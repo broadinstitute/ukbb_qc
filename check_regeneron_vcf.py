@@ -15,16 +15,16 @@ def main(args):
 
     nf_mt = hl.import_vcf('gs://gnomad-ukbb/data/vcfs/nf/NF_by_chrom/UKB_Freeze_Four.*.NF.vcf.gz',
                        force_bgz=True, array_elements_required=False, reference_genome='GRCh38', contig_recoding=contig_dict)
-    nf_mt.write('gs://gnomad-ukbb/data/regeneron.freeze_4.nf.mt', overwrite=args.overwrite)
-    nf_mt = hl.read_matrix_table('gs://gnomad-ukbb/data/regeneron.freeze_4.nf.mt')
+    nf_mt.write('gs://broad-ukbb/data/regeneron.freeze_4.nf.mt', overwrite=args.overwrite)
+    nf_mt = hl.read_matrix_table('gs://broad-ukbb/data/regeneron.freeze_4.nf.mt')
     nf_mt.describe()
     nf_variants, nf_samples = nf_mt.count()
     logger.info(f'{nf_variants} variants and {nf_samples} samples found in NF VCF')
 
     gl_mt = hl.import_vcf('gs://gnomad-ukbb/data/vcfs/gl/GL_by_chrom/UKB_Freeze_Four.*.GL.vcf.gz',
                        force_bgz=True, array_elements_required=False, reference_genome='GRCh38', contig_recoding=contig_dict)
-    gl_mt.write('gs://gnomad-ukbb/data/regeneron.freeze_4.gl.mt', overwrite=args.overwrite)
-    gl_mt = hl.read_matrix_table('gs://gnomad-ukbb/data/regeneron.freeze_4.gl.mt')
+    gl_mt.write('gs://broad-ukbb/data/regeneron.freeze_4.gl.mt', overwrite=args.overwrite)
+    gl_mt = hl.read_matrix_table('gs://broad-ukbb/data/regeneron.freeze_4.gl.mt')
     gl_mt.describe()
     gl_variants, gl_samples = gl_mt.count()
     logger.info(f'{gl_variants} variants and {gl_samples} samples found in GL VCF')
