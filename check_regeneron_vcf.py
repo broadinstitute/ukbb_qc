@@ -15,6 +15,7 @@ def main(args):
 
     nf_mt = hl.import_vcf('gs://gnomad-ukbb/data/vcfs/nf/NF_by_chrom/UKB_Freeze_Four.*.NF.vcf.gz',
                        force_bgz=True, array_elements_required=False, reference_genome='GRCh38', contig_recoding=contig_dict)
+    # NOTE: VCFs have been deleted
     nf_mt.write('gs://broad-ukbb/data/regeneron.freeze_4.nf.mt', overwrite=args.overwrite)
     nf_mt = hl.read_matrix_table('gs://broad-ukbb/data/regeneron.freeze_4.nf.mt')
     nf_mt.describe()
@@ -23,6 +24,7 @@ def main(args):
 
     gl_mt = hl.import_vcf('gs://gnomad-ukbb/data/vcfs/gl/GL_by_chrom/UKB_Freeze_Four.*.GL.vcf.gz',
                        force_bgz=True, array_elements_required=False, reference_genome='GRCh38', contig_recoding=contig_dict)
+    # NOTE: VCFs have been deleted
     gl_mt.write('gs://broad-ukbb/data/regeneron.freeze_4.gl.mt', overwrite=args.overwrite)
     gl_mt = hl.read_matrix_table('gs://broad-ukbb/data/regeneron.freeze_4.gl.mt')
     gl_mt.describe()
