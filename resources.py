@@ -93,7 +93,23 @@ def non_refs_only_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, split=
     return f'gs://broad-ukbb/non_refs_only/{data_source}.freeze_{freeze}.nf{".split" if split else ""}.mt'
 
 
-array_sample_map = 'gs://broad-ukbb-jgoodric/array/Project_26041_bridge.csv'
+array_sample_map = 'gs://broad-ukbb/data/array/Project_26041_bridge.csv'
+
+
+def get_array_data_path(extension: str, chrom: str) -> str:
+    """
+    Get path to UKBB array data for a specific chromosome in plink format.
+    :param str extension: file type bim, bam, or fam
+    :param str chrom: Chromosome to return
+    :return: Path to array data for given chromosome and file type
+    :rtype: str
+    """
+    if extension == 'bed':
+        return f'gs://broad-ukbb/data/array/ukb_cal_{chrom}_v2.{extension}'
+    elif extension == 'bim':
+        return f'gs://broad-ukbb/data/array/ukb_snp_{chrom}_v2.{extension}'
+    elif extension == 'fam':
+        return 'gs://broad-ukbb/data/array/ukb26041_cal_chr22_v2_s488292.fam'
 
 
 # Sample QC files
