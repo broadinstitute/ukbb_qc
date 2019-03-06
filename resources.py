@@ -23,9 +23,9 @@ def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, adj: bool = Fa
         raise DataException('No split raw data. Use of hardcalls is recommended.')
 
     if non_refs_only:
-        mt = hl.read_matrix_table(get_ukbb_data_path(data_source, freeze, split=split, non_refs_only=non_refs_only, hail_version=hail_version))
+        mt = hl.read_matrix_table(get_ukbb_data_path(data_source, freeze, split=split, non_refs_only=non_refs_only))
     else:
-        mt = hl.read_matrix_table(get_ukbb_data_path(data_source, freeze, hardcalls=not raw, split=split, hail_version=hail_version))
+        mt = hl.read_matrix_table(get_ukbb_data_path(data_source, freeze, hardcalls=not raw, split=split))
 
     if adj:
         mt = filter_to_adj(mt)
@@ -54,7 +54,7 @@ def get_ukbb_data_path(data_source: str, freeze: int = CURRENT_FREEZE, hardcalls
     elif non_refs_only:
         return non_refs_only_mt_path(data_source, freeze, split)
     else:
-        return raw_mt_path()
+        return raw_mt_path(data_source, freeze)
 
 
 def array_mt_path(liftover: bool = False) -> str:
@@ -111,6 +111,7 @@ def get_array_data_path(extension: str, chrom: str) -> str:
     elif extension == 'fam':
         return 'gs://broad-ukbb/data/array/ukb26041_cal_chr22_v2_s488292.fam'
 
+ukbb_calling_intervals_path = 'gs://broad-ukbb/data/white_album_exome_calling_regions.v1.interval_list'
 
 # Sample QC files
 
@@ -126,6 +127,12 @@ def qc_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     if data_source not in DATA_SOURCES:
         raise DataException("This data_source is currently not present")
     return f'gs://broad-ukbb/data/{data_source}.freeze_{freeze}.nf.high_callrate_common_biallelic_snps.mt'
+
+
+def callrate_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    if data_source not in DATA_SOURCES:
+        raise DataException("This data_source is currently not present")
+    return f'gs://broad-ukbb/sample_qc/{data_source}.freeze_{freeze}/callrate.mt'
 
 
 class DataException(Exception):
