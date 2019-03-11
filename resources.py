@@ -111,28 +111,57 @@ def get_array_data_path(extension: str, chrom: str) -> str:
     elif extension == 'fam':
         return 'gs://broad-ukbb/data/array/ukb26041_cal_chr22_v2_s488292.fam'
 
-ukbb_calling_intervals_path = 'gs://broad-ukbb/data/white_album_exome_calling_regions.v1.interval_list'
+
+ukbb_calling_intervals_path = 'gs://broad-ukbb/ukbb_exome_calling.interval_list'
 
 # Sample QC files
 
-def qc_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+def qc_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, ld_pruned: bool = False) -> str:
     """
     Returns MatrixTable for sample QC purposes
     Criteria: callrate > 0.99, AF > 0.001, SNPs only, bi-allelics only
     :param str data_source: Will be regeneron or broad
     :param int freeze: One of data freezes
+    :param bool ld_pruned: Should the qc matrix be LD pruned
     :return: Path MatrixTable for sample QC purposes
     :rtype: str
     """
     if data_source not in DATA_SOURCES:
         raise DataException("This data_source is currently not present")
-    return f'gs://broad-ukbb/data/{data_source}.freeze_{freeze}.nf.high_callrate_common_biallelic_snps.mt'
+
+    return f'gs://broad-ukbb/sample_qc/{data_source}.freeze_{freeze}/nf.high_callrate_common_biallelic_snps{ld_pruned}.mt'
 
 
 def callrate_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     if data_source not in DATA_SOURCES:
         raise DataException("This data_source is currently not present")
     return f'gs://broad-ukbb/sample_qc/{data_source}.freeze_{freeze}/callrate.mt'
+
+
+def relatedness_pca_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    if data_source not in DATA_SOURCES:
+        raise DataException("This data_source is currently not present")
+    return f'gs://broad-ukbb/sample_qc/{data_source}.freeze_{freeze}/relatedness.ht'
+
+
+def relatedness_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    if data_source not in DATA_SOURCES:
+        raise DataException("This data_source is currently not present")
+    return f'gs://broad-ukbb/sample_qc/{data_source}.freeze_{freeze}/relatedness.ht'
+
+
+def ancestry_pca_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, population: str = None) -> str:
+    if data_source not in DATA_SOURCES:
+        raise DataException("This data_source is currently not present")
+    pop = f'.{population}' if population else ''
+    return f'gs://broad-ukbb/sample_qc/{data_source}.freeze_{freeze}/unrelated.pca_scores{pop}.ht'
+
+
+def ancestry_pca_loadings_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, population: str = None) -> str:
+    if data_source not in DATA_SOURCES:
+        raise DataException("This data_source is currently not present")
+    pop = f'.{population}' if population else ''
+    return f'gs://broad-ukbb/sample_qc/{data_source}.freeze_{freeze}/unrelated.pca_loadings{pop}.ht'
 
 
 class DataException(Exception):
