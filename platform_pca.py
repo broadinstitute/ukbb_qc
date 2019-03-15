@@ -1,5 +1,5 @@
 from gnomad_hail import *
-from ukbb_qc.resources import *
+from resources import *
 import hail as hl
 import argparse
 import numpy as np
@@ -40,7 +40,7 @@ def run_platform_pca(callrate_mt: hl.MatrixTable) -> Tuple[List[float], hl.Table
     callrate_mt = callrate_mt.annotate_entries(callrate=callrate_mt.callrate - callrate_mt.mean_callrate)
     eigenvalues, scores, loadings = hl.pca(callrate_mt.callrate,
                                            compute_loadings=True)
-    # Eigenvalues: [26489244.935849957, 2039950.6985898241, 1407875.3058482022, 1082106.1507608977, 373810.0800184624, 361301.2291929654, 324435.7483132424, 205912.4810229146, 196196.71017912056, 159808.25367132248]
+    # Regeneron freeze 4 Eigenvalues: [26489244.935849957, 2039950.6985898241, 1407875.3058482022, 1082106.1507608977, 373810.0800184624, 361301.2291929654, 324435.7483132424, 205912.4810229146, 196196.71017912056, 159808.25367132248]
 
     logger.info('Eigenvalues: {}'.format(eigenvalues))
 
@@ -77,7 +77,7 @@ def assign_platform_pcs(platform_pc_table: hl.Table, pc_scores_ann: str = 'score
 def main(args):
     hl.init(log='/platform_pca.log')
 
-    output_dir = args.output_dir.rstrip("/")
+    output_dir = platform_pca_ht_path_prefix(args.data_source, args.freeze).rstrip("/")
 
     if args.compute_callrate_mt:
         logger.info('Preparing data for platform PCA...')
@@ -86,14 +86,12 @@ def main(args):
         callrate_mt = compute_callrate_mt(mt, intervals, reference_genome='GRCh38')
         callrate_mt.write(callrate_mt_path(args.data_source, args.freeze), args.overwrite)
 
-
     if args.run_platform_pca:
         logger.info("Running platform PCA...")
         callrate_mt =  hl.read_matrix_table(callrate_mt_path(args.data_source, args.freeze))
         eigenvalues, scores_ht, loadings_ht = run_platform_pca(callrate_mt)
         scores_ht.write(f'{output_dir}/platform_pca_scores.ht', overwrite=args.overwrite)
         loadings_ht.write(f'{output_dir}/platform_pca_loadings.ht', overwrite=args.overwrite)
-
 
     if args.assign_platforms:
         logger.info("Assigning platforms based on platform PCA clustering")
@@ -108,7 +106,6 @@ if __name__ == '__main__':
     parser.add_argument('--slack_channel', help='Slack channel to post results and notifications to.')
     parser.add_argument('--data_source', help='Source of the data, either broad or regeneron')
     parser.add_argument('--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
-    parser.add_argument('--output_dir', help='Directory to output PCA files to.')
 
     parser.add_argument('--compute_callrate_mt', help='Computes an interval by sample mt of callrate that will be used to compute platform PCs', action='store_true')
     parser.add_argument('--run_platform_pca', help='Runs platform PCA (assumes callrate MT was computed)', action='store_true')
