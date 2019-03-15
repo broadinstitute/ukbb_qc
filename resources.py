@@ -77,7 +77,7 @@ def raw_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'gs://broad-ukbb/data/{data_source}.freeze_{freeze}.nf.mt'
 
 
-def hardcalls_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, split=True) -> str:
+def hardcalls_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, split: bool = True) -> str:
     """
     Warning: unsplit and no special consideration on sex chromosomes
     :param str data_source: Will be regeneron or broad
@@ -89,7 +89,7 @@ def hardcalls_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, split=True
     return f'gs://broad-ukbb/data/{data_source}.freeze_{freeze}.nf{".split" if split else ""}.mt'
 
 
-def non_refs_only_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, split=True) -> str:
+def non_refs_only_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, split: bool = True) -> str:
     return f'gs://broad-ukbb/non_refs_only/{data_source}.freeze_{freeze}.nf{".split" if split else ""}.mt'
 
 

@@ -14,9 +14,9 @@ logger.setLevel(logging.INFO)
 # Note: should go to a common repo, couldn't use the one in gnomad_hail because wrong build
 def filter_to_autosomes(t: Union[hl.MatrixTable, hl.Table], reference_genome: str) -> Union[hl.MatrixTable, hl.Table]:
     if reference_genome == "GRCh37":
-        autosomes = hl.parse_locus_interval('1-22',reference_genome=reference_genome)
+        autosomes = hl.parse_locus_interval('1-22', reference_genome=reference_genome)
     if reference_genome == "GRCh38":
-        autosomes = hl.parse_locus_interval('chr1-chr22',reference_genome=reference_genome)
+        autosomes = hl.parse_locus_interval('chr1-chr22', reference_genome=reference_genome)
     if isinstance(t, hl.MatrixTable):
         return hl.filter_intervals(t, [autosomes])
     else:
@@ -38,12 +38,8 @@ def run_platform_pca(callrate_mt: hl.MatrixTable) -> Tuple[List[float], hl.Table
     # Center until Hail's PCA does it for you
     callrate_mt = callrate_mt.annotate_rows(mean_callrate=hl.agg.mean(callrate_mt.callrate))
     callrate_mt = callrate_mt.annotate_entries(callrate=callrate_mt.callrate - callrate_mt.mean_callrate)
-    eigenvalues, scores, loadings = hl.pca(callrate_mt.callrate,
-                                           compute_loadings=True)
-    # Regeneron freeze 4 Eigenvalues: [26489244.935849957, 2039950.6985898241, 1407875.3058482022, 1082106.1507608977, 373810.0800184624, 361301.2291929654, 324435.7483132424, 205912.4810229146, 196196.71017912056, 159808.25367132248]
-
+    eigenvalues, scores, loadings = hl.pca(callrate_mt.callrate, compute_loadings=True)
     logger.info('Eigenvalues: {}'.format(eigenvalues))
-
     return eigenvalues, scores, loadings
 
 
@@ -92,6 +88,7 @@ def main(args):
         eigenvalues, scores_ht, loadings_ht = run_platform_pca(callrate_mt)
         scores_ht.write(f'{output_dir}/platform_pca_scores.ht', overwrite=args.overwrite)
         loadings_ht.write(f'{output_dir}/platform_pca_loadings.ht', overwrite=args.overwrite)
+        # Regeneron freeze 4 Eigenvalues: [26489244.935849957, 2039950.6985898241, 1407875.3058482022, 1082106.1507608977, 373810.0800184624, 361301.2291929654, 324435.7483132424, 205912.4810229146, 196196.71017912056, 159808.25367132248]
 
     if args.assign_platforms:
         logger.info("Assigning platforms based on platform PCA clustering")

@@ -10,7 +10,8 @@ logger = logging.getLogger("relatedness")
 logger.setLevel(logging.INFO)
 
 
-def get_qc_mt(mt: hl.MatrixTable, min_af: float = 0.001, min_callrate: float = 0.99) -> hl.MatrixTable:
+# Note: The following functions are slightly modified from Laurent's myoseq sample qc should probably move to a common location
+def compute_qc_mt(mt: hl.MatrixTable, min_af: float = 0.001, min_callrate: float = 0.99) -> hl.MatrixTable:
     """
     Returns MatrixTable for sample QC purposes
     Default criteria: callrate > 0.99, AF > 0.001, SNPs only, bi-allelics only
@@ -142,9 +143,9 @@ def main(args):
     data_source = args.data_source
     freeze = args.freeze
 
-    if args.compute_qc_mt:
+    if not args.skip_compute_qc_mt:
         logger.info("Filtering to bi-allelic, high-callrate, common SNPs for sample QC...")
-        qc_mt = get_qc_mt(get_ukbb_data(data_source, freeze, raw=True,split=False))
+        qc_mt = compute_qc_mt(get_ukbb_data(data_source, freeze, raw=True, split=False))
         qc_mt = qc_mt.naive_coalesce(5000)
         qc_mt.write(qc_mt_path(data_source, freeze), overwrite=args.overwrite)
 
@@ -153,22 +154,22 @@ def main(args):
         qc_ht = hl.sample_qc(qc_mt).cols().select('sample_qc')
         qc_ht.write(qc_ht_path(data_source, freeze), overwrite=args.overwrite)
 
-    if args.ld_prune_qc_mt:
+    if not args.skip_ld_prune_qc_mt:
         logger.info("LD prune qc MatrixTable sample QC...")
         qc_mt = hl.read_matrix_table(qc_mt_path(data_source, freeze))
         pruned_qc_mt = ld_prune_qc_mt(qc_mt)
         variants, samples = pruned_qc_mt.count()
         logger.info(f'{variants} variants found in LD-pruned MT')
-        pruned_qc_mt = filter_to_adj(pruned_qc_mt).unfilter_entries()
+        pruned_qc_mt = filter_to_adj(pruned_qc_mt)
         pruned_qc_mt.write(qc_mt_path(data_source, freeze, ld_pruned=True), overwrite=args.overwrite)
 
-    if args.pca_for_pc_relate:
+    if not args.skip_pca_for_pc_relate:
         logger.info('Running PCA for PC-Relate...')
         pruned_qc_mt = hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned=True)).unfilter_entries()
         eig, scores, _ = hl.hwe_normalized_pca(pruned_qc_mt.GT, k=10, compute_loadings=False)
         scores.write(relatedness_pca_scores_ht_path(data_source, freeze), args.overwrite)
 
-    if args.pc_relate:
+    if not args.skip_pc_relate:
         logger.info('Running PC-Relate...')
         pruned_qc_mt = hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned=True)).unfilter_entries()
         scores = hl.read_table(relatedness_pca_scores_ht_path(data_source, freeze))
@@ -177,7 +178,7 @@ def main(args):
                                       block_size=4096, min_kinship=args.min_emission_kinship, statistics='all')
         relatedness_ht.write(relatedness_ht_path(data_source, freeze), args.overwrite)
 
-    if args.filter_dups:
+    if not args.skip_filter_dups:
         logger.info("Filtering duplicate samples...")
         dups_ht = filter_dups(
             hl.read_table(relatedness_ht_path(data_source, freeze)),
@@ -186,7 +187,7 @@ def main(args):
         )
         dups_ht.write(duplicates_ht_path(data_source, freeze), overwrite=args.overwrite)
 
-    if args.infer_families:
+    if not args.skip_infer_families:
         logger.info("Inferring families")
         ped = get_ped(
             hl.read_table(relatedness_ht_path(data_source, freeze)),
@@ -199,22 +200,21 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--overwrite', help='Overwrite all data from this subset (default: False)', action='store_true')
-    parser.add_argument('--test_run', help='Test with chr20', action='store_true')
     parser.add_argument('--slack_channel', help='Slack channel to post results and notifications to.')
     parser.add_argument('--data_source', help='Source of the data, either broad or regeneron')
     parser.add_argument('--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
 
-    parser.add_argument('--compute_qc_mt', help='Compute matrix to be used in sample qc', action='store_true')
-    parser.add_argument('--ld_prune_qc_mt', help='LD prunes the qc matrix', action='store_true')
-    parser.add_argument('--pca_for_pc_relate', help='Run PCA to be used in PC-relate', action='store_true')
-    parser.add_argument('--pc_relate', help='Runs PC-relate on all samples. NOTE: This needs SSDs on your workers (for the temp files) and no pre-emptibles while the BlockMatrix writes', action='store_true')
+    parser.add_argument('--skip_compute_qc_mt', help='Skop Compute matrix to be used in sample qc', action='store_true')
+    parser.add_argument('--skip_ld_prune_qc_mt', help='Skip LD prunes the qc matrix', action='store_true')
+    parser.add_argument('--skip_pca_for_pc_relate', help='Skip run PCA to be used in PC-relate', action='store_true')
+    parser.add_argument('--skip_pc_relate', help='Skip runing PC-relate on all samples. NOTE: This needs SSDs on your workers (for the temp files) and no pre-emptibles while the BlockMatrix writes', action='store_true')
     parser.add_argument('--min_emission_kinship', help='Minimum kinship threshold for emitting a pair of samples in PC relate and filtering related individuals.', default=0.05, type=float)
     parser.add_argument('--min_filtering_kinship',
                              help='Minimum kinship threshold for filtering a pair of samples in PC relate and filtering related individuals. (Default = 0.08838835; 2nd degree relatives)',
                              default=0.08838835, type=float)
-    parser.add_argument('--filter_dups', help='Filter duplicated samples', action='store_true')
-    parser.add_argument('--infer_families',
-                             help='Extracts duplicate samples and infers families samples based on PC-relate results',
+    parser.add_argument('--skip_filter_dups', help='Skip filtering duplicated samples', action='store_true')
+    parser.add_argument('--skip_infer_families',
+                             help='Skip extracting duplicate samples and infers families samples based on PC-relate results',
                              action='store_true')
 
     args = parser.parse_args()
