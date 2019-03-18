@@ -117,7 +117,7 @@ ukbb_calling_intervals_path = 'gs://broad-ukbb/ukbb_exome_calling.interval_list'
 sample_qc_prefix = 'gs://broad-ukbb/sample_qc'
 
 def sex_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    return f'gs://broad-ukbb/data/{data_source}.freeze_{freeze}.nf_sex.ht' # TODO: Need to change this to be in sample_qc folder probably
+    return f'{sample_qc_prefix}/{data_source}.freeze_{freeze}/sex_check/sex.ht' # TODO: Need to change this to be in sample_qc folder probably
 
 
 def qc_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, ld_pruned: bool = False) -> str:
