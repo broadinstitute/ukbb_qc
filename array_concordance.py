@@ -69,7 +69,7 @@ def main(args):
 
         samples = samples.annotate(
             num_gt_con=samples.concordance[2][2] + samples.concordance[3][3] + samples.concordance[4][4],
-            num_gt=hl.sum(samples.concordance[2][2:]) + hl.sum(samples.concordance[3][3:]) + samples.concordance[4][4])
+            num_gt=hl.sum(samples.concordance[2][2:]) + hl.sum(samples.concordance[3][2:]) + samples.concordance[4][2:])
         samples = samples.annotate(prop_gt_con=samples.num_gt_con / samples.num_gt)
         min_prop_gt_con = samples.aggregate(hl.agg.min(samples.prop_gt_con))
         logger.info(f'Minimum proportion concordance: {min_prop_gt_con} ')
