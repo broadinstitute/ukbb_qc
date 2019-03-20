@@ -129,6 +129,17 @@ def sample_list_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix}/{data_source}.freeze_{freeze}/samples.list'
 
 
+def hard_filters_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Returns path of MatrixTable with hl.variant_qc, hl.sample_qc annotations to be used for sexcheck and applying hard filters
+    :param str data_source: Will be regeneron or broad
+    :param int freeze: One of data freezes
+    :return: Path to MatrixTable for sexcheck and applying hard filters
+    :rtype: str
+    """
+    return f'{sample_qc_prefix}/{data_source}.freeze_{freeze}/nf.variant_qc_sample_qc_adj_annot.mt'
+
+
 def sex_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
     Returns path of Table with imputed sex annotations
