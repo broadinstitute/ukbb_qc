@@ -2,6 +2,7 @@ import hail as hl
 
 CURRENT_FREEZE = 4
 DATA_SOURCES = ['regeneron']
+FREEZES = [4]
 
 
 def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, adj: bool = False, split: bool = True,
@@ -63,7 +64,7 @@ def array_mt_path(liftover: bool = False) -> str:
     :return: Path to array MT
     :rtype: str
     """
-    return f'gs://broad-ukbb/data/array/ukbb_array{"_liftover_GRCh38" if liftover else ""}.mt'
+    return f'gs://broad-ukbb/resources/array/ukbb_array{"_liftover_GRCh38" if liftover else ""}.mt'
 
 
 def raw_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
@@ -74,7 +75,8 @@ def raw_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     :return: Path to chosen raw MT
     :rtype: str
     """
-    return f'gs://broad-ukbb/data/{data_source}.freeze_{freeze}.nf.mt'
+    # Note: nf wont apply to broad so should we just remove nf or add as a parameter?
+    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/data/{data_source}.freeze_{freeze}.nf.mt'
 
 
 def hardcalls_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, split: bool = True) -> str:
@@ -86,11 +88,11 @@ def hardcalls_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, split: boo
     :return: Path to chosen hardcalls MT
     :rtype: str
     """
-    return f'gs://broad-ukbb/data/{data_source}.freeze_{freeze}.nf{".split" if split else ""}.mt'
+    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/data/{data_source}.freeze_{freeze}.hardcalls{".split" if split else ""}.mt'
 
 
 def non_refs_only_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, split: bool = True) -> str:
-    return f'gs://broad-ukbb/non_refs_only/{data_source}.freeze_{freeze}.nf{".split" if split else ""}.mt'
+    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/non_refs_only/non_refs_only{".split" if split else ""}.mt'
 
 
 def get_array_data_path(extension: str, chrom: str) -> str:
@@ -102,85 +104,82 @@ def get_array_data_path(extension: str, chrom: str) -> str:
     :rtype: str
     """
     if extension == 'bed':
-        return f'gs://broad-ukbb/data/array/ukb_cal_{chrom}_v2.{extension}'
+        return f'gs://broad-ukbb/resources/array/ukb_cal_{chrom}_v2.{extension}'
     elif extension == 'bim':
-        return f'gs://broad-ukbb/data/array/ukb_snp_{chrom}_v2.{extension}'
+        return f'gs://broad-ukbb/resources/array/ukb_snp_{chrom}_v2.{extension}'
     elif extension == 'fam':
-        return 'gs://broad-ukbb/data/array/ukb26041_cal_chr22_v2_s488292.fam'
+        return 'gs://broad-ukbb/resources/array/ukb26041_cal_chr22_v2_s488292.fam'
 
 
-array_sample_map = 'gs://broad-ukbb/data/array/Project_26041_bridge.csv'
-ukbb_calling_intervals_path = 'gs://broad-ukbb/ukbb_exome_calling.interval_list'
+array_sample_map = 'gs://broad-ukbb/resources/array/Project_26041_bridge.csv'
+ukbb_calling_intervals_path = 'gs://broad-ukbb/resources/ukbb_exome_calling.interval_list'
+
 
 # Sample QC files
+def sample_qc_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    if data_source not in DATA_SOURCES:
+        raise DataException("This data_source is currently not present")
+    if freeze not in FREEZES:
+        raise DataException("This freeze is currently not present")
+    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/sample_qc'
 
-sample_qc_prefix = 'gs://broad-ukbb/sample_qc'
+def array_sample_concordance_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    return f'{sample_qc_prefix(data_source, freeze)}/array_concordance/sample_concordance.ht'
+
+def array_variant_concordance_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    return f'{sample_qc_prefix(data_source, freeze)}/array_concordance/variant_concordance.ht'
 
 def sex_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    return f'{sample_qc_prefix}/{data_source}.freeze_{freeze}/sex_check/sex.ht' # TODO: Need to change this to be in sample_qc folder probably
-
+    return f'{sample_qc_prefix(data_source, freeze)}/sex_check/sex.ht'
 
 def qc_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, ld_pruned: bool = False) -> str:
     """
     Returns path of MatrixTable for sample QC purposes
-    :param str data_source: Will be regeneron or broad
-    :param int freeze: One of data freezes
     :param bool ld_pruned: Should the qc matrix be LD pruned
     :return: Path MatrixTable for sample QC purposes
     :rtype: str
     """
-    if data_source not in DATA_SOURCES:
-        raise DataException("This data_source is currently not present")
     ld_pruned = '.pruned' if ld_pruned else ''
-    return f'{sample_qc_prefix}/{data_source}.freeze_{freeze}/nf.high_callrate_common_biallelic_snps{ld_pruned}.mt'
-
+    return f'{sample_qc_prefix(data_source, freeze)}/high_callrate_common_biallelic_snps{ld_pruned}.mt'
 
 def qc_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    if data_source not in DATA_SOURCES:
-        raise DataException("This data_source is currently not present")
-    return f'{sample_qc_prefix}/{data_source}.freeze_{freeze}/nf.high_callrate_common_biallelic_snps.ht'
+    return f'{sample_qc_prefix(data_source, freeze)}/high_callrate_common_biallelic_snps.ht'
+    return f'{sample_qc_prefix(data_source, freeze)}/high_callrate_common_biallelic_snps.ht'
 
 def callrate_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    if data_source not in DATA_SOURCES:
-        raise DataException("This data_source is currently not present")
-    return f'{sample_qc_prefix}/{data_source}.freeze_{freeze}/callrate.mt'
+    return f'{sample_qc_prefix(data_source, freeze)}/platform_pca/callrate.mt'
 
-def platform_pca_ht_path_prefix(data_source: str, freeze: int = CURRENT_FREEZE, ) -> str:
-    if data_source not in DATA_SOURCES:
-        raise DataException("This data_source is currently not present")
-    return f'{sample_qc_prefix}/{data_source}.freeze_{freeze}/platform_pca'
+def platform_pca_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    return f'{sample_qc_prefix(data_source, freeze)}/platform_pca/platform_pca_scores.ht'
+
+def platform_pca_loadings_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    return f'{sample_qc_prefix(data_source, freeze)}/platform_pca/platform_pca_loadings.ht'
+
+def platform_pca_results_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    return f'{sample_qc_prefix(data_source, freeze)}/platform_pca/platform_pca_results.ht'
 
 def relatedness_pca_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    if data_source not in DATA_SOURCES:
-        raise DataException("This data_source is currently not present")
-    return f'{sample_qc_prefix}/{data_source}.freeze_{freeze}/relatedness/pruned.pca_scores.ht'
+    return f'{sample_qc_prefix(data_source, freeze)}/relatedness/pruned.pca_scores.ht'
 
 def relatedness_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    if data_source not in DATA_SOURCES:
-        raise DataException("This data_source is currently not present")
-    return f'{sample_qc_prefix}/{data_source}.freeze_{freeze}/relatedness/relatedness.ht'
+    return f'{sample_qc_prefix(data_source, freeze)}/relatedness/relatedness.ht'
 
 def duplicates_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    if data_source not in DATA_SOURCES:
-        raise DataException("This data_source is currently not present")
-    return f'{sample_qc_prefix}/{data_source}.freeze_{freeze}/relatedness/dups.ht'
+    return f'{sample_qc_prefix(data_source, freeze)}/relatedness/dups.ht'
 
 def inferred_ped_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    if data_source not in DATA_SOURCES:
-        raise DataException("This data_source is currently not present")
-    return f'{sample_qc_prefix}/{data_source}.freeze_{freeze}/relatedness/ped.txt'
+    return f'{sample_qc_prefix(data_source, freeze)}/relatedness/ped.txt'
+
+def related_drop_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    return f'{sample_qc_prefix(data_source, freeze)}/relatedness/related_samples_to_drop.ht'
 
 def ancestry_pca_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, population: str = None) -> str:
-    if data_source not in DATA_SOURCES:
-        raise DataException("This data_source is currently not present")
     pop = f'.{population}' if population else ''
-    return f'{sample_qc_prefix}/{data_source}.freeze_{freeze}/ancestry/unrelated.pca_scores{pop}.ht'
+    return f'{sample_qc_prefix(data_source, freeze)}/ancestry/unrelated.pca_scores{pop}.ht'
 
 def ancestry_pca_loadings_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, population: str = None) -> str:
-    if data_source not in DATA_SOURCES:
-        raise DataException("This data_source is currently not present")
     pop = f'.{population}' if population else ''
-    return f'{sample_qc_prefix}/{data_source}.freeze_{freeze}/ancestry/unrelated.pca_loadings{pop}.ht'
+    return f'{sample_qc_prefix(data_source, freeze)}/ancestry/unrelated.pca_loadings{pop}.ht'
 
 
 class DataException(Exception):
