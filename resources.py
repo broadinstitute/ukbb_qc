@@ -147,6 +147,9 @@ def sample_list_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/samples.list'
 
 
+def hard_filters_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    return f'{sample_qc_prefix(data_source, freeze)}/hard_filters_flagged.mt'
+
 def array_sample_concordance_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/array_concordance/sample_concordance.ht'
 
