@@ -40,6 +40,8 @@ def main(args):
 
         array_mt = array_mt.annotate_rows(new_locus=hl.liftover(array_mt.locus, 'GRCh38', include_strand=True),
                                           old_locus=array_mt.locus)
+        # Filter out any liftover that has changed strands because they were kept in the liftover file
+        array_mt = array_mt.filter_rows(hl.is_defined(array_mt.new_locus) & ~array_mt.new_locus.is_negative_strand)
         array_mt = array_mt.key_rows_by(locus=array_mt.new_locus.result, alleles=array_mt.alleles)
 
         array_mt.write(array_mt_path(liftover=True), overwrite=args.overwrite)
@@ -49,10 +51,7 @@ def main(args):
 
     if args.array_concordance:
         logger.info('Checking concordance between exome and array data...')
-        output_dir = args.output_dir.rstrip("/")
         array_mt = hl.read_matrix_table(array_mt_path(liftover=True))
-        #Filter out any liftover that has changed strands because they were kept in the liftover file
-        array_mt = array_mt.filter_rows(hl.is_defined(array_mt.new_locus) & ~array_mt.new_locus.is_negative_strand)
         logger.info('Mapping array sample names to exome sample names...')
         sample_map = hl.import_table(array_sample_map, delimiter=',')
         sample_map = sample_map.key_by(s=sample_map.eid_26041)
@@ -61,20 +60,20 @@ def main(args):
         array_variants, array_samples = array_mt.count()
         logger.info(f'{array_samples} samples found in array to exome name map')
 
-        exome_mt = hl.read_matrix_table(qc_mt_path(args.data_source, args.freeze))
+        exome_mt = get_ukbb_data(args.data_source, args.freeze, raw=True, adj=True, split=False)
+        exome_mt = exome_mt.filter_rows((hl.len(exome_mt.alleles) == 2) & hl.is_snp(exome_mt.alleles[0], exome_mt.alleles[1]))
         # Renaming exome samples to match array data
         exome_mt = exome_mt.key_cols_by(s=exome_mt.s.split("_")[1])
 
         summary, samples, variants = hl.concordance(array_mt, exome_mt)
-
         samples = samples.annotate(
             num_gt_con=samples.concordance[2][2] + samples.concordance[3][3] + samples.concordance[4][4],
-            num_gt=hl.sum(samples.concordance[2][2:]) + hl.sum(samples.concordance[3][2:]) + samples.concordance[4][2:])
+            num_gt=hl.sum(samples.concordance[2][2:]) + hl.sum(samples.concordance[3][2:]) + hl.sum(samples.concordance[4][2:]))
         samples = samples.annotate(prop_gt_con=samples.num_gt_con / samples.num_gt)
         min_prop_gt_con = samples.aggregate(hl.agg.min(samples.prop_gt_con))
-        logger.info(f'Minimum proportion concordance: {min_prop_gt_con} ')
-        samples.write(f'{output_dir}/sample_concordance.ht', overwrite=args.overwrite)
-        variants.write(f'{output_dir}/variant_concordance.ht', overwrite=args.overwrite)
+        logger.info(f'Minimum proportion concordance: {min_prop_gt_con}')
+        samples.write(array_sample_concordance_path(args.data_source, args.freeze), overwrite=args.overwrite)
+        variants.write(array_variant_concordance_path(args.data_source, args.freeze), overwrite=args.overwrite)
 
 
 if __name__ == '__main__':
@@ -90,8 +89,6 @@ if __name__ == '__main__':
     concordance.add_argument('--data_source', help='Source of the data, either broad or regeneron')
     concordance.add_argument('--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
     concordance.add_argument('--array_concordance', help='Compute array concordance', action='store_true')
-    concordance.add_argument('--output_dir', help='Directory to output concordance files to.')
-
 
     args = parser.parse_args()
 
