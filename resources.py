@@ -95,6 +95,18 @@ def non_refs_only_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, split:
     return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/non_refs_only/non_refs_only{".split" if split else ""}.mt'
 
 
+def adj_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Returns path of MatrixTable with hl.variant_qc, hl.sample_qc, adj annotations
+    :param str data_source: Will be regeneron or broad
+    :param int freeze: One of data freezes
+    :return: Path to annotated MatrixTable
+    :rtype: str
+    """
+    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/data/nf_adj.mt'
+
+
+
 def get_array_data_path(extension: str, chrom: str) -> str:
     """
     Get path to UKBB array data for a specific chromosome in plink format.
