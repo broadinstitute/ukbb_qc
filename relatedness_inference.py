@@ -1,8 +1,8 @@
-from gnomad_hail import *
 from resources import *
+from gnomad_hail import *
+from platform_pca import *
 import hail as hl
 import argparse
-from platform_pca import *
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -111,30 +111,61 @@ def rank_dup_samples(dups_ht: hl.Table, qc_ht: hl.Table) -> Tuple[hl.Table, hl.e
     return dups_ht, dups_ht.rank
 
 
-def get_related_samples_to_drop(rank_table: hl.Table, relatedness_ht: hl.Table) -> hl.Table:
+def get_related_samples_to_drop(
+        relatedness_ht: hl.Table,
+        min_filtering_kinship: float,
+        rank_func: Callable[..., Tuple[hl.Table, Callable[[hl.expr.Expression, hl.expr.Expression], hl.expr.NumericExpression]]],
+        rank_func_args: Optional[List]
+) -> hl.Table:
     """
     Use the maximal independence function in Hail to intelligently prune clusters of related individuals, removing
-    less desirable samples while maximizing the number of unrelated individuals kept in the sample set
-    :param Table rank_table: Table with ranking annotations across exomes and genomes, computed via make_rank_file()
-    :param Table relatedness_ht: Table with kinship coefficient annotations computed via pc_relate()
-    :return: Table containing sample IDs ('s') to be pruned from the combined exome and genome sample set
-    :rtype: Table
+    less desirable samples while maximizing the number of unrelated individuals kept in the sample set.
+    :param relatedness_ht:
+    :param min_filtering_kinship:
+    :param rank_func:
+    :param rank_func_args:
+    :return:
     """
     # Define maximal independent set, using rank list
-    related_pairs = relatedness_ht.filter(relatedness_ht.kin > 0.08838835).select('i', 'j')
-    related_samples = related_pairs.aggregate(hl.agg.collect_as_set(hl.agg.explode([related_pairs.i, related_pairs.j])))
-    logger.info('{} samples with at least 2nd-degree relatedness found in callset'.format(len(related_samples)))
-    max_rank = rank_table.count()
-    related_pairs = related_pairs.annotate(id1_rank=hl.struct(id=related_pairs.i, rank=rank_table[related_pairs.i].rank),
-                                           id2_rank=hl.struct(id=related_pairs.j, rank=rank_table[related_pairs.j].rank)
-                                           ).select('id1_rank', 'id2_rank')
+    related_pairs = relatedness_ht.filter(relatedness_ht.kin > min_filtering_kinship).key_by().select('i', 'j')
+    n_related_samples = related_pairs.annotate(ij=[related_pairs.i, related_pairs.j]).explode('ij').key_by('ij').distinct().count()
+    logger.info('{} samples with at least 2nd-degree relatedness found in callset'.format(n_related_samples))
+
+    if rank_func_args is None:
+        rank_func_args = []
+    related_pairs, tie_breaker = rank_func(relatedness_ht, *rank_func_args)
+
+    related_samples_to_drop_ranked = hl.maximal_independent_set(related_pairs.i, related_pairs.j,
+                                                                keep=False, tie_breaker=tie_breaker)
+    related_samples_to_drop_ranked = related_samples_to_drop_ranked.key_by()
+    related_samples_to_drop_ranked = related_samples_to_drop_ranked.select(**related_samples_to_drop_ranked.node)
+    return related_samples_to_drop_ranked.key_by(*relatedness_ht.i)
+
+
+# Note: Will need to change this to work with gnomAD, we will want to default to gnomAD ranking, unless tied pair is gnomAD, UKBB pair
+def rank_related_samples(
+        related_pairs: hl.Table,
+        qc_ht: hl.Table
+) -> Tuple[hl.Table, Callable[[hl.expr.Expression, hl.expr.Expression], hl.expr.NumericExpression]]:
+
+    def annotate_related_pairs(related_pairs: hl.Table, index_col: str) -> hl.Table:
+        related_pairs = related_pairs.key_by(**related_pairs[index_col])
+        related_pairs = related_pairs.filter(hl.is_missing(case_parents[related_pairs.key]))
+        return related_pairs.annotate(
+            **{
+                index_col: related_pairs[index_col].annotate(
+                    dp_mean=hl.or_else(qc_ht[related_pairs.key].sample_qc.dp_stats.mean, -1.0)
+                )
+            }
+        ).key_by()
+
+    related_pairs = annotate_related_pairs(related_pairs, "i")
+    related_pairs = annotate_related_pairs(related_pairs, "j")
 
     def tie_breaker(l, r):
-        return hl.or_else(l.rank, max_rank + 1) - hl.or_else(r.rank, max_rank + 1)
+        return ( l.dp_mean - r.dp_mean)
 
-    related_samples_to_drop_ranked = hl.maximal_independent_set(related_pairs.id1_rank, related_pairs.id2_rank,
-                                                                keep=False, tie_breaker=tie_breaker)
-    return related_samples_to_drop_ranked.select(**related_samples_to_drop_ranked.node.id).key_by('data_type', 's')
+    return related_pairs, tie_breaker
 
 
 def main(args):
@@ -143,6 +174,7 @@ def main(args):
     data_source = args.data_source
     freeze = args.freeze
 
+    # Note: should we move this part and the one below it into the script that KC has for sample/variant/adj filtering?
     if not args.skip_compute_qc_mt:
         logger.info("Filtering to bi-allelic, high-callrate, common SNPs for sample QC...")
         qc_mt = compute_qc_mt(get_ukbb_data(data_source, freeze, raw=True, split=False))
@@ -163,16 +195,13 @@ def main(args):
         pruned_qc_mt = filter_to_adj(pruned_qc_mt)
         pruned_qc_mt.write(qc_mt_path(data_source, freeze, ld_pruned=True), overwrite=args.overwrite)
 
-    if not args.skip_pca_for_pc_relate:
+    if not args.skip_pc_relate:
         logger.info('Running PCA for PC-Relate...')
         pruned_qc_mt = hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned=True)).unfilter_entries()
         eig, scores, _ = hl.hwe_normalized_pca(pruned_qc_mt.GT, k=10, compute_loadings=False)
         scores.write(relatedness_pca_scores_ht_path(data_source, freeze), args.overwrite)
 
-    if not args.skip_pc_relate:
         logger.info('Running PC-Relate...')
-        pruned_qc_mt = hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned=True)).unfilter_entries()
-        scores = hl.read_table(relatedness_pca_scores_ht_path(data_source, freeze))
         # NOTE: This needs SSDs on your workers (for the temp files) and no preemptible workers while the BlockMatrix writes
         relatedness_ht = hl.pc_relate(pruned_qc_mt.GT, min_individual_maf=0.05, scores_expr=scores[pruned_qc_mt.col_key].scores,
                                       block_size=4096, min_kinship=args.min_emission_kinship, statistics='all')
@@ -196,6 +225,15 @@ def main(args):
         )
         ped.write(inferred_ped_path(data_source, freeze))
 
+    if args.skip_filter_related_samples:
+        logger.info("Filtering related samples")
+        related_samples_to_drop = get_related_samples_to_drop(
+            hl.read_table(relatedness_ht_path(data_source, freeze)),
+            args.min_filtering_kinship,
+            rank_related_samples,
+            [hl.read_table(qc_ht_path(data_source, freeze))]
+        )
+        related_samples_to_drop.write(related_drop_path(data_source, freeze), overwrite=args.overwrite)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -206,9 +244,11 @@ if __name__ == '__main__':
 
     parser.add_argument('--skip_compute_qc_mt', help='Skop Compute matrix to be used in sample qc', action='store_true')
     parser.add_argument('--skip_ld_prune_qc_mt', help='Skip LD prunes the qc matrix', action='store_true')
-    parser.add_argument('--skip_pca_for_pc_relate', help='Skip run PCA to be used in PC-relate', action='store_true')
-    parser.add_argument('--skip_pc_relate', help='Skip runing PC-relate on all samples. NOTE: This needs SSDs on your workers (for the temp files) and no pre-emptibles while the BlockMatrix writes', action='store_true')
-    parser.add_argument('--min_emission_kinship', help='Minimum kinship threshold for emitting a pair of samples in PC relate and filtering related individuals.', default=0.05, type=float)
+    parser.add_argument('--skip_pc_relate', help='Skip runing PC-relate on all samples. NOTE: This needs SSDs on your workers (for the temp files) and no pre-emptibles while the BlockMatrix writes',
+                        action='store_true')
+    parser.add_argument('--min_emission_kinship', help='Minimum kinship threshold for emitting a pair of samples in PC relate and filtering related individuals.',
+                        default=0.05,
+                        type=float)
     parser.add_argument('--min_filtering_kinship',
                              help='Minimum kinship threshold for filtering a pair of samples in PC relate and filtering related individuals. (Default = 0.08838835; 2nd degree relatives)',
                              default=0.08838835, type=float)
@@ -216,6 +256,9 @@ if __name__ == '__main__':
     parser.add_argument('--skip_infer_families',
                              help='Skip extracting duplicate samples and infers families samples based on PC-relate results',
                              action='store_true')
+    parser.add_argument('--skip_filter_related_samples',
+                        help='Skip Filter related samples (based on the pairs present from the --run_pc_relate and using the --min_filtering_kinship value for that run)',
+                        action='store_true')
 
     args = parser.parse_args()
 
