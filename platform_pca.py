@@ -73,28 +73,29 @@ def assign_platform_pcs(platform_pc_table: hl.Table, pc_scores_ann: str = 'score
 def main(args):
     hl.init(log='/platform_pca.log')
 
-    output_dir = platform_pca_ht_path_prefix(args.data_source, args.freeze).rstrip("/")
+    data_source = args.data_source
+    freeze = args.freeze
 
     if args.compute_callrate_mt:
         logger.info('Preparing data for platform PCA...')
         intervals = hl.import_locus_intervals(ukbb_calling_intervals_path, reference_genome='GRCh38')
-        mt = get_ukbb_data(args.data_source, args.freeze, adj=True, raw=True, split=False)
+        mt = get_ukbb_data(data_source, freeze, adj=True, raw=True, split=False)
         callrate_mt = compute_callrate_mt(mt, intervals, reference_genome='GRCh38')
-        callrate_mt.write(callrate_mt_path(args.data_source, args.freeze), args.overwrite)
+        callrate_mt.write(callrate_mt_path(data_source, freeze), args.overwrite)
 
     if args.run_platform_pca:
         logger.info("Running platform PCA...")
-        callrate_mt =  hl.read_matrix_table(callrate_mt_path(args.data_source, args.freeze))
+        callrate_mt = hl.read_matrix_table(callrate_mt_path(data_source, freeze))
         eigenvalues, scores_ht, loadings_ht = run_platform_pca(callrate_mt)
-        scores_ht.write(f'{output_dir}/platform_pca_scores.ht', overwrite=args.overwrite)
-        loadings_ht.write(f'{output_dir}/platform_pca_loadings.ht', overwrite=args.overwrite)
+        scores_ht.write(platform_pca_scores_ht_path(data_source, freeze), overwrite=args.overwrite)
+        loadings_ht.write(platform_pca_loadings_ht_path(data_source, freeze), overwrite=args.overwrite)
         # Regeneron freeze 4 Eigenvalues: [26489244.935849957, 2039950.6985898241, 1407875.3058482022, 1082106.1507608977, 373810.0800184624, 361301.2291929654, 324435.7483132424, 205912.4810229146, 196196.71017912056, 159808.25367132248]
 
     if args.assign_platforms:
         logger.info("Assigning platforms based on platform PCA clustering")
         scores_ht = hl.read_table(f'{output_dir}/platform_pca_scores.ht')
         platform_ht = assign_platform_pcs(scores_ht, hdbscan_min_cluster_size=args.hdbscan_min_cluster_size, hdbscan_min_samples=args.hdbscan_min_samples)
-        platform_ht.write(f'{output_dir}/platform_pca_results.ht', overwrite=args.overwrite)
+        platform_ht.write(platform_pca_results_ht_path(data_source, freeze), overwrite=args.overwrite)
 
 
 if __name__ == '__main__':
