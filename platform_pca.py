@@ -100,10 +100,10 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--overwrite', help='Overwrite all data from this subset (default: False)', action='store_true')
+    parser.add_argument('-o', '--overwrite', help='Overwrite all data from this subset (default: False)', action='store_true')
     parser.add_argument('--slack_channel', help='Slack channel to post results and notifications to.')
-    parser.add_argument('--data_source', help='Source of the data, either broad or regeneron')
-    parser.add_argument('--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
+    parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
+    parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
 
     parser.add_argument('--compute_callrate_mt', help='Computes an interval by sample mt of callrate that will be used to compute platform PCs', action='store_true')
     parser.add_argument('--run_platform_pca', help='Runs platform PCA (assumes callrate MT was computed)', action='store_true')
