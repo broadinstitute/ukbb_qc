@@ -1,5 +1,6 @@
 from resources import *
 from gnomad_hail import *
+from gnomad_hail.utils.sample_qc import *
 from platform_pca import *
 import hail as hl
 import argparse
@@ -51,48 +52,6 @@ def ld_prune_qc_mt(qc_mt: hl.MatrixTable, ld_r2: float = 0.1) -> hl.MatrixTable:
 
 # Note: everything below was copied exactly from Laurent's myoseq qc
 
-def filter_dups(
-        relatedness_ht: hl.Table,
-        dup_ranking_func: Callable[..., Tuple[hl.Table, hl.expr.Expression]],
-        dup_ranking_func_args: Optional[List]
-):
-    """
-    Creates a HT with duplicated samples sets.
-    Each row is indexed by the sample that is kept and also contains the set of duplicate samples that should be filtered.
-    dup_ranking_func is a function to decide which duplicate to keep.
-    It should take a table keyed by samples key and any number of additional arguments given through `dup_ranking_func_args`
-    It should return a tuple containing:
-        - the input table with any modifications (e.g. annotations) needed for ranking
-        - A hail expression of a type that can be sorted giving the corresponding rank (where smaller is better)
-    :param relatedness_ht: Input relatedness HT
-    :param dup_ranking_func: Ranking function to pick amongst duplicates.
-    :param dup_ranking_func_args: Optional additional arguments for `dup_ranking_func`
-    :return:
-    """
-    logger.info("Getting duplicate samples")
-    dups = get_duplicated_samples(relatedness_ht)
-    logger.info(f"Found {len(dups)} duplicate sets.")
-    dups_ht = hl.Table.parallelize([hl.struct(dup_set=i, dups=dups[i]) for i in range(0, len(dups))])
-    dups_ht = dups_ht.explode(dups_ht.dups, name='_dup')
-    dups_ht = dups_ht.key_by(**dups_ht._dup)
-    if dup_ranking_func_args is None:
-        dup_ranking_func_args = []
-    dups_ht, rank_expr = dup_ranking_func(dups_ht, *dup_ranking_func_args)
-    dups_cols = hl.bind(
-        lambda x: hl.struct(
-            kept=x[0],
-            filtered=x[1:]
-        ),
-        hl.sorted(hl.agg.collect(hl.tuple([dups_ht._dup, rank_expr])), key=lambda x: x[1]).map(lambda x: x[0])
-    )
-    dups_ht = dups_ht.group_by(dups_ht.dup_set).aggregate(
-        **dups_cols
-    )
-
-    dups_ht = dups_ht.key_by(**{f'{x}_kept': expr for x, expr in dups_ht.kept.items()}).drop('kept')
-    return dups_ht
-
-
 def get_ped(relatedness_ht: hl.Table, dups_ht: hl.Table, sex_ht: hl.Table) -> hl.Pedigree:
     relatedness_ht = relatedness_ht.key_by(  # Needed for familial inference at this point -- should be generalized
         i=relatedness_ht.i.s,
@@ -106,51 +65,14 @@ def get_ped(relatedness_ht: hl.Table, dups_ht: hl.Table, sex_ht: hl.Table) -> hl
     return ped
 
 
-def rank_dup_samples(dups_ht: hl.Table, qc_ht: hl.Table) -> Tuple[hl.Table, hl.expr.Expression]:
-    dups_ht = dups_ht.annotate(rank=-1 * qc_ht[dups_ht.key].sample_qc.dp_stats.mean)
-    return dups_ht, dups_ht.rank
-
-
-def get_related_samples_to_drop(
-        relatedness_ht: hl.Table,
-        min_filtering_kinship: float,
-        rank_func: Callable[..., Tuple[hl.Table, Callable[[hl.expr.Expression, hl.expr.Expression], hl.expr.NumericExpression]]],
-        rank_func_args: Optional[List]
-) -> hl.Table:
-    """
-    Use the maximal independence function in Hail to intelligently prune clusters of related individuals, removing
-    less desirable samples while maximizing the number of unrelated individuals kept in the sample set.
-    :param relatedness_ht:
-    :param min_filtering_kinship:
-    :param rank_func:
-    :param rank_func_args:
-    :return:
-    """
-    # Define maximal independent set, using rank list
-    related_pairs = relatedness_ht.filter(relatedness_ht.kin > min_filtering_kinship).key_by().select('i', 'j')
-    n_related_samples = related_pairs.annotate(ij=[related_pairs.i, related_pairs.j]).explode('ij').key_by('ij').distinct().count()
-    logger.info('{} samples with at least 2nd-degree relatedness found in callset'.format(n_related_samples))
-
-    if rank_func_args is None:
-        rank_func_args = []
-    related_pairs, tie_breaker = rank_func(relatedness_ht, *rank_func_args)
-
-    related_samples_to_drop_ranked = hl.maximal_independent_set(related_pairs.i, related_pairs.j,
-                                                                keep=False, tie_breaker=tie_breaker)
-    related_samples_to_drop_ranked = related_samples_to_drop_ranked.key_by()
-    related_samples_to_drop_ranked = related_samples_to_drop_ranked.select(**related_samples_to_drop_ranked.node)
-    return related_samples_to_drop_ranked.key_by(*relatedness_ht.i)
-
-
 # Note: Will need to change this to work with gnomAD, we will want to default to gnomAD ranking, unless tied pair is gnomAD, UKBB pair
 def rank_related_samples(
-        related_pairs: hl.Table,
+        relatedness_ht: hl.Table,
         qc_ht: hl.Table
 ) -> Tuple[hl.Table, Callable[[hl.expr.Expression, hl.expr.Expression], hl.expr.NumericExpression]]:
 
     def annotate_related_pairs(related_pairs: hl.Table, index_col: str) -> hl.Table:
         related_pairs = related_pairs.key_by(**related_pairs[index_col])
-        related_pairs = related_pairs.filter(hl.is_missing(case_parents[related_pairs.key]))
         return related_pairs.annotate(
             **{
                 index_col: related_pairs[index_col].annotate(
@@ -159,17 +81,17 @@ def rank_related_samples(
             }
         ).key_by()
 
-    related_pairs = annotate_related_pairs(related_pairs, "i")
-    related_pairs = annotate_related_pairs(related_pairs, "j")
+    relatedness_ht = annotate_related_pairs(relatedness_ht, "i")
+    relatedness_ht = annotate_related_pairs(relatedness_ht, "j")
 
     def tie_breaker(l, r):
-        return ( l.dp_mean - r.dp_mean)
+        return (l.dp_mean - r.dp_mean)
 
-    return related_pairs, tie_breaker
+    return relatedness_ht, tie_breaker
 
 
 def main(args):
-    hl.init(log='/relatedness.log', tmp_dir='hdfs:///pc_relate.tmp/')
+    #hl.init(log='/relatedness.log', tmp_dir='hdfs:///pc_relate.tmp/')
 
     data_source = args.data_source
     freeze = args.freeze
@@ -209,10 +131,11 @@ def main(args):
 
     if not args.skip_filter_dups:
         logger.info("Filtering duplicate samples...")
-        dups_ht = filter_dups(
+        sample_qc_ht = hl.read_table(qc_ht_path(data_source, freeze))
+        samples_rankings_ht = sample_qc_ht.select(rank=-1 * sample_qc_ht.sample_qc.dp_stats.mean)
+        dups_ht = filter_duplicate_samples(
             hl.read_table(relatedness_ht_path(data_source, freeze)),
-            rank_dup_samples,
-            [hl.read_table(qc_ht_path(data_source, freeze))]
+            samples_rankings_ht
         )
         dups_ht.write(duplicates_ht_path(data_source, freeze), overwrite=args.overwrite)
 
@@ -225,22 +148,30 @@ def main(args):
         )
         ped.write(inferred_ped_path(data_source, freeze))
 
-    if args.skip_filter_related_samples:
+    if not args.skip_filter_related_samples:
         logger.info("Filtering related samples")
-        related_samples_to_drop = get_related_samples_to_drop(
-            hl.read_table(relatedness_ht_path(data_source, freeze)),
-            args.min_filtering_kinship,
-            rank_related_samples,
-            [hl.read_table(qc_ht_path(data_source, freeze))]
+        relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
+        relatedness_ht = relatedness_ht.filter(relatedness_ht.kin > args.min_filtering_kinship)
+        related_pairs_ht, related_pairs_tie_breaker = rank_related_samples(
+            relatedness_ht,
+            hl.read_table(qc_ht_path(data_source, freeze))
         )
-        related_samples_to_drop.write(related_drop_path(data_source, freeze), overwrite=args.overwrite)
+
+        related_samples_to_drop_ht = hl.maximal_independent_set(related_pairs_ht.i, related_pairs_ht.j,
+                                                                keep=False, tie_breaker=related_pairs_tie_breaker)
+        related_samples_to_drop_ht = related_samples_to_drop_ht.key_by()
+        related_samples_to_drop_ht = related_samples_to_drop_ht.select(**related_samples_to_drop_ht.node)
+        related_samples_to_drop_ht = related_samples_to_drop_ht.key_by('s')
+        related_samples_to_drop_ht.write(related_drop_path(data_source, freeze), overwrite=args.overwrite)
+        logger.info(f'{related_samples_to_drop_ht.count()} samples dropped from callset using maximal independent set')
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--overwrite', help='Overwrite all data from this subset (default: False)', action='store_true')
+    parser.add_argument('-o', '--overwrite', help='Overwrite all data from this subset (default: False)', action='store_true')
     parser.add_argument('--slack_channel', help='Slack channel to post results and notifications to.')
-    parser.add_argument('--data_source', help='Source of the data, either broad or regeneron')
-    parser.add_argument('--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
+    parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
+    parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
 
     parser.add_argument('--skip_compute_qc_mt', help='Skop Compute matrix to be used in sample qc', action='store_true')
     parser.add_argument('--skip_ld_prune_qc_mt', help='Skip LD prunes the qc matrix', action='store_true')
@@ -250,12 +181,12 @@ if __name__ == '__main__':
                         default=0.05,
                         type=float)
     parser.add_argument('--min_filtering_kinship',
-                             help='Minimum kinship threshold for filtering a pair of samples in PC relate and filtering related individuals. (Default = 0.08838835; 2nd degree relatives)',
-                             default=0.08838835, type=float)
+                        help='Minimum kinship threshold for filtering a pair of samples in PC relate and filtering related individuals. (Default = 0.08838835; 2nd degree relatives)',
+                        default=0.08838835, type=float)
     parser.add_argument('--skip_filter_dups', help='Skip filtering duplicated samples', action='store_true')
     parser.add_argument('--skip_infer_families',
-                             help='Skip extracting duplicate samples and infers families samples based on PC-relate results',
-                             action='store_true')
+                        help='Skip extracting duplicate samples and infers families samples based on PC-relate results',
+                        action='store_true')
     parser.add_argument('--skip_filter_related_samples',
                         help='Skip Filter related samples (based on the pairs present from the --run_pc_relate and using the --min_filtering_kinship value for that run)',
                         action='store_true')
