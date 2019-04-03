@@ -78,17 +78,17 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--overwrite', help='Overwrite all data from this subset (default: False)', action='store_true')
+    parser.add_argument('-o', '--overwrite', help='Overwrite all data from this subset (default: False)', action='store_true')
     parser.add_argument('--slack_channel', help='Slack channel to post results and notifications to.')
 
     array_import = parser.add_argument_group('Import array plink files and write Matrix Table')
-    array_import.add_argument('--import_arrays', help='Import array data', action='store_true')
-    array_import.add_argument('--liftover_arrays', help='Liftover array Matrix Table to GRCh38', action='store_true')
+    array_import.add_argument('-i', '--import_arrays', help='Import array data', action='store_true')
+    array_import.add_argument('-l', '--liftover_arrays', help='Liftover array Matrix Table to GRCh38', action='store_true')
 
     concordance = parser.add_argument_group("Compute array concordance with exomes")
-    concordance.add_argument('--data_source', help='Source of the data, either broad or regeneron')
-    concordance.add_argument('--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
-    concordance.add_argument('--array_concordance', help='Compute array concordance', action='store_true')
+    concordance.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
+    concordance.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
+    concordance.add_argument('-c', '--array_concordance', help='Compute array concordance', action='store_true')
 
     args = parser.parse_args()
 
