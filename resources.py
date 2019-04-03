@@ -123,6 +123,20 @@ def sample_qc_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
         raise DataException("This freeze is currently not present")
     return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/sample_qc'
 
+def sample_list_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Returns path of sample list for sample check
+    :param str data_source: Will be regeneron or broad
+    :param int freeze: One of data freezes
+    :return: Path to sample list file
+    :rtype: str
+    """
+    return f'{sample_qc_prefix(data_source, freeze)}/samples.list'
+
+
+def hard_filters_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    return f'{sample_qc_prefix(data_source, freeze)}/hard_filters_flagged.mt'
+
 def array_sample_concordance_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/array_concordance/sample_concordance.ht'
 
@@ -143,7 +157,6 @@ def qc_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, ld_pruned: bool =
     return f'{sample_qc_prefix(data_source, freeze)}/high_callrate_common_biallelic_snps{ld_pruned}.mt'
 
 def qc_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    return f'{sample_qc_prefix(data_source, freeze)}/high_callrate_common_biallelic_snps.ht'
     return f'{sample_qc_prefix(data_source, freeze)}/high_callrate_common_biallelic_snps.ht'
 
 def callrate_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
