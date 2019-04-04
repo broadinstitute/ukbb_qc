@@ -1,6 +1,7 @@
 import argparse
 from call_sex import *
-from gnomad_hail import *
+from gnomad_hail.utils.generic import *
+from gnomad_hail.utils.sample_qc import add_filters_expr
 import logging
 from resources import * 
 
@@ -10,7 +11,36 @@ logger = logging.getLogger("apply_hard_filters")
 logger.setLevel(logging.INFO)
 
 
-def flag_ambiguous(mt: hl.MatrixTable, sex_ht: hl.Table) -> hl.MatrixTable:
+def apply_hard_filters_expr(mt: hl.MatrixTable, min_callrate: float = 0.99, min_depth: float = 20.0) -> hl.MatrixTable:
+    """
+    Creates hard filters expression and annotates mt with expression (creates hard_filters column)
+    :param MatrixTable mt: MatrixTable to be annotated 
+    :param float min_callrate: Callrate threshold to be used to filter samples; default is 0.99
+    :param float min_depth: Depth threshold to be used to filter samples; default is 20.0
+    :return: MatrixTable with updated filter field
+    :rtype: MatrixTable
+    """
+    
+    # the default coverage/depth cutoffs were set visually using plots:
+    # p = hl.plot.histogram(mt.sample_qc.dp_stats.mean, range=(10,120), legend='Mean Sample DP')
+    # p = hl.plot.histogram(mt.sample_qc.call_rate, range=(0.991, 0.997), legend='Mean Sample Callrate')
+
+    hard_filters = {
+        # we don't have contamination/chimera for regeneron vcf
+        #'contamination': ht.freemix > 0.05,
+        #'chimera': ht.pct_chimeras > 0.05,
+        'low_callrate': mt.sample_qc.call_rate < min_callrate,
+        'ambiguous_sex': mt.sex == 'ambiguous_sex',
+        'sex_aneuploidy': mt.sex == 'sex_aneuploidy',
+        'low_coverage': mt.sample_qc.dp_stats.mean < min_depth
+    }
+
+    mt = mt.annotate_cols(hard_filters = add_filters_expr(hard_filters, None))
+
+    return mt
+
+
+def annotate_sex(mt: hl.MatrixTable, sex_ht: hl.Table) -> hl.MatrixTable:
     """
     Annotates mt with imputed sex calculated using call_sex.py
     :param MatrixTable mt: MatrixTable containing samples to be annotated and filtered
@@ -26,26 +56,10 @@ def flag_ambiguous(mt: hl.MatrixTable, sex_ht: hl.Table) -> hl.MatrixTable:
     return mt
 
 
-def flag_low_qual(mt: hl.MatrixTable, min_callrate: float = 0.99, min_depth: float = 20.0) -> hl.MatrixTable:
-    """
-    Annotates samples with low callrate and depth
-    :param MatrixTable mt: MatrixTable containing samples to be filtered
-    :param float min_callrate: Callrate threshold to be used to filter samples; default is 0.99
-    :return: MatrixTable with low quality samples flagged
-    :rtype: MatrixTable
-    """
-
-    # the default cutoffs were set visually using plots:
-    # p = hl.plot.histogram(mt.sample_qc.dp_stats.mean, range=(10,120), legend='Mean Sample DP')
-    # p = hl.plot.histogram(mt.sample_qc.call_rate, range=(0.991, 0.997), legend='Mean Sample Callrate')
-    mt = mt.annotate_cols(low_call_rate = hl.cond(mt.sample_qc.call_rate < min_callrate, True, False))
-    mt = mt.annotate_cols(low_dp = hl.cond(mt.sample_qc.dp_stats.mean < min_depth, True, False))
-    return mt
-    
-
 def main(args):
 
-    hl.init()
+    # hl.init() isn't necessary? according to Laurent
+    #hl.init()
 
     datasource = args.datasource
     if args.freeze:
@@ -59,21 +73,31 @@ def main(args):
     logger.info('Reading in qc mt')
     qc_mt = hl.read_matrix_table(qc_mt_path(datasource, freeze, False))
 
-    # TODO - make common function for returning reference genome + call that instead of this hail command
+    logger.info('Adding variant_qc to qc mt')
+    # add hail's variant qc to qc mt - this is to filter on frequency for imputing sex
+    qc_mt = hl.variant_qc(mt)
+
     logger.info('Getting build of qc mt')
-    reference = qc_mt.locus.dtype.reference_genome.name
+    reference = get_reference_genome(qc_mt.locus).name
 
     logger.info('Imputing sex (using call_sex.py) on qc mt')
     sex_ht = impute_sex(qc_mt, reference, f'{sample_qc_prefix}/{datasource}.freeze_{freeze}/sex_check')
+
+    logger.info('Annotate mt with sex information')
+    mt = annotate_sex(mt, sex_ht)
+
+    logger.info('Adding hard filters to mt')
+    mt = apply_hard_filters_expr(mt)
     
-    logger.info('Flag samples with ambiguous sex or sex aneuploidy in raw mt')
-    mt = flag_ambiguous(mt, sex_ht)
-
-    logger.info('Flag low quality samples (samples with low callrate and depth) in raw mt')
-    mt = flag_low_qual(mt, args.callrate, args.depth)
-
     logger.info('Writing raw mt with annotations')
-    mt.write(hard_filters_mt_path(datasource, freeze), overwrite=args.overwrite)
+    mt = mt.checkpoint(hard_filters_mt_path(datasource, freeze), overwrite = args.overwrite)
+
+    logger.info('Checking number of samples flagged with hard filters')
+    ht = mt.cols()
+    ht = ht.explode(ht.hard_filters)
+    filters = ht.aggregate(hl.agg.counter(ht.hard_filters))
+    for filt in filters:
+        logger.info(f'Samples flagged due to {filt}: {filters[filt]}')
     logger.info('Complete')
 
 
