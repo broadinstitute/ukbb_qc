@@ -188,11 +188,17 @@ def related_drop_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
 
 def ancestry_pca_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, population: str = None) -> str:
     pop = f'.{population}' if population else ''
-    return f'{sample_qc_prefix(data_source, freeze)}/ancestry/unrelated.pca_scores{pop}.ht'
+    return f'{sample_qc_prefix(data_source, freeze)}/population_pca/unrelated.pca_scores{pop}.ht'
 
 def ancestry_pca_loadings_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, population: str = None) -> str:
     pop = f'.{population}' if population else ''
-    return f'{sample_qc_prefix(data_source, freeze)}/ancestry/unrelated.pca_loadings{pop}.ht'
+    return f'{sample_qc_prefix(data_source, freeze)}/population_pca/unrelated.pca_loadings{pop}.ht'
+
+def ancestry_pc_project_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    return f'{sample_qc_prefix(data_source, freeze)}/population_pca/pc_project_scores_pop_assign.ht'
+
+def qc_temp_data_prefix(data_source: str, freeze: int = CURRENT_FREEZE):
+    return f'{sample_qc_prefix(data_source, freeze)}/temp/'
 
 
 class DataException(Exception):
