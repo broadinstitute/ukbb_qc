@@ -1,5 +1,4 @@
 import argparse
-from gnomad_hail import *
 import logging
 from resources import *
 
@@ -18,7 +17,6 @@ def summary(mt: hl.MatrixTable) -> hl.Struct:
     """
 
     var_summary = hl.summarize_variants(mt, show=False)
-
     logger.info('Dataset has {} variants'.format(var_summary.n_variants))
    
     # check that all contigs have variant calls 
@@ -162,9 +160,8 @@ def main(args):
 
     # NOTE writing out mt here as no other annotations are added to mt after this point
     logger.info('Writing out adj, sample/variant qc annotated mt')
-    mt.write(adj_mt_path(datasource, freeze), overwrite = args.overwrite)
-    mt = hl.read_matrix_table(adj_mt_path(datasource, freeze))  
-    
+    mt = mt.checkpoint(adj_mt_path(datasource, freeze), overwrite = args.overwrite)   
+ 
     logger.info('Checking for adj filtration')
     mt_adj = filter_to_adj(mt)
     adj = adj_check(mt, mt_adj)
