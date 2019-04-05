@@ -81,7 +81,7 @@ def main(args):
     reference = get_reference_genome(qc_mt.locus).name
 
     logger.info('Imputing sex (using call_sex.py) on qc mt')
-    sex_ht = impute_sex(qc_mt, reference, f'{sample_qc_prefix}/{datasource}.freeze_{freeze}/sex_check')
+    sex_ht = impute_sex(qc_mt, reference, f'{sample_qc_prefix(datasource, freeze)}/sex_check')
 
     logger.info('Annotate mt with sex information')
     mt = annotate_sex(mt, sex_ht)
