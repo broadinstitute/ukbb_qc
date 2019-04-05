@@ -1,7 +1,6 @@
-from resources import *
 from gnomad_hail import *
 from gnomad_hail.utils.sample_qc import *
-from platform_pca import *
+from resources import *
 import hail as hl
 import argparse
 
@@ -91,7 +90,7 @@ def rank_related_samples(
 
 
 def main(args):
-    #hl.init(log='/relatedness.log', tmp_dir='hdfs:///pc_relate.tmp/')
+    hl.init(log='/relatedness.log', tmp_dir='hdfs:///pc_relate.tmp/')
 
     data_source = args.data_source
     freeze = args.freeze
@@ -104,7 +103,7 @@ def main(args):
         qc_mt.write(qc_mt_path(data_source, freeze), overwrite=args.overwrite)
 
         qc_mt = hl.read_matrix_table(qc_mt_path(data_source, freeze))
-        qc_mt = filter_to_autosomes(qc_mt, reference_genome='GRCh38')
+        qc_mt = filter_to_autosomes(qc_mt)
         qc_ht = hl.sample_qc(qc_mt).cols().select('sample_qc')
         qc_ht.write(qc_ht_path(data_source, freeze), overwrite=args.overwrite)
 
@@ -133,10 +132,16 @@ def main(args):
         logger.info("Filtering duplicate samples...")
         sample_qc_ht = hl.read_table(qc_ht_path(data_source, freeze))
         samples_rankings_ht = sample_qc_ht.select(rank=-1 * sample_qc_ht.sample_qc.dp_stats.mean)
-        dups_ht = filter_duplicate_samples(
-            hl.read_table(relatedness_ht_path(data_source, freeze)),
-            samples_rankings_ht
-        )
+        relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
+        if len(get_duplicated_samples(relatedness_ht)) > 0:
+            dups_ht = filter_duplicate_samples(relatedness_ht, samples_rankings_ht)
+            dups_ht.write(duplicates_ht_path(data_source, freeze, dup_sets=True), overwrite=args.overwrite)
+            dups_ht = flatten_duplicate_samples_ht(dups_ht)
+            dups_ht = sample_qc_ht.select(
+                duplicate=hl.is_defined(dups_ht[sample_qc_ht.key].dup_filtered) & dups_ht[sample_qc_ht.key].dup_filtered,
+            )
+        else:
+            dups_ht = sample_qc_ht.select(duplicate=False)
         dups_ht.write(duplicates_ht_path(data_source, freeze), overwrite=args.overwrite)
 
     if not args.skip_infer_families:

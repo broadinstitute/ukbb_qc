@@ -88,7 +88,7 @@ def hardcalls_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, split: boo
     :return: Path to chosen hardcalls MT
     :rtype: str
     """
-    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/harcalls/hardcalls{".split" if split else ""}.mt'
+    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/hardcalls/hardcalls{".split" if split else ""}.mt'
 
 
 def non_refs_only_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, split: bool = True) -> str:
@@ -177,8 +177,9 @@ def relatedness_pca_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZ
 def relatedness_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/relatedness/relatedness.ht'
 
-def duplicates_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    return f'{sample_qc_prefix(data_source, freeze)}/relatedness/dups.ht'
+def duplicates_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, dup_sets: bool = False) -> str:
+    dup_sets = f'_sets' if dup_sets else ''
+    return f'{sample_qc_prefix(data_source, freeze)}/relatedness/duplicate{dup_sets}.ht'
 
 def inferred_ped_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/relatedness/ped.txt'
@@ -203,6 +204,9 @@ def ancestry_pc_project_scores_ht_path(data_source: str, freeze: int = CURRENT_F
     """
     data_type = f'.{data_type}' if data_type else ''
     return f'{sample_qc_prefix(data_source, freeze)}/population_pca/pc_project_scores_pop_assign{data_type}.ht'
+
+def platform_pop_outlier_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    return f'{sample_qc_prefix(data_source, freeze)}/outlier_detection.ht'
 
 def qc_temp_data_prefix(data_source: str, freeze: int = CURRENT_FREEZE):
     return f'{sample_qc_prefix(data_source, freeze)}/temp/'
