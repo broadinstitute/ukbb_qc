@@ -79,7 +79,7 @@ def main(args):
     if args.compute_callrate_mt:
         logger.info('Preparing data for platform PCA...')
         intervals = hl.import_locus_intervals(ukbb_calling_intervals_path, reference_genome='GRCh38')
-        mt = get_ukbb_data(data_source, freeze, adj=True, split=False)
+        mt = hl.read_matrix_table(hard_filters_mt_path(data_source, freeze))
         mt = mt.filter_cols(hl.len(mt.hard_filters) == 0)
         callrate_mt = compute_callrate_mt(mt, intervals, reference_genome='GRCh38')
         callrate_mt.write(callrate_mt_path(data_source, freeze), args.overwrite)
