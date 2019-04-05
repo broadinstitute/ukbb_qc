@@ -194,8 +194,15 @@ def ancestry_pca_loadings_ht_path(data_source: str, freeze: int = CURRENT_FREEZE
     pop = f'.{population}' if population else ''
     return f'{sample_qc_prefix(data_source, freeze)}/population_pca/unrelated.pca_loadings{pop}.ht'
 
-def ancestry_pc_project_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    return f'{sample_qc_prefix(data_source, freeze)}/population_pca/pc_project_scores_pop_assign.ht'
+def ancestry_pc_project_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, data_type: str = None) -> str:
+    """
+    Returns path of Table for scores and pop assignments from pc_project on gnomAD PCs
+    :param str data_type: either None for UKBB only or joint for merged UKBB and gnomAD
+    :return: Path to Table
+    :rtype: str
+    """
+    data_type = f'.{data_type}' if data_type else ''
+    return f'{sample_qc_prefix(data_source, freeze)}/population_pca/pc_project_scores_pop_assign{data_type}.ht'
 
 def qc_temp_data_prefix(data_source: str, freeze: int = CURRENT_FREEZE):
     return f'{sample_qc_prefix(data_source, freeze)}/temp/'
