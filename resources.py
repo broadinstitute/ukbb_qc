@@ -88,7 +88,7 @@ def hardcalls_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, split: boo
     :return: Path to chosen hardcalls MT
     :rtype: str
     """
-    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/data/{data_source}.freeze_{freeze}.hardcalls{".split" if split else ""}.mt'
+    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/harcalls/hardcalls{".split" if split else ""}.mt'
 
 
 def non_refs_only_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, split: bool = True) -> str:
