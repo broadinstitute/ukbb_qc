@@ -1,9 +1,9 @@
 import argparse
 from call_sex import *
-from gnomad_hail.utils.generic import *
+from gnomad_hail.utils.generic import get_reference_genome
 from gnomad_hail.utils.sample_qc import add_filters_expr
 import logging
-from resources import * 
+from resources import *
 
 
 logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
@@ -50,7 +50,7 @@ def annotate_sex(mt: hl.MatrixTable, sex_ht: hl.Table) -> hl.MatrixTable:
     """
 
      # s	is_female	f_stat	n_called	expected_homs	observed_homs	sex	y_cov	twenty_cov	normalized_y_coverage
-    sex_colnames = ['f_stat', 'is_female', 'sex']
+    sex_colnames = ['f_stat', 'is_female', 'sex', 'normalized_y_coverage']
     sex_ht = sex_ht.select(*sex_colnames)
     mt = mt.annotate_cols(**sex_ht[mt.col_key])
     return mt
@@ -74,7 +74,7 @@ def main(args):
     qc_mt = hl.read_matrix_table(qc_mt_path(datasource, freeze, False))
 
     logger.info('Adding variant_qc to qc mt')
-    # add hail's variant qc to qc mt - this is to filter on frequency for imputing sex
+    # this is to filter on AF during sex imputation
     qc_mt = hl.variant_qc(mt)
 
     logger.info('Getting build of qc mt')
