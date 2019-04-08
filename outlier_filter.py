@@ -29,40 +29,35 @@ def main(args):
 
     mt = hl.read_matrix_table(hard_filters_mt_path(data_source, freeze))
     logger.info('Filtering samples that fail hard filters...')
-    mt.describe()
-    print(mt.count())
-    mt.hard_filters.show()
     mt = mt.filter_cols(hl.len(mt.hard_filters) == 0).select_cols()
-
-    mt.describe()
-    print(mt.count())
-
 
     logger.info('Running mini sample QC for platform- and population-specific filtering...')
     run_sample_qc(mt).cols().select('sample_qc').write(qc_temp_data_prefix(data_source, freeze) + 'outlier_sample_qc.ht', args.overwrite)
     sample_qc_ht = hl.read_table(qc_temp_data_prefix(data_source, freeze) + 'outlier_sample_qc.ht')
 
-    if args.skip_platform_filter:
+    strata = []
+    if not args.skip_platform_filter:
         logger.info('Annotating platform assignments...')
         platform_ht = hl.read_table(platform_pca_results_ht_path(data_source, freeze))
-        sample_qc_ht = sample_qc_ht.annotate(qc_platform=platform_ht.key_by('s')[sample_qc_ht.s].qc_platform)
-    else:
-        sample_qc_ht = sample_qc_ht.annotate(qc_platform=0)
+        sample_qc_ht = sample_qc_ht.annotate(qc_platform=platform_ht[sample_qc_ht.key].qc_platform)
+        strata.append('qc_platform')
 
-    logger.info('Annotating population assignments...')
-    pop_ht = hl.read_table(ancestry_pc_project_scores_ht_path(data_source, freeze))
-    sample_qc_ht = sample_qc_ht.annotate(qc_pop=pop_ht.key_by('s')[sample_qc_ht.s].pop)
+    if not args.skip_population_filter:
+        logger.info('Annotating population assignments...')
+        pop_ht = hl.read_table(ancestry_pc_project_scores_ht_path(data_source, freeze))
+        sample_qc_ht = sample_qc_ht.annotate(qc_pop=pop_ht[sample_qc_ht.key].pop.pop)
+        strata.append('qc_pop')
 
     # For each platform and population, aggregate sample QC metrics and calculate the MAD/mean/stdev
     logger.info('Flagging samples failing pop/platform-specific sample qc thresholds...')
     pop_platform_filter_ht = compute_stratified_metrics_filter(
         sample_qc_ht,
         args.filtering_qc_metrics.split(","),
-        ['qc_pop', 'qc_platform']
+        strata
     )
     pop_platform_filter_ht.write(platform_pop_outlier_ht_path(data_source, freeze), overwrite=args.overwrite)
 
-    num_pass = mt.aggregate_cols(hl.agg.count_where(hl.len(mt.pop_platform_filters) == 0))
+    num_pass = pop_platform_filter_ht.aggregate(hl.agg.count_where(hl.len(pop_platform_filter_ht.pop_platform_filters) == 0))
     logger.info(f'{num_pass} exome samples found passing pop/platform-specific filtering')
 
 
@@ -76,7 +71,9 @@ if __name__ == '__main__':
     parser.add_argument('--skip_platform_filter',
                                       help="Skip including platforms in outlier filtering",
                                       action='store_true')
-
+    parser.add_argument('--skip_population_filter',
+                                      help="Skip including population in outlier filtering",
+                                      action='store_true')
     parser.add_argument('--filtering_qc_metrics', help="List of QC metrics for filtering.", default=",".join(
     ['n_snp', 'r_ti_tv', 'r_insertion_deletion', 'n_insertion', 'n_deletion', 'r_het_hom_var']))
 
