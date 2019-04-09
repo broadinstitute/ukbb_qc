@@ -28,23 +28,27 @@ def impute_sex(mt: hl.MatrixTable, build: str, outdir: str) -> hl.Table:
         """
         
         logger.info('Filtering to chromosome 20 and non-PAR regions on chrY')
-        mt = mt.filter_rows((mt.locus.contig == "chr20") | (mt.locus.in_y_nonpar()),keep = True)
+        chry_mt = mt.filter_rows((mt.locus.contig == "chr20") | (mt.locus.in_y_nonpar()),keep = True)
         
         logger.info('Filtering to PASS variants')
-        mt = mt.filter_rows(hl.is_missing(mt.filters))
+        chry_mt = chry_mt.filter_rows(hl.is_missing(chry_mt.filters))
         
         logger.info('Filtering to common SNVs')
-        mt = mt.filter_rows(mt.variant_qc.AF[0] > 0.05)
+        chry_mt = chry_mt.filter_rows(chry_mt.variant_qc.AF[0] > 0.05)
        
         logger.info('Calculating coverage on chromosome 20 and chromosome Y')
-        mt = mt.annotate_cols(
-        chry_cov = hl.agg.filter(mt.locus.contig == "chrY",hl.agg.mean(mt.DP)))
-        mt = mt.annotate_cols(
-        chr20_cov = hl.agg.filter(mt.locus.contig == "chr20",hl.agg.mean(mt.DP)))
+        chry_mt = chry_mt.annotate_cols(
+        chry_cov = hl.agg.filter(chry_mt.locus.contig == "chrY",hl.agg.mean(chry_mt.DP)))
+        chry_mt = chry_mt.annotate_cols(
+        chr20_cov = hl.agg.filter(chry_mt.locus.contig == "chr20",hl.agg.mean(chry_mt.DP)))
 
         logger.info('Using chr20 coverage to normalize chrY coverage')
-        mt = mt.annotate_cols(normalized_y_coverage = mt.chry_cov/mt.chr20_cov)
-        return(mt)
+        chry_mt = chry_mt.annotate_cols(normalized_y_coverage = chry_mt.chry_cov/chry_mt.chr20_cov)
+
+        logger.info('Annotating input MT with chr20, chrY, and normalized chrY coverage')
+        ht = chry_mt.cols()
+        mt = mt.annotate_cols(**ht[mt.col_key])
+        return mt 
 
 
     def annotate_sex(
@@ -75,7 +79,7 @@ def impute_sex(mt: hl.MatrixTable, build: str, outdir: str) -> hl.Table:
             mt = hl.filter_intervals(mt, [hl.parse_locus_interval('chrX', reference_genome="GRCh38")])
         
         sex_ht = hl.impute_sex(mt.GT, aaf_threshold = aaf_threshold, male_threshold = male_threshold, female_threshold = female_threshold)
-
+    
         # annotate mt with imputed sex
         mt = mt.annotate_cols(**sex_ht[mt.col_key])
         sex_ht = mt.cols()
@@ -120,8 +124,7 @@ def impute_sex(mt: hl.MatrixTable, build: str, outdir: str) -> hl.Table:
 
     logger.info('Writing out sex ht')
     sex_ht_path = outdir + '/sex.ht'
-    sex_ht.write(sex_ht_path, overwrite=True)
-    sex_ht = hl.read_table(sex_ht_path)
+    sex_ht = sex_ht.checkpoint(sex_ht_path, overwrite=True)
 
     logger.info('Writing out sex.txt')
     outfile = outdir + '/sex.txt'
