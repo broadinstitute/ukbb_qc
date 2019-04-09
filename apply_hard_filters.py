@@ -58,9 +58,6 @@ def annotate_sex(mt: hl.MatrixTable, sex_ht: hl.Table) -> hl.MatrixTable:
 
 def main(args):
 
-    # hl.init() isn't necessary? according to Laurent
-    #hl.init()
-
     datasource = args.datasource
     if args.freeze:
         freeze = args.freeze
@@ -75,13 +72,13 @@ def main(args):
 
     logger.info('Adding variant_qc to qc mt')
     # this is to filter on AF during sex imputation
-    qc_mt = hl.variant_qc(mt)
+    qc_mt = hl.variant_qc(qc_mt)
 
     logger.info('Getting build of qc mt')
-    reference = get_reference_genome(qc_mt.locus).name
+    build = get_reference_genome(qc_mt.locus).name
 
     logger.info('Imputing sex (using call_sex.py) on qc mt')
-    sex_ht = impute_sex(qc_mt, reference, f'{sample_qc_prefix(datasource, freeze)}/sex_check')
+    sex_ht = impute_sex(qc_mt, build, f'{sample_qc_prefix(datasource, freeze)}/sex_check')
 
     logger.info('Annotate mt with sex information')
     mt = annotate_sex(mt, sex_ht)
@@ -91,7 +88,7 @@ def main(args):
     
     logger.info('Writing raw mt with annotations')
     mt = mt.checkpoint(hard_filters_mt_path(datasource, freeze), overwrite = args.overwrite)
-
+    
     logger.info('Checking number of samples flagged with hard filters')
     ht = mt.cols()
     ht = ht.explode(ht.hard_filters)
