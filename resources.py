@@ -147,6 +147,17 @@ def sample_list_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/samples.list'
 
 
+def meta_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Returns path of meta ht for plotting
+    :param str data_source: Will be regeneron or broad
+    :param int freeze: One of data freezes
+    :return: Path to meta ht
+    :rtype: str
+    """
+    #return f'{sample_qc_prefix(data_source, freeze)/meta.ht'
+    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/meta.ht'
+
 def hard_filters_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/hard_filters_flagged.mt'
 
@@ -171,7 +182,6 @@ def qc_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, ld_pruned: bool =
 
 def qc_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/high_callrate_common_biallelic_snps.ht'
-    return f'{sample_qc_prefix(data_source, freeze)}/high_callrate_common_biallelic_snps.ht'
 
 def callrate_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/platform_pca/callrate.mt'
@@ -191,8 +201,9 @@ def relatedness_pca_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZ
 def relatedness_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/relatedness/relatedness.ht'
 
-def duplicates_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    return f'{sample_qc_prefix(data_source, freeze)}/relatedness/dups.ht'
+def duplicates_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, dup_sets: bool = False) -> str:
+    dup_sets = f'_sets' if dup_sets else ''
+    return f'{sample_qc_prefix(data_source, freeze)}/relatedness/duplicate{dup_sets}.ht'
 
 def inferred_ped_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/relatedness/ped.txt'
@@ -207,6 +218,51 @@ def ancestry_pca_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, 
 def ancestry_pca_loadings_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, population: str = None) -> str:
     pop = f'.{population}' if population else ''
     return f'{sample_qc_prefix(data_source, freeze)}/ancestry/unrelated.pca_loadings{pop}.ht'
+
+def ancestry_pc_project_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, data_type: str = None) -> str:
+    """
+    Returns path of Table for scores and pop assignments from pc_project on gnomAD PCs
+    :param str data_type: either None for UKBB only or joint for merged UKBB and gnomAD
+    :return: Path to Table
+    :rtype: str
+    """
+    data_type = f'.{data_type}' if data_type else ''
+    return f'{sample_qc_prefix(data_source, freeze)}/population_pca/pc_project_scores_pop_assign{data_type}.ht'
+
+def platform_pop_outlier_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    return f'{sample_qc_prefix(data_source, freeze)}/outlier_detection.ht'
+
+def qc_temp_data_prefix(data_source: str, freeze: int = CURRENT_FREEZE):
+    return f'{sample_qc_prefix(data_source, freeze)}/temp/'
+
+def get_ht_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE, name: str = None) -> str:
+    """
+    Creates a checkpoint path for Table
+    :param str data_type: Will be regeneron or broad
+    :param int freeze: One of data freezes
+    :param str name: Name of intermediate Table
+    :return: Output checkpoint path
+    :rtype: str
+    """
+
+    return f'broad-ukbb/{data_source}.freeze_{freeze}/temp/{name}.ht'
+
+
+def table_join(
+    left_ht: hl.Table, left_key: str, right_ht: hl.Table, right_key: str, join_type: str
+    ) -> hl.Table:
+    """
+    Joins two tables, creates a checkpoint, and returns joined table
+    :param Table left_ht: left Table to be joined
+    :param str left_key: key for left Table
+    :param Table right_ht: right Table to be joined
+    :param str right_key: key for right Table
+    :param str join_type: how to join the tables (left, right, inner, outer)
+    :return: joined Table
+    :rtype: Table
+    """
+
+    return left_ht.key_by(left_key).join(right_ht.key_by(right_key), how = join_type)
 
 
 class DataException(Exception):
