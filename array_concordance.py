@@ -15,8 +15,8 @@ def main(args):
     if args.import_arrays:
         logger.info('Importing array data (autosomes only) into hail Matrix Table...')
 
-        array_files = [(get_array_data_path('bed',f'chr{chrom}'),
-                        get_array_data_path('bim',f'chr{chrom}')) for chrom in range(1, 23)]
+        array_files = [(get_array_data_path('bed', f'chr{chrom}'),
+                        get_array_data_path('bim', f'chr{chrom}')) for chrom in range(1, 23)]
 
         mts = [hl.import_plink(bed=f[0],
                                bim=f[1],
