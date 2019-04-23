@@ -28,7 +28,7 @@ def main(args):
     right_ht = hl.read_table(qc_ht_path(data_source, freeze))
 
     logger.info('Joining hard filters ht and qc ht to start making meta ht')
-    left_ht = table_join(left_ht, 's', right_ht, 's', 'inner')
+    left_ht = table_join(left_ht, 's', right_ht, 's', 'outer')
 
     logger.info('Reading in platform PCA ht')
     right_ht = hl.read_table(platform_pca_results_ht_path(data_source, freeze))
@@ -36,13 +36,13 @@ def main(args):
     right_ht = right_ht.drop('scores')
 
     logger.info('Joining platform PCA ht into current join (meta ht)')
-    left_ht = table_join(left_ht, 's', right_ht, 's', 'inner')
+    left_ht = table_join(left_ht, 's', right_ht, 's', 'outer')
 
     logger.info('Reading in population PC ht')
     right_ht = hl.read_table(ancestry_pc_project_scores_ht_path(data_source, freeze, None))
 
     logger.info('Joining population PC ht into current join')
-    left_ht = table_join(left_ht, 's', right_ht, 's', 'inner')
+    left_ht = table_join(left_ht, 's', right_ht, 's', 'outer')
 
     logger.info('Creating checkpoint')
     left_ht = left_ht.checkpoint(get_ht_checkpoint_path(data_source, freeze, 'intermediate_ht_join'), overwrite = True)
