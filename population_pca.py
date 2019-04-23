@@ -77,6 +77,7 @@ def main(args):
     hl.init(log='/population_pca.log')
 
     if args.run_pc_project:
+        # Note: I used all workers for this as it kept failing with preemptibles
         qc_mt = get_ukbb_data(args.data_source, args.freeze, split=False, raw=True)
         joint_scores_ht = project_on_gnomad_pop_pcs(qc_mt)
         joint_scores_ht.checkpoint(ancestry_pc_project_scores_ht_path(args.data_source, args.freeze, "joint"), overwrite=args.overwrite)
