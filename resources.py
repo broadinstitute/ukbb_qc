@@ -158,8 +158,8 @@ def meta_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     #return f'{sample_qc_prefix(data_source, freeze)/meta.ht'
     return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/meta.ht'
 
-def hard_filters_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    return f'{sample_qc_prefix(data_source, freeze)}/hard_filters_flagged.mt'
+def hard_filters_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    return f'{sample_qc_prefix(data_source, freeze)}/hard_filters_flagged.ht'
 
 def array_sample_concordance_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/array_concordance/sample_concordance.ht'
