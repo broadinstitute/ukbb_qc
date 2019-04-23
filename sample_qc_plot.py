@@ -1,0 +1,152 @@
+import pandas as pd
+from gnomad_hail import *
+from gnomad_hail.utils.plotting import *
+from statsmodels.robust.scale import mad
+from bokeh.layouts import row, column, gridplot
+from bokeh.plotting import figure, output_notebook, show
+from bokeh.palettes import Spectral, Set1
+import holoviews as hv
+hv.extension('bokeh')
+
+from IPython.display import display_html
+
+
+def get_pc_plots(pcs_pd, pc_name, color_col='color', colors=None, palette=None, n_pcs=10):
+    plots = []
+    factors = pcs_pd[color_col].unique()
+    factors.sort()
+    if palette is not None:
+        palette = palette[len(factors)]
+        colors = CategoricalColorMapper(palette=palette, factors=factors)
+    for pc in range(1, n_pcs, 2):
+        p = figure(title=pc_name)
+        legend_it = []
+        for factor in factors:
+            source = ColumnDataSource(pcs_pd[pcs_pd[color_col] == factor])
+            c = p.circle(x=f'{pc_name}{pc}',
+                         y=f'{pc_name}{pc + 1}',
+                         source=source,
+                         color={'field': color_col, 'transform': colors},
+                         alpha=0.6)
+            legend_it.append((factor, [c]))
+        p.xaxis.axis_label = f'PC{pc}'
+        p.yaxis.axis_label = f'PC{pc + 1}'
+        legend = Legend(items=legend_it, location=(10, 10))
+        legend.click_policy = "hide"
+        p.add_layout(legend, 'right')
+        plots.append(Panel(child=p, title=f'PC{pc} vs PC{pc + 1}'))
+    return Tabs(tabs=plots)
+
+
+def get_relatedness_plots(ibd_pd,
+                          color_col={'Broad': 'Broad_classification', 'Regeneron': 'Regeneron_classification'},
+                          related_factors=['Full-sibling', 'Parent-child', 'Second-degree', 'None'],
+                          related_colors=['#e41a1c', '#377eb8', '#4daf4a', '#984ea3'],
+                          ibd_axes=[("0", "1"), ("1", "2"), ("0", "2")],
+                          data_sources=["Broad", "Regeneron"]):
+    colors = CategoricalColorMapper(palette=related_colors, factors=related_factors)
+
+    def plot_ibd(data_source, ibd_1, ibd_2):
+        p = figure(title=f'{data_source} IBD{ibd_1} vs IBD{ibd_2}')
+        for factor in related_factors:
+            source = ColumnDataSource(ibd_pd[ibd_pd[color_col[data_source]] == factor])
+            c = p.circle(x=f'{data_source}_IBD{ibd_1}',
+                         y=f'{data_source}_IBD{ibd_2}',
+                         source=source,
+                         color={'field': color_col[data_source], 'transform': colors},
+                         alpha=0.6,
+                         legend=factor)
+        p.xaxis.axis_label = f'{data_source} IBD{ibd_1}'
+        p.yaxis.axis_label = f'{data_source} IBD{ibd_2}'
+        p.legend.click_policy = "hide"
+        p.legend.location = "top_right"
+
+        return p
+
+    plots = []
+    for ibd_1, ibd_2 in ibd_axes:
+        ibd_plots = [plot_ibd(data_source, ibd_1, ibd_2) for data_source in data_sources]
+        p = gridplot(ibd_plots, ncols=len(ibd_plots), plot_width=500, plot_height=500)
+        plots.append(Panel(child=p, title=f'IBD{ibd_1} vs IBD{ibd_2}'))
+
+    return Tabs(tabs=plots)
+
+
+def get_outlier_plots(outlier_sample_qc,
+                      meta_ht,
+                      facet_col='qc_pop',
+                      qc_metrics=["n_snp", "r_ti_tv", "r_insertion_deletion", "n_insertion", "n_deletion",
+                                  "r_het_hom_var"],
+                      palette=Set1):
+    outlier_sample_qc = outlier_sample_qc.annotate(qc_pop=meta_ht[outlier_sample_qc.key].pop.pop,
+                                                   pop_platform_filters=meta_ht[
+                                                       outlier_sample_qc.key].pop_platform_filters)
+    cols = [facet_col]
+    key = 's'
+    colnames = cols + [key] + [f'sample_qc.{metric}' for metric in qc_metrics]
+    new_colnames = cols + [key] + [f'{metric}' for metric in qc_metrics]
+    sample_qc_pd = outlier_sample_qc.flatten().select(*colnames).rename(dict(zip(colnames, new_colnames))).key_by(
+        key).to_pandas()
+    sample_qc_fail_pd = sample_qc_pd.groupby(facet_col).transform(
+        lambda x: (x < (x.median() - (4 * mad(x)))) | (x > (x.median() + (4 * mad(x)))))
+    sample_qc_fail_pd[facet_col] = sample_qc_pd[facet_col]
+    plots = None
+    tables = []
+    factors = sample_qc_pd[facet_col].unique()
+    factors.sort()
+    if palette is not None:
+        palette = palette[len(factors)]
+        colors = CategoricalColorMapper(palette=palette, factors=factors)
+    for metric in qc_metrics:
+        curve_dict = {}
+        sample_qc_fail_pd.groupby(facet_col)[metric].value_counts()
+        fail_table = sample_qc_fail_pd.groupby(facet_col)[metric].value_counts().unstack().fillna(0)
+        fail_table = fail_table.rename_axis(index=None, columns=None)
+        fail_table.columns = ['Pass', 'Fail']
+        fail_table['Pct_fail'] = (fail_table['Fail'] / fail_table.sum(axis=1)) * 100
+        decimals = pd.Series([0, 0, 2], index=['Pass', 'Fail', 'Pct_fail'])
+        fail_table = fail_table.round()  # (decimals)
+        tables.append((metric, fail_table))
+        for factor in factors:
+            source = sample_qc_pd[sample_qc_pd[facet_col] == factor][metric]
+            upper = source.median() + (4 * mad(source))
+            lower = source.median() - (4 * mad(source))
+            p = hv.Distribution(source).opts(xrotation=45)  # , fill_color={'field': facet_col, 'transform': colors})
+            p = p * hv.VLine(lower).opts(line_dash='dashed')
+            p = p * hv.VLine(upper).opts(line_dash='dashed')
+            curve_dict[factor] = p
+        if plots is not None:
+            plots = plots + hv.NdLayout(curve_dict, kdims=facet_col, label=metric).opts(sizing_mode='scale_both')
+        else:
+            plots = hv.NdLayout(curve_dict, kdims=facet_col, label=metric).opts(sizing_mode='scale_both')
+
+    return tables, plots
+
+
+def display_tables(table_list):
+    head = """<html>
+<body>
+<table style="width:100%">
+<thead align="center">
+<tr>
+{}
+</tr>
+</thead>
+<tr>
+"""
+    titles = ""
+    row = ""
+    for title, serie in table_list:
+        s = serie.copy()
+        titles += f'<th style="text-align: center;">{title}</th>\n'
+        s.name = ''
+        row += "<td>{}</td>".format(s.to_html())
+
+    head = head.format(titles)
+    head += row
+    head += """
+</tr>
+</table>
+</body>
+</html>"""
+    display_html(head, raw=True)
