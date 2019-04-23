@@ -86,11 +86,11 @@ def main(args):
     logger.info('Adding hard filters to mt')
     mt = apply_hard_filters_expr(mt)
     
-    logger.info('Writing raw mt with annotations')
-    mt = mt.checkpoint(hard_filters_mt_path(datasource, freeze), overwrite = args.overwrite)
+    logger.info('Converting mt to ht and writing out')
+    ht = mt.cols()
+    ht = ht.checkpoint(hard_filters_ht_path(datasource, freeze), overwrite=args.overwrite)
     
     logger.info('Checking number of samples flagged with hard filters')
-    ht = mt.cols()
     ht = ht.explode(ht.hard_filters)
     filters = ht.aggregate(hl.agg.counter(ht.hard_filters))
     for filt in filters:
