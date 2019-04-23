@@ -113,7 +113,7 @@ def get_array_data_path(extension: str, chrom: str) -> str:
 
 array_sample_map = 'gs://broad-ukbb/resources/array/Project_26041_bridge.csv'
 ukbb_calling_intervals_path = 'gs://broad-ukbb/resources/ukbb_exome_calling.interval_list'
-
+lcr_intervals_path = 'gs://broad-ukbb/resources/LCRFromHengH38_chr1-22_XY.txt'
 
 # Sample QC files
 def sample_qc_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
