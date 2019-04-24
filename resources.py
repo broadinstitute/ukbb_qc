@@ -248,33 +248,5 @@ def get_ht_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE, name:
     return f'broad-ukbb/{data_source}.freeze_{freeze}/temp/{name}.ht'
 
 
-def sample_count(ht) -> int:
-    """
-    Checks for the number of samples in given Table
-
-    :param Table ht: Table to be checked
-    :return: Number of samples in Table
-    :rtype: int
-    """
-    return ht.count()
-
-
-def sample_comparison(ht1, ht2) -> bool:
-    """
-    Checks if two sample counts are the same
-
-    :param Table ht1: First Table to be checked
-    :param Table ht2: Second Table to be checked
-    :return: Whether the sample counts are the same
-    :rtype: bool
-    """
-
-    s_count1 = sample_count(ht1)
-    s_count2 = sample_count(ht2)
-    logger.info(f'{s_count1} samples in left table; {s_count2} samples in right table')
-
-    return s_count1 == s_count2
-
-
 class DataException(Exception):
     pass
