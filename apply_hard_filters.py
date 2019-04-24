@@ -87,6 +87,8 @@ def main(args):
     mt = apply_hard_filters_expr(mt)
     
     logger.info('Converting mt to ht and writing out')
+    mt = mt.annotate_cols(raw_sample_qc = mt.sample_qc)
+    mt = mt.drop(mt.sample_qc)
     ht = mt.cols()
     ht = ht.checkpoint(hard_filters_ht_path(datasource, freeze), overwrite=args.overwrite)
     
