@@ -248,11 +248,40 @@ def get_ht_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE, name:
     return f'broad-ukbb/{data_source}.freeze_{freeze}/temp/{name}.ht'
 
 
+def sample_count(ht) -> int:
+    """
+    Checks for the number of samples in given Table
+
+    :param Table ht: Table to be checked
+    :return: Number of samples in Table
+    :rtype: int
+    """
+    return ht.s.count()
+
+
+def sample_comparison(ht1, ht2) -> bool:
+    """
+    Checks if two sample counts are the same
+
+    :param Table ht1: First Table to be checked
+    :param Table ht2: Second Table to be checked
+    :return: Whether the sample counts are the same
+    :rtype: bool
+    """
+
+    s_count1 = sample_count(ht1)
+    s_count2 = sample_count(ht2)
+    logger.info(f'{s_count1} samples in left table; {s_count2} samples in right table')
+
+    return s_count1 == s_count2
+
+
 def table_join(
     left_ht: hl.Table, left_key: str, right_ht: hl.Table, right_key: str, join_type: str
     ) -> hl.Table:
     """
-    Joins two tables, creates a checkpoint, and returns joined table
+    Joins two tables and returns joined table. Also prints warning if sample counts are not the same.
+
     :param Table left_ht: left Table to be joined
     :param str left_key: key for left Table
     :param Table right_ht: right Table to be joined
@@ -261,6 +290,12 @@ def table_join(
     :return: joined Table
     :rtype: Table
     """
+
+
+    sample_count_match = sample_comparison(left_ht, right_ht)
+
+    if not sample_count_match:
+        logger.warning('Sample counts in left and right tables do not match')
 
     return left_ht.key_by(left_key).join(right_ht.key_by(right_key), how = join_type)
 
