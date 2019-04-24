@@ -8,6 +8,23 @@ logger = logging.getLogger("create_meta_ht")
 logger.setLevel(logging.INFO)
 
 
+def sample_comparison(ht1, ht2) -> bool:
+    """
+    Checks if two sample counts are the same
+
+    :param Table ht1: First Table to be checked
+    :param Table ht2: Second Table to be checked
+    :return: Whether the sample counts are the same
+    :rtype: bool
+    """
+
+    s_count1 = ht1.count()
+    s_count2 = ht2.count()
+    logger.info(f'{s_count1} samples in left table; {s_count2} samples in right table')
+
+    return s_count1 == s_count2
+
+
 def table_join(
     left_ht: hl.Table, left_key: str, right_ht: hl.Table, right_key: str, join_type: str
     ) -> hl.Table:
