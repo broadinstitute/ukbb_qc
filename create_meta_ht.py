@@ -8,6 +8,30 @@ logger = logging.getLogger("create_meta_ht")
 logger.setLevel(logging.INFO)
 
 
+def table_join(
+    left_ht: hl.Table, left_key: str, right_ht: hl.Table, right_key: str, join_type: str
+    ) -> hl.Table:
+    """
+    Joins two tables and returns joined table. Also prints warning if sample counts are not the same.
+
+    :param Table left_ht: left Table to be joined
+    :param str left_key: key for left Table
+    :param Table right_ht: right Table to be joined
+    :param str right_key: key for right Table
+    :param str join_type: how to join the tables (left, right, inner, outer)
+    :return: joined Table
+    :rtype: Table
+    """
+
+
+    sample_count_match = sample_comparison(left_ht, right_ht)
+
+    if not sample_count_match:
+        logger.warning('Sample counts in left and right tables do not match')
+
+    return left_ht.key_by(left_key).join(right_ht.key_by(right_key), how = join_type)
+
+
 def main(args):
 
     data_source = args.data_source
@@ -16,13 +40,8 @@ def main(args):
     else:
         freeze = CURRENT_FREEZE
 
-    logger.info('Reading in mt with hard filters and sex annotations')
-    mt = hl.read_matrix_table(hard_filters_mt_path(data_source, freeze))
-    mt = mt.annotate_cols(raw_sample_qc = mt.sample_qc)
-    mt = mt.drop(mt.sample_qc)
-
-    logger.info('Converting hard filters mt to ht')
-    left_ht = mt.cols()
+    logger.info('Reading hard filters ht')
+    left_ht = hl.read_table(hard_filters_ht_path(data_source, freeze))
 
     logger.info('Reading in qc ht')
     right_ht = hl.read_table(qc_ht_path(data_source, freeze))
