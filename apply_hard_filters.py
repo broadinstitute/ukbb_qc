@@ -40,22 +40,6 @@ def apply_hard_filters_expr(mt: hl.MatrixTable, min_callrate: float = 0.99, min_
     return mt
 
 
-def annotate_sex(mt: hl.MatrixTable, sex_ht: hl.Table) -> hl.MatrixTable:
-    """
-    Annotates mt with imputed sex calculated using call_sex.py
-    :param MatrixTable mt: MatrixTable containing samples to be annotated and filtered
-    :param Table sex_ht: Table containing sex annotations from Kristen's code call_sex.py
-    :return: MatrixTable with ambiguous sex/sex aneuploidies flagged
-    :rtype: MatrixTable
-    """
-
-     # s	is_female	f_stat	n_called	expected_homs	observed_homs	sex	y_cov	twenty_cov	normalized_y_coverage
-    sex_colnames = ['f_stat', 'is_female', 'sex', 'normalized_y_coverage']
-    sex_ht = sex_ht.select(*sex_colnames)
-    mt = mt.annotate_cols(**sex_ht[mt.col_key])
-    return mt
-
-
 def main(args):
 
     datasource = args.datasource
@@ -81,15 +65,17 @@ def main(args):
     sex_ht = impute_sex(qc_mt, build, f'{sample_qc_prefix(datasource, freeze)}/sex_check')
 
     logger.info('Annotate mt with sex information')
-    mt = annotate_sex(mt, sex_ht)
-
+    # s	is_female	f_stat	n_called	expected_homs	observed_homs	sex	y_cov	twenty_cov	normalized_y_coverage
+    sex_colnames = ['f_stat', 'is_female', 'sex', 'normalized_y_coverage']
+    sex_ht = sex_ht.select(*sex_colnames)
+    mt = mt.annotate_cols(**sex_ht[mt.col_key])
+    
     logger.info('Adding hard filters to mt')
     mt = apply_hard_filters_expr(mt)
     
     logger.info('Converting mt to ht and writing out')
-    mt = mt.annotate_cols(raw_sample_qc = mt.sample_qc)
-    mt = mt.drop(mt.sample_qc)
     ht = mt.cols()
+    ht = ht.transmute(raw_sample_qc=ht.sample_qc)
     ht = ht.checkpoint(hard_filters_ht_path(datasource, freeze), overwrite=args.overwrite)
     
     logger.info('Checking number of samples flagged with hard filters')
