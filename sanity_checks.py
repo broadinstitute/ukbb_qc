@@ -8,7 +8,7 @@ logger = logging.getLogger("sanity_checks")
 logger.setLevel(logging.INFO)
 
 
-def summary(mt: hl.MatrixTable) -> hl.Struct:
+def summarize_mt(mt: hl.MatrixTable) -> hl.Struct:
     """
     Gets a summary of variants in mt, prints number of variants to stdout, and checks that each chromosome has variant calls
     :param MatrixTable mt: Raw MatrixTable to be checked
@@ -24,21 +24,10 @@ def summary(mt: hl.MatrixTable) -> hl.Struct:
         if var_summary.contigs[contig] == 0:
             logger.info('{} has no variants called'.format(contig))
 
-    return hl.summarize_variants(mt, show=False)
+    return var_summary
 
 
-def alt_alleles(mt: hl.MatrixTable) -> hl.expr.StructExpression:
-    """
-    Gets allele count distributions with n_alt_alleles() function
-    :param MatrixTable mt: MatrixTable to be checked
-    :return: StructExpression of allele count distribution
-    :rtype: StructExpression
-    """
-
-    return mt.aggregate_entries(hl.agg.counter(mt.GT.n_alt_alleles()))
-    
- 
-def adj_check(mt: hl.MatrixTable, mt_adj: hl.MatrixTable) -> bool:
+def check_adj(mt: hl.MatrixTable, mt_adj: hl.MatrixTable) -> bool:
     """
     Checks if MatrixTable has been filtered using adj criteria by checking allele counts pre and post adj filtration
     :param MatrixTable mt: MatrixTable to be checked
@@ -47,24 +36,14 @@ def adj_check(mt: hl.MatrixTable, mt_adj: hl.MatrixTable) -> bool:
     :rtype: bool
     """
 
-    pre = alt_alleles(mt)
+    pre = mt.aggregate_entries(hl.agg.counter(mt.GT.n_alt_alleles()))
     logger.info('\nAllele distribution pre adj filtration: {}'.format(pre))
-    post = alt_alleles(mt_adj)
+    post = mt_adj.aggregate_entries(hl.agg.counter(mt_adj.GT.n_alt_alleles()))
     logger.info('\nAllele distribution post adj filtration: {}'.format(post))
 
     adj = True
-    for field in pre:
-        if field in post:
-            if post[field] < pre[field]:
-                logger.info('Allele {} had fewer allele counts post adj filtration'.format(field))
-                adj = False
-            elif post[field] > pre[field]:
-                logger.info('Allele {} had more alleles post adj filtration'.format(field))
-                adj = False
-            else:
-                logger.info('Allele {} has the same allele count pre/post adj filtration'.format(field))
-        else:
-            logger.info('Allele {} was present pre-adj filtration but not post'.format(field))
+    if sum(pre.values()) != sum(post.values()):
+        adj = False
 
     return adj
 
@@ -118,18 +97,6 @@ def sample_check(mt: hl.MatrixTable, ht: hl.Table, sample_qc_path: str) -> bool:
     return sample_mismatch
     
 
-def hail_qc(mt: hl.MatrixTable) -> hl.MatrixTable:
-    """
-    Annotates MatrixTable with variant and sample QC
-    :param MatrixTable mt: MatrixTable to be annotated
-    :return: MatrixTable with variant/sample QC annotations
-    :rtype: MatrixTable
-    """
-
-    mt = hl.variant_qc(mt)
-    mt = hl.sample_qc(mt)
-    return mt
-
 
 def main(args):
 
@@ -146,25 +113,26 @@ def main(args):
     
     logger.info('Loading raw matrixtable of dataset and reading in list of provided samples')
     mt = hl.read_matrix_table(raw_mt_path(datasource, freeze))
-    ht = hl.import_table(sample_list_path(datasource, freeze), no_header = True)
+    ht = hl.import_table(sample_list_path(datasource, freeze), no_header=True)
 
     logger.info('Getting variant summary for mt')
-    var_summary = summary(mt)
+    var_summary = summarize_mt(mt)
     logger.info('\nVariant summary: {}'.format(var_summary))
 
     logger.info('Annotating mt with sample and variant qc')
-    mt = hail_qc(mt)
+    mt = hl.variant_qc(mt)
+    mt = hl.sample_qc(mt)
    
     logger.info('Annotating with adj')
     mt = annotate_adj(mt)
 
     # NOTE writing out mt here as no other annotations are added to mt after this point
     logger.info('Writing out adj, sample/variant qc annotated mt')
-    mt = mt.checkpoint(adj_mt_path(datasource, freeze), overwrite = args.overwrite)   
+    mt = mt.checkpoint(adj_mt_path(datasource, freeze), overwrite=args.overwrite)   
  
     logger.info('Checking for adj filtration')
     mt_adj = filter_to_adj(mt)
-    adj = adj_check(mt, mt_adj)
+    adj = check_adj(mt, mt_adj)
    
     if adj:
         logger.info('Dataset was adj filtered')
@@ -173,7 +141,7 @@ def main(args):
 
     logger.info('Checking if all samples provided are in dataset')
     if sample_check(mt, ht, sample_qc_path):
-        logger.info('\nSample mismatch between dataset and provided list of samples')
+        logger.warning('\nSample mismatch between dataset and provided list of samples')
     else:
         logger.info('\nAll samples in dataset match provided list of samples')
     
