@@ -1,6 +1,7 @@
 import argparse
 import logging
-from resources import *
+from gnomad_hail.utils.gnomad_functions import *
+from ukbb_qc.resources import *
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -113,11 +114,11 @@ def main(args):
     
     logger.info('Loading raw matrixtable of dataset and reading in list of provided samples')
     mt = hl.read_matrix_table(raw_mt_path(datasource, freeze))
-    ht = hl.import_table(sample_list_path(datasource, freeze), no_header=True)
+    ht = hl.import_table(sample_list_path('regeneron', freeze), no_header=True)
 
     logger.info('Getting variant summary for mt')
-    var_summary = summarize_mt(mt)
-    logger.info('\nVariant summary: {}'.format(var_summary))
+    #var_summary = summarize_mt(mt)
+    #logger.info('\nVariant summary: {}'.format(var_summary))
 
     logger.info('Annotating mt with sample and variant qc')
     mt = hl.variant_qc(mt)
