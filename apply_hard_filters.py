@@ -1,9 +1,6 @@
 import argparse
-from call_sex import *
-from gnomad_hail.utils.generic import get_reference_genome
 from gnomad_hail.utils.sample_qc import add_filters_expr
-import logging
-from resources import *
+from ukbb_qc.call_sex import * 
 
 
 logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
@@ -11,14 +8,14 @@ logger = logging.getLogger("apply_hard_filters")
 logger.setLevel(logging.INFO)
 
 
-def apply_hard_filters_expr(mt: hl.MatrixTable, min_callrate: float = 0.99, min_depth: float = 20.0) -> hl.MatrixTable:
+def apply_hard_filters_expr(ht: hl.Table, min_callrate: float = 0.99, min_depth: float = 20.0) -> hl.Table:
     """
-    Creates hard filters expression and annotates mt with expression (creates hard_filters column)
-    :param MatrixTable mt: MatrixTable to be annotated 
+    Creates hard filters expression and annotates ht with expression (creates hard_filters column)
+    :param Table ht: Table to be annotated 
     :param float min_callrate: Callrate threshold to be used to filter samples; default is 0.99
     :param float min_depth: Depth threshold to be used to filter samples; default is 20.0
-    :return: MatrixTable with updated filter field
-    :rtype: MatrixTable
+    :return: Table with hard_filters column
+    :rtype: Table
     """
     
     # the default coverage/depth cutoffs were set visually using plots:
@@ -29,54 +26,55 @@ def apply_hard_filters_expr(mt: hl.MatrixTable, min_callrate: float = 0.99, min_
         # we don't have contamination/chimera for regeneron vcf
         #'contamination': ht.freemix > 0.05,
         #'chimera': ht.pct_chimeras > 0.05,
-        'low_callrate': mt.sample_qc.call_rate < min_callrate,
-        'ambiguous_sex': mt.sex == 'ambiguous_sex',
-        'sex_aneuploidy': mt.sex == 'sex_aneuploidy',
-        'low_coverage': mt.sample_qc.dp_stats.mean < min_depth
+        'low_callrate': ht.sample_qc.call_rate < min_callrate,
+        'ambiguous_sex': ht.sex == 'ambiguous_sex',
+        'sex_aneuploidy': ht.sex == 'sex_aneuploidy',
+        'low_coverage': ht.sample_qc.dp_stats.mean < min_depth
     }
 
-    mt = mt.annotate_cols(hard_filters = add_filters_expr(hard_filters, None))
-
-    return mt
+    ht = ht.annotate(hard_filters=add_filters_expr(hard_filters, None))
+    return ht
 
 
 def main(args):
 
-    datasource = args.datasource
+    data_source = args.data_source
     if args.freeze:
         freeze = args.freeze
     else:
         freeze = CURRENT_FREEZE
 
-    logger.info('Reading in mt with adj, variant_qc, and sample_qc annotations')
-    mt = hl.read_matrix_table(adj_mt_path(datasource, freeze))
+    logger.info('Reading in raw mt')
+    mt = hl.read_matrix_table(raw_mt_path(data_source, freeze))
 
-    logger.info('Reading in qc mt')
-    qc_mt = hl.read_matrix_table(qc_mt_path(datasource, freeze, False))
+    logger.info('Adding hl.sample_qc to mt')
+    mt = hl.sample_qc(mt)
+    mt = mt.transmute_cols(raw_sample_qc=mt.sample_qc)
 
-    logger.info('Adding variant_qc to qc mt')
-    # this is to filter on AF during sex imputation
-    qc_mt = hl.variant_qc(qc_mt)
+    if data_source == 'regeneron':
+        logger.info('Adding hl.variant_qc to mt (to add AF annotation)')
+        mt = hl.variant_qc(mt)
 
-    logger.info('Getting build of qc mt')
-    build = get_reference_genome(qc_mt.locus).name
+    logger.info('Getting build of mt')
+    build = get_reference_genome(mt.locus).name
 
-    logger.info('Imputing sex (using call_sex.py) on qc mt')
-    sex_ht = impute_sex(qc_mt, build, f'{sample_qc_prefix(datasource, freeze)}/sex_check')
+    logger.info('Imputing sex (using call_sex.py) on mt')
+    sex_ht = impute_sex(mt, build, data_source)
 
     logger.info('Annotate mt with sex information')
     # s	is_female	f_stat	n_called	expected_homs	observed_homs	sex	y_cov	twenty_cov	normalized_y_coverage
     sex_colnames = ['f_stat', 'is_female', 'sex', 'normalized_y_coverage']
     sex_ht = sex_ht.select(*sex_colnames)
     mt = mt.annotate_cols(**sex_ht[mt.col_key])
-    
-    logger.info('Adding hard filters to mt')
-    mt = apply_hard_filters_expr(mt)
-    
-    logger.info('Converting mt to ht and writing out')
+   
+    logger.info('Converting mt to ht')
     ht = mt.cols()
-    ht = ht.transmute(raw_sample_qc=ht.sample_qc)
-    ht = ht.checkpoint(hard_filters_ht_path(datasource, freeze), overwrite=args.overwrite)
+ 
+    logger.info('Adding hard filters')
+    ht = apply_hard_filters_expr(ht)
+    
+    logger.info('Writing out hard filters ht')
+    ht = ht.checkpoint(hard_filters_ht_path(data_source, freeze), overwrite=args.overwrite)
     
     logger.info('Checking number of samples flagged with hard filters')
     ht = ht.explode(ht.hard_filters)
@@ -88,7 +86,7 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='This script applies hard filters to UKBB data')
-    parser.add_argument('-s', '--datasource', help='Data source', choices=['regeneron', 'broad'], default='broad')
+    parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
     parser.add_argument('-f', '--freeze', help='Current freeze #', type=int)
     parser.add_argument('-c', '--callrate', help='Minimum callrate', default=0.99)
     parser.add_argument('-d', '--depth', help='Minimum depth', default=20)
