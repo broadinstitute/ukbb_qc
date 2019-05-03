@@ -1,7 +1,7 @@
 import hail as hl
 
 CURRENT_FREEZE = 4
-DATA_SOURCES = ['regeneron']
+DATA_SOURCES = ['regeneron', 'broad']
 FREEZES = [4]
 
 
@@ -67,7 +67,7 @@ def array_mt_path(liftover: bool = False) -> str:
     return f'gs://broad-ukbb/resources/array/ukbb_array{"_liftover_GRCh38" if liftover else ""}.mt'
 
 
-def raw_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+def raw_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, is_temp = False) -> str:
     """
     Warning: unsplit and no special consideration on sex chromosomes
     :param str data_source: Will be regeneron or broad
@@ -75,8 +75,11 @@ def raw_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     :return: Path to chosen raw MT
     :rtype: str
     """
-    # Note: nf wont apply to broad so should we just remove nf or add as a parameter?
-    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/data/{data_source}.freeze_{freeze}.nf.mt'
+    tempstr = '.temp' if is_temp else ''
+    if data_source == 'regeneron':
+        return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/data/{data_source}.freeze_{freeze}.nf.mt'
+    elif data_source == 'broad':
+        return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/data/{data_source}.freeze_{freeze}{tempstr}.mt'
 
 
 def hardcalls_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, split: bool = True) -> str:
