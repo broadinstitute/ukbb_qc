@@ -48,14 +48,14 @@ def liftover_ht(ht: hl.Table, ref_from: str = 'GRCh37', ref_to: str = 'GRCh38') 
     return ht
 
 
-def project_on_gnomad_pop_pcs(qc_mt: hl.MatrixTable) -> hl.Table:
+def project_on_gnomad_pop_pcs(mt: hl.MatrixTable) -> hl.Table:
     """
-    Performs pc_project on a qc_mt using gnomAD population pca loadings and known pops
-    :param MatrixTable qc_mt: raw matrix table to perform pc_project and pop assignment on
+    Performs pc_project on a mt using gnomAD population pca loadings and known pops
+    :param MatrixTable mt: raw matrix table to perform pc_project and pop assignment on
     :return: pc_project scores Table and
     :rtype: tuple(Table, Table)
     """
-    qc_mt = qc_mt.select_entries('GT')
+    mt = mt.select_entries('GT')
 
     # Load gnomAD metadata and population pc loadings
     gnomad_meta_exomes_ht = prep_meta(hl.read_table(metadata_exomes_ht_path(version=CURRENT_EXOME_META)))
@@ -64,7 +64,7 @@ def project_on_gnomad_pop_pcs(qc_mt: hl.MatrixTable) -> hl.Table:
     gnomad_loadings_ht = hl.read_table(gres.ancestry_pca_loadings_ht_path())
     gnomad_loadings_ht = liftover_ht(gnomad_loadings_ht)
 
-    scores_ht = pc_project(qc_mt, gnomad_loadings_ht)
+    scores_ht = pc_project(mt, gnomad_loadings_ht)
     scores_ht = scores_ht.annotate(pop_for_rf=hl.null(hl.tstr))
     scores_ht = scores_ht.select('pop_for_rf', **{f'PC{i + 1}': scores_ht.scores[i] for i in range(10)})
 
@@ -78,8 +78,8 @@ def main(args):
 
     if args.run_pc_project:
         # Note: I used all workers for this as it kept failing with preemptibles
-        qc_mt = get_ukbb_data(args.data_source, args.freeze, split=False, raw=True)
-        joint_scores_ht = project_on_gnomad_pop_pcs(qc_mt)
+        mt = get_ukbb_data(args.data_source, args.freeze, split=False, adj=True)
+        joint_scores_ht = project_on_gnomad_pop_pcs(mt)
         joint_scores_ht.checkpoint(ancestry_pc_project_scores_ht_path(args.data_source, args.freeze, "joint"), overwrite=args.overwrite)
         joint_scores_pd = joint_scores_ht.to_pandas()
 
@@ -93,7 +93,7 @@ def main(args):
         joint_pops_ht = hl.Table.from_pandas(joint_pops_pd, key=list(joint_scores_ht.key))
         scores_ht = joint_scores_ht.filter(hl.is_missing(joint_scores_ht.pop_for_rf))
         scores_ht = scores_ht.annotate(pop=joint_pops_ht[scores_ht.key])
-        scores_ht.checkpoint(ancestry_pc_project_scores_ht_path(args.data_source, args.freeze), overwrite=args.overwrite)
+        scores_ht = scores_ht.checkpoint(ancestry_pc_project_scores_ht_path(args.data_source, args.freeze), overwrite=args.overwrite)
 
         logger.info(
             "Found the following sample count after population assignment (reduced to only input samples): {}".format(
