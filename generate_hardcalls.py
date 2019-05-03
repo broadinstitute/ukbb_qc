@@ -16,7 +16,9 @@ def main(args):
 
     if args.write_hardcalls:
         logger.info("Generating hardcalls...")
-        mt = hl.read_matrix_table(hard_filters_mt_path(data_source, freeze))
+        mt = get_ukbb_data(data_source, freeze, split=False, raw=True)
+        ht = hl.read_table(hard_filters_ht_path(data_source, freeze))
+        mt = annotate_adj(mt.select_cols(sex=ht[mt.row_key].sex))
         mt = mt.select_entries(GT=mt.GT, adj=mt.adj)  # Note: this is different from gnomAD hardcalls file because no PGT or PID
         mt = adjust_sex_ploidy(mt, mt.sex)
         mt = mt.select_cols().naive_coalesce(10000)

@@ -133,9 +133,18 @@ def sample_list_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
     return f'{sample_qc_prefix(data_source, freeze)}/samples.list'
 
+def meta_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Returns path of meta ht for plotting
+    :param str data_source: Will be regeneron or broad
+    :param int freeze: One of data freezes
+    :return: Path to meta ht
+    :rtype: str
+    """
+    return f'{sample_qc_prefix(data_source, freeze)}/meta.ht'
 
-def hard_filters_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    return f'{sample_qc_prefix(data_source, freeze)}/hard_filters_flagged.mt'
+def hard_filters_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    return f'{sample_qc_prefix(data_source, freeze)}/hard_filters_flagged.ht'
 
 def array_sample_concordance_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/array_concordance/sample_concordance.ht'
@@ -174,18 +183,22 @@ def platform_pca_results_ht_path(data_source: str, freeze: int = CURRENT_FREEZE)
 def relatedness_pca_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/relatedness/pruned.pca_scores.ht'
 
-def relatedness_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    return f'{sample_qc_prefix(data_source, freeze)}/relatedness/relatedness.ht'
+def relatedness_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, method: str = 'pc_relate') -> str:
+    method = f'.{method}' if method != 'pc_relate' else ''
+    return f'{sample_qc_prefix(data_source, freeze)}/relatedness/relatedness{method}.ht'
 
-def duplicates_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, dup_sets: bool = False) -> str:
+def duplicates_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, dup_sets: bool = False, method: str = 'pc_relate') -> str:
     dup_sets = f'_sets' if dup_sets else ''
-    return f'{sample_qc_prefix(data_source, freeze)}/relatedness/duplicate{dup_sets}.ht'
+    method = f'.{method}' if method != 'pc_relate' else ''
+    return f'{sample_qc_prefix(data_source, freeze)}/relatedness/duplicate{dup_sets}{method}.ht'
 
-def inferred_ped_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    return f'{sample_qc_prefix(data_source, freeze)}/relatedness/ped.txt'
+def inferred_ped_path(data_source: str, freeze: int = CURRENT_FREEZE, method: str = 'pc_relate') -> str:
+    method = f'.{method}' if method != 'pc_relate' else ''
+    return f'{sample_qc_prefix(data_source, freeze)}/relatedness/ped{method}.txt'
 
-def related_drop_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    return f'{sample_qc_prefix(data_source, freeze)}/relatedness/related_samples_to_drop.ht'
+def related_drop_path(data_source: str, freeze: int = CURRENT_FREEZE, method: str = 'pc_relate') -> str:
+    method = f'.{method}' if method != 'pc_relate' else ''
+    return f'{sample_qc_prefix(data_source, freeze)}/relatedness/related_samples_to_drop{method}.ht'
 
 def ancestry_pca_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, population: str = None) -> str:
     pop = f'.{population}' if population else ''
