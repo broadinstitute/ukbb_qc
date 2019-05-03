@@ -55,10 +55,9 @@ def main(args):
     data_source = args.data_source
     freeze = args.freeze
 
-    # Note: should we move this part and the one below it into the script that KC has for sample/variant/adj filtering?
     if not args.skip_compute_qc_mt:
         logger.info("Filtering to bi-allelic, high-callrate, common SNPs for sample QC...")
-        qc_mt = compute_qc_mt(get_ukbb_data(data_source, freeze, raw=True, split=False))
+        qc_mt = compute_qc_mt(get_ukbb_data(data_source, freeze, adj=True, split=False))
         qc_mt = qc_mt.naive_coalesce(5000)
         qc_mt.write(qc_mt_path(data_source, freeze), overwrite=args.overwrite)
 
