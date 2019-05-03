@@ -79,14 +79,15 @@ def main(args):
     if args.compute_callrate_mt:
         logger.info('Preparing data for platform PCA...')
         intervals = hl.import_locus_intervals(ukbb_calling_intervals_path, reference_genome='GRCh38')
-        mt = hl.read_matrix_table(hard_filters_mt_path(data_source, freeze))
-        mt = mt.filter_cols(hl.len(mt.hard_filters) == 0)
+        mt = get_ukbb_data(args.data_source, args.freeze, split=False, adj=True)
         callrate_mt = compute_callrate_mt(mt, intervals, reference_genome='GRCh38')
         callrate_mt.write(callrate_mt_path(data_source, freeze), args.overwrite)
 
     if args.run_platform_pca:
         logger.info("Running platform PCA...")
         callrate_mt = hl.read_matrix_table(callrate_mt_path(data_source, freeze))
+        qc_ht = hl.read_table(hard_filters_ht_path(data_source, freeze)).key_by('s')
+        callrate_mt = callrate_mt.filter_cols(hl.len(qc_ht[callrate_mt.col_key].hard_filters) == 0)
         eigenvalues, scores_ht, loadings_ht = run_platform_pca(callrate_mt)
         scores_ht.write(platform_pca_scores_ht_path(data_source, freeze), overwrite=args.overwrite)
         loadings_ht.write(platform_pca_loadings_ht_path(data_source, freeze), overwrite=args.overwrite)
@@ -94,7 +95,7 @@ def main(args):
 
     if args.assign_platforms:
         logger.info("Assigning platforms based on platform PCA clustering")
-        scores_ht = hl.read_table(f'{output_dir}/platform_pca_scores.ht')
+        scores_ht = hl.read_table(platform_pca_scores_ht_path(data_source, freeze))
         platform_ht = assign_platform_pcs(scores_ht, hdbscan_min_cluster_size=args.hdbscan_min_cluster_size, hdbscan_min_samples=args.hdbscan_min_samples)
         platform_ht.write(platform_pca_results_ht_path(data_source, freeze), overwrite=args.overwrite)
 
