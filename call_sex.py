@@ -102,6 +102,10 @@ def impute_sex(mt: hl.MatrixTable, build: str, data_source:str, min_callrate: fl
     :return: Table with sex annotations
     :rtype: Table
     """
+
+    logger.info('Filtering to biallelic SNPs')
+    mt = mt.filter_rows((hl.len(mt.alleles) == 2) & hl.is_snp(mt.alleles[0], mt.alleles[1]))
+    
     logger.info('Filtering to common PASS variants (PASS: empty filters field for broad, missing filters value for regeneron)')
     if data_source == 'regeneron':
         mt = mt.filter_rows(hl.is_missing(mt.filters))
@@ -110,9 +114,6 @@ def impute_sex(mt: hl.MatrixTable, build: str, data_source:str, min_callrate: fl
     else:
         mt = mt.filter_rows(mt.filters.length() == 0, keep=True)
         mt = mt.filter_rows(mt.info.AF[0] > 0.05)
-
-    logger.info('Filtering to biallelic SNPs')
-    mt = mt.filter_rows((hl.len(mt.alleles) == 2) & hl.is_snp(mt.alleles[0], mt.alleles[1]))
 
     logger.info('Filtering to variants with high callrate')
     mt = mt.filter_rows(hl.agg.fraction(hl.is_defined(mt.GT)) > min_callrate)
