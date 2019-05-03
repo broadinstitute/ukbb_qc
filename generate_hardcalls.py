@@ -1,7 +1,7 @@
 from gnomad_hail import *
 import hail as hl
-from resources import *
-
+from ukbb_qc.resources import *
+from ukbb_qc.call_sex import *
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("hardcalls")
@@ -13,6 +13,27 @@ def main(args):
 
     data_source = args.data_source
     freeze = args.freeze
+
+    logger.info('IMPUTING SEX...')
+    logger.info('Filtering to high-callrate, common, biallelic SNPs on relevant chromosomes...')
+    mt = hl.read_matrix_table(raw_mt_path(data_source, freeze))
+    mt = hl.variant_qc(mt)
+    mt.describe()
+
+    sex_check_intervals = [hl.parse_locus_interval(x, reference_genome='GRCh38') for x in ['chr20', 'chrX', 'chrY']]
+    sex_mt = hl.filter_intervals(mt, sex_check_intervals)
+
+    sex_mt = sex_mt.filter_rows((hl.len(sex_mt.alleles) == 2) & hl.is_snp(sex_mt.alleles[0], sex_mt.alleles[1]))
+    sex_mt = sex_mt.filter_rows((hl.agg.fraction(hl.is_defined(sex_mt.GT)) > 0.99) & (sex_mt.variant_qc.AF[0] > 0.05))
+    # NOTE: Deleted 'PASS' requirement for now -- let's see how this goes
+
+    # NOTE: coverage estimation is now based on high-callrate, common, biallelic SNPs
+    sex_ht = run_impute_sex(sex_mt, data_source, freeze)
+    sex_colnames = ['f_stat', 'is_female', 'sex', 'normalized_Y_cov']
+    sex_ht = sex_ht.select(*sex_colnames)
+    mt = mt.annotate_cols(**sex_ht[mt.col_key])
+
+    # TODO: check distributions here
 
     if args.write_hardcalls:
         logger.info("Generating hardcalls...")

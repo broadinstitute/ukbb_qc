@@ -39,55 +39,33 @@ def apply_hard_filters_expr(ht: hl.Table, min_callrate: float = 0.99, min_depth:
 def main(args):
 
     data_source = args.data_source
-    if args.freeze:
-        freeze = args.freeze
-    else:
-        freeze = CURRENT_FREEZE
+    freeze = args.freeze
 
-    logger.info('Reading in raw mt')
+    logger.info('Reading in raw MT...')
     mt = hl.read_matrix_table(raw_mt_path(data_source, freeze))
 
-    logger.info('Adding hl.sample_qc to mt')
+    logger.info('Computing raw sample QC metrics...')
     mt = hl.sample_qc(mt)
     mt = mt.transmute_cols(raw_sample_qc=mt.sample_qc)
-
-    if data_source == 'regeneron':
-        logger.info('Adding hl.variant_qc to mt (to add AF annotation)')
-        mt = hl.variant_qc(mt)
-
-    logger.info('Getting build of mt')
-    build = get_reference_genome(mt.locus).name
-
-    logger.info('Imputing sex (using call_sex.py) on mt')
-    sex_ht = impute_sex(mt, build, data_source)
-
-    logger.info('Annotate mt with sex information')
-    # s	is_female	f_stat	n_called	expected_homs	observed_homs	sex	y_cov	twenty_cov	normalized_y_coverage
-    sex_colnames = ['f_stat', 'is_female', 'sex', 'normalized_y_coverage']
-    sex_ht = sex_ht.select(*sex_colnames)
-    mt = mt.annotate_cols(**sex_ht[mt.col_key])
-   
-    logger.info('Converting mt to ht')
     ht = mt.cols()
  
-    logger.info('Adding hard filters')
+    logger.info('Annotating hard filters...')
     ht = apply_hard_filters_expr(ht)
     
-    logger.info('Writing out hard filters ht')
+    logger.info('Writing out hard filters HT...')
     ht = ht.checkpoint(hard_filters_ht_path(data_source, freeze), overwrite=args.overwrite)
     
-    logger.info('Checking number of samples flagged with hard filters')
+    logger.info('Checking number of samples flagged with hard filters...')
     ht = ht.explode(ht.hard_filters)
     filters = ht.aggregate(hl.agg.counter(ht.hard_filters))
     for filt in filters:
         logger.info(f'Samples flagged due to {filt}: {filters[filt]}')
-    logger.info('Complete')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='This script applies hard filters to UKBB data')
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
-    parser.add_argument('-f', '--freeze', help='Current freeze #', type=int)
+    parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
     parser.add_argument('-c', '--callrate', help='Minimum callrate', default=0.99)
     parser.add_argument('-d', '--depth', help='Minimum depth', default=20)
     parser.add_argument('-o', '--overwrite', help='Overwrite pre-existing data', action='store_true', default=True)
