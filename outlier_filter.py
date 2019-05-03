@@ -7,6 +7,34 @@ logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("relatedness")
 logger.setLevel(logging.INFO)
 
+def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: bool = True) -> Union[hl.MatrixTable, hl.Table]:
+    """
+    Filters low-confidence regions
+
+    :param MatrixTable or Table mt: MatrixTable or Table to filter
+    :param bool filter_lcr: Whether to filter LCR regions
+    :param bool filter_decoy: Whether to filter decoy regions
+    :param bool filter_segdup: Whether to filter Segdup regions
+    :param bool filter_exome_low_coverage_regions: Whether to filter exome low confidence regions
+    :param list of str high_conf_regions: Paths to set of high confidence regions to restrict to (union of regions)
+    :return: MatrixTable or Table with low confidence regions removed
+    :rtype: MatrixTable or Table
+    """
+    from ukbb_qc.resources import lcr_intervals_path
+
+    criteria = []
+    if filter_lcr:
+        lcr = hl.import_locus_intervals(lcr_intervals_path, reference_genome="GRCh38")
+        criteria.append(hl.is_missing(lcr[mt.locus]))
+
+    if criteria:
+        filter_criteria = functools.reduce(operator.iand, criteria)
+        if isinstance(mt, hl.MatrixTable):
+            mt = mt.filter_rows(filter_criteria)
+        else:
+            mt = mt.filter(filter_criteria)
+
+    return mt
 
 def run_sample_qc(mt: hl.MatrixTable) -> hl.MatrixTable:
     """
@@ -15,7 +43,8 @@ def run_sample_qc(mt: hl.MatrixTable) -> hl.MatrixTable:
     :return: MT filtered to autosomes and high-confidence regions, with computed sample QC column annotations
     :rtype: MatrixTable
     """
-    mt = filter_to_autosomes(mt) # filter_low_conf_regions(mt))
+    mt = filter_to_autosomes(mt)
+    mt = filter_low_conf_regions(mt)
     mt = mt.filter_rows(hl.len(mt.alleles) == 2)  # NOTE: this does not work on a split MT!
     mt = hl.sample_qc(mt)
     mt = mt.annotate_rows(variant_qc=hl.struct(af=hl.agg.mean(mt.GT.n_alt_alleles()) / 2))
@@ -27,9 +56,10 @@ def main(args):
     data_source = args.data_source
     freeze = args.freeze
 
-    mt = hl.read_matrix_table(hard_filters_mt_path(data_source, freeze))
+    mt = get_ukbb_data(data_source, freeze, split=False, adj=True)
     logger.info('Filtering samples that fail hard filters...')
-    mt = mt.filter_cols(hl.len(mt.hard_filters) == 0).select_cols()
+    qc_ht = hl.read_table(hard_filters_ht_path(data_source, freeze)).key_by('s')
+    mt = mt.filter_cols(hl.len(qc_ht[mt.col_key].hard_filters) == 0).select_cols()
 
     logger.info('Running mini sample QC for platform- and population-specific filtering...')
     run_sample_qc(mt).cols().select('sample_qc').write(qc_temp_data_prefix(data_source, freeze) + 'outlier_sample_qc.ht', args.overwrite)
