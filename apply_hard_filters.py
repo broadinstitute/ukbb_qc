@@ -41,15 +41,15 @@ def main(args):
     data_source = args.data_source
     freeze = args.freeze
 
-    logger.info('Reading in raw MT...')
-    mt = hl.read_matrix_table(raw_mt_path(data_source, freeze))
+    logger.info('Adding sex imputation annotations...')
+    mt = get_ukbb_data(data_source, freeze, split=False, raw=True)
+    ht = hl.read_table(sex_ht_path(data_source, freeze))
+    mt = mt.annotate_cols(**ht[mt.row_key])
 
     logger.info('Computing raw sample QC metrics...')
     mt = hl.sample_qc(mt)
     mt = mt.transmute_cols(raw_sample_qc=mt.sample_qc)
     ht = mt.cols()
- 
-    logger.info('Annotating hard filters...')
     ht = apply_hard_filters_expr(ht)
     
     logger.info('Writing out hard filters HT...')
