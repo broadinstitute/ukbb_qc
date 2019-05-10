@@ -3,6 +3,7 @@ from gnomad_hail.utils.sample_qc import *
 from resources import *
 import hail as hl
 import argparse
+from ukbb_qc.sanity_checks import *
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -72,9 +73,7 @@ def main(args):
         pruned_qc_mt = ld_prune_qc_mt(qc_mt)
         variants, samples = pruned_qc_mt.count()
         logger.info(f'{variants} variants found in LD-pruned MT')
-        pruned_qc_mt = filter_to_adj(pruned_qc_mt)
         pruned_qc_mt.write(qc_mt_path(data_source, freeze, ld_pruned=True), overwrite=args.overwrite)
-
 
 
 if __name__ == '__main__':

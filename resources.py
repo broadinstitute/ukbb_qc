@@ -158,6 +158,9 @@ def array_variant_concordance_path(data_source: str, freeze: int = CURRENT_FREEZ
 def sex_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/sex_check/sex.ht'
 
+def sex_tsv_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    return f'{sample_qc_prefix(data_source, freeze)}/sex_check/sex.tsv'
+
 def qc_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, ld_pruned: bool = False) -> str:
     """
     Returns path of MatrixTable for sample QC purposes
