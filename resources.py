@@ -208,11 +208,17 @@ def related_drop_path(data_source: str, freeze: int = CURRENT_FREEZE, method: st
 
 def ancestry_pca_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, population: str = None) -> str:
     pop = f'.{population}' if population else ''
-    return f'{sample_qc_prefix(data_source, freeze)}/population_pca/unrelated.pca_scores{pop}.ht'
+    return f'{sample_qc_prefix(data_source, freeze)}/population_pca/pca_scores{pop}.ht'
 
 def ancestry_pca_loadings_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, population: str = None) -> str:
     pop = f'.{population}' if population else ''
-    return f'{sample_qc_prefix(data_source, freeze)}/population_pca/unrelated.pca_loadings{pop}.ht'
+    return f'{sample_qc_prefix(data_source, freeze)}/population_pca/pca_loadings{pop}.ht'
+
+def ancestry_cluster_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    return f'{sample_qc_prefix(data_source, freeze)}/population_pca/cluster_assignments.ht'
+
+def ancestry_hybrid_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    return f'{sample_qc_prefix(data_source, freeze)}/population_pca/hybrid_pop_assignments.ht'
 
 def ancestry_pc_project_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, data_type: str = None) -> str:
     """
@@ -224,11 +230,24 @@ def ancestry_pc_project_scores_ht_path(data_source: str, freeze: int = CURRENT_F
     data_type = f'.{data_type}' if data_type else ''
     return f'{sample_qc_prefix(data_source, freeze)}/population_pca/pc_project_scores_pop_assign{data_type}.ht'
 
-def platform_pop_outlier_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    return f'{sample_qc_prefix(data_source, freeze)}/outlier_detection.ht'
+def platform_pop_outlier_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, pop_assignment_method: str = None) -> str:
+    pop_assignment_method = f'.{pop_assignment_method}' if pop_assignment_method else ''
+    return f'{sample_qc_prefix(data_source, freeze)}/outlier_detection/outlier_detection{pop_assignment_method}.ht'
 
 def qc_temp_data_prefix(data_source: str, freeze: int = CURRENT_FREEZE):
     return f'{sample_qc_prefix(data_source, freeze)}/temp/'
+
+def get_ht_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE, name: str = None) -> str:
+    """
+    Creates a checkpoint path for Table
+    :param str data_type: Will be regeneron or broad
+    :param int freeze: One of data freezes
+    :param str name: Name of intermediate Table
+    :return: Output checkpoint path
+    :rtype: str
+    """
+
+    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/{name}.ht'
 
 
 class DataException(Exception):
