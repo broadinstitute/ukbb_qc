@@ -55,14 +55,17 @@ def run_sample_qc(mt: hl.MatrixTable) -> hl.MatrixTable:
 def main(args):
     data_source = args.data_source
     freeze = args.freeze
+    pop_assignment_method = args.pop_assignment_method
 
-    mt = get_ukbb_data(data_source, freeze, split=False, adj=True)
-    logger.info('Filtering samples that fail hard filters...')
-    qc_ht = hl.read_table(hard_filters_ht_path(data_source, freeze)).key_by('s')
-    mt = mt.filter_cols(hl.len(qc_ht[mt.col_key].hard_filters) == 0).select_cols()
+    if args.run_mini_qc:
+        mt = get_ukbb_data(data_source, freeze, split=False, adj=True)
+        logger.info('Filtering samples that fail hard filters...')
+        qc_ht = hl.read_table(hard_filters_ht_path(data_source, freeze)).key_by('s')
+        mt = mt.filter_cols(hl.len(qc_ht[mt.col_key].hard_filters) == 0).select_cols()
 
-    logger.info('Running mini sample QC for platform- and population-specific filtering...')
-    run_sample_qc(mt).cols().select('sample_qc').write(qc_temp_data_prefix(data_source, freeze) + 'outlier_sample_qc.ht', args.overwrite)
+        logger.info('Running mini sample QC for platform- and population-specific filtering...')
+        run_sample_qc(mt).cols().select('sample_qc').write(qc_temp_data_prefix(data_source, freeze) + 'outlier_sample_qc.ht', args.overwrite)
+
     sample_qc_ht = hl.read_table(qc_temp_data_prefix(data_source, freeze) + 'outlier_sample_qc.ht')
 
     strata = []
@@ -74,9 +77,12 @@ def main(args):
 
     if not args.skip_population_filter:
         logger.info('Annotating population assignments...')
-        pop_ht = hl.read_table(ancestry_pc_project_scores_ht_path(data_source, freeze))
-        sample_qc_ht = sample_qc_ht.annotate(qc_pop=pop_ht[sample_qc_ht.key].pop.pop)
+
+        pop_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
+        sample_qc_ht = sample_qc_ht.annotate(qc_pop=pop_ht[sample_qc_ht.key][pop_assignment_method])
         strata.append('qc_pop')
+    else:
+        pop_assignment_method = None
 
     # For each platform and population, aggregate sample QC metrics and calculate the MAD/mean/stdev
     logger.info('Flagging samples failing pop/platform-specific sample qc thresholds...')
@@ -85,7 +91,7 @@ def main(args):
         args.filtering_qc_metrics.split(","),
         strata
     )
-    pop_platform_filter_ht.write(platform_pop_outlier_ht_path(data_source, freeze), overwrite=args.overwrite)
+    pop_platform_filter_ht.write(platform_pop_outlier_ht_path(data_source, freeze, pop_assignment_method), overwrite=args.overwrite)
 
     num_pass = pop_platform_filter_ht.aggregate(hl.agg.count_where(hl.len(pop_platform_filter_ht.pop_platform_filters) == 0))
     logger.info(f'{num_pass} exome samples found passing pop/platform-specific filtering')
@@ -98,12 +104,17 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
     parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
 
+    parser.add_argument('--run_mini_qc',
+                                      help="Run mini sample qc needed for outlier filtering",
+                                      action='store_true')
     parser.add_argument('--skip_platform_filter',
                                       help="Skip including platforms in outlier filtering",
                                       action='store_true')
     parser.add_argument('--skip_population_filter',
                                       help="Skip including population in outlier filtering",
                                       action='store_true')
+    parser.add_argument('--pop_assignment_method', help="Population assignment method to use for stratification",
+                        default='hybrid_pop', choices=['gnomad_pc_project_pop','HDBSCAN_pop_cluster','hybrid_pop'])
     parser.add_argument('--filtering_qc_metrics', help="List of QC metrics for filtering.", default=",".join(
     ['n_snp', 'r_ti_tv', 'r_insertion_deletion', 'n_insertion', 'n_deletion', 'r_het_hom_var']))
 

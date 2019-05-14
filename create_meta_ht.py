@@ -1,6 +1,6 @@
 import argparse
 import logging
-from resources import * 
+from ukbb_qc.resources import *
 
 
 logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
@@ -74,7 +74,7 @@ def main(args):
     left_ht = join_tables(left_ht, 's', right_ht, 's', 'outer')
 
     logger.info('Reading in population PC ht')
-    right_ht = hl.read_table(ancestry_pc_project_scores_ht_path(data_source, freeze, None))
+    right_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
 
     logger.info('Joining population PC ht into current join')
     left_ht = join_tables(left_ht, 's', right_ht, 's', 'outer')
@@ -103,10 +103,15 @@ def main(args):
     left_ht = left_ht.annotate(related_filter=hl.is_defined(related_samples_to_drop_ht[left_ht.s]))
    
     logger.info('Reading in outlier ht')
-    right_ht = hl.read_table(platform_pop_outlier_ht_path(data_source, freeze)) 
+    right_ht = hl.read_table(platform_pop_outlier_ht_path(data_source, freeze, args.pop_assignment_method))
 
     logger.info('Joining outlier ht to current join')
     left_ht = join_tables(left_ht, 's', right_ht, 's', 'left')
+
+    logger.info('Annotating is_filtered field')
+    left_ht = left_ht.annotate(is_filtered=((hl.len(left_ht.hard_filters) != 0) |
+                                            (left_ht.duplicate | left_ht.related_filter) |
+                                            (hl.len(left_ht.pop_platform_filters) != 0)))
 
     logger.info('Writing out meta ht')
     left_ht.write(meta_ht_path(data_source, freeze), overwrite = True)
@@ -118,6 +123,8 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
     parser.add_argument('-f', '--freeze', help='Current freeze #', type=int)
     parser.add_argument('-d', '--dup_sets', help='Dup sets for duplicate ht table', action='store_true', default=False)
+    parser.add_argument('--pop_assignment_method', help="Population assignment method to use for outlier stratification",
+                        default='hybrid_pop', choices=['gnomad_pc_project_pop','HDBSCAN_pop_cluster','hybrid_pop'])
     args = parser.parse_args()
 
     main(args)
