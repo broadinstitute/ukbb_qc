@@ -128,9 +128,9 @@ def main(args):
 
     if args.run_pc_project:
         # Note: I used all workers for this as it kept failing with preemptibles
-        mt = get_ukbb_data(args.data_source, args.freeze, split=False, adj=True)
+        mt = get_ukbb_data(data_source, freeze, split=False, adj=True)
         joint_scores_ht = project_on_gnomad_pop_pcs(mt)
-        joint_scores_ht = joint_scores_ht.checkpoint(ancestry_pc_project_scores_ht_path(args.data_source, args.freeze, "joint"), overwrite=args.overwrite)
+        joint_scores_ht = joint_scores_ht.checkpoint(ancestry_pc_project_scores_ht_path(data_source, freeze, "joint"), overwrite=args.overwrite)
         joint_scores_pd = joint_scores_ht.to_pandas()
 
         joint_pops_pd, joint_pops_rf_model = assign_population_pcs(
@@ -147,17 +147,17 @@ def main(args):
         scores_ht = scores_ht.annotate(pop=joint_pops_ht[scores_ht.key])
         scores_ht = scores_ht.annotate_globals(n_pcs=args.n_pcs,
                                                min_prob=args.min_pop_prob)
-        scores_ht = scores_ht.checkpoint(ancestry_pc_project_scores_ht_path(args.data_source, args.freeze), overwrite=args.overwrite)
+        scores_ht = scores_ht.checkpoint(ancestry_pc_project_scores_ht_path(data_source, freeze), overwrite=args.overwrite)
 
         logger.info(
             "Found the following sample count after population assignment (reduced to only input samples): {}".format(
                 scores_ht.aggregate(hl.agg.counter(scores_ht.pop['pop']))))
 
-        with hl.hadoop_open(qc_temp_data_prefix(args.data_source, args.freeze) + 'project_gnomad_pop_rf_model.pkl', 'wb') as out:
+        with hl.hadoop_open(qc_temp_data_prefix(data_source, freeze) + 'project_gnomad_pop_rf_model.pkl', 'wb') as out:
             pickle.dump(joint_pops_rf_model, out)
 
     if args.assign_hybrid_ancestry:
-        pc_project_ht = hl.read_table(ancestry_pc_project_scores_ht_path(args.data_source, args.freeze))
+        pc_project_ht = hl.read_table(ancestry_pc_project_scores_ht_path(data_source, freeze))
         pc_cluster_ht = hl.read_table(ancestry_cluster_ht_path(data_source, freeze))
         pc_scores_ht = hl.read_table(ancestry_pca_scores_ht_path(data_source, freeze))
 
