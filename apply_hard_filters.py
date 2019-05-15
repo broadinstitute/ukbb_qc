@@ -26,10 +26,10 @@ def apply_hard_filters_expr(ht: hl.Table, min_callrate: float = 0.99, min_depth:
         # we don't have contamination/chimera for regeneron vcf
         #'contamination': ht.freemix > 0.05,
         #'chimera': ht.pct_chimeras > 0.05,
-        'low_callrate': ht.sample_qc.call_rate < min_callrate,
+        'low_callrate': ht.raw_sample_qc.call_rate < min_callrate,
         'ambiguous_sex': ht.sex == 'ambiguous_sex',
         'sex_aneuploidy': ht.sex == 'sex_aneuploidy',
-        'low_coverage': ht.sample_qc.dp_stats.mean < min_depth
+        'low_coverage': ht.raw_sample_qc.dp_stats.mean < min_depth
     }
 
     ht = ht.annotate(hard_filters=add_filters_expr(hard_filters, None))
@@ -44,7 +44,7 @@ def main(args):
     logger.info('Adding sex imputation annotations...')
     mt = get_ukbb_data(data_source, freeze, split=False, raw=True)
     ht = hl.read_table(sex_ht_path(data_source, freeze))
-    mt = mt.annotate_cols(**ht[mt.row_key])
+    mt = mt.annotate_cols(**ht[mt.col_key])
 
     logger.info('Computing raw sample QC metrics...')
     mt = hl.sample_qc(mt)
