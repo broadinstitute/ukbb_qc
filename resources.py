@@ -250,5 +250,9 @@ def get_ht_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE, name:
     return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/{name}.ht'
 
 
+def hg38_selfchain_path() -> str:
+    return 'gs://broad-ukbb/resources/hg38_self_chain_nosamepos_withalts_gt10k.bed.gz' 
+
+
 class DataException(Exception):
     pass
