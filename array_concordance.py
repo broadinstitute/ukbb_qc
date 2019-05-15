@@ -1,5 +1,5 @@
 from gnomad_hail import *
-from resources import *
+from ukbb_qc.resources import *
 import hail as hl
 import argparse
 
@@ -61,7 +61,11 @@ def main(args):
         logger.info(f'{array_samples} samples found in array to exome name map')
 
         exome_mt = get_ukbb_data(args.data_source, args.freeze, adj=True, split=False)
+
+        # NOTE: Filter to autosomes because of adjusted sex ploidies in hardcalls mt (hail throws a ploidy 0 error)
+        exome_mt = exome_mt.filter_rows(exome_mt.locus.in_autosome())
         exome_mt = exome_mt.filter_rows((hl.len(exome_mt.alleles) == 2) & hl.is_snp(exome_mt.alleles[0], exome_mt.alleles[1]))
+
         # Renaming exome samples to match array data
         exome_mt = exome_mt.key_cols_by(s=exome_mt.s.split("_")[1])
 
