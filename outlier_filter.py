@@ -58,7 +58,7 @@ def main(args):
     pop_assignment_method = args.pop_assignment_method
 
     if args.run_mini_qc:
-        mt = get_ukbb_data(data_source, freeze, split=False, raw=True, adj=True)
+        mt = get_ukbb_data(data_source, freeze, split=False, raw=True, adj=False)
         logger.info('Filtering samples that fail hard filters...')
         qc_ht = hl.read_table(hard_filters_ht_path(data_source, freeze)).key_by('s')
         mt = mt.filter_cols(hl.len(qc_ht[mt.col_key].hard_filters) == 0).select_cols()
