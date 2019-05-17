@@ -108,10 +108,10 @@ def main(args):
     logger.info('Joining outlier ht to current join')
     left_ht = join_tables(left_ht, 's', right_ht, 's', 'left')
 
-    logger.info('Annotating is_filtered field')
-    left_ht = left_ht.annotate(is_filtered=((hl.len(left_ht.hard_filters) != 0) |
-                                            (left_ht.duplicate | left_ht.related_filter) |
-                                            (hl.len(left_ht.pop_platform_filters) != 0)))
+    logger.info('Annotating high_quality field')
+    left_ht = left_ht.annotate(high_quality=((hl.len(left_ht.hard_filters) == 0) |
+                                            (! left_ht.duplicate | ! left_ht.related_filter) |
+                                            (hl.len(left_ht.pop_platform_filters) == 0)))
 
     logger.info('Writing out meta ht')
     left_ht.write(meta_ht_path(data_source, freeze), overwrite = True)
