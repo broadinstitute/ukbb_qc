@@ -1,6 +1,6 @@
 from gnomad_hail import *
 from gnomad_hail.utils.sample_qc import *
-from resources import *
+from ukbb_qc.resources import *
 import hail as hl
 import argparse
 
@@ -15,9 +15,13 @@ def get_ped(relatedness_ht: hl.Table, dups_ht: hl.Table, sex_ht: hl.Table) -> hl
         i=relatedness_ht.i.s,
         j=relatedness_ht.j.s
     )
-    dups_to_remove = dups_ht.aggregate(hl.agg.explode(lambda x: hl.agg.collect_as_set(x.s), dups_ht.filtered))
+    dups_to_remove = dups_ht.aggregate(hl.agg.filter(dups_ht.duplicate == True, hl.agg.collect_as_set(dups_ht.s)))
     logger.info(f"Removing {len(dups_to_remove)} duplicates from family creation.")
     sex = {row.s: row.is_female for row in sex_ht.to_pandas().itertuples()}
+
+    # check for empty set
+    if len(dups_to_remove) == 0:
+        dups_to_remove = hl.empty_set(hl.tstr)
     ped = infer_families(relatedness_ht, sex, dups_to_remove)
     logger.info(f"Found {len(ped.complete_trios())} complete trios.")
     return ped
@@ -106,7 +110,7 @@ def main(args):
         related_samples_to_drop_ht = related_samples_to_drop_ht.select(**related_samples_to_drop_ht.node)
         related_samples_to_drop_ht = related_samples_to_drop_ht.key_by('s')
         related_samples_to_drop_ht.write(related_drop_path(data_source, freeze), overwrite=args.overwrite)
-        logger.info(f'{related_samples_to_drop_ht.count()} samples dropped from callset using maximal independent set')
+        logger.info(f'{related_samples_to_drop_ht.count()} samples flagged in callset using maximal independent set')
 
 
 if __name__ == '__main__':
@@ -116,7 +120,7 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
     parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
 
-    parser.add_argument('--skip_pc_relate', help='Skip runing PC-relate on all samples. NOTE: This needs SSDs on your workers (for the temp files) and no pre-emptibles while the BlockMatrix writes',
+    parser.add_argument('--skip_pc_relate', help='Skip running PC-relate on all samples. NOTE: This needs SSDs on your workers (for the temp files) and no pre-emptibles while the BlockMatrix writes',
                         action='store_true')
     parser.add_argument('--min_emission_kinship', help='Minimum kinship threshold for emitting a pair of samples in PC relate and filtering related individuals.',
                         default=0.05,
