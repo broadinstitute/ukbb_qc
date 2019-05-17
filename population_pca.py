@@ -130,9 +130,11 @@ def main(args):
         # Note: I used all workers for this as it kept failing with preemptibles
         mt = get_ukbb_data(data_source, freeze, split=False, adj=True)
         joint_scores_ht = project_on_gnomad_pop_pcs(mt)
-        joint_scores_ht = joint_scores_ht.checkpoint(ancestry_pc_project_scores_ht_path(data_source, freeze, "joint"), overwrite=args.overwrite)
-        joint_scores_pd = joint_scores_ht.to_pandas()
+        joint_scores_ht.write(ancestry_pc_project_scores_ht_path(data_source, freeze, "joint"), overwrite=args.overwrite)
 
+    if args.run_rf:
+        joint_scores_ht = hl.read_table(ancestry_pc_project_scores_ht_path(data_source, freeze, "joint"))
+        joint_scores_pd = joint_scores_ht.to_pandas()
         joint_pops_pd, joint_pops_rf_model = assign_population_pcs(
             joint_scores_pd,
             pc_cols=[f'PC{i + 1}' for i in range(args.n_pcs)],
@@ -187,9 +189,11 @@ if __name__ == '__main__':
 
     parser.add_argument('--run_pc_project', help='Runs pc project and population assignment using gnomAD data', action='store_true')
     parser.add_argument('--n_pcs', help='Number of PCs to compute (default: 10)', default=10, type=int)
+    parser.add_argument('--run_rf', 
+                        help='Create random forest model to assign population labels based on PCA results', action='store_true')
     parser.add_argument('--min_pop_prob',
                      help='Minimum probability of belonging to a given population for assignment (if below, the sample is labeled as "oth" (default: 0.9)',
-                     default=0.9,
+                     default=0.5,
                      type=float)
 
     parser.add_argument('--run_pca', help='Runs pop PCA on pruned qc MT', action='store_true')
