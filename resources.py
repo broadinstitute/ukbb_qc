@@ -1,4 +1,5 @@
 import hail as hl
+from typing import *
 
 CURRENT_FREEZE = 4
 DATA_SOURCES = ['regeneron', 'broad']
@@ -6,7 +7,7 @@ FREEZES = [4]
 
 
 def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, adj: bool = False, split: bool = True,
-                  raw: bool = False, non_refs_only: bool = False) -> hl.MatrixTable:
+                  raw: bool = False, non_refs_only: bool = False, meta_root: Optional[str] = None) -> hl.MatrixTable:
     """
     Wrapper function to get UKBB data as MT. By default, returns split hardcalls (with adj annotated but not filtered)
     :param str data_source: Will be regeneron or broad
@@ -15,6 +16,7 @@ def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, adj: bool = Fa
     :param bool split: Whether the dataset should be split (only applies to raw=False)
     :param bool raw: Whether to return the raw data (not recommended: unsplit, and no special consideration on sex chromosomes)
     :param bool non_refs_only: Whether to return the non-ref-genotype only MT (warning: no special consideration on sex chromosomes)
+    :param str meta_root: Root annotation name for metadata (e.g., 'meta')
     :return: hardcalls dataset
     :rtype: MatrixTable
     """
@@ -31,6 +33,10 @@ def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, adj: bool = Fa
     if adj:
         mt = filter_to_adj(mt)
 
+    if meta_root:
+        meta_ht = hl.read_table(meta_ht_path('regeneron', freeze))  # TODO: set back to 'data_source' once Broad meta is created
+        mt = mt.annotate_cols(**{meta_root: meta_ht[mt.s]})
+        mt = mt.annotate_cols(meta=mt.meta.annotate(high_quality=~mt.meta.is_filtered)) # TODO: remove after meta is fixed
     return mt
 
 
@@ -324,6 +330,41 @@ def get_regeneron_ancestry_path(freeze: int = CURRENT_FREEZE) -> str:
 
 def get_joint_regeneron_ancestry_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/population_pca/regeneron_ukb_joint_ancestry.ht'
+
+
+# Variant QC annotations
+def variant_qc_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    if data_source not in DATA_SOURCES:
+        raise DataException("This data_source is currently not present")
+    if freeze not in FREEZES:
+        raise DataException("This freeze is currently not present")
+
+    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/variant_qc'
+
+
+def var_annotations_ht_path(data_source: str, freeze: int, annotation_type: str) -> str:
+    """
+    Get variant-level annotations
+
+    :param str data_source: 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param str annotation_type: Tag describing variant-level annotations in HT, e.g., "vep", "qc_stats", "call_stats"
+    :return: Path to annotations Table
+    :rtype: str
+    """
+    return f'{variant_qc_prefix(data_source, freeze)}/variant_annotations/{annotation_type}.ht'
+
+def sample_annotations_table_path(data_source: str, freeze: int, annotation_type: str) -> str:
+    """
+    Get sample-level annotations
+
+    :param str data_source: 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param str annotation_type: Tag describing variant-level annotations in HT, e.g., "family_stats"
+    :return: Path to annotations HT
+    :rtype: str
+    """
+    return f'{variant_qc_prefix(data_source, freeze)}/sample_annotations/{annotation_type}.ht'
 
 
 class DataException(Exception):
