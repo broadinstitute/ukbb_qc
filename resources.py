@@ -1,4 +1,5 @@
 import hail as hl
+from typing import *
 
 CURRENT_FREEZE = 4
 DATA_SOURCES = ['regeneron', 'broad']
@@ -6,7 +7,7 @@ FREEZES = [4]
 
 
 def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, adj: bool = False, split: bool = True,
-                  raw: bool = False, non_refs_only: bool = False) -> hl.MatrixTable:
+                  raw: bool = False, non_refs_only: bool = False, meta_root: Optional[str] = None) -> hl.MatrixTable:
     """
     Wrapper function to get UKBB data as MT. By default, returns split hardcalls (with adj annotated but not filtered)
     :param str data_source: Will be regeneron or broad
@@ -15,6 +16,7 @@ def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, adj: bool = Fa
     :param bool split: Whether the dataset should be split (only applies to raw=False)
     :param bool raw: Whether to return the raw data (not recommended: unsplit, and no special consideration on sex chromosomes)
     :param bool non_refs_only: Whether to return the non-ref-genotype only MT (warning: no special consideration on sex chromosomes)
+    :param str meta_root: Root annotation name for metadata (e.g., 'meta')
     :return: hardcalls dataset
     :rtype: MatrixTable
     """
@@ -31,6 +33,10 @@ def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, adj: bool = Fa
     if adj:
         mt = filter_to_adj(mt)
 
+    if meta_root:
+        meta_ht = hl.read_table(meta_ht_path('regeneron', freeze))  # TODO: set back to 'data_source' once Broad meta is created
+        mt = mt.annotate_cols(**{meta_root: meta_ht[mt.s]})
+        mt = mt.annotate_cols(meta=mt.meta.annotate(high_quality=~mt.meta.is_filtered)) # TODO: remove after meta is fixed
     return mt
 
 
@@ -118,6 +124,7 @@ array_sample_map = 'gs://broad-ukbb/resources/array/Project_26041_bridge.csv'
 ukbb_calling_intervals_path = 'gs://broad-ukbb/resources/ukbb_exome_calling.interval_list'
 lcr_intervals_path = 'gs://broad-ukbb/resources/LCRFromHengH38_chr1-22_XY.txt'
 
+
 # Sample QC files
 def sample_qc_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     if data_source not in DATA_SOURCES:
@@ -125,6 +132,7 @@ def sample_qc_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     if freeze not in FREEZES:
         raise DataException("This freeze is currently not present")
     return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/sample_qc'
+
 
 def sample_list_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
@@ -136,6 +144,7 @@ def sample_list_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
     return f'{sample_qc_prefix(data_source, freeze)}/samples.list'
 
+
 def meta_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
     Returns path of meta ht for plotting
@@ -146,20 +155,26 @@ def meta_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
     return f'{sample_qc_prefix(data_source, freeze)}/meta.ht'
 
+
 def hard_filters_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/hard_filters_flagged.ht'
+
 
 def array_sample_concordance_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/array_concordance/sample_concordance.ht'
 
+
 def array_variant_concordance_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/array_concordance/variant_concordance.ht'
+
 
 def sex_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/sex_check/sex.ht'
 
+
 def sex_tsv_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/sex_check/sex.tsv'
+
 
 def qc_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, ld_pruned: bool = False) -> str:
     """
@@ -171,54 +186,69 @@ def qc_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, ld_pruned: bool =
     ld_pruned = '.pruned' if ld_pruned else ''
     return f'{sample_qc_prefix(data_source, freeze)}/high_callrate_common_biallelic_snps{ld_pruned}.mt'
 
+
 def qc_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/high_callrate_common_biallelic_snps.ht'
+
 
 def callrate_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/platform_pca/callrate.mt'
 
+
 def platform_pca_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/platform_pca/platform_pca_scores.ht'
+
 
 def platform_pca_loadings_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/platform_pca/platform_pca_loadings.ht'
 
+
 def platform_pca_results_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/platform_pca/platform_pca_results.ht'
+
 
 def relatedness_pca_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/relatedness/pruned.pca_scores.ht'
 
+
 def relatedness_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, method: str = 'pc_relate') -> str:
     method = f'.{method}' if method != 'pc_relate' else ''
     return f'{sample_qc_prefix(data_source, freeze)}/relatedness/relatedness{method}.ht'
+
 
 def duplicates_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, dup_sets: bool = False, method: str = 'pc_relate') -> str:
     dup_sets = f'_sets' if dup_sets else ''
     method = f'.{method}' if method != 'pc_relate' else ''
     return f'{sample_qc_prefix(data_source, freeze)}/relatedness/duplicate{dup_sets}{method}.ht'
 
+
 def inferred_ped_path(data_source: str, freeze: int = CURRENT_FREEZE, method: str = 'pc_relate') -> str:
     method = f'.{method}' if method != 'pc_relate' else ''
     return f'{sample_qc_prefix(data_source, freeze)}/relatedness/ped{method}.txt'
+
 
 def related_drop_path(data_source: str, freeze: int = CURRENT_FREEZE, method: str = 'pc_relate') -> str:
     method = f'.{method}' if method != 'pc_relate' else ''
     return f'{sample_qc_prefix(data_source, freeze)}/relatedness/related_samples_to_drop{method}.ht'
 
+
 def ancestry_pca_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, population: str = None) -> str:
     pop = f'.{population}' if population else ''
     return f'{sample_qc_prefix(data_source, freeze)}/population_pca/pca_scores{pop}.ht'
+
 
 def ancestry_pca_loadings_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, population: str = None) -> str:
     pop = f'.{population}' if population else ''
     return f'{sample_qc_prefix(data_source, freeze)}/population_pca/pca_loadings{pop}.ht'
 
+
 def ancestry_cluster_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/population_pca/cluster_assignments.ht'
 
+
 def ancestry_hybrid_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/population_pca/hybrid_pop_assignments.ht'
+
 
 def ancestry_pc_project_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, data_type: str = None) -> str:
     """
@@ -230,12 +260,15 @@ def ancestry_pc_project_scores_ht_path(data_source: str, freeze: int = CURRENT_F
     data_type = f'.{data_type}' if data_type else ''
     return f'{sample_qc_prefix(data_source, freeze)}/population_pca/pc_project_scores_pop_assign{data_type}.ht'
 
+
 def platform_pop_outlier_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, pop_assignment_method: str = None) -> str:
     pop_assignment_method = f'.{pop_assignment_method}' if pop_assignment_method else ''
     return f'{sample_qc_prefix(data_source, freeze)}/outlier_detection/outlier_detection{pop_assignment_method}.ht'
 
+
 def qc_temp_data_prefix(data_source: str, freeze: int = CURRENT_FREEZE):
     return f'{sample_qc_prefix(data_source, freeze)}/temp/'
+
 
 def get_ht_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE, name: str = None) -> str:
     """
@@ -252,6 +285,90 @@ def get_ht_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE, name:
 
 def hg38_selfchain_path() -> str:
     return 'gs://broad-ukbb/resources/hg38_self_chain_nosamepos_withalts_gt10k.bed.gz' 
+
+
+def get_regeneron_relatedness_path(freeze: int = CURRENT_FREEZE, relationship: str = None) -> str:
+    """
+    Returns path to regeneron relatedness inference files
+    :param int freeze: One of data freezes
+    :param str relationship: relatedness relationship, need to be 2nd-degree, full-sibling, or parent-child
+    :return: Output relatedness file path
+    :rtype: str
+    """
+
+    if freeze not in FREEZES:
+        raise DataException("This freeze is currently not present")
+    if relationship not in ['2nd-degree', 'full-sibling', 'parent-child']:
+        raise DataException("This regeneron relationship file not present")
+    if freeze == 4:
+        freeze_str = "Four"
+    return f'gs://broad-ukbb/regeneron.freeze_{freeze}/data/pharma_relatedness_analysis/UKB_Freeze_{freeze_str}.NF.pVCF_{relationship}_relationships.genome'
+
+
+def get_regeneron_broad_relatedness_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    return f'{sample_qc_prefix(data_source, freeze)}/relatedness/regeneron_joint_relatedness.ht'
+
+
+ukbb_phenotype_path = "gs://broad-ukbb/resources/ukb24295.phenotypes.txt"
+
+
+def get_ukbb_self_reported_ancestry_path(freeze: int = CURRENT_FREEZE) -> str:
+    return f'gs://broad-ukbb/resources/ukb24295.phenotypes.freeze_{freeze}.ht'
+
+
+def get_regeneron_ancestry_path(freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Returns path to regeneron relatedness inference files
+    :param int freeze: One of data freezes
+    :param str relationship: relatedness relationship, need to be 2nd-degree, full-sibling, or parent-child
+    :return: Output relatedness file path
+    :rtype: str
+    """
+
+    if freeze not in FREEZES:
+        raise DataException("This freeze is currently not present")
+    if freeze == 4:
+        freeze_str = "Four"
+    return f'gs://broad-ukbb/regeneron.freeze_{freeze}/data/pharma_relatedness_analysis/UKB_Freeze_{freeze_str}.NF.splitmulti.commonsnps_samples_ancestries.txt'
+
+
+def get_joint_regeneron_ancestry_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    return f'{sample_qc_prefix(data_source, freeze)}/population_pca/regeneron_ukb_joint_ancestry.ht'
+
+
+# Variant QC annotations
+def variant_qc_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    if data_source not in DATA_SOURCES:
+        raise DataException("This data_source is currently not present")
+    if freeze not in FREEZES:
+        raise DataException("This freeze is currently not present")
+
+    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/variant_qc'
+
+
+def var_annotations_ht_path(data_source: str, freeze: int, annotation_type: str) -> str:
+    """
+    Get variant-level annotations
+
+    :param str data_source: 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param str annotation_type: Tag describing variant-level annotations in HT, e.g., "vep", "qc_stats", "call_stats"
+    :return: Path to annotations Table
+    :rtype: str
+    """
+    return f'{variant_qc_prefix(data_source, freeze)}/variant_annotations/{annotation_type}.ht'
+
+def sample_annotations_table_path(data_source: str, freeze: int, annotation_type: str) -> str:
+    """
+    Get sample-level annotations
+
+    :param str data_source: 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param str annotation_type: Tag describing variant-level annotations in HT, e.g., "family_stats"
+    :return: Path to annotations HT
+    :rtype: str
+    """
+    return f'{variant_qc_prefix(data_source, freeze)}/sample_annotations/{annotation_type}.ht'
 
 
 class DataException(Exception):
