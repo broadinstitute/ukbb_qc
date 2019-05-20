@@ -110,7 +110,7 @@ def main(args):
 
     logger.info('Annotating high_quality field')
     left_ht = left_ht.annotate(high_quality=((hl.len(left_ht.hard_filters) == 0) |
-                                            (! left_ht.duplicate | ! left_ht.related_filter) |
+                                            (~left_ht.duplicate | ~left_ht.related_filter) |
                                             (hl.len(left_ht.pop_platform_filters) == 0)))
 
     logger.info('Writing out meta ht')
