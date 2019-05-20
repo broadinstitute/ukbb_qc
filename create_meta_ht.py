@@ -121,7 +121,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='This script applies hard filters to UKBB data')
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
-    parser.add_argument('-f', '--freeze', help='Current freeze #', type=int)
+    parser.add_argument('-f', '--freeze', help='Current freeze #', default=CURRENT_FREEZE, type=int)
     parser.add_argument('-d', '--dup_sets', help='Dup sets for duplicate ht table', action='store_true', default=False)
     parser.add_argument('--pop_assignment_method', help="Population assignment method to use for outlier stratification",
                         default='hybrid_pop', choices=['gnomad_pc_project_pop','HDBSCAN_pop_cluster','hybrid_pop'])
