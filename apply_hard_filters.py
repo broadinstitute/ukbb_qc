@@ -8,7 +8,7 @@ logger = logging.getLogger("apply_hard_filters")
 logger.setLevel(logging.INFO)
 
 
-def apply_hard_filters_expr(ht: hl.Table, min_callrate: float = 0.99, min_depth: float = 20.0) -> hl.Table:
+def apply_hard_filters_expr(ht: hl.Table, min_callrate: float, min_depth: float) -> hl.Table:
     """
     Creates hard filters expression and annotates ht with expression (creates hard_filters column)
     :param Table ht: Table to be annotated 
@@ -22,14 +22,17 @@ def apply_hard_filters_expr(ht: hl.Table, min_callrate: float = 0.99, min_depth:
     # p = hl.plot.histogram(mt.sample_qc.dp_stats.mean, range=(10,120), legend='Mean Sample DP')
     # p = hl.plot.histogram(mt.sample_qc.call_rate, range=(0.991, 0.997), legend='Mean Sample Callrate')
 
+    logger.info('Callrate cutoff for hard filters: {}'.format(min_callrate))
+    logger.info('Depth cutoff for hard filters: {}'.format(min_depth))
+
     hard_filters = {
         # we don't have contamination/chimera for regeneron vcf
         #'contamination': ht.freemix > 0.05,
         #'chimera': ht.pct_chimeras > 0.05,
-        'low_callrate': ht.sample_qc.call_rate < min_callrate,
+        'low_callrate': ht.raw_sample_qc.call_rate < min_callrate,
         'ambiguous_sex': ht.sex == 'ambiguous_sex',
         'sex_aneuploidy': ht.sex == 'sex_aneuploidy',
-        'low_coverage': ht.sample_qc.dp_stats.mean < min_depth
+        'low_coverage': ht.raw_sample_qc.dp_stats.mean < min_depth
     }
 
     ht = ht.annotate(hard_filters=add_filters_expr(hard_filters, None))
@@ -44,13 +47,13 @@ def main(args):
     logger.info('Adding sex imputation annotations...')
     mt = get_ukbb_data(data_source, freeze, split=False, raw=True)
     ht = hl.read_table(sex_ht_path(data_source, freeze))
-    mt = mt.annotate_cols(**ht[mt.row_key])
+    mt = mt.annotate_cols(**ht[mt.col_key])
 
     logger.info('Computing raw sample QC metrics...')
     mt = hl.sample_qc(mt)
     mt = mt.transmute_cols(raw_sample_qc=mt.sample_qc)
     ht = mt.cols()
-    ht = apply_hard_filters_expr(ht)
+    ht = apply_hard_filters_expr(ht, args.callrate, args.depth)
     
     logger.info('Writing out hard filters HT...')
     ht = ht.checkpoint(hard_filters_ht_path(data_source, freeze), overwrite=args.overwrite)
@@ -66,8 +69,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='This script applies hard filters to UKBB data')
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
     parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
-    parser.add_argument('-c', '--callrate', help='Minimum callrate', default=0.99)
-    parser.add_argument('-d', '--depth', help='Minimum depth', default=20)
+    parser.add_argument('-c', '--callrate', help='Minimum callrate', default=0.99, type=float)
+    parser.add_argument('-d', '--depth', help='Minimum depth', default=20.0, type=float)
     parser.add_argument('-o', '--overwrite', help='Overwrite pre-existing data', action='store_true', default=True)
     args = parser.parse_args()
 

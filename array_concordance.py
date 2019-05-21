@@ -1,6 +1,6 @@
 from gnomad_hail import *
-from ukbb_qc.resources import *
 from gnomad_hail.utils.liftover import *
+from ukbb_qc.resources import *
 import hail as hl
 import argparse
 
@@ -81,9 +81,12 @@ def main(args):
 
         array_mt = array_mt.filter_rows((array_mt.variant_qc.call_rate > args.call_rate_cutoff) &
                                         ~array_missmatch_ht[array_mt.row_key].reference_mismatch)
-        print(array_mt.rows().count())
         exome_mt = get_ukbb_data(args.data_source, args.freeze, adj=True, split=False)
         exome_mt = hl.variant_qc(exome_mt)
+
+        # NOTE: Filter to autosomes because of adjusted sex ploidies in hardcalls mt (hail throws a ploidy 0 error)
+        exome_mt = exome_mt.filter_rows(exome_mt.locus.in_autosome())
+
         # Renaming exome samples to match array data
         exome_mt = exome_mt.key_cols_by(s=exome_mt.s.split("_")[1])
         exome_mt = exome_mt.filter_rows((hl.len(exome_mt.alleles) == 2) &

@@ -51,7 +51,8 @@ def main(args):
     if args.split_nonrefs:
         logger.info("Running split_multi on non-ref MT...")
         mt = get_ukbb_data(data_source, freeze, split=False, non_refs_only=True)
-        mt = mt.drop('PL')  # Note: I guess we need to check if PL has issues rather than just always dropping
+        if data_source == 'regeneron':
+            mt = mt.drop('PL')  # Note: I guess we need to check if PL has issues rather than just always dropping
         mt = hl.split_multi_hts(mt)
         mt = mt.filter_entries(mt.is_missing | mt.GT.is_non_ref())
         mt.write(get_ukbb_data_path(data_source, freeze, split=True, non_refs_only=True), args.overwrite)

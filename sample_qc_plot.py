@@ -11,7 +11,7 @@ hv.extension('bokeh')
 from IPython.display import display_html
 
 
-def get_pc_plots(pcs_pd, pc_name, color_col='color', colors=None, palette=None, n_pcs=10):
+def get_pc_plots(pcs_pd, pc_name, color_col='color', colors=None, palette=None, n_pcs=10, plot_height=600, plot_width=700, alpha=0.7):
     plots = []
     factors = pcs_pd[color_col].unique()
     factors.sort()
@@ -27,15 +27,30 @@ def get_pc_plots(pcs_pd, pc_name, color_col='color', colors=None, palette=None, 
                          y=f'{pc_name}{pc + 1}',
                          source=source,
                          color={'field': color_col, 'transform': colors},
-                         alpha=0.6)
+                         alpha=alpha)
             legend_it.append((factor, [c]))
         p.xaxis.axis_label = f'PC{pc}'
         p.yaxis.axis_label = f'PC{pc + 1}'
+        p.plot_height = plot_height
+        p.plot_width = plot_width
         legend = Legend(items=legend_it, location=(10, 10))
         legend.click_policy = "hide"
         p.add_layout(legend, 'right')
         plots.append(Panel(child=p, title=f'PC{pc} vs PC{pc + 1}'))
     return Tabs(tabs=plots)
+
+
+def get_pc_plots_hail(pcs_ht, pc_name, color_col='color', colors=None, n_pcs=10, plot_height=600, plot_width=700):
+    plots = []
+    for pc in range(1, n_pcs, 2):
+        p = hl.plot.scatter(pcs_ht[f'{pc_name}{pc}'],
+                            pcs_ht[f'{pc_name}{pc + 1}'],
+                            colors=colors,
+                            label=pcs_ht[color_col], width=plot_width, height=plot_height,
+                            title=pc_name, xlabel=f'PC{pc}', ylabel=f'PC{pc + 1}')
+        plots.append(Panel(child=p, title=f'PC{pc} vs PC{pc + 1}'))
+    return Tabs(tabs=plots)
+
 
 
 def get_relatedness_plots(ibd_pd,
@@ -76,11 +91,11 @@ def get_outlier_plots(outlier_sample_qc,
                       meta_ht,
                       facet_col='qc_pop',
                       qc_metrics=["n_snp", "r_ti_tv", "r_insertion_deletion", "n_insertion", "n_deletion",
-                                  "r_het_hom_var"],
-                      palette=Set1):
-    outlier_sample_qc = outlier_sample_qc.annotate(qc_pop=meta_ht[outlier_sample_qc.key].pop.pop,
-                                                   pop_platform_filters=meta_ht[
-                                                       outlier_sample_qc.key].pop_platform_filters)
+                                  "r_het_hom_var"]):
+    #outlier_sample_qc = outlier_sample_qc.annotate(qc_pop=meta_ht[outlier_sample_qc.key].pop.pop,
+    #                                               pop_platform_filters=meta_ht[
+    #                                                   outlier_sample_qc.key].pop_platform_filters)
+    outlier_sample_qc = outlier_sample_qc.annotate(**meta_ht[outlier_sample_qc.key])
     cols = [facet_col]
     key = 's'
     colnames = cols + [key] + [f'sample_qc.{metric}' for metric in qc_metrics]
@@ -94,18 +109,17 @@ def get_outlier_plots(outlier_sample_qc,
     tables = []
     factors = sample_qc_pd[facet_col].unique()
     factors.sort()
-    if palette is not None:
-        palette = palette[len(factors)]
-        colors = CategoricalColorMapper(palette=palette, factors=factors)
     for metric in qc_metrics:
         curve_dict = {}
         sample_qc_fail_pd.groupby(facet_col)[metric].value_counts()
         fail_table = sample_qc_fail_pd.groupby(facet_col)[metric].value_counts().unstack().fillna(0)
-        fail_table = fail_table.rename_axis(index=None, columns=None)
+        fail_table = fail_table.rename_axis(mapper="None")
         fail_table.columns = ['Pass', 'Fail']
         fail_table['Pct_fail'] = (fail_table['Fail'] / fail_table.sum(axis=1)) * 100
         decimals = pd.Series([0, 0, 2], index=['Pass', 'Fail', 'Pct_fail'])
-        fail_table = fail_table.round()  # (decimals)
+        fail_table["Pass"] = pd.to_numeric(fail_table["Pass"], downcast='integer')
+        fail_table["Fail"] = pd.to_numeric(fail_table["Fail"], downcast='integer')
+        fail_table = fail_table.round(2)  # (decimals)
         tables.append((metric, fail_table))
         for factor in factors:
             source = sample_qc_pd[sample_qc_pd[facet_col] == factor][metric]
@@ -121,6 +135,7 @@ def get_outlier_plots(outlier_sample_qc,
             plots = hv.NdLayout(curve_dict, kdims=facet_col, label=metric).opts(sizing_mode='scale_both')
 
     return tables, plots
+
 
 
 def display_tables(table_list):

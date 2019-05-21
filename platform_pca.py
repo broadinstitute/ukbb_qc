@@ -1,5 +1,5 @@
 from gnomad_hail import *
-from resources import *
+from ukbb_qc.resources import *
 import hail as hl
 import argparse
 import numpy as np
