@@ -1,6 +1,6 @@
 from gnomad_hail import *
 from gnomad_hail.utils.sample_qc import *
-from resources import *
+from ukbb_qc.resources import *
 import hail as hl
 import argparse
 from ukbb_qc.sanity_checks import *
@@ -58,7 +58,8 @@ def main(args):
 
     if not args.skip_compute_qc_mt:
         logger.info("Filtering to bi-allelic, high-callrate, common SNPs for sample QC...")
-        qc_mt = compute_qc_mt(get_ukbb_data(data_source, freeze, adj=True, split=False))
+        #qc_mt = compute_qc_mt(get_ukbb_data(data_source, freeze, adj=True, split=False))
+        qc_mt = compute_qc_mt(get_ukbb_data(data_source, freeze, raw=True, adj=True, split=False))
         qc_mt = qc_mt.naive_coalesce(5000)
         qc_mt.write(qc_mt_path(data_source, freeze), overwrite=args.overwrite)
 
@@ -70,6 +71,7 @@ def main(args):
     if not args.skip_ld_prune_qc_mt:
         logger.info("LD prune qc MatrixTable sample QC...")
         qc_mt = hl.read_matrix_table(qc_mt_path(data_source, freeze))
+        qc_mt = qc_mt.unfilter_entries()
         pruned_qc_mt = ld_prune_qc_mt(qc_mt)
         variants, samples = pruned_qc_mt.count()
         logger.info(f'{variants} variants found in LD-pruned MT')
