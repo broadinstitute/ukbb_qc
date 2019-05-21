@@ -1,5 +1,6 @@
 from gnomad_hail import *
-from resources import *
+from ukbb_qc.resources import *
+from gnomad_hail.utils.liftover import *
 import hail as hl
 import argparse
 
@@ -44,7 +45,7 @@ def main(args):
         array_mt = array_mt.filter_rows(hl.is_defined(array_mt.new_locus) & ~array_mt.new_locus.is_negative_strand)
         array_mt = array_mt.key_rows_by(locus=array_mt.new_locus.result, alleles=array_mt.alleles)
 
-        array_mt.write(array_mt_path(liftover=True), overwrite=args.overwrite)
+        array_mt = array_mt.checkpoint(array_mt_path(liftover=True), overwrite=args.overwrite)
         array_variants, array_samples = array_mt.count()
         logger.info(f'{array_variants} variants and {array_samples} samples found in liftover array data')
 
@@ -59,11 +60,40 @@ def main(args):
         array_mt = array_mt.filter_cols(hl.is_defined(array_mt.s))
         array_variants, array_samples = array_mt.count()
         logger.info(f'{array_samples} samples found in array to exome name map')
+        array_mt = hl.variant_qc(array_mt)
 
+        rg38 = hl.get_reference('GRCh38')
+        rg38.add_sequence(
+            'gs://hail-common/references/Homo_sapiens_assembly38.fasta.gz',
+            'gs://hail-common/references/Homo_sapiens_assembly38.fasta.fai'
+            )
+
+        logger.info('Checking SNPs for reference mismatches')
+        array_missmatch_ht = annotate_snp_mismatch(array_mt.rows(), rg38)
+
+        mismatch = check_mismatch(array_missmatch_ht)
+        logger.info('{} total SNPs'.format(mismatch['total_variants']))
+        logger.info('{} SNPs on minus strand'.format(mismatch['negative_strand']))
+        logger.info('{} reference mismatches in SNPs'.format(mismatch['total_mismatch']))
+        logger.info('{} mismatches on minus strand'.format(mismatch['negative_strand_mismatch']))
+
+
+
+        array_mt = array_mt.filter_rows((array_mt.variant_qc.call_rate > args.call_rate_cutoff) &
+                                        ~array_missmatch_ht[array_mt.row_key].reference_mismatch)
+        print(array_mt.rows().count())
         exome_mt = get_ukbb_data(args.data_source, args.freeze, adj=True, split=False)
-        exome_mt = exome_mt.filter_rows((hl.len(exome_mt.alleles) == 2) & hl.is_snp(exome_mt.alleles[0], exome_mt.alleles[1]))
+        exome_mt = hl.variant_qc(exome_mt)
         # Renaming exome samples to match array data
         exome_mt = exome_mt.key_cols_by(s=exome_mt.s.split("_")[1])
+        exome_mt = exome_mt.filter_rows((hl.len(exome_mt.alleles) == 2) &
+                                        hl.is_snp(exome_mt.alleles[0], exome_mt.alleles[1]) &
+                                        hl.is_defined(array_mt.index_rows(exome_mt.row_key)) &
+                                        (exome_mt.variant_qc.call_rate > args.call_rate_cutoff))
+        exome_mt = exome_mt.checkpoint(get_mt_checkpoint_path(args.data_source, args.freeze, name="exome_subset_concordance"), overwrite=args.overwrite)
+        array_mt = array_mt.filter_rows(hl.is_defined(exome_mt.index_rows(array_mt.row_key)))
+
+        array_mt = array_mt.checkpoint(get_mt_checkpoint_path(args.data_source, args.freeze, name="array_subset_concordance"), overwrite=args.overwrite)
 
         summary, samples, variants = hl.concordance(array_mt, exome_mt)
         samples = samples.annotate(
@@ -89,6 +119,8 @@ if __name__ == '__main__':
     concordance.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
     concordance.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
     concordance.add_argument('-c', '--array_concordance', help='Compute array concordance', action='store_true')
+    concordance.add_argument('--call_rate_cutoff', help='Call rate cutoff.', type=float,
+                        default=0.95)
 
     args = parser.parse_args()
 
