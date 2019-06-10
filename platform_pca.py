@@ -81,7 +81,7 @@ def main(args):
         logger.info('Preparing data for platform PCA...')
         intervals = hl.import_locus_intervals(ukbb_calling_intervals_path, reference_genome='GRCh38')
         mt = get_ukbb_data(args.data_source, args.freeze, split=False, adj=True)
-        mt = remove_hard_filter_samples(mt) 
+        mt = remove_hard_filter_samples(data_source, freeze, mt) 
         callrate_mt = compute_callrate_mt(mt, intervals, reference_genome='GRCh38')
         callrate_mt.write(callrate_mt_path(data_source, freeze), args.overwrite)
 
