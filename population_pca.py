@@ -108,8 +108,10 @@ def main(args):
 
     if args.run_pca:
         logger.info("Running population PCA")
+        qc_mt = remove_hard_filter_samples(data_source, freeze, 
+                                            hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned=True)))
         pca_evals, pop_pca_scores_ht, pop_pca_loadings_ht = run_pca_with_relateds(
-            hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned=True)),
+            qc_mt,
             hl.read_table(related_drop_path(data_source, freeze)),
             args.n_pcs
         )
@@ -129,6 +131,7 @@ def main(args):
     if args.run_pc_project:
         # Note: I used all workers for this as it kept failing with preemptibles
         mt = get_ukbb_data(data_source, freeze, split=False, adj=True)
+        mt = remove_hard_filter_samples(data_source, freeze, mt)
         joint_scores_ht = project_on_gnomad_pop_pcs(mt)
         joint_scores_ht.write(ancestry_pc_project_scores_ht_path(data_source, freeze, "joint"), overwrite=args.overwrite)
 
