@@ -1,5 +1,6 @@
 from gnomad_hail import *
 from ukbb_qc.resources import *
+from ukbb_qc.utils import *
 import hail as hl
 import argparse
 import numpy as np
@@ -80,14 +81,13 @@ def main(args):
         logger.info('Preparing data for platform PCA...')
         intervals = hl.import_locus_intervals(ukbb_calling_intervals_path, reference_genome='GRCh38')
         mt = get_ukbb_data(args.data_source, args.freeze, split=False, adj=True)
+        mt = remove_hard_filter_samples(mt) 
         callrate_mt = compute_callrate_mt(mt, intervals, reference_genome='GRCh38')
         callrate_mt.write(callrate_mt_path(data_source, freeze), args.overwrite)
 
     if args.run_platform_pca:
         logger.info("Running platform PCA...")
         callrate_mt = hl.read_matrix_table(callrate_mt_path(data_source, freeze))
-        qc_ht = hl.read_table(hard_filters_ht_path(data_source, freeze)).key_by('s')
-        callrate_mt = callrate_mt.filter_cols(hl.len(qc_ht[callrate_mt.col_key].hard_filters) == 0)
         eigenvalues, scores_ht, loadings_ht = run_platform_pca(callrate_mt)
         scores_ht.write(platform_pca_scores_ht_path(data_source, freeze), overwrite=args.overwrite)
         loadings_ht.write(platform_pca_loadings_ht_path(data_source, freeze), overwrite=args.overwrite)
