@@ -18,12 +18,6 @@ def remove_hard_filter_samples(data_source: str, freeze: int, mt: hl.MatrixTable
     # remove unnecessary fields from hard filters ht
     ht = ht.select('hard_filters')
 
-    # join ht and mt
-    mt = mt.annotate_cols(**ht[mt.col_key])
-
-    # filter hard filtered samples
-    mt = mt.filter_cols(hl.len(mt.hard_filters) > 0)
-
-    # drop hard filter column from mt
-    mt = mt.drop('hard_filters')
+    # remove hard filtered samples
+    mt = mt.filter_cols(hl.len(ht[mt.col_key].hard_filters) == 0)
     return mt
