@@ -60,7 +60,8 @@ def main(args):
 
     if not args.skip_pc_relate:
         logger.info('Running PCA for PC-Relate...')
-        pruned_qc_mt = hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned=True)).unfilter_entries()
+        pruned_qc_mt = remove_hard_filter_samples(data_source, freeze, 
+                                            hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned=True)).unfilter_entries()
         eig, scores, _ = hl.hwe_normalized_pca(pruned_qc_mt.GT, k=10, compute_loadings=False)
         scores.write(relatedness_pca_scores_ht_path(data_source, freeze), args.overwrite)
 
@@ -72,7 +73,7 @@ def main(args):
 
     if not args.skip_filter_dups:
         logger.info("Filtering duplicate samples...")
-        sample_qc_ht = hl.read_table(qc_ht_path(data_source, freeze))
+        sample_qc_ht = remove_hard_filter_samples(data_source, freeze, hl.read_table(qc_ht_path(data_source, freeze)))
         samples_rankings_ht = sample_qc_ht.select(rank=-1 * sample_qc_ht.sample_qc.dp_stats.mean)
         relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
         if len(get_duplicated_samples(relatedness_ht)) > 0:
