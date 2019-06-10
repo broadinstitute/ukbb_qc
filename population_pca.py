@@ -2,6 +2,7 @@ from gnomad_hail import *
 from gnomad_hail.utils.sample_qc import *
 import gnomad_hail.resources.sample_qc as gres
 from ukbb_qc.resources import *
+from ukbb_qc.utils import *
 import hail as hl
 import argparse
 import pickle
