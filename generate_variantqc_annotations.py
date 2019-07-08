@@ -26,23 +26,7 @@ def generate_call_stats(mt: hl.MatrixTable) -> hl.Table:
 
     return mt.annotate_rows(qc_callstats=call_stats_expression).rows()
 
-
-# def generate_de_novos(mt: hl.MatrixTable, fam_file: str, freq_data: hl.Table) -> hl.Table:
-#     mt = mt.select_cols()
-#     fam_ht = read_fam(fam_file).key_by()
-#     fam_ht = fam_ht.select(s=[fam_ht.s, fam_ht.pat_id, fam_ht.mat_id]).explode('s').key_by('s')
-#     mt = mt.filter_cols(hl.is_defined(fam_ht[mt.s]))
-#     mt = mt.select_rows()
-#     mt = hl.split_multi_hts(mt)
-#     mt = mt.annotate_rows(family_stats=freq_data[mt.row_key].family_stats)
-#     ped = hl.Pedigree.read(fam_file, delimiter='\\t')
-#
-#     de_novo_table = hl.de_novo(mt, ped, mt.family_stats[0].unrelated_qc_callstats.AF[1])
-#     de_novo_table = de_novo_table.key_by('locus', 'alleles').collect_by_key('de_novo_data')
-#
-#     return de_novo_table
-
-
+# NOTE: altered from gnomAD version to create HTs for annotation
 def annotate_truth_data(mt: hl.MatrixTable) -> hl.Table:
     """
     Writes bi-allelic sites MT with the following annotations:
@@ -60,11 +44,40 @@ def annotate_truth_data(mt: hl.MatrixTable) -> hl.Table:
         'mills': mills_mt_path(),
         'kgp_high_conf_snvs': kgp_high_conf_snvs_mt_path()
     }
-    truth_mtes = {key: hl.split_multi_hts(hl.read_matrix_table(path).repartition(1000), left_aligned=False)
+    truth_htes = {key: hl.split_multi_hts(hl.read_matrix_table(path).repartition(1000).rows(), left_aligned=False)
                   for key, path in truth_mtes.items()}
+    truth_htes = truth_htes.update({'ukbb_array': var_annotations_ht_path(data_source, freeze, 'array_concordance')})  # TODO: formalize code to create this resource
 
-    return mt.annotate_rows(truth_data=hl.struct(**{root: hl.is_defined(truth_mt[mt.row_key, :])
-                                                    for root, truth_mt in truth_mtes.items()})).rows()
+    return mt.annotate_rows(truth_data=hl.struct(**{root: hl.is_defined(truth_ht[mt.row_key])
+                                                    for root, truth_ht in truth_htes.items()})).rows()
+
+
+def generate_array_concordant_variants(mt: hl.MatrixTable) -> hl.Table:
+    """
+
+    :param mt:
+    :return: Table containing concordant variants found in both the UKBB array data and the UKBB exome data
+    :rtype: Table
+    """
+
+    mt = hl.read_matrix_table(array_mt_path(liftover=True))
+    return
+
+# def generate_de_novos(mt: hl.MatrixTable, fam_file: str, freq_data: hl.Table) -> hl.Table:
+#     mt = mt.select_cols()
+#     fam_ht = read_fam(fam_file).key_by()
+#     fam_ht = fam_ht.select(s=[fam_ht.s, fam_ht.pat_id, fam_ht.mat_id]).explode('s').key_by('s')
+#     mt = mt.filter_cols(hl.is_defined(fam_ht[mt.s]))
+#     mt = mt.select_rows()
+#     mt = hl.split_multi_hts(mt)
+#     mt = mt.annotate_rows(family_stats=freq_data[mt.row_key].family_stats)
+#     ped = hl.Pedigree.read(fam_file, delimiter='\\t')
+#
+#     de_novo_table = hl.de_novo(mt, ped, mt.family_stats[0].unrelated_qc_callstats.AF[1])
+#     de_novo_table = de_novo_table.key_by('locus', 'alleles').collect_by_key('de_novo_data')
+#
+#     return de_novo_table
+
 
 
 def main(args):
@@ -116,7 +129,6 @@ def main(args):
     #     mt.write(annotations_ht_path(data_type, 'de_novos'), args.overwrite)
 
     if args.annotate_truth_data:
-        # TODO: liftover truth data to hg38
         mt = get_ukbb_data(data_source, freeze, meta_root=None)
         annotate_truth_data(mt).write(var_annotations_ht_path(data_source, freeze, 'truth_data'), overwrite=args.overwrite)
 
