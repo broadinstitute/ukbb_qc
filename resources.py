@@ -122,6 +122,7 @@ def get_array_data_path(extension: str, chrom: str) -> str:
 
 array_sample_map = 'gs://broad-ukbb/resources/array/Project_26041_bridge.csv'
 ukbb_calling_intervals_path = 'gs://broad-ukbb/resources/ukbb_exome_calling.interval_list'
+broad_calling_intervals_path = 'gs://broad-ukbb/resources/broad_exome_calling.interval_list'
 lcr_intervals_path = 'gs://broad-ukbb/resources/LCRFromHengH38_chr1-22_XY.txt'
 
 
@@ -281,6 +282,10 @@ def get_ht_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE, name:
     """
 
     return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/{name}.ht'
+
+
+def hg38_selfchain_path() -> str:
+    return 'gs://broad-ukbb/resources/hg38_self_chain_nosamepos_withalts_gt10k.bed.gz' 
 
 
 def get_regeneron_relatedness_path(freeze: int = CURRENT_FREEZE, relationship: str = None) -> str:
