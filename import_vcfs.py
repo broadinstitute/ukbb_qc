@@ -32,6 +32,14 @@ def main(args):
             logger.info('\nAll samples in dataset match provided list of samples')
         # NOTE: stop here to inspect summaries, missing variant annotations, and sample IDs -- there were problems with Broad callset
 
+    if args.import_vqsr:
+        logger.info('Importing VQSR annotations...')
+        mt = hl.import_vcf(args.import_vqsr_regex, force_bgz=True, reference_genome='GRCh38').naive_coalesce(args.num_vqsr_partitions)
+        ht = mt.rows()
+        ht = hl.split_multi_hts(ht).checkpoint(var_annotations_ht_path(data_source, freeze, 'vqsr'), overwrite=args.overwrite)
+        row_count = ht.count()
+        logger.info(f'Found {row_count} variants with VQSR annotations')
+
     if args.write_raw_mt:
         mt = hl.read_matrix_table(raw_mt_path(data_source, freeze, is_temp=True))
         mt = mt.key_cols_by(s=mt.s[1:])
@@ -49,11 +57,13 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--import_vcfs', help='Import and write temporary raw MT', action='store_true')
+    parser.add_argument('--import_vqsr', help='Import and write VQSR annotations to HT', action='store_true')
     parser.add_argument('--write_raw_mt', help='Trim temporary raw MT into final raw MT', action='store_true')
 
     parser.add_argument('-i', '--import_regex', help='Regex string containing VCF(s) for import', type=str)
     parser.add_argument('-v', '--import_vqsr_regex', help='Regex string containing VQSR VCF(s) for import', type=str)
     parser.add_argument('-n', '--num_partitions', help='Number of partitions to be used for raw MT', type=int)
+    parser.add_argument('-m', '--num_vqsr_partitions', help='Number of partitions to be used for VQSR HT', type=int)
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
     parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
 

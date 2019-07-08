@@ -4,7 +4,7 @@ from typing import *
 CURRENT_FREEZE = 4
 DATA_SOURCES = ['regeneron', 'broad']
 FREEZES = [4]
-
+CURRENT_HAIL_VERSION = "0.2"
 
 def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, adj: bool = False, split: bool = True,
                   raw: bool = False, non_refs_only: bool = False, meta_root: Optional[str] = None) -> hl.MatrixTable:
@@ -348,7 +348,7 @@ def var_annotations_ht_path(data_source: str, freeze: int, annotation_type: str)
 
     :param str data_source: 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
-    :param str annotation_type: Tag describing variant-level annotations in HT, e.g., "vep", "qc_stats", "call_stats"
+    :param str annotation_type: Tag describing variant-level annotations in HT, e.g., "vep", "qc_stats", "call_stats", "vqsr"
     :return: Path to annotations Table
     :rtype: str
     """
@@ -366,6 +366,94 @@ def sample_annotations_table_path(data_source: str, freeze: int, annotation_type
     """
     return f'{variant_qc_prefix(data_source, freeze)}/sample_annotations/{annotation_type}.ht'
 
+
+def rf_run_hash_path(data_source: str, freeze: int = CURRENT_FREEZE):
+    """
+    Returns the path to the json file containing the RF runs list.
+
+    :param str data_source: 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :return: Path to json file
+    :rtype: str
+    """
+
+    return f'{variant_qc_prefix(data_source, freeze)}/rf/runs.json'
+
+
+def rf_annotated_path(
+        data_source: str,
+        freeze: int = CURRENT_FREEZE,
+        adj: bool = False) -> str:
+    """
+    Returns the path to the RF-ready annotated HT
+
+    :param str data_source: 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param bool adj: Whether to load 'adj' or 'raw'
+    :return:
+    """
+
+    return f'{variant_qc_prefix(data_source, freeze)}/rf/rf_annotated.{"adj" if adj else "raw"}.ht'
+
+
+def rf_path(data_source: str, freeze: int = CURRENT_FREEZE,
+            data: str = 'rf_result',
+            run_hash: str = None
+            ) -> str:
+    """
+
+    Gets the path to the desired RF data.
+    Data can take the following values:
+        - 'training': path to the training data for a given run
+        - 'model': path to pyspark pipeline RF model
+        - 'rf_result' (default): path to HT containing result of RF filtering
+
+    :param str data_source: 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param str data: One of 'pre_rf', 'training', 'model' or 'rf_result' (default)
+    :param str run_hash: Hash of RF run to load
+    :return:
+    """
+
+    extension = 'model' if data == 'model' else 'ht'
+    return f'{variant_qc_prefix(data_source, freeze)}/rf/{run_hash}/{data}.{extension}'
+
+
+def score_ranking_path(data_source: str, freeze: int,
+            data: str,
+            binned: bool = False,
+            ) -> str:
+    """
+    Returns the path to non-RF metrics score rankings Tables, e.g.:
+    * vqsr
+
+    :param str data_source: 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param data: The score data to return
+    :param binned: Whether to get the binned data
+    :return: Path to desired hail Table
+    :rtype: str
+    """
+
+    return f'{variant_qc_prefix(data_source, freeze)}/score_rankings/{data}{"_binned" if binned else ""}.ht'
+
+
+def omni_mt_path(hail_version=CURRENT_HAIL_VERSION):
+    return 'gs://gnomad-public/truth-sets/hail-{0}/1000G_omni2.5.hg38.mt'.format(hail_version)
+
+def mills_mt_path(hail_version=CURRENT_HAIL_VERSION):
+    return 'gs://gnomad-public/truth-sets/hail-{0}/Mills_and_1000G_gold_standard.indels.hg38.mt'.format(hail_version)
+
+
+def hapmap_mt_path(hail_version=CURRENT_HAIL_VERSION):
+    return 'gs://gnomad-public/truth-sets/hail-{0}/hapmap_3.3.hg38.mt'.format(hail_version)
+
+
+def kgp_high_conf_snvs_mt_path(hail_version=CURRENT_HAIL_VERSION):
+    return 'gs://gnomad-public/truth-sets/hail-{0}/1000G_phase1.snps.high_confidence.hg38.mt'.format(hail_version)
+
+def array_truth_data_ht_path():
+    return 'gs://'
 
 class DataException(Exception):
     pass
