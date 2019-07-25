@@ -47,8 +47,7 @@ def get_pc_plots_hail(pcs_ht, pc_name, color_col='color', colors=None, n_pcs=10,
                             pcs_ht[f'{pc_name}{pc + 1}'],
                             colors=colors,
                             label=pcs_ht[color_col], width=plot_width, height=plot_height,
-                            title=pc_name, xlabel=f'PC{pc}', ylabel=f'PC{pc + 1}',
-                            collect_all=True)
+                            title=pc_name, xlabel=f'PC{pc}', ylabel=f'PC{pc + 1}')
         plots.append(Panel(child=p, title=f'PC{pc} vs PC{pc + 1}'))
     return Tabs(tabs=plots)
 
