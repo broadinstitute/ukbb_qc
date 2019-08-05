@@ -39,14 +39,17 @@ def annotate_truth_data(mt: hl.MatrixTable) -> hl.Table:
     mt = mt.select_rows()
 
     truth_mtes = {
-        'hapmap': hapmap_mt_path(),
+        # 'hapmap': hapmap_mt_path(),
         'omni': omni_mt_path(),
         'mills': mills_mt_path(),
-        'kgp_high_conf_snvs': kgp_high_conf_snvs_mt_path()
+        'kgp_high_conf_snvs': kgp_high_conf_snvs_mt_path(),
+        'ukbb_array': 'gs://broad-ukbb/broad.freeze_4/temp/exome_subset_concordance.rekeyed.mt'
     }
+
     truth_htes = {key: hl.split_multi_hts(hl.read_matrix_table(path).repartition(1000).rows(), left_aligned=False)
                   for key, path in truth_mtes.items()}
-    truth_htes = truth_htes.update({'ukbb_array': var_annotations_ht_path(data_source, freeze, 'array_concordance')})  # TODO: formalize code to create this resource
+    # TODO: formalize code to create this resource
+    truth_htes.update({'hapmap': hl.read_table(hapmap_ht_path())})
 
     return mt.annotate_rows(truth_data=hl.struct(**{root: hl.is_defined(truth_ht[mt.row_key])
                                                     for root, truth_ht in truth_htes.items()})).rows()
