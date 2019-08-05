@@ -58,6 +58,8 @@ def main(args):
     pop_assignment_method = args.pop_assignment_method
 
     if args.run_mini_qc:
+        # NOTE: we run outlier detection without adj filtration to get better separation between high and low quality samples
+        # this is per Julia's discussion with Konrad
         mt = get_ukbb_data(data_source, freeze, split=False, raw=True, adj=False)
         logger.info('Filtering samples that fail hard filters...')
         qc_ht = hl.read_table(hard_filters_ht_path(data_source, freeze)).key_by('s')
