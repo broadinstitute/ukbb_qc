@@ -17,7 +17,6 @@ def compare_samples(ht1, ht2) -> bool:
     :return: Whether the sample counts are the same
     :rtype: bool
     """
-
     s_count1 = ht1.count()
     s_count2 = ht2.count()
     logger.info(f'{s_count1} samples in left table; {s_count2} samples in right table')
@@ -39,10 +38,7 @@ def join_tables(
     :return: joined Table
     :rtype: Table
     """
-
-
     sample_count_match = compare_samples(left_ht, right_ht)
-
     if not sample_count_match:
         logger.warning('Sample counts in left and right tables do not match')
 
@@ -109,10 +105,9 @@ def main(args):
     left_ht = join_tables(left_ht, 's', right_ht, 's', 'left')
 
     logger.info('Annotating high_quality field')
-    left_ht = left_ht.annotate(high_quality=((hl.len(left_ht.hard_filters) == 0) |
-                                            (~left_ht.duplicate | ~left_ht.related_filter) |
+    left_ht = left_ht.annotate(high_quality=((hl.len(left_ht.hard_filters) == 0) &
                                             (hl.len(left_ht.pop_platform_filters) == 0)))
-
+ 
     logger.info('Writing out meta ht')
     left_ht.write(meta_ht_path(data_source, freeze), overwrite = True)
     logger.info('Complete') 
