@@ -41,6 +41,7 @@ def main(args):
 
         array_mt = array_mt.annotate_rows(new_locus=hl.liftover(array_mt.locus, 'GRCh38', include_strand=True),
                                           old_locus=array_mt.locus)
+
         # Filter out any liftover that has changed strands because they were kept in the liftover file
         array_mt = array_mt.filter_rows(hl.is_defined(array_mt.new_locus) & ~array_mt.new_locus.is_negative_strand)
         array_mt = array_mt.key_rows_by(locus=array_mt.new_locus.result, alleles=array_mt.alleles)
@@ -70,14 +71,14 @@ def main(args):
 
         logger.info('Checking SNPs for reference mismatches')
         array_missmatch_ht = annotate_snp_mismatch(array_mt.rows(), rg38)
-
+    
+        # NOTE: This step doesn't currently work
+        # see https://github.com/hail-is/hail/issues/5371
         mismatch = check_mismatch(array_missmatch_ht)
         logger.info('{} total SNPs'.format(mismatch['total_variants']))
         logger.info('{} SNPs on minus strand'.format(mismatch['negative_strand']))
         logger.info('{} reference mismatches in SNPs'.format(mismatch['total_mismatch']))
         logger.info('{} mismatches on minus strand'.format(mismatch['negative_strand_mismatch']))
-
-
 
         array_mt = array_mt.filter_rows((array_mt.variant_qc.call_rate > args.call_rate_cutoff) &
                                         ~array_missmatch_ht[array_mt.row_key].reference_mismatch)
