@@ -3,9 +3,11 @@ import hail as hl
 from gnomad_hail.utils.sample_qc import *
 from ukbb_qc.resources import *
 
+
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("relatedness")
 logger.setLevel(logging.INFO)
+
 
 def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: bool = True) -> Union[hl.MatrixTable, hl.Table]:
     """
@@ -36,6 +38,7 @@ def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: boo
 
     return mt
 
+
 def run_sample_qc(mt: hl.MatrixTable) -> hl.MatrixTable:
     """
     Filter MTs to bi-allelic sites and remove problematic intervals, and performs sample QC
@@ -59,7 +62,7 @@ def main(args):
 
     if args.run_mini_qc:
         # NOTE: we run outlier detection without adj filtration to get better separation between high and low quality samples
-        # this is per Julia's discussion with Konrad
+        # this is per Julia's discussion with Konrad in #ukbb_qc
         mt = get_ukbb_data(data_source, freeze, split=False, raw=True, adj=False)
         logger.info('Filtering samples that fail hard filters...')
         qc_ht = hl.read_table(hard_filters_ht_path(data_source, freeze)).key_by('s')
@@ -69,7 +72,6 @@ def main(args):
         run_sample_qc(mt).cols().select('sample_qc').write(qc_temp_data_prefix(data_source, freeze) + 'outlier_sample_qc.ht', args.overwrite)
 
     sample_qc_ht = hl.read_table(qc_temp_data_prefix(data_source, freeze) + 'outlier_sample_qc.ht')
-
     strata = []
     if not args.skip_platform_filter:
         logger.info('Annotating platform assignments...')
@@ -79,7 +81,6 @@ def main(args):
 
     if not args.skip_population_filter:
         logger.info('Annotating population assignments...')
-
         pop_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
         sample_qc_ht = sample_qc_ht.annotate(qc_pop=pop_ht[sample_qc_ht.key][pop_assignment_method])
         strata.append('qc_pop')
