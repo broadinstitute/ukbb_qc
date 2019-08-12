@@ -23,5 +23,5 @@ def remove_hard_filter_samples(data_source: str, freeze: int, t: Union[hl.Matrix
     if isinstance(t, hl.MatrixTable):
         t = t.filter_cols(hl.len(ht[t.col_key].hard_filters) == 0) 
     else:
-        t.filter((hl.len(ht[t.row_key].hard_filters) == 0)
+        t.filter((hl.len(ht[t.row_key].hard_filters) == 0))
     return t
