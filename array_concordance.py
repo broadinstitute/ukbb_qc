@@ -69,11 +69,10 @@ def main(args):
             'gs://hail-common/references/Homo_sapiens_assembly38.fasta.fai'
             )
 
-        logger.info('Checking SNPs for reference mismatches')
-        array_missmatch_ht = annotate_snp_mismatch(array_mt.rows(), rg38)
-    
         # NOTE: This step doesn't currently work
         # see https://github.com/hail-is/hail/issues/5371
+        logger.info('Checking SNPs for reference mismatches')
+        array_missmatch_ht = annotate_snp_mismatch(array_mt.rows(), rg38)
         mismatch = check_mismatch(array_missmatch_ht)
         logger.info('{} total SNPs'.format(mismatch['total_variants']))
         logger.info('{} SNPs on minus strand'.format(mismatch['negative_strand']))
