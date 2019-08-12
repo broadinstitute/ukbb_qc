@@ -2,9 +2,8 @@ import pandas as pd
 from gnomad_hail import *
 from gnomad_hail.utils.plotting import *
 from statsmodels.robust.scale import mad
-from bokeh.layouts import row, column, gridplot
-from bokeh.plotting import figure, output_notebook, show
-from bokeh.palettes import Spectral, Set1
+from bokeh.layouts import gridplot
+from bokeh.plotting import figure
 import holoviews as hv
 hv.extension('bokeh')
 
@@ -102,6 +101,8 @@ def get_outlier_plots(outlier_sample_qc,
     new_colnames = cols + [key] + [f'{metric}' for metric in qc_metrics]
     sample_qc_pd = outlier_sample_qc.flatten().select(*colnames).rename(dict(zip(colnames, new_colnames))).key_by(
         key).to_pandas()
+    sample_qc_pd = sample_qc_pd.set_index(key)
+
     sample_qc_fail_pd = sample_qc_pd.groupby(facet_col).transform(
         lambda x: (x < (x.median() - (4 * mad(x)))) | (x > (x.median() + (4 * mad(x)))))
     sample_qc_fail_pd[facet_col] = sample_qc_pd[facet_col]
