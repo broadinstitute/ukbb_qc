@@ -16,7 +16,7 @@ def main(args):
 
     if args.join_relatedness:
         # Define Relationship thresholds
-        first_degree_threshold = args.first_degree_kin_threshold.split(",")
+        first_degree_threshold = [float(i) for i in args.first_degree_kin_threshold.split(",")]
         second_degree_threshold = args.second_degree_kin_threshold
         ibd2_parent_offspring_threshold = args.ibd2_parent_offspring_threshold
 
@@ -27,6 +27,7 @@ def main(args):
         regeneron_rel_ht = regeneron_rel_SD_ht.union(regeneron_rel_FS_ht).union(regeneron_rel_PC_ht)
 
         # Add a new column to each of the tables that sorts and joins the ids to be used to index pairs
+        relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
         relatedness_ht = relatedness_ht.annotate(samples=hl.delimit(hl.sorted([relatedness_ht.i.s, relatedness_ht.j.s])))
         regeneron_rel_ht = regeneron_rel_ht.annotate(samples=hl.delimit(hl.sorted([regeneron_rel_ht.IID1, regeneron_rel_ht.IID2])))
 
@@ -77,23 +78,19 @@ def main(args):
                                        .when(3003,"Bangladeshi").when(3004,"Other Asian").when(4,"Black or Black British").when(4001,"Caribbean")
                                        .when(4002,"African").when(4003,"Other Black").when(5,"Chinese").when(6,"Other").when(-1,"Do not Know")
                                        .when(-3,"Prefer not to answer").default("None"))
-        ukbb_ancestry.checkpoint(get_ukbb_self_reported_ancestry_path(freeze), overwrite=args.overwrite)
-
+        ukbb_ancestry.write(get_ukbb_self_reported_ancestry_path(freeze), overwrite=args.overwrite)
 
 
     if args.join_ancestry:
+        ukbb_ancestry = hl.read_table(get_ukbb_self_reported_ancestry_path(freeze))
         regeneron_pops_ht = hl.import_table(get_regeneron_ancestry_path(freeze), impute=True).key_by('IID')
         regeneron_pops_ht = regeneron_pops_ht.annotate(Regeneron_pop=regeneron_pops_ht.Class)
-        pop_pcs_ht = meta_ht.select(Ancestry=meta_ht.pop.pop, *{f'PC{i}' for i in range(1,11)})
-        pop_pcs_ht = pop_pcs_ht.annotate(Broad_pop=pop_pcs_ht.Ancestry)
-
-        pop_joint_ht = pop_pcs_ht.join(regeneron_pops_ht, 'left')
+        pop_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
+        pop_joint_ht = pop_ht.join(regeneron_pops_ht, 'left')
         pop_joint_ht = pop_joint_ht.key_by(array_map=pop_joint_ht.s.split("_")[1])
         pop_joint_ht = pop_joint_ht.join(ukbb_ancestry, 'left')
         pop_joint_ht = pop_joint_ht.key_by('s')
         pop_joint_ht.write(get_joint_regeneron_ancestry_path(data_source, freeze), overwrite=args.overwrite)
-
-
 
 
 if __name__ == '__main__':
