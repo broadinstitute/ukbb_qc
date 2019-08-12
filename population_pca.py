@@ -130,8 +130,9 @@ def main(args):
         pops_ht.write(ancestry_cluster_ht_path(data_source, freeze), args.overwrite)
 
     if args.run_pc_project:
-        # Note: I used all workers for this as it kept failing with preemptibles
-        mt = get_ukbb_data(data_source, freeze, split=False, adj=True)
+        # NOTE: I used all workers for this as it kept failing with preemptibles
+        # Using the split mt led to better clustering and fewer others in Broad freeze 4
+        mt = get_ukbb_data(data_source, freeze, split=True, adj=True)
         mt = remove_hard_filter_samples(data_source, freeze, mt)
         joint_scores_ht = project_on_gnomad_pop_pcs(mt)
         joint_scores_ht.write(ancestry_pc_project_scores_ht_path(data_source, freeze, "joint"), overwrite=args.overwrite)
