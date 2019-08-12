@@ -1,4 +1,5 @@
 from gnomad_hail import *
+from gnomad_hail.utils.generic import filter_to_autosomes
 from ukbb_qc.resources import *
 from ukbb_qc.utils import *
 import hail as hl
@@ -10,18 +11,6 @@ import hdbscan
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("platform_pca")
 logger.setLevel(logging.INFO)
-
-
-# Note: should go to a common repo, couldn't use the one in gnomad_hail because wrong build
-def filter_to_autosomes(t: Union[hl.MatrixTable, hl.Table], reference_genome: str) -> Union[hl.MatrixTable, hl.Table]:
-    if reference_genome == "GRCh37":
-        autosomes = hl.parse_locus_interval('1-22', reference_genome=reference_genome)
-    if reference_genome == "GRCh38":
-        autosomes = hl.parse_locus_interval('chr1-chr22', reference_genome=reference_genome)
-    if isinstance(t, hl.MatrixTable):
-        return hl.filter_intervals(t, [autosomes])
-    else:
-        return t.filter(autosomes.contains(t.locus))
 
 
 # Note: The following functions are from Laurent's myoseq sample qc should probably move to a common location
@@ -36,6 +25,7 @@ def compute_callrate_mt(mt: hl.MatrixTable, intervals: hl.Table, reference_genom
 
 def run_platform_pca(callrate_mt: hl.MatrixTable) -> Tuple[List[float], hl.Table, hl.Table]:
     callrate_mt = callrate_mt.annotate_entries(callrate=hl.int(callrate_mt.callrate > 0.25))
+    
     # Center until Hail's PCA does it for you
     callrate_mt = callrate_mt.annotate_rows(mean_callrate=hl.agg.mean(callrate_mt.callrate))
     callrate_mt = callrate_mt.annotate_entries(callrate=callrate_mt.callrate - callrate_mt.mean_callrate)
