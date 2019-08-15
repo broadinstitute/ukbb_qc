@@ -101,22 +101,36 @@ def assign_cluster_pcs(pca_ht: hl.Table, pc_scores_ann: str = 'scores', hdbscan_
     return ht
 
 
+def load_ukbb_array_pcs(num_pcs=16):
+    sample_map = hl.import_table('gs://broad-ukbb/resources/array/Project_26041_bridge.csv', delimiter=',')
+    array_pcs = hl.import_table('gs://broad-ukbb/resources/array/ukb_sqc_v2_ukb26041.txt', impute=True, delimiter='\t',
+                                no_header=True)
+
+    sample_map = sample_map.key_by(s=sample_map.eid_26041)
+    array_pcs = array_pcs.key_by(s=sample_map[hl.str(array_pcs.f1)].eid_sample)
+    array_pcs = array_pcs.filter(hl.is_defined(array_pcs.s))
+    array_pcs = array_pcs.annotate(scores=hl.array([array_pcs[f'f{i+26}'] for i in range(0, num_pcs)]))
+
+    return array_pcs
+
+
 def main(args):
     hl.init(log='/population_pca.log')
 
     data_source = args.data_source
     freeze = args.freeze
+    n_pcs = args.n_pcs
 
     if args.run_pca:
         logger.info("Running population PCA")
-        qc_mt = remove_hard_filter_samples(data_source, freeze, 
-                                            hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned=True)))
+        qc_mt = remove_hard_filter_samples(data_source, freeze,
+                                           hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned=True)))
         pca_evals, pop_pca_scores_ht, pop_pca_loadings_ht = run_pca_with_relateds(
             qc_mt,
             hl.read_table(related_drop_path(data_source, freeze)),
-            args.n_pcs
+            n_pcs
         )
-        pop_pca_scores_ht = pop_pca_scores_ht.annotate_globals(n_pcs=args.n_pcs)
+        pop_pca_scores_ht = pop_pca_scores_ht.annotate_globals(n_pcs=n_pcs)
         pop_pca_loadings_ht.write(ancestry_pca_loadings_ht_path(data_source, freeze), args.overwrite)
         pop_pca_scores_ht.write(ancestry_pca_scores_ht_path(data_source, freeze), args.overwrite)
 
@@ -128,6 +142,38 @@ def main(args):
                                      hdbscan_min_samples=args.hdbscan_min_samples)
         pops_ht.annotate_globals(hdbscan_min_cluster_size=args.hdbscan_min_cluster_size)
         pops_ht.write(ancestry_cluster_ht_path(data_source, freeze), args.overwrite)
+
+    if args.assign_clusters_array_pcs:
+        logger.info("Load UKBB array PC data")
+        array_pc_ht = load_ukbb_array_pcs()
+        logger.info("Assigning PCA clustering")
+        pops_ht = assign_cluster_pcs(array_pc_ht,
+                                     hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
+                                     hdbscan_min_samples=args.hdbscan_min_samples)
+        pops_ht.annotate_globals(hdbscan_min_cluster_size=args.hdbscan_min_cluster_size)
+        pops_ht.write(ancestry_cluster_array_ht_path(data_source, freeze), args.overwrite)
+
+    if args.assign_clusters_joint_scratch_array_pcs:
+        logger.info("Load exome scratch PC data")
+        scores_ht = hl.read_table(ancestry_pca_scores_ht_path(data_source, freeze))
+        scores_ht = scores_ht.key_by(s_array=scores_ht.s.split("_")[1])
+        logger.info("Load UKBB array PC data")
+        array_pc_ht = load_ukbb_array_pcs()
+        array_pc_ht = array_pc_ht.annotate(exome_scores=scores_ht[array_pc_ht.key].scores,
+                                           s_exome=scores_ht[array_pc_ht.key].s)
+        array_pc_ht = array_pc_ht.filter(hl.is_defined(array_pc_ht.exome_scores))
+        array_pc_ht = array_pc_ht.select('s_exome',
+                                         **{f'PC{i + 1}': array_pc_ht.exome_scores[i] for i in range(n_pcs)},
+                                         **{f'PC{i + n_pcs + 1}': array_pc_ht.scores[i] for i in range(args.n_array_pcs)})
+        array_pc_ht = array_pc_ht.annotate(scores=hl.array([array_pc_ht[f'PC{i + 1}'] for i in range(n_pcs + args.n_array_pcs)]))
+        array_pc_ht = array_pc_ht.key_by('s_exome')
+
+        logger.info("Assigning PCA clustering")
+        pops_ht = assign_cluster_pcs(array_pc_ht,
+                                     hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
+                                     hdbscan_min_samples=args.hdbscan_min_samples)
+        pops_ht.annotate_globals(hdbscan_min_cluster_size=args.hdbscan_min_cluster_size)
+        pops_ht.write(ancestry_cluster_joint_scratch_array_ht_path(data_source, freeze), args.overwrite)
 
     if args.run_pc_project:
         # NOTE: I used all workers for this as it kept failing with preemptibles
@@ -142,7 +188,7 @@ def main(args):
         joint_scores_pd = joint_scores_ht.to_pandas()
         joint_pops_pd, joint_pops_rf_model = assign_population_pcs(
             joint_scores_pd,
-            pc_cols=[f'PC{i + 1}' for i in range(args.n_pcs)],
+            pc_cols=[f'PC{i + 1}' for i in range(n_pcs)],
             known_col='pop_for_rf',
             min_prob=args.min_pop_prob
         )
@@ -152,7 +198,7 @@ def main(args):
         scores_ht = scores_ht.drop('pop_for_rf')
         joint_pops_ht = joint_pops_ht.drop('pop_for_rf')
         scores_ht = scores_ht.annotate(pop=joint_pops_ht[scores_ht.key])
-        scores_ht = scores_ht.annotate_globals(n_pcs=args.n_pcs,
+        scores_ht = scores_ht.annotate_globals(n_pcs=n_pcs,
                                                min_prob=args.min_pop_prob)
         scores_ht = scores_ht.checkpoint(ancestry_pc_project_scores_ht_path(data_source, freeze), overwrite=args.overwrite)
 
@@ -193,16 +239,22 @@ if __name__ == '__main__':
     parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
 
     parser.add_argument('--run_pc_project', help='Runs pc project and population assignment using gnomAD data', action='store_true')
-    parser.add_argument('--n_pcs', help='Number of PCs to compute (default: 10)', default=10, type=int)
+    parser.add_argument('--n_pcs',
+                        help='Number of PCs to compute or use in population inference (default: 10)',
+                        default=10,
+                        type=int)
     parser.add_argument('--run_rf', 
                         help='Create random forest model to assign population labels based on PCA results', action='store_true')
     parser.add_argument('--min_pop_prob',
-                     help='Minimum probability of belonging to a given population for assignment (if below, the sample is labeled as "oth" (default: 0.9)',
-                     default=0.5,
-                     type=float)
+                        help='Minimum probability of belonging to a given population for assignment (if below, the sample is labeled as "oth" (default: 0.5)',
+                        default=0.5,
+                        type=float)
 
     parser.add_argument('--run_pca', help='Runs pop PCA on pruned qc MT', action='store_true')
     parser.add_argument('--assign_clusters', help='Assigns clusters based on PCA results using HDBSCAN', action='store_true')
+    parser.add_argument('--assign_clusters_array_pcs', help='Assigns clusters based on PCA results using HDBSCAN', action='store_true')
+    parser.add_argument('--n_array_pcs', help='Number of array PCs to use in clustering (default: 16)', default=16, type=int)
+    parser.add_argument('--assign_clusters_joint_scratch_array_pcs', help='Assigns clusters based on PCA results using HDBSCAN', action='store_true')
     parser.add_argument('--hdbscan_min_samples', help='Minimum samples parameter for HDBSCAN. If not specified, --hdbscan_min_cluster_size is used.', type=int, required=False)
     parser.add_argument('--hdbscan_min_cluster_size', help='Minimum cluster size parameter for HDBSCAN.', type=int, default=50)
     parser.add_argument('--assign_hybrid_ancestry', help='Assigns samples to HDBSCAN clusters where available otherwise uses pc_project assignments.',

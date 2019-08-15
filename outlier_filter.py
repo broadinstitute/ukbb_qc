@@ -48,11 +48,13 @@ def run_sample_qc(mt: hl.MatrixTable) -> hl.MatrixTable:
     """
     mt = filter_to_autosomes(mt)
     mt = filter_low_conf_regions(mt)
-    mt = mt.filter_rows(hl.len(mt.alleles) == 2)  # NOTE: this does not work on a split MT!
+    mt = mt.filter_rows((~mt.was_split) & (hl.len(mt.alleles) == 2))
+    logger.info('starting sample QC...')
     mt = hl.sample_qc(mt)
     mt = mt.annotate_rows(variant_qc=hl.struct(af=hl.agg.mean(mt.GT.n_alt_alleles()) / 2))
     mt = mt.annotate_cols(sample_qc=mt.sample_qc.annotate(f_inbreeding=hl.agg.inbreeding(mt.GT, mt.variant_qc.af)))
-    return mt
+
+    return mt.cols().select('sample_qc')
 
 
 def main(args):
@@ -63,13 +65,14 @@ def main(args):
     if args.run_mini_qc:
         # NOTE: we run outlier detection without adj filtration to get better separation between high and low quality samples
         # this is per Julia's discussion with Konrad in #ukbb_qc
-        mt = get_ukbb_data(data_source, freeze, split=False, raw=True, adj=False)
+        # Need all workers for the mini qc
+        mt = get_ukbb_data(data_source, freeze, split=False, adj=False)
         logger.info('Filtering samples that fail hard filters...')
         qc_ht = hl.read_table(hard_filters_ht_path(data_source, freeze)).key_by('s')
         mt = mt.filter_cols(hl.len(qc_ht[mt.col_key].hard_filters) == 0).select_cols()
-
         logger.info('Running mini sample QC for platform- and population-specific filtering...')
-        run_sample_qc(mt).cols().select('sample_qc').write(qc_temp_data_prefix(data_source, freeze) + 'outlier_sample_qc.ht', args.overwrite)
+        sample_qc_ht = run_sample_qc(mt)
+        sample_qc_ht.write(qc_temp_data_prefix(data_source, freeze) + 'outlier_sample_qc.ht', args.overwrite)
 
     sample_qc_ht = hl.read_table(qc_temp_data_prefix(data_source, freeze) + 'outlier_sample_qc.ht')
     strata = []
