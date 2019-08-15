@@ -82,7 +82,7 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--overwrite', help='Overwrite all data from this subset (default: False)', action='store_true')
     parser.add_argument('--slack_channel', help='Slack channel to post results and notifications to.')
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
-    parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
+    parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE, type=int)
 
     parser.add_argument('--skip_compute_qc_mt', help='Skip Compute matrix to be used in sample qc', action='store_true')
     parser.add_argument('--skip_ld_prune_qc_mt', help='Skip LD prunes the qc matrix', action='store_true')

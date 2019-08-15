@@ -120,7 +120,7 @@ if __name__ == '__main__':
 
     concordance = parser.add_argument_group("Compute array concordance with exomes")
     concordance.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
-    concordance.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
+    concordance.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE, type=int)
     concordance.add_argument('-c', '--array_concordance', help='Compute array concordance', action='store_true')
     concordance.add_argument('--call_rate_cutoff', help='Call rate cutoff.', type=float,
                         default=0.95)
