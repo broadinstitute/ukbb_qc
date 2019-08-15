@@ -21,7 +21,7 @@ def main(args):
         mt.summarize(entries=False)
 
         logger.info('Running sanity checks on raw callset...')
-        sample_qc_path = sample_qc_prefix(datasource, freeze)
+        sample_qc_path = sample_qc_prefix(data_source, freeze)
         var_summary = summarize_mt(mt)
         logger.info('\nVariant summary: {}'.format(var_summary))
 
