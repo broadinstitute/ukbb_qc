@@ -65,7 +65,7 @@ if __name__ == '__main__':
     parser.add_argument('-n', '--num_partitions', help='Number of partitions to be used for raw MT', type=int)
     parser.add_argument('-m', '--num_vqsr_partitions', help='Number of partitions to be used for VQSR HT', type=int)
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
-    parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
+    parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE, type=int)
 
     parser.add_argument('--slack_channel', help='Slack channel to post results and notifications to.')
     parser.add_argument('--overwrite', help='Overwrite pre-existing data', action='store_true')
