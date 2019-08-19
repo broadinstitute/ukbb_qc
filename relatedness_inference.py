@@ -61,7 +61,7 @@ def main(args):
     if not args.skip_pc_relate:
         logger.info('Running PCA for PC-Relate...')
         pruned_qc_mt = remove_hard_filter_samples(data_source, freeze, 
-                                            hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned=True)).unfilter_entries()
+                                            hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned=True))).unfilter_entries()
         eig, scores, _ = hl.hwe_normalized_pca(pruned_qc_mt.GT, k=10, compute_loadings=False)
         scores.write(relatedness_pca_scores_ht_path(data_source, freeze), args.overwrite)
 
