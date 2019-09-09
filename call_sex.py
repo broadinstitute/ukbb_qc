@@ -45,7 +45,7 @@ def impute_sex(mt: hl.MatrixTable, male_threshold: float = 0.75, female_threshol
     mt = hl.filter_intervals(mt, 
                             [hl.parse_locus_interval(x_contig, reference_genome=get_reference_genome(mt.locus).name) 
                             for x_contig in get_reference_genome(mt.locus).x_contigs]) 
-    mt = mt.filter_rows((hl.agg.fraction(hl.is_defined(mt.GT)) > 0.99) & (mt.variant_qc.AF[0] > 0.05))
+    mt = mt.filter_rows((hl.agg.fraction(hl.is_defined(mt.GT)) > 0.99) & (mt.variant_qc.AF[1] > 0.05))
 
     sex_ht = hl.impute_sex(mt.GT, aaf_threshold=aaf_threshold, male_threshold=male_threshold, female_threshold=female_threshold)
     mt = mt.annotate_cols(**sex_ht[mt.col_key])
