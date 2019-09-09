@@ -577,7 +577,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
-    parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
+    parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE, type=int)
 
     parser.add_argument('--run_hash', help='Run hash. Created by --train_rf and only needed for --apply_rf without running --train_rf', required=False)
     parser.add_argument('--snp_bin_cutoff', help='Percentile to set RF cutoff', type=int, default=90)

@@ -3,9 +3,11 @@ import hail as hl
 from gnomad_hail.utils.sample_qc import *
 from ukbb_qc.resources import *
 
+
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("relatedness")
 logger.setLevel(logging.INFO)
+
 
 def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: bool = True) -> Union[hl.MatrixTable, hl.Table]:
     """
@@ -36,6 +38,7 @@ def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: boo
 
     return mt
 
+
 def run_sample_qc(mt: hl.MatrixTable) -> hl.MatrixTable:
     """
     Filter MTs to bi-allelic sites and remove problematic intervals, and performs sample QC
@@ -45,11 +48,13 @@ def run_sample_qc(mt: hl.MatrixTable) -> hl.MatrixTable:
     """
     mt = filter_to_autosomes(mt)
     mt = filter_low_conf_regions(mt)
-    mt = mt.filter_rows(hl.len(mt.alleles) == 2)  # NOTE: this does not work on a split MT!
+    mt = mt.filter_rows((~mt.was_split) & (hl.len(mt.alleles) == 2))
+    logger.info('starting sample QC...')
     mt = hl.sample_qc(mt)
     mt = mt.annotate_rows(variant_qc=hl.struct(af=hl.agg.mean(mt.GT.n_alt_alleles()) / 2))
     mt = mt.annotate_cols(sample_qc=mt.sample_qc.annotate(f_inbreeding=hl.agg.inbreeding(mt.GT, mt.variant_qc.af)))
-    return mt
+
+    return mt.cols().select('sample_qc')
 
 
 def main(args):
@@ -58,16 +63,18 @@ def main(args):
     pop_assignment_method = args.pop_assignment_method
 
     if args.run_mini_qc:
-        mt = get_ukbb_data(data_source, freeze, split=False, raw=True, adj=False)
+        # NOTE: we run outlier detection without adj filtration to get better separation between high and low quality samples
+        # this is per Julia's discussion with Konrad in #ukbb_qc
+        # Need all workers for the mini qc
+        mt = get_ukbb_data(data_source, freeze, split=False, adj=False)
         logger.info('Filtering samples that fail hard filters...')
         qc_ht = hl.read_table(hard_filters_ht_path(data_source, freeze)).key_by('s')
         mt = mt.filter_cols(hl.len(qc_ht[mt.col_key].hard_filters) == 0).select_cols()
-
         logger.info('Running mini sample QC for platform- and population-specific filtering...')
-        run_sample_qc(mt).cols().select('sample_qc').write(qc_temp_data_prefix(data_source, freeze) + 'outlier_sample_qc.ht', args.overwrite)
+        sample_qc_ht = run_sample_qc(mt)
+        sample_qc_ht.write(qc_temp_data_prefix(data_source, freeze) + 'outlier_sample_qc.ht', args.overwrite)
 
     sample_qc_ht = hl.read_table(qc_temp_data_prefix(data_source, freeze) + 'outlier_sample_qc.ht')
-
     strata = []
     if not args.skip_platform_filter:
         logger.info('Annotating platform assignments...')
@@ -77,7 +84,6 @@ def main(args):
 
     if not args.skip_population_filter:
         logger.info('Annotating population assignments...')
-
         pop_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
         sample_qc_ht = sample_qc_ht.annotate(qc_pop=pop_ht[sample_qc_ht.key][pop_assignment_method])
         strata.append('qc_pop')
@@ -102,7 +108,7 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--overwrite', help='Overwrite all data from this subset (default: False)', action='store_true')
     parser.add_argument('--slack_channel', help='Slack channel to post results and notifications to.')
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
-    parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
+    parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE, type=int)
 
     parser.add_argument('--run_mini_qc',
                                       help="Run mini sample qc needed for outlier filtering",

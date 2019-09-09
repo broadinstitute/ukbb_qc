@@ -1,9 +1,9 @@
 import hail as hl
 from typing import *
 
-CURRENT_FREEZE = 4
+CURRENT_FREEZE = 5
 DATA_SOURCES = ['regeneron', 'broad']
-FREEZES = [4]
+FREEZES = [4, 5]
 CURRENT_HAIL_VERSION = "0.2"
 
 def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, adj: bool = False, split: bool = True,
@@ -124,6 +124,7 @@ array_sample_map = 'gs://broad-ukbb/resources/array/Project_26041_bridge.csv'
 ukbb_calling_intervals_path = 'gs://broad-ukbb/resources/ukbb_exome_calling.interval_list'
 broad_calling_intervals_path = 'gs://broad-ukbb/resources/broad_exome_calling.interval_list'
 lcr_intervals_path = 'gs://broad-ukbb/resources/LCRFromHengH38_chr1-22_XY.txt'
+ukbb_calling_intervals_summary = 'gs://broad-ukbb/regeneron.freeze_4/data/ukbb_exome_calling_intervals.summary.txt'
 
 
 # Sample QC files
@@ -247,6 +248,14 @@ def ancestry_cluster_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> 
     return f'{sample_qc_prefix(data_source, freeze)}/population_pca/cluster_assignments.ht'
 
 
+def ancestry_cluster_array_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    return f'{sample_qc_prefix(data_source, freeze)}/population_pca/array_cluster_assignments.ht'
+
+
+def ancestry_cluster_joint_scratch_array_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    return f'{sample_qc_prefix(data_source, freeze)}/population_pca/joint_scratch_array_cluster_assignments.ht'
+
+
 def ancestry_hybrid_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/population_pca/hybrid_pop_assignments.ht'
 
@@ -284,8 +293,25 @@ def get_ht_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE, name:
     return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/{name}.ht'
 
 
+def capture_ht_path() -> str:
+    return 'gs://broad-ukbb/broad.freeze_4/capture.ht'
+
+
 def hg38_selfchain_path() -> str:
-    return 'gs://broad-ukbb/resources/hg38_self_chain_nosamepos_withalts_gt10k.bed.gz' 
+    return 'gs://broad-ukbb/resources/hg38_self_chain_nosamepos_withalts_gt10k.bed.gz'
+
+
+def get_mt_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE, name: str = None) -> str:
+    """
+    Creates a checkpoint path for Table
+    :param str data_type: Will be regeneron or broad
+    :param int freeze: One of data freezes
+    :param str name: Name of intermediate Table
+    :return: Output checkpoint path
+    :rtype: str
+    """
+
+    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/{name}.mt'
 
 
 def get_regeneron_relatedness_path(freeze: int = CURRENT_FREEZE, relationship: str = None) -> str:
@@ -337,6 +363,18 @@ def get_joint_regeneron_ancestry_path(data_source: str, freeze: int = CURRENT_FR
     return f'{sample_qc_prefix(data_source, freeze)}/population_pca/regeneron_ukb_joint_ancestry.ht'
 
 
+def interval_qc_path(data_source: str, freeze: int = CURRENT_FREEZE, chrom: int = None, ht: bool = True) -> str:
+    if chrom is None:
+        chrom = ""
+    else:
+        chrom = f'.chr{chrom}'
+    prefix = f'{sample_qc_prefix(data_source, freeze)}/interval_qc/coverage_by_target{chrom}'
+    if ht:
+        return prefix + '.ht'
+    else:
+        return prefix + '.txt'
+
+
 # Variant QC annotations
 def variant_qc_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     if data_source not in DATA_SOURCES:
@@ -358,6 +396,7 @@ def var_annotations_ht_path(data_source: str, freeze: int, annotation_type: str)
     :rtype: str
     """
     return f'{variant_qc_prefix(data_source, freeze)}/variant_annotations/{annotation_type}.ht'
+
 
 def sample_annotations_table_path(data_source: str, freeze: int, annotation_type: str) -> str:
     """

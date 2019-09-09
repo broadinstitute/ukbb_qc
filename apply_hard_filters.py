@@ -68,7 +68,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='This script applies hard filters to UKBB data')
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
-    parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
+    parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE, type=int)
     parser.add_argument('-c', '--callrate', help='Minimum callrate', default=0.99, type=float)
     parser.add_argument('-d', '--depth', help='Minimum depth', default=20.0, type=float)
     parser.add_argument('-o', '--overwrite', help='Overwrite pre-existing data', action='store_true', default=True)

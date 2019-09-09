@@ -1,4 +1,5 @@
 from gnomad_hail import *
+from gnomad_hail.utils.generic import filter_to_autosomes
 from ukbb_qc.resources import *
 from ukbb_qc.utils import *
 import hail as hl
@@ -12,21 +13,9 @@ logger = logging.getLogger("platform_pca")
 logger.setLevel(logging.INFO)
 
 
-# Note: should go to a common repo, couldn't use the one in gnomad_hail because wrong build
-def filter_to_autosomes(t: Union[hl.MatrixTable, hl.Table], reference_genome: str) -> Union[hl.MatrixTable, hl.Table]:
-    if reference_genome == "GRCh37":
-        autosomes = hl.parse_locus_interval('1-22', reference_genome=reference_genome)
-    if reference_genome == "GRCh38":
-        autosomes = hl.parse_locus_interval('chr1-chr22', reference_genome=reference_genome)
-    if isinstance(t, hl.MatrixTable):
-        return hl.filter_intervals(t, [autosomes])
-    else:
-        return t.filter(autosomes.contains(t.locus))
-
-
 # Note: The following functions are from Laurent's myoseq sample qc should probably move to a common location
-def compute_callrate_mt(mt: hl.MatrixTable, intervals: hl.Table, reference_genome: str) -> hl.MatrixTable:
-    callrate_mt = filter_to_autosomes(mt, reference_genome=reference_genome)
+def compute_callrate_mt(mt: hl.MatrixTable, intervals: hl.Table) -> hl.MatrixTable:
+    callrate_mt = filter_to_autosomes(mt)
     callrate_mt = callrate_mt.annotate_rows(interval=intervals[callrate_mt.locus].target)
     callrate_mt = callrate_mt.filter_rows(hl.is_defined(callrate_mt.interval) & (hl.len(callrate_mt.alleles) == 2))
     callrate_mt = callrate_mt.select_entries(GT=hl.or_missing(hl.is_defined(callrate_mt.GT), hl.struct()))
@@ -36,6 +25,7 @@ def compute_callrate_mt(mt: hl.MatrixTable, intervals: hl.Table, reference_genom
 
 def run_platform_pca(callrate_mt: hl.MatrixTable) -> Tuple[List[float], hl.Table, hl.Table]:
     callrate_mt = callrate_mt.annotate_entries(callrate=hl.int(callrate_mt.callrate > 0.25))
+    
     # Center until Hail's PCA does it for you
     callrate_mt = callrate_mt.annotate_rows(mean_callrate=hl.agg.mean(callrate_mt.callrate))
     callrate_mt = callrate_mt.annotate_entries(callrate=callrate_mt.callrate - callrate_mt.mean_callrate)
@@ -81,15 +71,19 @@ def main(args):
         logger.info('Preparing data for platform PCA...')
         intervals = hl.import_locus_intervals(ukbb_calling_intervals_path, reference_genome='GRCh38')
         mt = get_ukbb_data(args.data_source, args.freeze, split=False, adj=True)
+        logger.info(f'Input MatrixTable count: {mt.count()}')
         mt = remove_hard_filter_samples(data_source, freeze, mt) 
-        callrate_mt = compute_callrate_mt(mt, intervals, reference_genome='GRCh38')
+        logger.info(f'Count after removing hard filtered samples: {mt.count()}')
+        callrate_mt = compute_callrate_mt(mt, intervals)
         callrate_mt.write(callrate_mt_path(data_source, freeze), args.overwrite)
+        logger.info(f'Callrate MatrixTable count: {callrate_mt.count}')
 
     if args.run_platform_pca:
         logger.info("Running platform PCA...")
         callrate_mt = hl.read_matrix_table(callrate_mt_path(data_source, freeze))
         eigenvalues, scores_ht, loadings_ht = run_platform_pca(callrate_mt)
         scores_ht.write(platform_pca_scores_ht_path(data_source, freeze), overwrite=args.overwrite)
+        logger.info(f'Scores Table count: {scores_ht.count}')
         loadings_ht.write(platform_pca_loadings_ht_path(data_source, freeze), overwrite=args.overwrite)
         # Regeneron freeze 4 Eigenvalues: [26489244.935849957, 2039950.6985898241, 1407875.3058482022, 1082106.1507608977, 373810.0800184624, 361301.2291929654, 324435.7483132424, 205912.4810229146, 196196.71017912056, 159808.25367132248]
 
@@ -98,6 +92,7 @@ def main(args):
         scores_ht = hl.read_table(platform_pca_scores_ht_path(data_source, freeze))
         platform_ht = assign_platform_pcs(scores_ht, hdbscan_min_cluster_size=args.hdbscan_min_cluster_size, hdbscan_min_samples=args.hdbscan_min_samples)
         platform_ht.write(platform_pca_results_ht_path(data_source, freeze), overwrite=args.overwrite)
+        logger.info(f'Platform PCA Table count: {platform_ht.count}')
 
 
 if __name__ == '__main__':
@@ -105,7 +100,7 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--overwrite', help='Overwrite all data from this subset (default: False)', action='store_true')
     parser.add_argument('--slack_channel', help='Slack channel to post results and notifications to.')
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
-    parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
+    parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE, type=int)
 
     parser.add_argument('--compute_callrate_mt', help='Computes an interval by sample mt of callrate that will be used to compute platform PCs', action='store_true')
     parser.add_argument('--run_platform_pca', help='Runs platform PCA (assumes callrate MT was computed)', action='store_true')
