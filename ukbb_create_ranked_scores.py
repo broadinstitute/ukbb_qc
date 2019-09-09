@@ -1,5 +1,4 @@
 from gnomad_hail import *
-from gnomad_hail.resources.basics import clinvar_ht_path
 from ukbb_qc.resources import *
 
 
@@ -139,16 +138,19 @@ def create_binned_data(ht: hl.Table, data: str, data_source: str, freeze: int, n
 
     # Load external evaluation data
     # clinvar_ht = hl.read_table(clinvar_ht_path)  # TODO: swap out for official table
-    clinvar_ht = hl.read_table('gs://gnomad/tmp/clinvar_20190609.ht')
+    if not hl.utils.hadoop_exists('gs://broad-ukbb/resources/clinvar_20190609.pathogenic.ht'):
+        clinvar_ht = hl.read_table('gs://gnomad/tmp/clinvar_20190609.ht')
 
-    logger.info(f"Found {clinvar_ht.count()} variants in Clinvar before filtering")
-    no_star_assertions = hl.literal({"no_assertion_provided", "no_assertion_criteria_provided", "no_interpretation_for_the_single_variant"})
-    clinvar_ht = clinvar_ht.filter(hl.set(clinvar_ht.info.CLNREVSTAT).intersection(no_star_assertions).length() > 0, keep=False)
-    logger.info(f"Found {clinvar_ht.count()} variants after removing variants without assertions")
-    clinvar_ht = clinvar_ht.filter(clinvar_ht.info.CLNSIG.map(lambda x: x.lower()).map(lambda x: x.contains('pathogenic')).any(lambda x: x), keep=True)
-    logger.info(f"Found {clinvar_ht.count()} variants after filtering to (likely) pathogenic variants")
-    clinvar_ht = clinvar_ht.filter(hl.is_defined(clinvar_ht.info.CLNSIGCONF), keep=False)
-    logger.info(f"Found {clinvar_ht.count()} variants after filtering to variants without CLNSIGCONF (conflicting clinical interpretations)")
+        logger.info(f"Found {clinvar_ht.count()} variants in Clinvar before filtering")
+        no_star_assertions = hl.literal({"no_assertion_provided", "no_assertion_criteria_provided", "no_interpretation_for_the_single_variant"})
+        clinvar_ht = clinvar_ht.filter(hl.set(clinvar_ht.info.CLNREVSTAT).intersection(no_star_assertions).length() > 0, keep=False)
+        logger.info(f"Found {clinvar_ht.count()} variants after removing variants without assertions")
+        clinvar_ht = clinvar_ht.filter(clinvar_ht.info.CLNSIG.map(lambda x: x.lower()).map(lambda x: x.contains('pathogenic')).any(lambda x: x), keep=True)
+        logger.info(f"Found {clinvar_ht.count()} variants after filtering to (likely) pathogenic variants")
+        clinvar_ht = clinvar_ht.filter(hl.is_defined(clinvar_ht.info.CLNSIGCONF), keep=False)
+        logger.info(f"Found {clinvar_ht.count()} variants after filtering to variants without CLNSIGCONF (conflicting clinical interpretations)")
+        clinvar_ht.write('gs://broad-ukbb/resources/clinvar_20190609.pathogenic.ht')
+    clinvar_ht = hl.read_table('gs://broad-ukbb/resources/clinvar_20190609.pathogenic.ht')
 
     # denovo_ht = get_validated_denovos_ht()
     # if data_type == 'exomes':
@@ -225,6 +227,7 @@ def create_binned_data(ht: hl.Table, data: str, data_source: str, freeze: int, n
             n_omni=hl.agg.count_where(ht.truth_data.omni),
             n_mills=hl.agg.count_where(ht.truth_data.mills),
             n_ukbb_array=hl.agg.count_where(ht.truth_data.ukbb_array),
+            n_sib_singletons=hl.agg.count_where(ht.truth_data.sib_singletons),
             n_hapmap=hl.agg.count_where(ht.truth_data.hapmap),
             n_kgp_high_conf_snvs=hl.agg.count_where(ht.truth_data.kgp_high_conf_snvs),
             fail_hard_filters=hl.agg.count_where(ht.fail_hard_filters)
@@ -275,6 +278,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--slack_channel', help='Slack channel to post results and notifications to.')
+    parser.add_argument('--overwrite', help='Overwrite all data from this subset (default: False)', action='store_true')
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
     parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE)
 

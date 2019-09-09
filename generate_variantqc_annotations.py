@@ -49,7 +49,8 @@ def annotate_truth_data(mt: hl.MatrixTable) -> hl.Table:
     truth_htes = {key: hl.split_multi_hts(hl.read_matrix_table(path).repartition(1000).rows(), left_aligned=False)
                   for key, path in truth_mtes.items()}
     # TODO: formalize code to create this resource
-    truth_htes.update({'hapmap': hl.read_table(hapmap_ht_path())})
+    truth_htes.update({'hapmap': hl.read_table(hapmap_ht_path()),
+                       'sib_singletons': hl.read_table('gs://broad-ukbb/broad.freeze_4/variant_qc/variant_annotations/sibling_singletons.train.ht')})
 
     return mt.annotate_rows(truth_data=hl.struct(**{root: hl.is_defined(truth_ht[mt.row_key])
                                                     for root, truth_ht in truth_htes.items()})).rows()
@@ -131,11 +132,23 @@ def main(args):
     #     mt = generate_de_novos(mt, fam_path(data_type), freq_data)
     #     mt.write(annotations_ht_path(data_type, 'de_novos'), args.overwrite)
 
+    # TODO: fix resources and hardcoded paths
+    if args.create_truth_data:
+        # Split truth data set randomly
+        sib_ht = hl.read_matrix_table('gs://broad-ukbb/broad.freeze_4/sample_qc/relatedness/sibling_singletons.mt').rows().naive_coalesce(500)
+        sib_ht_test = sib_ht.sample(p=args.test_train_split)
+        sib_ht_train = sib_ht.anti_join(sib_ht_test)
+        logger.info(f'Keeping {sib_ht_test.count()} variants for testing and {sib_ht_train.count()} variants for training out of {sib_ht.count()} total variants')
+        sib_ht_test.write('gs://broad-ukbb/broad.freeze_4/variant_qc/variant_annotations/sibling_singletons.test.ht', overwrite=args.overwrite)
+        sib_ht_train.write('gs://broad-ukbb/broad.freeze_4/variant_qc/variant_annotations/sibling_singletons.train.ht', overwrite=args.overwrite)
+
     if args.annotate_truth_data:
         mt = get_ukbb_data(data_source, freeze, meta_root=None)
-        annotate_truth_data(mt).write(var_annotations_ht_path(data_source, freeze, 'truth_data'), overwrite=args.overwrite)
+        mt = annotate_truth_data(mt).checkpoint(var_annotations_ht_path(data_source, freeze, 'truth_data'), overwrite=args.overwrite)
+        mt.summarize()
 
 
+# TODO: add groupings
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
@@ -151,6 +164,9 @@ if __name__ == '__main__':
     parser.add_argument('--generate_family_stats', help='Calculates family stats', action='store_true')
     parser.add_argument('--include_adj_family_stats', help='Also calculate family stats for adj genotypes', action='store_true')
     # parser.add_argument('--generate_de_novos', help='Calculates de novo data', action='store_true')
+    parser.add_argument('--create_truth_data', help='Create additional UKBB truth data by selecting sibling singletons and array-concordant variants', action='store_true')
+    parser.add_argument('--test_train_split', help='Percentage of truth data to hold back for testing', default=0.2)
+
     parser.add_argument('--annotate_truth_data', help='Annotates MT with truth data', action='store_true')
 
     parser.add_argument('--calculate_medians', help='Calculate metric medians (warning: slow)', action='store_true')
