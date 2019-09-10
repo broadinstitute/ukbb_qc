@@ -9,19 +9,20 @@ logger.setLevel(logging.INFO)
 
 
 def main(args):
-    hl.init(log='/import_vcfs.log')
+    hl._set_flags(newaggs=None)
 
     data_source = args.data_source
-    freeze = args.freeze
+    freeze = int(args.freeze)
 
     if args.import_vcfs:
-        logger.info('Importing genotyped VCFs for inspection...')
-        mt = hl.import_vcf(args.import_regex, force_bgz=True, reference_genome='GRCh38').naive_coalesce(args.num_partitions)
-        mt = mt.checkpoint(raw_mt_path(data_source, freeze, is_temp=True), overwrite=args.overwrite)
-        mt.summarize(entries=False)
+        # logger.info('Importing genotyped VCFs for inspection...')
+        # mt = hl.import_vcf(args.import_regex, force_bgz=True, reference_genome='GRCh38').naive_coalesce(args.num_partitions)
+        # mt = mt.checkpoint(raw_mt_path(data_source, freeze, is_temp=True), overwrite=args.overwrite)
+        # mt.summarize(entries=False)
 
         logger.info('Running sanity checks on raw callset...')
         sample_qc_path = sample_qc_prefix(data_source, freeze)
+        mt = hl.read_matrix_table(raw_mt_path(data_source, freeze, is_temp=True))
         var_summary = summarize_mt(mt)
         logger.info('\nVariant summary: {}'.format(var_summary))
 
@@ -36,17 +37,19 @@ def main(args):
         logger.info('Importing VQSR annotations...')
         mt = hl.import_vcf(args.import_vqsr_regex, force_bgz=True, reference_genome='GRCh38').naive_coalesce(args.num_vqsr_partitions)
         ht = mt.rows()
+        row_count1 = ht.count()
         ht = hl.split_multi_hts(ht).checkpoint(var_annotations_ht_path(data_source, freeze, 'vqsr'), overwrite=args.overwrite)
-        row_count = ht.count()
-        logger.info(f'Found {row_count} variants with VQSR annotations')
+        row_count2 = ht.count()
+        logger.info(f'Found {row_count1} unsplit and {row_count2} split variants with VQSR annotations')
 
     if args.write_raw_mt:
         mt = hl.read_matrix_table(raw_mt_path(data_source, freeze, is_temp=True))
-        mt = mt.key_cols_by(s=mt.s[1:])
+        mt.describe()
+        # mt = mt.key_cols_by(s=mt.s[1:])
         logger.info('Dropping missing variant annotations...')
         # TODO: identify and drop highly missing annotations automatically
         drop_annots = [x for x in mt['info'] if x.startswith('AS_')]
-        drop_annots.extend(['SB_TABLE', 'RAW_MQandDP', 'QUALapprox', 'InbreedingCoeff', 'ExcessHet', 'END'])
+        drop_annots.extend(['SB_TABLE', 'RAW_MQandDP', 'QUALapprox', 'InbreedingCoeff', 'END'])  # 'ExcessHet'
         logger.info(f'Dropping the following empty variant annotations: {drop_annots}')
         mt = mt.annotate_rows(info=mt.info.drop(*drop_annots))
         mt = mt.checkpoint(raw_mt_path(data_source, freeze), overwrite=args.overwrite)
