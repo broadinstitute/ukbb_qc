@@ -19,7 +19,7 @@ def main(args):
 
 
     if args.join_tables:
-        gnomad_ht = hl.read_table('gs://gnomad-public/release/2.1.1/liftover_grch38/ht/exomes/gnomad.exomes.r2.1.1.sites.liftover_grch38.ht')
+        gnomad_ht = hl.read_table(get_gnomad_liftover_data_path('exomes', '2.1.1'))
         # print(hl.eval(gnomad_ht.freq_meta))
         gnomad_ht = gnomad_ht.annotate(pass_gnomad=(hl.len(gnomad_ht.filters) == 0))
         ukbb_ht = hl.read_table(rf_path(data_source, freeze, 'rf_result', run_hash=run_hash))
