@@ -128,7 +128,7 @@ def main(args):
         gnomad_ht = hl.read_table(f'{variant_qc_prefix(data_source, freeze)}/assessment/gnomad_nfe.ht').select()
         rows = gnomad_ht.count()
         liftover_ht = hl.read_table(
-            get_gnomad_liftover_data_path('exomes', version=2.1.1)).key_by('original_locus', 'original_alleles').rename(
+            get_gnomad_liftover_data_path('exomes', '2.1.1')).key_by('original_locus', 'original_alleles').rename(
                 {'locus' : 'locus_grch38', 'alleles' : 'alleles_grch38'})
         gnomad_ht = gnomad_ht.annotate(**liftover_ht[gnomad_ht.key])
         gnomad_ht = gnomad_ht.filter(hl.is_defined(gnomad_ht.locus_grch38))
@@ -149,14 +149,14 @@ def main(args):
         # NOTE: freq[2] contains the NFE variant allele frequencies in gnomAD
         joint_ht = joint_ht.filter((joint_ht.freq[2].AF <= 0.05), keep=True)
         joint_ht = joint_ht.annotate(gnomad_af_bin=hl.case()
-                                    .when((joint_ht.freq[0].AF <= 0.00001), "(0, 0.00001]")
-                                    .when((joint_ht.freq[0].AF > 0.00001) & (joint_ht.freq[0].AF <= 0.0001), "(0.00001, 0.0001]")
-                                    .when((joint_ht.freq[0].AF > 0.0001) & (joint_ht.freq[0].AF <= 0.001), "(0.0001, 0.001]")
-                                    .when((joint_ht.freq[0].AF > 0.001) & (joint_ht.freq[0].AF <= 0.01), "(0.001, 0.01]")
-                                    .when((joint_ht.freq[0].AF > 0.01) & (joint_ht.freq[0].AF <= 0.02), "(0.01, 0.02]")
-                                    .when((joint_ht.freq[0].AF > 0.02) & (joint_ht.freq[0].AF <= 0.03), "(0.02, 0.03]")
-                                    .when((joint_ht.freq[0].AF > 0.03) & (joint_ht.freq[0].AF <= 0.04), "(0.03, 0.04]")
-                                    .when((joint_ht.freq[0].AF > 0.04) & (joint_ht.freq[0].AF <= 0.05), "(0.03, 0.05]")
+                                    .when((joint_ht.freq[2].AF <= 0.00001), "(0, 0.00001]")
+                                    .when((joint_ht.freq[2].AF > 0.00001) & (joint_ht.freq[0].AF <= 0.0001), "(0.00001, 0.0001]")
+                                    .when((joint_ht.freq[2].AF > 0.0001) & (joint_ht.freq[0].AF <= 0.001), "(0.0001, 0.001]")
+                                    .when((joint_ht.freq[2].AF > 0.001) & (joint_ht.freq[0].AF <= 0.01), "(0.001, 0.01]")
+                                    .when((joint_ht.freq[2].AF > 0.01) & (joint_ht.freq[0].AF <= 0.02), "(0.01, 0.02]")
+                                    .when((joint_ht.freq[2].AF > 0.02) & (joint_ht.freq[0].AF <= 0.03), "(0.02, 0.03]")
+                                    .when((joint_ht.freq[2].AF > 0.03) & (joint_ht.freq[0].AF <= 0.04), "(0.03, 0.04]")
+                                    .when((joint_ht.freq[2].AF > 0.04) & (joint_ht.freq[0].AF <= 0.05), "(0.03, 0.05]")
                                     .default(hl.null(hl.tstr)))
         joint_ht = (joint_ht.group_by(joint_ht.gnomad_af_bin, joint_ht.variant_type, joint_ht.pass_gnomad, joint_ht.pass_broad)
                     .aggregate(
