@@ -105,18 +105,18 @@ def main(args):
             gnomad_mt.rows().write('gs://broad-ukbb/broad.freeze_4/temp/gnomad_nfe.ht', overwrite=args.overwrite)
 
             # Read in UKBB and filter to NFE, identify those variants
+            # this reads in split hardcalls (non-adj)
             ukbb_mt = get_ukbb_data(data_source, freeze)
             rows, cols = ukbb_mt.count()
 
-            meta_ht = hl.read_table(meta_ht_path('regeneron', freeze))
-            nfe_pops = hl.literal({"0", "10", "11", "12", "5", "6", "9", "nfe"})
-            meta_ht = meta_ht.annotate(is_nfe=nfe_pops.contains(meta_ht.hybrid_pop))
+            # Keep only NFE found with gnomAD PC project
+            # hard code path until we replace meta ht with pop adj meta ht
+            meta_ht = hl.read_table('gs://broad-ukbb/regeneron.freeze_4/sample_qc/meta_w_pop_adj.ht')
+            meta_ht = meta_ht.annotate(is_nfe=(meta_ht.hybrid_pop == 'nfe'))
             logger.info(f'NFE samples in Regeneron meta table: {meta_ht.aggregate(hl.agg.counter(meta_ht.is_nfe))}')
-            # ht = meta_ht.group_by('gnomad_pc_project_pop', 'hybrid_pop').aggregate(n=hl.agg.count())
-            # ht.show(50)
 
             ukbb_mt = ukbb_mt.annotate_cols(**{'meta': meta_ht[ukbb_mt.s]})
-            ukbb_mt = ukbb_mt.filter_cols(ukbb_mt.meta.is_nfe)
+            ukbb_mt = ukbb_mt.filter_cols(ukbb_mt.meta.is_nfe)    
             logger.info(f'Found {ukbb_mt.count_cols()} NFE samples out of {cols} original samples in UKBB exomes')
             ukbb_mt = ukbb_mt.annotate_rows(nfe_ac=hl.agg.sum(ukbb_mt.GT.n_alt_alleles()))
             ukbb_mt = ukbb_mt.filter_rows(ukbb_mt.nfe_ac > 0, keep=True)
