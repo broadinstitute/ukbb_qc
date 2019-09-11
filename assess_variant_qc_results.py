@@ -158,7 +158,8 @@ def main(args):
                                     .when((joint_ht.freq[0].AF > 0.04) & (joint_ht.freq[0].AF <= 0.05), "(0.03, 0.05]")
                                     .default(hl.null(hl.tstr)))
         joint_ht = (joint_ht.group_by(joint_ht.gnomad_af_bin, joint_ht.variant_type, joint_ht.pass_gnomad, joint_ht.pass_broad)
-                    .aggregate(n_shared=hl.agg.count_where(hl.is_defined(joint_ht.pass_broad) & hl.is_defined(joint_ht.pass_gnomad)),
+                    .aggregate(
+                            n_shared=hl.agg.count_where(hl.is_defined(joint_ht.pass_broad) & hl.is_defined(joint_ht.pass_gnomad)),
                             n_gnomad_unique=hl.agg.count_where(
                                     hl.is_defined(joint_ht.pass_gnomad) & ~hl.is_defined(joint_ht.pass_broad)),
                             n=hl.agg.count()))
@@ -170,11 +171,13 @@ def main(args):
 
 
     if args.bin_rf_probs_nfe:
-        joint_ht = hl.read_table('gs://broad-ukbb/broad.freeze_4/temp/joint_gnomad_ukbb.nfe.ht')
-        joint_ht = joint_ht.group_by(tp_bin = joint_ht.rf_probability // 0.01).aggregate(n_pass_gnomad=hl.agg.count_where(hl.is_defined(joint_ht.pass_gnomad) & joint_ht.pass_gnomad),
-                                                                                                  n_fail_gnomad=hl.agg.count_where(hl.is_defined(joint_ht.pass_gnomad) & ~joint_ht.pass_gnomad),
-                                                                                                  n_unique_ukbb=hl.agg.count_where(~hl.is_defined(joint_ht.pass_gnomad)),
-                                                                                                  n=hl.agg.count())
+        #joint_ht = hl.read_table(f'gs://broad-ukbb/broad.freeze_{freeze}/temp/joint_gnomad_ukbb.nfe.ht')
+        joint_ht = hl.read_table(f'{variant_qc_prefix(data_source, freeze)}/assessment/joint_gnomad_broad_regeneron.{run_hash}.ht')
+        joint_ht = joint_ht.group_by(tp_bin = joint_ht.rf_probability // 0.01).aggregate(
+                            n_pass_gnomad=hl.agg.count_where(hl.is_defined(joint_ht.pass_gnomad) & joint_ht.pass_gnomad),
+                            n_fail_gnomad=hl.agg.count_where(hl.is_defined(joint_ht.pass_gnomad) & ~joint_ht.pass_gnomad),
+                            n_unique_ukbb=hl.agg.count_where(~hl.is_defined(joint_ht.pass_gnomad)),
+                            n=hl.agg.count())
         joint_ht = joint_ht.checkpoint('gs://broad-ukbb/broad.freeze_4/temp/joint_gnomad_ukbb.nfe.probs.ht', overwrite=args.overwrite)
         joint_ht.show(50)
         joint_ht.export('gs://broad-ukbb/broad.freeze_4/temp/joint_gnomad_ukbb.nfe.probs.tsv.gz')
