@@ -111,8 +111,8 @@ def main(args):
 
             # Keep only NFE found with gnomAD PC project
             # hard code path until we replace meta ht with pop adj meta ht
-            meta_ht = hl.read_table('gs://broad-ukbb/regeneron.freeze_4/sample_qc/meta_w_pop_adj.ht')
-            meta_ht = meta_ht.annotate(is_nfe=(meta_ht.hybrid_pop == 'nfe'))
+            meta_ht = hl.read_table(f'gs://broad-ukbb/regeneron.freeze_{freeze}/sample_qc/meta_w_pop_adj.ht')
+            meta_ht = meta_ht.annotate(is_nfe=(meta_ht.gnomad_pc_project_pop == 'nfe'))
             logger.info(f'NFE samples in Regeneron meta table: {meta_ht.aggregate(hl.agg.counter(meta_ht.is_nfe))}')
 
             ukbb_mt = ukbb_mt.annotate_cols(**{'meta': meta_ht[ukbb_mt.s]})
@@ -121,10 +121,10 @@ def main(args):
             ukbb_mt = ukbb_mt.annotate_rows(nfe_ac=hl.agg.sum(ukbb_mt.GT.n_alt_alleles()))
             ukbb_mt = ukbb_mt.filter_rows(ukbb_mt.nfe_ac > 0, keep=True)
             logger.info(f'Found {ukbb_mt.count_rows()} variants in NFE samples out of {rows} original variants in all UKBB exomes')
-            ukbb_mt.rows().write('gs://broad-ukbb/broad.freeze_4/temp/ukbb_nfe.ht', overwrite=args.overwrite)
+            ukbb_mt.rows().write(f'gs://broad-ukbb/broad.freeze_{freeze}/temp/ukbb_nfe.ht', overwrite=args.overwrite)
 
         # Filter joint ht to those variants
-        gnomad_ht = hl.read_table('gs://broad-ukbb/broad.freeze_4/temp/gnomad_nfe.ht').select()
+        gnomad_ht = hl.read_table(f'gs://broad-ukbb/broad.freeze_{freeze}/temp/gnomad_nfe.ht').select()
         rows = gnomad_ht.count()
         liftover_ht = hl.read_table(
             'gs://gnomad-public/release/2.1.1/liftover_grch38/ht/exomes/gnomad.exomes.r2.1.1.sites.liftover_grch38.ht').key_by('original_locus', 'original_alleles').rename({'locus' : 'locus_grch38', 'alleles' : 'alleles_grch38'})
@@ -134,32 +134,39 @@ def main(args):
             f'Found {gnomad_ht.count()} variants in lifted-over NFE samples out of {rows} original variants in NFE gnomAD exomes')
         gnomad_ht = gnomad_ht.key_by('locus_grch38', 'alleles_grch38')
 
-        ukbb_ht = hl.read_table('gs://broad-ukbb/broad.freeze_4/temp/ukbb_nfe.ht').select()
-        nfe_ht = ukbb_ht.join(gnomad_ht, how='outer').checkpoint('gs://broad-ukbb/broad.freeze_4/temp/joint_gnomad_ukbb.nfe.ht')
+        ukbb_ht = hl.read_table(f'gs://broad-ukbb/broad.freeze_{freeze}/temp/ukbb_nfe.ht').select()
+        nfe_ht = ukbb_ht.join(gnomad_ht, how='outer').checkpoint(f'gs://broad-ukbb/broad.freeze_{freeze}/temp/joint_gnomad_ukbb.nfe.ht',
+                                                                overwrite=args.overwrite)
 
-        joint_ht = hl.read_table('gs://broad-ukbb/broad.freeze_4/temp/joint_gnomad_ukbb.ht')
+        #joint_ht = hl.read_table(f'gs://broad-ukbb/broad.freeze_{freeze}/temp/joint_gnomad_ukbb.ht')
+        joint_ht = hl.read_table(f'{variant_qc_prefix(data_source, freeze)}/assessment/joint_gnomad_broad_regeneron.{run_hash}.ht')
+        nfe_ht = hl.read_table(f'gs://broad-ukbb/broad.freeze_{freeze}/temp/joint_gnomad_ukbb.nfe.ht')
+
         joint_ht = joint_ht.filter(hl.is_defined(nfe_ht[joint_ht.key]))
         logger.info(f'Found {joint_ht.count()} variants in NFE samples in both gnomAD and UKBB')
 
         # # Note: freq[2] contains the NFE variant allele frequencies in gnomAD
-        # joint_ht = joint_ht.filter((joint_ht.freq[2].AF <= 0.05) & (joint_ht.freq[2].AF > 0.001), keep=True)
-        # joint_ht = joint_ht.annotate(gnomad_af_bin=hl.case()
-        #                              .when((joint_ht.freq[0].AF > 0.001) & (joint_ht.freq[0].AF <= 0.01), "(0.001, 0.01]")
-        #                              .when((joint_ht.freq[0].AF > 0.01) & (joint_ht.freq[0].AF <= 0.02), "(0.01, 0.02]")
-        #                              .when((joint_ht.freq[0].AF > 0.02) & (joint_ht.freq[0].AF <= 0.03), "(0.02, 0.03]")
-        #                              .when((joint_ht.freq[0].AF > 0.03) & (joint_ht.freq[0].AF <= 0.04), "(0.03, 0.04]")
-        #                              .when((joint_ht.freq[0].AF > 0.04) & (joint_ht.freq[0].AF <= 0.05), "(0.03, 0.05]")
-        #                              .default(hl.null(hl.tstr)))
-        # joint_ht = (joint_ht.group_by(joint_ht.gnomad_af_bin, joint_ht.variant_type, joint_ht.pass_gnomad, joint_ht.pass_ukbb)
-        #             .aggregate(n_shared=hl.agg.count_where(hl.is_defined(joint_ht.pass_ukbb) & hl.is_defined(joint_ht.pass_gnomad)),
-        #                        n_gnomad_unique=hl.agg.count_where(
-        #                            hl.is_defined(joint_ht.pass_gnomad) & ~hl.is_defined(joint_ht.pass_ukbb)),
-        #                        n=hl.agg.count()))
-        # joint_ht = joint_ht.annotate(frac_shared=joint_ht.n_shared/joint_ht.n,
-        #                              frac_gnomad_unique=joint_ht.n_gnomad_unique/joint_ht.n)
-        # joint_ht = joint_ht.checkpoint('gs://broad-ukbb/broad.freeze_4/temp/joint_gnomad_ukbb.nfe.agg.ht', overwrite=args.overwrite)
-        # joint_ht.show(50)
-        # joint_ht.export('gs://broad-ukbb/broad.freeze_4/temp/joint_gnomad_ukbb.nfe.agg.tsv.gz')
+        joint_ht = joint_ht.filter((joint_ht.freq[2].AF <= 0.05) & (joint_ht.freq[2].AF > 0.00001), keep=True)
+        joint_ht = joint_ht.annotate(gnomad_af_bin=hl.case()
+                                    .when((joint_ht.freq[0].AF <= 0.00001), "(0, 0.00001]")
+                                    .when((joint_ht.freq[0].AF > 0.00001) & (joint_ht.freq[0].AF <= 0.0001), "(0.00001, 0.0001]")
+                                    .when((joint_ht.freq[0].AF > 0.0001) & (joint_ht.freq[0].AF <= 0.001), "(0.0001, 0.001]")
+                                    .when((joint_ht.freq[0].AF > 0.001) & (joint_ht.freq[0].AF <= 0.01), "(0.001, 0.01]")
+                                    .when((joint_ht.freq[0].AF > 0.01) & (joint_ht.freq[0].AF <= 0.02), "(0.01, 0.02]")
+                                    .when((joint_ht.freq[0].AF > 0.02) & (joint_ht.freq[0].AF <= 0.03), "(0.02, 0.03]")
+                                    .when((joint_ht.freq[0].AF > 0.03) & (joint_ht.freq[0].AF <= 0.04), "(0.03, 0.04]")
+                                    .when((joint_ht.freq[0].AF > 0.04) & (joint_ht.freq[0].AF <= 0.05), "(0.03, 0.05]")
+                                    .default(hl.null(hl.tstr)))
+        joint_ht = (joint_ht.group_by(joint_ht.gnomad_af_bin, joint_ht.variant_type, joint_ht.pass_gnomad, joint_ht.pass_broad)
+                    .aggregate(n_shared=hl.agg.count_where(hl.is_defined(joint_ht.pass_broad) & hl.is_defined(joint_ht.pass_gnomad)),
+                            n_gnomad_unique=hl.agg.count_where(
+                                    hl.is_defined(joint_ht.pass_gnomad) & ~hl.is_defined(joint_ht.pass_broad)),
+                            n=hl.agg.count()))
+        joint_ht = joint_ht.annotate(frac_shared=joint_ht.n_shared/joint_ht.n,
+                                        frac_gnomad_unique=joint_ht.n_gnomad_unique/joint_ht.n)
+        joint_ht = joint_ht.checkpoint(f'gs://broad-ukbb/broad.freeze_{freeze}/temp/joint_gnomad_ukbb.nfe.agg.ht', overwrite=args.overwrite)
+        joint_ht.show(50)
+        joint_ht.export(f'gs://broad-ukbb/broad.freeze_{freeze}/temp/joint_gnomad_ukbb.nfe.agg.tsv.gz')
 
 
     if args.bin_rf_probs_nfe:
