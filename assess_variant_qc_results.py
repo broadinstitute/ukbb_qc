@@ -147,7 +147,7 @@ def main(args):
         logger.info(f'Found {joint_ht.count()} variants in NFE samples in both gnomAD and UKBB')
 
         # NOTE: freq[2] contains the NFE variant allele frequencies in gnomAD
-        joint_ht = joint_ht.filter((joint_ht.freq[2].AF <= 0.05) & (joint_ht.freq[2].AF > 0.00001), keep=True)
+        joint_ht = joint_ht.filter((joint_ht.freq[2].AF <= 0.05), keep=True)
         joint_ht = joint_ht.annotate(gnomad_af_bin=hl.case()
                                     .when((joint_ht.freq[0].AF <= 0.00001), "(0, 0.00001]")
                                     .when((joint_ht.freq[0].AF > 0.00001) & (joint_ht.freq[0].AF <= 0.0001), "(0.00001, 0.0001]")
