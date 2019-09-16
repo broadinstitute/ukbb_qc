@@ -182,7 +182,7 @@ def main(args):
                             n=hl.agg.count())
         joint_ht = joint_ht.checkpoint(f'{variant_qc_prefix(data_source, freeze)}/assessment/joint_gnomad_ukbb.nfe.probs.ht', overwrite=args.overwrite)
         joint_ht.show(50)
-        joint_ht.export(f'gs://broad-ukbb/broad.freeze_{freeze}/assessment/joint_gnomad_ukbb.nfe.probs.tsv.gz')
+        joint_ht.export(f'{variant_qc_prefix(data_source, freeze)}/assessment/joint_gnomad_ukbb.nfe.probs.tsv.gz')
 
 
     if args.eval_sib_singletons:
