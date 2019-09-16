@@ -24,8 +24,10 @@ def main(args):
         gnomad_ht = gnomad_ht.annotate(pass_gnomad=(hl.len(gnomad_ht.filters) == 0))
         ukbb_ht = hl.read_table(rf_path(data_source, freeze, 'rf_result', run_hash=run_hash))
         ukbb_ht = ukbb_ht.annotate(pass_broad=(ukbb_ht.rf_probability.get('TP') > args.tp_threshold))
-        regeneron_ht = hl.read_matrix_table(f'gs://broad-ukbb/regeneron.freeze_{freeze}/data/regeneron.freeze_{freeze}.nf.mt').rows()
-        regeneron_filt_ht = hl.read_matrix_table(f'gs://broad-ukbb/regeneron.freeze_{freeze}/data/regeneron.freeze_{freeze}.gl.mt').rows()
+
+        # Read in regeneron tables and split multiallelics before joining
+        regeneron_ht = hl.read_matrix_table(hardcalls_mt_path('regeneron', freeze, split=True)).rows()
+        regeneron_filt_ht = hl.read_matrix_table(f'gs://broad-ukbb/regeneron.freeze_{freeze}/data/regeneron.freeze_{freeze}.gl.split.mt').rows()
         regeneron_ht = regeneron_ht.annotate(pass_regeneron=hl.is_defined(regeneron_filt_ht.index(regeneron_ht.key)))
 
         joint_ht = gnomad_ht.join(ukbb_ht, how='outer')
