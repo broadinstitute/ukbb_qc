@@ -269,6 +269,7 @@ def create_rf_ht(
         omni=ht.truth_data.omni,
         mills=ht.truth_data.mills,
         ukbb_array=ht.truth_data.ukbb_array,
+        sib_singletons=ht.truth_data.sib_singletons,
         n_nonref=ht.n_nonref,
         singleton=ht.singleton,
         was_split=ht.was_split,
@@ -375,7 +376,7 @@ def train_rf(data_source: str, freeze: int, args):
 
     ht = hl.read_table(rf_annotated_path(data_source, freeze, args.adj))
 
-    summary = ht.group_by('omni', 'mills', 'transmitted_singleton', 'ukbb_array').aggregate(n=hl.agg.count())
+    summary = ht.group_by('omni', 'mills', 'transmitted_singleton', 'ukbb_array', 'sib_singletons').aggregate(n=hl.agg.count())
     logger.info("Summary of truth data annotations:")
     summary.show(20)
 
@@ -385,7 +386,7 @@ def train_rf(data_source: str, freeze: int, args):
         if args.no_transmitted_singletons:
             tp_expr = ht.omni | ht.mills | ht.ukbb_array  # | ht.info_POSITIVE_TRAIN_SITE
         else:
-            tp_expr = ht.omni | ht.mills | ht.ukbb_array | ht.transmitted_singleton  # | ht.info_POSITIVE_TRAIN_SITE
+            tp_expr = ht.omni | ht.mills | ht.ukbb_array | ht.transmitted_singleton | ht.sib_singletons  # | ht.info_POSITIVE_TRAIN_SITE
 
         ht = ht.annotate(
             tp=tp_expr

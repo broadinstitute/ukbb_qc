@@ -36,7 +36,8 @@ def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, adj: bool = Fa
     if meta_root:
         meta_ht = hl.read_table(meta_ht_path('regeneron', freeze))  # TODO: set back to 'data_source' once Broad meta is created
         mt = mt.annotate_cols(**{meta_root: meta_ht[mt.s]})
-        mt = mt.annotate_cols(meta=mt.meta.annotate(high_quality=~mt.meta.is_filtered)) # TODO: remove after meta is fixed
+        mt = mt.annotate_cols(meta=mt.meta.annotate(high_quality=(hl.len(mt.meta.hard_filters) == 0) &
+                                                                 (hl.len(mt.meta.pop_platform_filters) == 0)))  # TODO: remove after meta is fixed
     return mt
 
 
@@ -481,6 +482,19 @@ def score_ranking_path(data_source: str, freeze: int,
 
     return f'{variant_qc_prefix(data_source, freeze)}/score_rankings/{data}{"_binned" if binned else ""}.ht'
 
+def binned_concordance_path(data_source: str, freeze: int, truth_sample: str, metric: str):
+    '''
+    :param str data_source: 'broad' or 'regeneron'
+    :param int freeze: UKBB tranche version
+    :param str truth_sample: Which truth sample concordance to analyze (e.g., "NA12878" or "syndip")
+    :param str metric: One of the evaluation metrics (or a RF hash)
+    :return: Path to Hail Table
+    :rtype: str
+    '''
+
+    return f'{variant_qc_prefix(data_source, freeze)}/rf/{truth_sample}.{metric}.binned_concordance.ht'
+
+
 
 def omni_mt_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad-public/truth-sets/hail-{0}/1000G_omni2.5.hg38.mt'.format(hail_version)
@@ -493,11 +507,13 @@ def hapmap_mt_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad-public/truth-sets/hail-{0}/hapmap_3.3.hg38.mt'.format(hail_version)
 
 
+def hapmap_ht_path():
+    return 'gs://broad-ukbb/resources//hapmap_3.3.hg38.ht'
+
+
 def kgp_high_conf_snvs_mt_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad-public/truth-sets/hail-{0}/1000G_phase1.snps.high_confidence.hg38.mt'.format(hail_version)
 
-def array_truth_data_ht_path():
-    return 'gs://'
 
 class DataException(Exception):
     pass
