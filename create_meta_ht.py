@@ -107,7 +107,6 @@ def main(args):
     logger.info('Annotating high_quality field')
     left_ht = left_ht.annotate(high_quality=((hl.len(left_ht.hard_filters) == 0) &
                                             (hl.len(left_ht.pop_platform_filters) == 0)))
- 
     logger.info('Writing out meta ht')
     left_ht.write(meta_ht_path(data_source, freeze), overwrite = True)
     logger.info('Complete') 
