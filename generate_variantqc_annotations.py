@@ -7,6 +7,7 @@ logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("variantqc_annotations")
 logger.setLevel(logging.INFO)
 
+# TODO: Remove hardcoded paths
 
 # NOTE: removed {"release_samples_raw": mt.meta.release} from sample_group_filters
 def generate_call_stats(mt: hl.MatrixTable) -> hl.Table:

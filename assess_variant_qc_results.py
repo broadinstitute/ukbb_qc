@@ -24,6 +24,7 @@ def main(args):
         gnomad_ht = gnomad_ht.annotate(pass_gnomad=(hl.len(gnomad_ht.filters) == 0))
         ukbb_ht = hl.read_table(rf_path(data_source, freeze, 'rf_result', run_hash=run_hash))
         ukbb_ht = ukbb_ht.annotate(pass_broad=(ukbb_ht.rf_probability.get('TP') > args.tp_threshold))
+        # TODO: add logic to handle indel filtering at a different probability threshold
         regeneron_ht = hl.read_matrix_table(f'gs://broad-ukbb/regeneron.freeze_{freeze}/data/regeneron.freeze_{freeze}.nf.mt').rows()
         regeneron_filt_ht = hl.read_matrix_table(f'gs://broad-ukbb/regeneron.freeze_{freeze}/data/regeneron.freeze_{freeze}.gl.mt').rows()
         regeneron_ht = regeneron_ht.annotate(pass_regeneron=hl.is_defined(regeneron_filt_ht.index(regeneron_ht.key)))
@@ -174,14 +175,26 @@ def main(args):
 
 
     if args.eval_sib_singletons:
-        sib_ht = hl.read_table(f'{variant_qc_prefix(data_source, freeze)}/variant_annotations/sibling_singletons.test.ht')
+        # broad_sib_ht = hl.read_table(f'{variant_qc_prefix(data_source, freeze)}/variant_annotations/sibling_singletons.test.ht')
+        regeneron_sib_ht = hl.read_matrix_table(f'{sample_qc_prefix("regeneron", freeze)}/relatedness/sibling_singletons.mt').rows()
         joint_ht = hl.read_table(f'{variant_qc_prefix(data_source, freeze)}/assessment/joint_gnomad_broad_regeneron.{run_hash}.ht')
-        sib_ht = sib_ht.annotate(**joint_ht[sib_ht.key])
+        # broad_sib_ht = broad_sib_ht.annotate(**joint_ht[broad_sib_ht.key])
+        regeneron_sib_ht = regeneron_sib_ht.annotate(**joint_ht[regeneron_sib_ht.key])
 
-        filter_summary = sib_ht.group_by(sib_ht.allele_type_1, sib_ht.was_split_1, sib_ht.pass_gnomad, sib_ht.pass_broad, sib_ht.pass_regeneron).aggregate(n=hl.agg.count())
-        filter_summary.show(50)
-        filter_summary.export(f'{variant_qc_prefix(data_source, freeze)}/assessment/sib_singletons_summmary.{run_hash}.tsv.gz')
+        # broad_filter_summary = broad_sib_ht.group_by(broad_sib_ht.allele_type_1, broad_sib_ht.was_split_1,
+        #                                              broad_sib_ht.pass_gnomad, broad_sib_ht.pass_broad, broad_sib_ht.pass_regeneron).aggregate(n=hl.agg.count())
+        # logger.info('Broad sibling singleton summary:')
+        # broad_filter_summary.show(50)
+        # broad_filter_summary.export(f'{variant_qc_prefix(data_source, freeze)}/assessment/sib_singletons_summmary.broad.{run_hash}.tsv.gz')
 
+        regeneron_filter_summary = regeneron_sib_ht.group_by(regeneron_sib_ht.allele_type_1, regeneron_sib_ht.was_split_1,
+                                                             regeneron_sib_ht.pass_gnomad, regeneron_sib_ht.pass_broad,
+                                                             regeneron_sib_ht.pass_regeneron).aggregate(n=hl.agg.count())
+        logger.info('Regeneron sibling singleton summary:')
+        regeneron_filter_summary.show(50)
+        regeneron_filter_summary.export(f'{variant_qc_prefix(data_source, freeze)}/assessment/sib_singletons_summmary.regeneron.{run_hash}.tsv.gz')
+
+    
 
 if __name__ == '__main__':
 
