@@ -186,13 +186,16 @@ def main(args):
 
 
     if args.eval_sib_singletons:
-        sib_ht = hl.read_table(f'{variant_qc_prefix(data_source, freeze)}/variant_annotations/sibling_singletons.test.ht')
+        broad_sib_ht = hl.read_table(f'{variant_qc_prefix(data_source, freeze)}/variant_annotations/sibling_singletons.test.ht')
         joint_ht = hl.read_table(f'{variant_qc_prefix(data_source, freeze)}/assessment/joint_gnomad_broad_regeneron.{run_hash}.ht')
-        sib_ht = sib_ht.annotate(**joint_ht[sib_ht.key])
+        broad_sib_ht = broad_sib_ht.annotate(**joint_ht[broad_sib_ht.key])
 
-        filter_summary = sib_ht.group_by(sib_ht.allele_type_1, sib_ht.was_split_1, sib_ht.pass_gnomad, sib_ht.pass_broad, sib_ht.pass_regeneron).aggregate(n=hl.agg.count())
-        filter_summary.show(50)
-        filter_summary.export(f'{variant_qc_prefix(data_source, freeze)}/assessment/sib_singletons_summmary.{run_hash}.tsv.gz')
+        broad_filter_summary = broad_sib_ht.group_by(broad_sib_ht.allele_type_1, broad_sib_ht.was_split_1,
+                                                     broad_sib_ht.pass_gnomad, broad_sib_ht.pass_broad, broad_sib_ht.pass_regeneron).aggregate(n=hl.agg.count())
+        logger.info('Broad sibling singleton summary:')
+        broad_filter_summary.show(50)
+        broad_filter_summary.export(f'{variant_qc_prefix(data_source, freeze)}/assessment/sib_singletons_summmary.broad.{run_hash}.tsv.gz')
+
 
 
 if __name__ == '__main__':
