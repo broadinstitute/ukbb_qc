@@ -187,11 +187,11 @@ def qc_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, ld_pruned: bool =
     :rtype: str
     """
     ld_pruned = '.pruned' if ld_pruned else ''
-    return f'{sample_qc_prefix(data_source, freeze)}/high_callrate_common_biallelic_snps{ld_pruned}.mt'
+    return f'{sample_qc_prefix(data_source, freeze)}/qc_data/high_callrate_common_biallelic_snps{ld_pruned}.mt'
 
 
 def qc_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    return f'{sample_qc_prefix(data_source, freeze)}/high_callrate_common_biallelic_snps.ht'
+    return f'{sample_qc_prefix(data_source, freeze)}/qc_data/high_callrate_common_biallelic_snps.ht'
 
 
 def callrate_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
