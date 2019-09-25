@@ -11,30 +11,6 @@ logger = logging.getLogger("process_raw")
 logger.setLevel(logging.INFO)
 
 
-# Note: The following functions are slightly modified from Laurent's myoseq sample qc should probably move to a common location
-def compute_qc_mt(mt: hl.MatrixTable, min_af: float = 0.001, min_callrate: float = 0.99) -> hl.MatrixTable:
-    """
-    Returns MatrixTable for sample QC purposes
-    Default criteria: callrate > 0.99, AF > 0.001, SNPs only, bi-allelics only
-    :param MatrixTable mt: Raw MatrixTable to be filtered
-    :param float min_af: Minimum allele frequency for variant filtering
-    :param float min_callrate: Minimum callrate for variant filtering
-    :return: MatrixTable for sample QC purposes
-    :rtype: MatrixTable
-    """
-    qc_mt = mt.filter_rows((hl.len(mt.alleles) == 2) & hl.is_snp(mt.alleles[0], mt.alleles[1]) &
-                        (hl.agg.mean(mt.GT.n_alt_alleles()) / 2 > min_af) &
-                        (hl.agg.fraction(hl.is_defined(mt.GT)) > min_callrate))
-    qc_mt = qc_mt.annotate_globals(
-        qc_mt_params=hl.struct(
-            min_af=min_af,
-            min_callrate=min_callrate
-        )
-    )
-    qc_mt.annotate_cols(sample_callrate=hl.agg.fraction(hl.is_defined(qc_mt.GT)))
-    return qc_mt
-
-
 def ld_prune_qc_mt(qc_mt: hl.MatrixTable, ld_r2: float = 0.1) -> hl.MatrixTable:
     """
     Returns MatrixTable for sample QC purposes
@@ -58,7 +34,14 @@ def main(args):
 
     if not args.skip_compute_qc_mt:
         logger.info("Filtering to bi-allelic, high-callrate, common SNPs for sample QC...")
-        qc_mt = compute_qc_mt(get_ukbb_data(data_source, freeze, raw=True, adj=True, split=False))
+        mt = get_ukbb_data(data_source, freeze, raw=True, adj=True, split=False)
+
+        lcr = get_lcr_intervals()
+        mt = mt.filter_rows(hl.is_missing(lcr[mt.row_key]))
+        # Todo: changed to use Laurent's code for the qc_mt, change is that it uses inbreeding_coeff and hardy_weinberg_threshold, is this OK? Do we want to apply_hard_filters?
+        # Todo: add segdup and decoy filter
+        qc_mt = get_qc_mt(mt, min_af=0.001, min_callrate=0.99, apply_hard_filters=False, ld_r2=None, filter_lcr=False,
+            filter_decoy=False, filter_segdup=False)
         qc_mt = qc_mt.naive_coalesce(5000)
         qc_mt.write(qc_mt_path(data_source, freeze), overwrite=args.overwrite)
 
