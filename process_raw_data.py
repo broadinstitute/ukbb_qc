@@ -38,10 +38,16 @@ def main(args):
 
         lcr = get_lcr_intervals()
         mt = mt.filter_rows(hl.is_missing(lcr[mt.row_key]))
-        # Todo: changed to use Laurent's code for the qc_mt, change is that it uses inbreeding_coeff and hardy_weinberg_threshold, is this OK? Do we want to apply_hard_filters?
+
+        if data_source == 'regeneron':
+            apply_hard_filters = False
+        else:
+            apply_hard_filters = True
+
+        # Todo: changed to use Laurent's code for the qc_mt, change is that it uses inbreeding_coeff and hardy_weinberg_threshold, is this OK and are defaults OK?
         # Todo: add segdup and decoy filter
-        qc_mt = get_qc_mt(mt, min_af=0.001, min_callrate=0.99, apply_hard_filters=False, ld_r2=None, filter_lcr=False,
-            filter_decoy=False, filter_segdup=False)
+        qc_mt = get_qc_mt(mt, min_af=0.001, min_callrate=0.99, apply_hard_filters=apply_hard_filters, ld_r2=None,
+                          filter_lcr=False, filter_decoy=False, filter_segdup=False)
         qc_mt = qc_mt.naive_coalesce(5000)
         qc_mt.write(qc_mt_path(data_source, freeze), overwrite=args.overwrite)
 
