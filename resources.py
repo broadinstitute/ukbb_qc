@@ -126,6 +126,9 @@ broad_calling_intervals_path = 'gs://broad-ukbb/resources/broad_exome_calling.in
 lcr_intervals_path = 'gs://broad-ukbb/resources/LCRFromHengH38_chr1-22_XY.txt'
 ukbb_calling_intervals_summary = 'gs://broad-ukbb/regeneron.freeze_4/data/ukbb_exome_calling_intervals.summary.txt'
 
+def get_lcr_intervals() -> hl.Table:
+    return hl.import_locus_intervals(lcr_intervals_path, reference_genome='GRCh38', skip_invalid_intervals=True)
+
 
 # Sample QC files
 def sample_qc_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
