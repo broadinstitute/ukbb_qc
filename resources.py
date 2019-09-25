@@ -34,10 +34,9 @@ def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, adj: bool = Fa
         mt = filter_to_adj(mt)
 
     if meta_root:
-        meta_ht = hl.read_table(meta_ht_path('regeneron', freeze))  # TODO: set back to 'data_source' once Broad meta is created
+        meta_ht = hl.read_table(meta_ht_path(data_source, freeze))
         mt = mt.annotate_cols(**{meta_root: meta_ht[mt.s]})
-        mt = mt.annotate_cols(meta=mt.meta.annotate(high_quality=(hl.len(mt.meta.hard_filters) == 0) &
-                                                                 (hl.len(mt.meta.pop_platform_filters) == 0)))  # TODO: remove after meta is fixed
+
     return mt
 
 
