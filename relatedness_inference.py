@@ -70,7 +70,7 @@ def main(args):
 
         logger.info('Running PC-Relate...')
         # NOTE: This needs SSDs on your workers (for the temp files) and no preemptible workers while the BlockMatrix writes
-        relatedness_ht = hl.pc_relate(pruned_qc_mt.GT, min_individual_maf=0.05,
+        relatedness_ht = hl.pc_relate(pruned_qc_mt.GT, min_individual_maf=min_individual_maf,
                                       scores_expr=scores[pruned_qc_mt.col_key].scores,
                                       block_size=4096, min_kinship=args.min_emission_kinship, statistics='all')
         relatedness_ht.write(relatedness_ht_path(data_source, freeze), args.overwrite)
@@ -141,7 +141,7 @@ if __name__ == '__main__':
                         type=float)
     parser.add_argument('--min_individual_maf',
                         help='Minor allele frequency cutoff, must be greater that 0.001 because the qc_mt used was already filtered to that maf.',
-                        default=0.001,
+                        default=0.05,
                         type=float)
     parser.add_argument('--min_filtering_kinship',
                         help='Minimum kinship threshold for filtering a pair of samples in PC relate and filtering related individuals. (Default = 0.08838835; 2nd degree relatives)',
