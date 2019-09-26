@@ -35,10 +35,10 @@ def main(args):
         intervals = hl.import_locus_intervals(ukbb_calling_intervals_path, reference_genome='GRCh38')
         mt = get_ukbb_data(args.data_source, args.freeze, split=False, adj=True)
         logger.info(f'Input MatrixTable count: {mt.count()}')
-        mt = remove_hard_filter_samples(data_source, freeze, mt) 
+        mt = remove_hard_filter_samples(data_source, freeze, mt)
         logger.info(f'Count after removing hard filtered samples: {mt.count()}')
         callrate_mt = compute_callrate_mt(mt, intervals)
-        callrate_mt.write(callrate_mt_path(data_source, freeze), args.overwrite)
+        callrate_mt = callrate_mt.checkpoint(callrate_mt_path(data_source, freeze), overwrite=args.overwrite)
         logger.info(f'Callrate MatrixTable count: {callrate_mt.count}')
 
     if args.run_platform_pca:
@@ -53,23 +53,33 @@ def main(args):
     if args.assign_platforms:
         logger.info("Assigning platforms based on platform PCA clustering")
         scores_ht = hl.read_table(platform_pca_scores_ht_path(data_source, freeze))
-        platform_ht = assign_platform_pcs(scores_ht, hdbscan_min_cluster_size=args.hdbscan_min_cluster_size, hdbscan_min_samples=args.hdbscan_min_samples)
-        platform_ht.write(platform_pca_results_ht_path(data_source, freeze), overwrite=args.overwrite)
+        platform_ht = assign_platform_pcs(scores_ht, hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
+                                          hdbscan_min_samples=args.hdbscan_min_samples)
+        platform_ht = platform_ht.checkpoint(platform_pca_results_ht_path(data_source, freeze),
+                                             overwrite=args.overwrite)
         logger.info(f'Platform PCA Table count: {platform_ht.count}')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-o', '--overwrite', help='Overwrite all data from this subset (default: False)', action='store_true')
+    parser.add_argument('-o', '--overwrite', help='Overwrite all data from this subset (default: False)',
+                        action='store_true')
     parser.add_argument('--slack_channel', help='Slack channel to post results and notifications to.')
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
     parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE, type=int)
 
-    parser.add_argument('--compute_callrate_mt', help='Computes an interval by sample mt of callrate that will be used to compute platform PCs', action='store_true')
-    parser.add_argument('--run_platform_pca', help='Runs platform PCA (assumes callrate MT was computed)', action='store_true')
-    parser.add_argument('--assign_platforms', help='Assigns platforms based on callrate PCA results using HDBSCAN', action='store_true')
-    parser.add_argument('--hdbscan_min_samples', help='Minimum samples parameter for HDBSCAN. If not specified, --hdbscan_min_cluster_size is used.', type=int, required=False)
-    parser.add_argument('--hdbscan_min_cluster_size', help='Minimum cluster size parameter for HDBSCAN.', type=int, default=100)
+    parser.add_argument('--compute_callrate_mt',
+                        help='Computes an interval by sample mt of callrate that will be used to compute platform PCs',
+                        action='store_true')
+    parser.add_argument('--run_platform_pca', help='Runs platform PCA (assumes callrate MT was computed)',
+                        action='store_true')
+    parser.add_argument('--assign_platforms', help='Assigns platforms based on callrate PCA results using HDBSCAN',
+                        action='store_true')
+    parser.add_argument('--hdbscan_min_samples',
+                        help='Minimum samples parameter for HDBSCAN. If not specified, --hdbscan_min_cluster_size is used.',
+                        type=int, required=False)
+    parser.add_argument('--hdbscan_min_cluster_size', help='Minimum cluster size parameter for HDBSCAN.', type=int,
+                        default=100)
 
     args = parser.parse_args()
 
