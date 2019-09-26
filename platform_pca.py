@@ -1,5 +1,6 @@
 from gnomad_hail import *
 from gnomad_hail.utils.generic import filter_to_autosomes
+from gnomad_hail.utils.sample_qc import run_platform_pca
 from ukbb_qc.resources import *
 from ukbb_qc.utils import *
 import hail as hl
@@ -21,17 +22,6 @@ def compute_callrate_mt(mt: hl.MatrixTable, intervals: hl.Table) -> hl.MatrixTab
     callrate_mt = callrate_mt.select_entries(GT=hl.or_missing(hl.is_defined(callrate_mt.GT), hl.struct()))
     callrate_mt = callrate_mt.group_rows_by(callrate_mt.interval).aggregate(callrate=hl.agg.fraction(hl.is_defined(callrate_mt.GT)))
     return callrate_mt
-
-
-def run_platform_pca(callrate_mt: hl.MatrixTable) -> Tuple[List[float], hl.Table, hl.Table]:
-    callrate_mt = callrate_mt.annotate_entries(callrate=hl.int(callrate_mt.callrate > 0.25))
-    
-    # Center until Hail's PCA does it for you
-    callrate_mt = callrate_mt.annotate_rows(mean_callrate=hl.agg.mean(callrate_mt.callrate))
-    callrate_mt = callrate_mt.annotate_entries(callrate=callrate_mt.callrate - callrate_mt.mean_callrate)
-    eigenvalues, scores, loadings = hl.pca(callrate_mt.callrate, compute_loadings=True)
-    logger.info('Eigenvalues: {}'.format(eigenvalues))
-    return eigenvalues, scores, loadings
 
 
 def assign_platform_pcs(platform_pc_table: hl.Table, pc_scores_ann: str = 'scores', hdbscan_min_cluster_size: int = 500, hdbscan_min_samples: int = None) -> hl.Table:
@@ -81,7 +71,7 @@ def main(args):
     if args.run_platform_pca:
         logger.info("Running platform PCA...")
         callrate_mt = hl.read_matrix_table(callrate_mt_path(data_source, freeze))
-        eigenvalues, scores_ht, loadings_ht = run_platform_pca(callrate_mt)
+        eigenvalues, scores_ht, loadings_ht = run_platform_pca(callrate_mt, None)
         scores_ht.write(platform_pca_scores_ht_path(data_source, freeze), overwrite=args.overwrite)
         logger.info(f'Scores Table count: {scores_ht.count}')
         loadings_ht.write(platform_pca_loadings_ht_path(data_source, freeze), overwrite=args.overwrite)
