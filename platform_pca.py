@@ -24,33 +24,6 @@ def compute_callrate_mt(mt: hl.MatrixTable, intervals: hl.Table) -> hl.MatrixTab
     return callrate_mt
 
 
-def assign_platform_pcs(platform_pc_table: hl.Table, pc_scores_ann: str = 'scores', hdbscan_min_cluster_size: int = 500, hdbscan_min_samples: int = None) -> hl.Table:
-    """
-    Function assumes that platform_pc_table contains columns named 'combined_sample', 'gross_platform' (known labels), 'callratePC<n>'
-    :param Table platform_pc_table: Table containing samples and callrate PCs
-    :param str pc_scores_ann: annotation of the scores in the platform_pc_table
-    :param int hdbscan_min_cluster_size: Minimum cluster size parameter for HDBSCAN
-    :param int hdbscan_min_samples: Minimum samples parameter for HDBSCAN. If not specified, hdbscan_min_cluster_size is used.
-    :return: Table containing samples, callrate PCs, and imputed platform labels
-    :rtype: Table
-    """
-    # Read and format data for clustering
-    data = platform_pc_table.to_pandas()
-    callrate_data = np.matrix(data[pc_scores_ann].tolist())
-    logger.info('Assigning platforms to {} exome samples in MT...'.format(len(callrate_data)))
-
-    # Cluster data
-    clusterer = hdbscan.HDBSCAN(min_cluster_size=hdbscan_min_cluster_size, min_samples=hdbscan_min_samples)
-    cluster_labels = clusterer.fit_predict(callrate_data)
-    n_clusters = len(set(cluster_labels)) - (-1 in cluster_labels)  # NOTE: -1 is the label for noisy (un-classifiable) data points
-    logger.info('Found {} unique platforms during platform imputation...'.format(n_clusters))
-
-    data['qc_platform'] = cluster_labels
-    ht = hl.Table.from_pandas(data, key=[*platform_pc_table.key])
-    ht = ht.annotate(qc_platform=hl.int32(ht.qc_platform))
-    return ht
-
-
 def main(args):
     hl.init(log='/platform_pca.log')
 
@@ -71,7 +44,7 @@ def main(args):
     if args.run_platform_pca:
         logger.info("Running platform PCA...")
         callrate_mt = hl.read_matrix_table(callrate_mt_path(data_source, freeze))
-        eigenvalues, scores_ht, loadings_ht = run_platform_pca(callrate_mt, None)
+        eigenvalues, scores_ht, loadings_ht = run_platform_pca(callrate_mt, None) # NOTE: added None for new binarization_threshold parameter to make sure we things the same way as before
         scores_ht.write(platform_pca_scores_ht_path(data_source, freeze), overwrite=args.overwrite)
         logger.info(f'Scores Table count: {scores_ht.count}')
         loadings_ht.write(platform_pca_loadings_ht_path(data_source, freeze), overwrite=args.overwrite)
