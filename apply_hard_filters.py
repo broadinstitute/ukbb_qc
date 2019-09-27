@@ -52,8 +52,7 @@ def main(args):
 
     logger.info('Computing raw sample QC metrics...')
     mt = hl.sample_qc(mt)
-    mt = mt.transmute_cols(raw_sample_qc=mt.sample_qc)
-    ht = mt.cols()
+    mt = mt.transmute_cols(raw_sample_qc=mt.sample_qc.select('call_rate', 'gq_stats', 'dp_stats')).cols() 
     ht = apply_hard_filters_expr(ht, args.callrate, args.depth)
     
     logger.info('Writing out hard filters HT...')
