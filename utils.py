@@ -36,7 +36,7 @@ def remove_hard_filter_samples(data_source: str, freeze: int, t: Union[hl.Matrix
         t = t.annotate_rows(non_refs=hl.agg.count_where(t.GT.is_non_ref()))
         t = t.filter_rows(t.non_refs > 0).drop('non_refs')
     else:
-        t.filter((hl.len(ht[t.row_key].hard_filters) == 0))
+        t.filter((hl.len(ht[t.key].hard_filters) == 0))
     return t
 
 
