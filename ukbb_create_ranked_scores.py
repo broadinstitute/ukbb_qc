@@ -227,6 +227,8 @@ def create_binned_data(ht: hl.Table, data: str, data_source: str, freeze: int, n
             n_omni=hl.agg.count_where(ht.truth_data.omni),
             n_mills=hl.agg.count_where(ht.truth_data.mills),
             n_ukbb_array=hl.agg.count_where(ht.truth_data.ukbb_array),
+            n_ukbb_array_con=hl.agg.count_where(ht.truth_data.ukbb_array_con),
+            n_ukbb_array_con_common=hl.agg.count_where(ht.truth_data.ukbb_array_con_common),
             n_sib_singletons=hl.agg.count_where(ht.truth_data.sib_singletons),
             n_hapmap=hl.agg.count_where(ht.truth_data.hapmap),
             n_kgp_high_conf_snvs=hl.agg.count_where(ht.truth_data.kgp_high_conf_snvs),
