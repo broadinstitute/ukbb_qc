@@ -97,7 +97,7 @@ def import_capture_regions(temp_prefix: str) -> None:
 
     logger.info('Importing capture table')
     capture_ht = hl.import_table(
-                    'gs://broad-ukbb/regeneron.freeze_4/data/ukbb_exome_calling_intervals.summary.txt', impute=True,
+                    ukbb_calling_intervals_summary, impute=True,
                     no_header=False)
 
     # seqnames	start	end	width	strand	target_type	region_type	target_id
@@ -111,7 +111,7 @@ def import_capture_regions(temp_prefix: str) -> None:
                                     'width', 'strand').key_by('locus')
 
     logger.info('Writing capture ht')
-    capture_ht.write('gs://broad-ukbb/resources/capture.ht', overwrite=True)
+    capture_ht.write(capture_ht_path('regeneron'), overwrite=True)
 
 
 def get_variant_breakdown(ht: hl.Table, temp_prefix: str) -> None:
