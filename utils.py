@@ -7,7 +7,6 @@ logger = logging.getLogger("utils")
 logger.setLevel(logging.INFO)
 
 
-
 def remove_hard_filter_samples(data_source: str, freeze: int, t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTable, hl.Table]:
     """
     Removes samples that failed hard filters from MatrixTable or Table. 
