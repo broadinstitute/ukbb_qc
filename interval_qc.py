@@ -23,7 +23,7 @@ def main(args):
         mt = filter_to_autosomes(mt)
 
     ht = hl.read_table(capture_ht_path(data_source, freeze))
-    ht = ht.annotate(interval=hl.str(ht.locus))
+    ht = ht.annotate(interval=hl.str(ht.interval))
     mt = mt.annotate_rows(**ht[mt.locus])
     ht = ht.key_by('interval')
     target_mt = (mt.group_rows_by('interval')
