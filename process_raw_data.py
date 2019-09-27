@@ -5,7 +5,6 @@ import hail as hl
 import argparse
 from ukbb_qc.sanity_checks import *
 
-
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("process_raw")
 logger.setLevel(logging.INFO)
@@ -31,6 +30,29 @@ def main(args):
 
     data_source = args.data_source
     freeze = args.freeze
+
+    if args.create_exome_array_id_map_ht:
+        sample_map = hl.import_table(array_sample_map, delimiter=',')
+        logger.info(f'Total number of IDs in the array to exome sample map: {sample_map.count()}...')
+
+        sample_map = sample_map.key_by(s=sample_map.eid_sample)
+        exome_ht = get_ukbb_data(data_source, freeze).cols()
+        exome_ht = exome_ht.annotate(ukbb_app_26041_id=sample_map[exome_ht.s.split("_")[1]].eid_26041)
+        logger.info(f'Total number of samples in the exome data: {exome_ht.count()}...')
+
+        s_exome_not_in_map = exome_ht.filter(hl.is_missing(exome_ht.ukbb_app_26041_id)).select()
+        s_map_not_in_exomes = sample_map.anti_join(exome_ht.key_by(i=exome_ht.s.split("_")[1]))
+
+        logger.info(
+            f'Total number of IDs in the sample map that are not in the exome data: {s_map_not_in_exomes.count()}...')
+        s_map_not_in_exomes.show(s_map_not_in_exomes.count())
+
+        logger.info(
+            f'Total number of IDs in the exome data that are not in the sample map: {s_exome_not_in_map.count()}...')
+        s_exome_not_in_map.show(s_exome_not_in_map.count())
+
+        exome_ht = exome_ht.select('ukbb_app_26041_id')
+        exome_ht.write(get_array_sample_map_ht(data_source, freeze), overwrite=overwrite)
 
     if args.compute_qc_mt:
         logger.info("Filtering to bi-allelic, high-callrate, common SNPs for sample QC...")
@@ -58,7 +80,8 @@ def main(args):
                           filter_segdup=False)
         qc_mt = qc_mt.naive_coalesce(5000)
         qc_mt.write(qc_mt_path(data_source, freeze), overwrite=args.overwrite)
-        logger.info(f'Total number of variants in bi-allelic, high-callrate, common SNPs for sample QC: {qc_mt.count()[0]}')
+        logger.info(
+            f'Total number of variants in bi-allelic, high-callrate, common SNPs for sample QC: {qc_mt.count()[0]}')
 
     if args.compute_sample_qc_ht:
         qc_mt = hl.read_matrix_table(qc_mt_path(data_source, freeze))
@@ -79,11 +102,14 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-o', '--overwrite', help='Overwrite all data from this subset (default: False)', action='store_true')
+    parser.add_argument('-o', '--overwrite', help='Overwrite all data from this subset (default: False)',
+                        action='store_true')
     parser.add_argument('--slack_channel', help='Slack channel to post results and notifications to.')
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
     parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE, type=int)
 
+    parser.add_argument('--create_exome_array_id_map_ht', help='Load exome to array id mapping file into hail Table',
+                        action='store_true')
     parser.add_argument('--compute_qc_mt', help='Compute matrix to be used in sample qc', action='store_true')
     parser.add_argument('--min_callrate',
                         help='Minimum variant callrate to retain variant in qc matrix table.',
