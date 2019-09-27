@@ -124,7 +124,7 @@ array_sample_map = 'gs://broad-ukbb/resources/array/Project_26041_bridge.csv'
 ukbb_calling_intervals_path = 'gs://broad-ukbb/resources/ukbb_exome_calling.interval_list'
 broad_calling_intervals_path = 'gs://broad-ukbb/resources/broad_exome_calling.interval_list'
 lcr_intervals_path = 'gs://broad-ukbb/resources/LCRFromHengH38_chr1-22_XY.txt'
-ukbb_calling_intervals_summary = 'gs://broad-ukbb/regeneron.freeze_4/data/ukbb_exome_calling_intervals.summary.txt'
+ukbb_calling_intervals_summary = 'gs://broad-ukbb/resources/ukbb_exome_calling_intervals.summary.txt'
 
 
 def gnomad_ancestry_loadings_liftover_path(checkpoint: bool = False):
@@ -308,8 +308,13 @@ def get_ht_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE, name:
     return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/{name}.ht'
 
 
-def capture_ht_path() -> str:
-    return 'gs://broad-ukbb/broad.freeze_4/capture.ht'
+def capture_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    if data_source == 'broad' and freeze == 4:
+        return 'gs://broad-ukbb/resources/xgen_plus_spikein.Homo_sapiens_assembly38.targets.pad50.intervals.ht'
+    elif data_source == 'regeneron':
+        return 'gs://broad-ukbb/resources/ukbb_exome_calling_intervals.summary.ht'
+    else:
+        raise DataException("No interval file specified for this data_source and freeze yet")
 
 
 def hg38_selfchain_path() -> str:
