@@ -40,6 +40,7 @@ def apply_hard_filters_expr(ht: hl.Table, min_callrate: float, min_depth: float)
 
 
 def main(args):
+    hl.init(log='/apply_hard_filters.log')
 
     data_source = args.data_source
     freeze = args.freeze
