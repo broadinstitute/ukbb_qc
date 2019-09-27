@@ -52,7 +52,9 @@ def annotate_truth_data(mt: hl.MatrixTable) -> hl.Table:
                   for key, path in truth_mtes.items()}
     # TODO: formalize code to create this resource
     truth_htes.update({'hapmap': hl.read_table(hapmap_ht_path()),
-                       'sib_singletons': hl.read_table(var_annotations_ht_path(data_source, freeze, 'sib_singletons.train'))})
+                       'sib_singletons': hl.read_table('gs://broad-ukbb/broad.freeze_4/variant_qc/variant_annotations/sibling_singletons.train.ht'),
+                       'ukbb_array_con':hl.read_table('gs://broad-ukbb/broad.freeze_4/temp/array_variant_concordance_callrate_0.95_non_ref_con_0.9.ht'),
+                       'ukbb_array_con_common':hl.read_table('gs://broad-ukbb/broad.freeze_4/temp/array_variant_concordance_callrate_0.95_non_ref_con_0.9_AF_0.001.ht')})
 
     return mt.annotate_rows(truth_data=hl.struct(**{root: hl.is_defined(truth_ht[mt.row_key])
                                                     for root, truth_ht in truth_htes.items()})).rows()
@@ -70,7 +72,7 @@ def generate_array_concordant_variants(mt: hl.MatrixTable) -> hl.Table:
     return
 
 
-def generate_sibling_singletons(mt, relatedness_ht):
+def generate_sibling_singletons(mt, relatedness_ht, num_var_per_sibs_cutoff=None):
     mt = filter_to_autosomes(mt)
     relatedness_ht = annotate_relationship(relatedness_ht)
     relatedness_siblings_ht = relatedness_ht.filter(relatedness_ht.relationship_classification == 'Full-sibling')
@@ -117,6 +119,12 @@ def generate_sibling_singletons(mt, relatedness_ht):
     dataset_result = dataset_result.filter_rows(dataset_result.sibling_singleton == 1)
     dataset_result = dataset_result.annotate_cols(num_variants=hl.agg.count_where(dataset_result.sibling_non_ref == 2))
 
+    if num_var_per_sibs_cutoff:
+        dataset_result = dataset_result.filter_cols(dataset_result.num_variants <= num_var_per_sibs_cutoff)
+        dataset_result = dataset_result.annotate_rows(
+            sibling_singleton=hl.agg.count_where(hl.is_defined(dataset_result.sibling_non_ref)))
+        dataset_result = dataset_result.filter_rows(dataset_result.sibling_singleton == 1)
+
     return dataset_result
 
 
@@ -139,7 +147,7 @@ def generate_sibling_singletons(mt, relatedness_ht):
 
 def main(args):
     hl.init(log='/generate_variantqc_annotations.log')
-
+    hl._set_flags(newaggs=None)
     data_source = args.data_source
     freeze = args.freeze
 
@@ -178,7 +186,7 @@ def main(args):
     if args.generate_sibling_singletons:
         relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
         mt = get_ukbb_data(data_source, freeze, split=True)
-        sib_mt = get_sibling_singletons(mt, relatedness_ht)
+        sib_mt = generate_sibling_singletons(mt, relatedness_ht, args.num_var_per_sibs_cutoff)
         sib_mt.rows().naive_coalesce(500).write(var_annotations_ht_path(data_source, freeze, 'sib_singletons'), overwrite=args.overwrite)
 
     # if args.generate_de_novos:  # (2.2 min/part @ 100K = 3K CPU-hours) + (7.4 m/p = 12K) + (34 m/p = ~44K) = 59K
@@ -219,6 +227,7 @@ if __name__ == '__main__':
     parser.add_argument('--generate_call_stats', help='Calculates call stats', action='store_true')
     parser.add_argument('--generate_family_stats', help='Calculates family stats', action='store_true')
     parser.add_argument('--generate_sibling_singletons', help='Creates a hail Table of variants that are sibling singletons', action='store_true')
+    parser.add_argument('--num_var_per_sibs_cutoff', help='Percentage of truth data to hold back for testing', default=40)
     parser.add_argument('--include_adj_family_stats', help='Also calculate family stats for adj genotypes', action='store_true')
     # parser.add_argument('--generate_de_novos', help='Calculates de novo data', action='store_true')
     parser.add_argument('--create_truth_data', help='Create additional UKBB truth data by selecting sibling singletons and array-concordant variants', action='store_true')
