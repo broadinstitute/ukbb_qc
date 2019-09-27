@@ -32,6 +32,7 @@ def main(args):
         regeneron_rel_ht = regeneron_rel_ht.annotate(samples=hl.delimit(hl.sorted([regeneron_rel_ht.IID1, regeneron_rel_ht.IID2])))
 
         # Add relationship status similar to Regeneron's based on thresholds above and join with Regeneron table
+
         relatedness_ht = relatedness_ht.annotate(Broad_classification=hl.case()
                                                  .when((relatedness_ht.kin > second_degree_threshold) &
                                                        (relatedness_ht.kin < first_degree_threshold[0]), 'Second-degree')
@@ -68,9 +69,9 @@ def main(args):
         ukbb_phenotypes = hl.import_table(ukbb_phenotype_path , impute=True)
         ukbb_phenotypes = ukbb_phenotypes.key_by(s_old=hl.str(ukbb_phenotypes['f.eid']))
         ukbb_ancestry = ukbb_phenotypes.select('f.21000.0.0', 'f.21000.1.0', 'f.21000.2.0')
-        sample_map = hl.import_table(array_sample_map, delimiter=',')
-        sample_map = sample_map.key_by(s=hl.str(sample_map.eid_26041))
-        ukbb_ancestry = ukbb_ancestry.key_by(s=sample_map[ukbb_ancestry.key].eid_sample)
+        sample_map_ht = hl.read_table(array_sample_map_ht(data_source, freeze))
+        sample_map_ht = sample_map_ht.key_by('ukbb_app_26041_id')
+        ukbb_ancestry = ukbb_ancestry.key_by(s=sample_map_ht[ukbb_ancestry.key].s)
         ukbb_ancestry = ukbb_ancestry.annotate(Self_reported_ancestry=hl.switch(ukbb_ancestry['f.21000.0.0'])
                                        .when(1,"White").when(1001,"British").when(1002,"Irish").when(1003,"Other white")
                                        .when(2,"Mixed").when(2001,"White and Black Caribbean").when(2002,"White and Black African").when(2003,"White and Asian")
