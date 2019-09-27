@@ -126,6 +126,18 @@ broad_calling_intervals_path = 'gs://broad-ukbb/resources/broad_exome_calling.in
 lcr_intervals_path = 'gs://broad-ukbb/resources/LCRFromHengH38_chr1-22_XY.txt'
 ukbb_calling_intervals_summary = 'gs://broad-ukbb/regeneron.freeze_4/data/ukbb_exome_calling_intervals.summary.txt'
 
+
+def gnomad_ancestry_loadings_liftover_path(checkpoint: bool = False):
+    if checkpoint:
+        return 'gs://broad-ukbb/temp/gnomad_joint_unrelated_pca_loadings.ht'
+    else:
+        return 'gs://broad-ukbb/resources/gnomad.joint.unrelated.pca_loadings_lift.ht'
+
+
+def array_sample_map_ht(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/array_sample_map.ht'
+
+
 def get_lcr_intervals() -> hl.Table:
     return hl.import_locus_intervals(lcr_intervals_path, reference_genome='GRCh38', skip_invalid_intervals=True)
 

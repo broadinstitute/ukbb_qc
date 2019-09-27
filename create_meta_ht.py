@@ -63,7 +63,7 @@ def main(args):
     left_ht = join_tables(left_ht, 's', right_ht, 's', 'outer')
 
     logger.info('Reading in ht mapping ukbb pharma id to ukbb application 26041 id')
-    right_ht = hl.read_table(get_array_sample_map_ht(data_source, freeze))
+    right_ht = hl.read_table(array_sample_map_ht(data_source, freeze))
 
     logger.info('Joining ukbb application 26041 id map into current join (meta ht)')
     left_ht = join_tables(left_ht, 's', right_ht, 's', 'left')
