@@ -10,7 +10,21 @@ hv.extension('bokeh')
 from IPython.display import display_html
 
 
-def get_pc_plots(pcs_pd, pc_name, color_col='color', colors=None, palette=None, n_pcs=10, plot_height=600, plot_width=700, alpha=0.7):
+def get_pc_plots(pcs_pd,
+                 pc_name,
+                 color_col='color',
+                 colors=None,
+                 palette=None,
+                 n_pcs=10,
+                 plot_height=600,
+                 plot_width=700,
+                 alpha=0.7) -> Tabs:
+    """
+    Description
+    :param type parameter: Description
+    :return: Description of what is returned
+    :rtype: Tabs
+    """
     plots = []
     factors = pcs_pd[color_col].unique()
     factors.sort()
@@ -36,6 +50,7 @@ def get_pc_plots(pcs_pd, pc_name, color_col='color', colors=None, palette=None, 
         legend.click_policy = "hide"
         p.add_layout(legend, 'right')
         plots.append(Panel(child=p, title=f'PC{pc} vs PC{pc + 1}'))
+
     return Tabs(tabs=plots)
 
 
@@ -138,6 +153,47 @@ def get_outlier_plots(outlier_sample_qc,
     return tables, plots
 
 
+def kinship_distribution_plot():
+    relatedness_joined_pd = relatedness_joined_ht.to_pandas()
+    kin = relatedness_joined_pd['kin']
+    kin = kin[~np.isnan(kin)]
+    frequencies, edges = np.histogram(kin, 200)
+    p = hv.Histogram((edges, frequencies))
+    p = p * hv.VLine(0.088388).opts(line_dash='dashed')
+    p = p * hv.VLine(0.17678).opts(line_dash='dashed')
+    p = p * hv.VLine(0.125).opts()
+    p = p * hv.VLine(0.25).opts()
+
+    p.opts(height=600, width=800, fontsize={'title': 16, 'labels': 2, 'xticks': 20, 'yticks': 20})
+
+
+
+def stacked_bar_AF_proportion(ht,
+                              x_group, x_lab, y_lab,
+                              color_group,
+                              count_group="n",
+                              count_total="n",
+                              width=800,
+                              height=500,
+                              ylim=(0, 1),
+                              cmap='Colorblind'):
+    totals_ht = (ht.group_by(ht[x_group]).aggregate(bin_total=hl.agg.sum(ht[count_total]))).key_by(x_group)
+    frac_ht = (ht.group_by(ht[x_group], ht[color_group]).aggregate(
+        n_group=hl.agg.sum(ht[count_group])))
+    frac_ht = frac_ht.annotate(
+        fraction=frac_ht.n_group / totals_ht[frac_ht[x_group]].bin_total)
+    bars = hv.Bars(frac_ht.to_pandas(),
+                   [(x_group, x_lab), color_group],
+                   ('fraction', y_lab))
+    bars.opts(stacked=True,
+              width=width,
+              height=height,
+              xrotation=45,
+              ylim=(0, 1),
+              legend_position="right",
+              cmap=cmap)
+
+    return bars
 
 def display_tables(table_list):
     head = """<html>
