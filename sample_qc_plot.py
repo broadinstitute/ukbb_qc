@@ -9,6 +9,12 @@ hv.extension('bokeh')
 
 from IPython.display import display_html
 
+relatedness_kin_cutoffs = {'Second-degree': 0.088388,
+                           'First-degree': 0.17678}
+
+relatedness_kin_means = {'Second-degree': 0.125,
+                         'First-degree': 0.25}
+
 
 def get_pc_plots(pcs_pd,
                  pc_name,
@@ -153,19 +159,53 @@ def get_outlier_plots(outlier_sample_qc,
     return tables, plots
 
 
-def kinship_distribution_plot():
-    relatedness_joined_pd = relatedness_joined_ht.to_pandas()
-    kin = relatedness_joined_pd['kin']
+def kinship_distribution_plot(relatedness_ht: hl.Table,
+                              kin_label: str = "kin",
+                              degree_cutoffs: Dict[str, float] = relatedness_kin_cutoffs,
+                              degree_means: Dict[str, float] = relatedness_kin_means,
+                              plot_height: int = 600,
+                              plot_width: int = 800,
+                              label_font_size: int = 16,
+                              axis_font_size: int = 14) -> hv.Histogram:
+    """
+    Makes a kinship histogram indicating the kinship means and cutoffs for first and
+    second degree relatives with vertical lines.
+
+    :param Table relatedness_ht: hail Table containing kinship values between sample pairs
+    :param str kin_label: column name containing kinship values
+    :param dict of floats degree_cutoffs: Kinship cutoffs for second and first degree relatives
+    :param dict of floats degree_means: Kinship means for second and first degree relatives
+    :param int plot_height: plot height
+    :param int plot_width: plot width
+    :param int label_font_size: font size for axis labels and legend text
+    :param int axis_font_size: font size for axis tick labels
+    :return: a histogram of kinship values
+    :rtype: Histogram
+    """
+    relatedness_pd = relatedness_ht.to_pandas()
+    kin = relatedness_pd[kin_label]
     kin = kin[~np.isnan(kin)]
     frequencies, edges = np.histogram(kin, 200)
     p = hv.Histogram((edges, frequencies))
-    p = p * hv.VLine(0.088388).opts(line_dash='dashed')
-    p = p * hv.VLine(0.17678).opts(line_dash='dashed')
-    p = p * hv.VLine(0.125).opts()
-    p = p * hv.VLine(0.25).opts()
+    height = p.data["Frequency"].max() - p.data["Frequency"].min()
+    colors = Category10[10]
+    for rel, cutoff in degree_cutoffs.items():
+        # p = p * hv.VLine(cutoff, label = f'{rel} cutoff').opts(line_dash='dashed')
+        p = p * hv.Spikes(([cutoff], [height]), vdims="height", label=f'{rel} cutoff').opts(line_dash='dashed',
+                                                                                            color=colors.pop(0),
+                                                                                            line_width=3)
 
-    p.opts(height=600, width=800, fontsize={'title': 16, 'labels': 2, 'xticks': 20, 'yticks': 20})
+    for rel, d_mean in degree_means.items():
+        # p = p * hv.VLine(d_mean, label = f'{rel} mean')
+        p = p * hv.Spikes(([d_mean], [height]), vdims="height", label=f'{rel} mean').opts(color=colors.pop(0),
+                                                                                          line_width=3)
 
+    p.opts(xlabel='Kinship',
+           height=plot_height,
+           width=plot_width,
+           fontsize={'labels': label_font_size, 'xticks': axis_font_size, 'yticks': axis_font_size})
+
+    return p
 
 
 def stacked_bar_AF_proportion(ht,
