@@ -88,9 +88,10 @@ def main(args):
         regeneron_pops_ht = regeneron_pops_ht.annotate(Regeneron_pop=regeneron_pops_ht.Class)
         pop_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
         pop_joint_ht = pop_ht.join(regeneron_pops_ht, 'left')
-        pop_joint_ht = pop_joint_ht.key_by(array_map=pop_joint_ht.s.split("_")[1])
-        pop_joint_ht = pop_joint_ht.join(ukbb_ancestry, 'left')
+        pop_joint_ht = pop_joint_ht.annotate(array_map=pop_joint_ht.s.split("_")[1])
         pop_joint_ht = pop_joint_ht.key_by('s')
+        pop_joint_ht = pop_joint_ht.join(ukbb_ancestry.key_by('s'), 'left')
+        pop_joint_ht.show()
         pop_joint_ht.write(get_joint_regeneron_ancestry_path(data_source, freeze), overwrite=args.overwrite)
 
 
