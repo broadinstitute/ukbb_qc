@@ -1,6 +1,6 @@
 from gnomad_hail import *
 from gnomad_hail.utils.generic import filter_to_autosomes
-from gnomad_hail.utils.sample_qc import run_platform_pca
+from gnomad_hail.utils.sample_qc import compute_callrate_mt,run_platform_pca
 from ukbb_qc.resources import *
 from ukbb_qc.utils import *
 import hail as hl
@@ -12,16 +12,6 @@ import hdbscan
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("platform_pca")
 logger.setLevel(logging.INFO)
-
-
-# Note: The following functions are from Laurent's myoseq sample qc should probably move to a common location
-def compute_callrate_mt(mt: hl.MatrixTable, intervals: hl.Table) -> hl.MatrixTable:
-    callrate_mt = filter_to_autosomes(mt)
-    callrate_mt = callrate_mt.annotate_rows(interval=intervals[callrate_mt.locus].target)
-    callrate_mt = callrate_mt.filter_rows(hl.is_defined(callrate_mt.interval) & (hl.len(callrate_mt.alleles) == 2))
-    callrate_mt = callrate_mt.select_entries(GT=hl.or_missing(hl.is_defined(callrate_mt.GT), hl.struct()))
-    callrate_mt = callrate_mt.group_rows_by(callrate_mt.interval).aggregate(callrate=hl.agg.fraction(hl.is_defined(callrate_mt.GT)))
-    return callrate_mt
 
 
 def main(args):
