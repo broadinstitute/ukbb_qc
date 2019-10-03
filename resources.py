@@ -514,9 +514,21 @@ def binned_concordance_path(data_source: str, freeze: int, truth_sample: str, me
     return f'{variant_qc_prefix(data_source, freeze)}/rf/{truth_sample}.{metric}.binned_concordance.ht'
 
 
+def annotations_ht_path(data_source: str, freeze: int, annotation_type: str):
+    """
+    Get sites-level annotations
+    :param str data_source: 'broad' or 'regeneron'
+    :param int freeze: UKBB tranche version
+    :param str annotation_type: One of "vep", "qc_stats", "family_stats", "frequencies", "rf", "omes_concordance", "NA12878_concordance", "syndip_concordance", "omes_by_platform_concordance"
+    :return: Path to annotations Table
+    :rtype: str
+    """
+    return f'{variant_qc_prefix(data_source, freeze)}/annotations/{annotation_type}.ht'
+
 
 def omni_mt_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad-public/truth-sets/hail-{0}/1000G_omni2.5.hg38.mt'.format(hail_version)
+
 
 def mills_mt_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad-public/truth-sets/hail-{0}/Mills_and_1000G_gold_standard.indels.hg38.mt'.format(hail_version)
