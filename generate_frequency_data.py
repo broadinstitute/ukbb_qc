@@ -1,5 +1,8 @@
 from gnomad_hail import *
+from gnomad_qc.annotations.generate_frequency_data import generate_downsamplings_cumulative
+from ukbb_qc.resources import * 
 from collections import Counter
+
 
 DOWNSAMPLINGS = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000, 45000, 50000,
                  55000, 60000, 65000, 70000, 75000, 80000, 85000, 90000, 95000, 100000, 110000, 120000]
@@ -7,23 +10,9 @@ POPS_TO_REMOVE_FOR_POPMAX = ['asj', 'fin', 'oth']
 F_CUTOFF = 0.05
 
 
-def generate_downsamplings_cumulative(mt: hl.MatrixTable) -> Tuple[hl.MatrixTable, List[int]]:
-    pop_data = [x[0] for x in get_sample_data(mt, [mt.meta[f'{pop_field}']])]
-    pops = Counter(pop_data)
-    downsamplings = DOWNSAMPLINGS + list(pops.values())
-    downsamplings = sorted([x for x in downsamplings if x <= sum(pops.values())])
-    kt = mt.cols()
-    kt = kt.annotate(r=hl.rand_unif(0, 1))
-    kt = kt.order_by(kt.r).add_index('global_idx')
-
-    for i, pop in enumerate(pops):
-        pop_kt = kt.filter(kt.meta[f'{pop_field}'] == pop).add_index('pop_idx')
-        if not i:
-            global_kt = pop_kt
-        else:
-            global_kt = global_kt.union(pop_kt)
-    global_kt = global_kt.key_by('s')
-    return mt.annotate_cols(downsampling=global_kt[mt.s]), downsamplings
+logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
+logger = logging.getLogger("generate_frequency_data")
+logger.setLevel(logging.INFO)
 
 
 def add_faf_expr(freq: hl.expr.ArrayExpression, freq_meta: hl.expr.ArrayExpression, locus: hl.expr.LocusExpression, populations: Set[str]) -> hl.expr.ArrayExpression:
@@ -64,13 +53,13 @@ def generate_frequency_data(mt: hl.MatrixTable, calculate_downsampling: bool = F
     """
     if calculate_downsampling:
         mt, downsamplings = generate_downsamplings_cumulative(mt)
-        print(f'Got {len(downsamplings)} downsamplings: {downsamplings}')
+        logger.info(f'Got {len(downsamplings)} downsamplings: {downsamplings}')
     cut_dict = {'pop': hl.agg.filter(hl.is_defined(mt.meta[f'{pop_field}']), hl.agg.counter(mt.meta[f'{pop_field}'])),
                 'sex': hl.agg.filter(hl.is_defined(mt.meta.sex), hl.agg.collect_as_set(mt.meta.sex)),
                 'subpop': hl.agg.filter(hl.is_defined(mt.meta.subpop) & hl.is_defined(mt.meta[f'{pop_field}']),
                                         hl.agg.collect_as_set(hl.struct(subpop=mt.meta.subpop, pop=mt.meta[f'{pop_field}'])))
                 }
-    print(cut_dict)
+    logger.info(cut_dict)
 
     if calculate_by_platform:
         cut_dict['platform'] = hl.agg.filter(hl.is_defined(mt.meta.qc_platform),
@@ -85,10 +74,6 @@ def generate_frequency_data(mt: hl.MatrixTable, calculate_downsampling: bool = F
     ] + [
         ({'pop': pop, 'sex': sex}, (mt.meta.sex == sex) & (mt.meta[f'{pop_field}'] == pop))
         for sex in cut_data.sex for pop in cut_data[f'{pop_field}']
-    ] + [
-        ({'subpop': subpop.subpop, 'pop': subpop[f'{pop_field}']},
-         mt.meta.subpop == subpop.subpop)
-        for subpop in cut_data.subpop
     ])
 
     if calculate_by_platform:
@@ -129,7 +114,7 @@ def generate_frequency_data(mt: hl.MatrixTable, calculate_downsampling: bool = F
     frequency_expression.insert(1, raw_stats_bind)
     meta_expressions.insert(1, {'group': 'raw'})
 
-    print(f'Calculating {len(frequency_expression)} aggregators...')
+    logger.info(f'Calculating {len(frequency_expression)} aggregators...')
     global_expression = {
         'freq_meta': meta_expressions
     }
@@ -150,6 +135,19 @@ def generate_frequency_data(mt: hl.MatrixTable, calculate_downsampling: bool = F
     return mt.rows(), sample_data
 
 
+def join_gnomad(ht: hl.Table, data_type: str) -> hl.Table:
+    """
+    Joins UKBB ht to gnomAD ht and adds gnomAD freq, popmax, and faf as annotation
+
+    :param Table ht: Input UKBB ht
+    :param str data_type: One of exomes or genomes
+    :return: UKBB ht with gnomAD frequency information added as annotation
+    :rtype: Table
+    """
+    gnomad_ht = hl.read_table(get_gnomad_liftover_data_path(f'{data_type}', '2.1.1')).select('freq', 'popmax', 'faf')
+    return ht.annotate(hl.format('gnomad_%s', data_type)=gnomad_ht[ht.locus, ht.alleles])
+
+
 def main(args):
     hl.init(log='/frequency_annotations.log')
 
@@ -167,9 +165,13 @@ def main(args):
     if args.calculate_frequencies:
         ht, sample_table = generate_frequency_data(mt, args.downsampling, args.by_platform, pop_field)
 
-        write_temp_gcs(ht, annotations_ht_path(data_source, freeze, annotation_type), args.overwrite)
+        write_temp_gcs(ht, annotations_ht_path(data_source, freeze, 'ukb_freq'), args.overwrite)
         if args.downsampling:
             sample_table.write(sample_annotations_table_path(data_type, 'downsampling'), args.overwrite)
+
+    if args.join_gnomad:
+        exomes_ht = hl.read_table(get_gnomad_liftover_data_path('exomes', '2.1.1')).select('freq', 'popmax', 'faf')
+        genomes_ht = hl.read_table(get_gnomad_liftover_data_path('genomes', '2.1.1')).select('freq', 'popmax', 'faf')
 
 
 if __name__ == '__main__':
@@ -178,8 +180,9 @@ if __name__ == '__main__':
     parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE, type=int)
     parser.add_argument('-g', '--gnomad', help='Calculate frequencies using gnomAD pc project pop', action='store_true')
     parser.add_argument('--downsampling', help='Also calculate downsampling frequency data', action='store_true')
-    parser.add_argument('--calculate_frequencies', help='Calcualte most frequency data', action='store_true')
+    parser.add_argument('--calculate_frequencies', help='Calculate most frequency data', action='store_true')
     parser.add_argument('--by_platform', help='Also calculate frequencies by platform', action='store_true')
+    parser.add_argument('-j', '--join_gnomad', help='Join table with gnomAD tables to get gnomAD frequencies', action='store_true')
     parser.add_argument('--slack_channel', help='Slack channel to post results and notifications to.')
     parser.add_argument('--overwrite', help='Overwrite data', action='store_true')
     args = parser.parse_args()
