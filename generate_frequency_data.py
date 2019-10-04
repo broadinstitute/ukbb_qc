@@ -145,8 +145,10 @@ def main(args):
             sample_table.write(sample_annotations_table_path(data_type, 'downsampling'), args.overwrite)
 
     if args.join_gnomad:
+        ht = hl.read_table(annotations_ht_path(data_source, freeze, 'ukb_freq'))
         ht = join_gnomad(ht, 'exomes')
         ht = join_gnomad(ht, 'genomes')
+        write_temp_gcs(ht, annotations_ht_path(data_source, freeze, 'join_freq'), args.overwrite)
 
 
 if __name__ == '__main__':
