@@ -163,9 +163,6 @@ if __name__ == '__main__':
     parser.add_argument('--overwrite', help='Overwrite data', action='store_true')
     args = parser.parse_args()
 
-    if int(args.exomes) + int(args.genomes) != 1:
-        sys.exit('Error: One and only one of --exomes or --genomes must be specified')
-
     if args.slack_channel:
         try_slack(args.slack_channel, main, args)
     else:
