@@ -118,9 +118,6 @@ def join_gnomad(ht: hl.Table, data_type: str) -> hl.Table:
     :return: UKBB ht with gnomAD frequency information added as annotation
     :rtype: Table
     """
-    #gnomad_ht = hl.read_table(get_gnomad_liftover_data_path(f'{data_type}', '2.1.1')).select('freq', 'popmax', 'faf')
-    #annotation = f'gnomad_{data_type}'
-    #return ht.annotate(**{annotation: gnomad_ht[ht.locus, ht.alleles]})
     gnomad_ht = hl.read_table(get_gnomad_liftover_data_path(f'{data_type}', '2.1.1')).select(
         'freq', 'popmax', 'faf').select_globals(
         'freq_meta', 'freq_index_dict', 'popmax_index_dict', 'faf_index_dict')
@@ -139,7 +136,6 @@ def main(args):
     data_source = args.data_source
     freeze = args.freeze
     mt = get_ukbb_data(data_source, freeze, meta_root='meta')
-    mt.describe()
 
     if args.calculate_frequencies:
         ht, sample_table = generate_frequency_data(mt, args.downsampling, args.by_platform)
