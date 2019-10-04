@@ -60,6 +60,7 @@ def get_age_ht(data_source: str, freeze: int) -> hl.Table:
     sample_map_ht = hl.read_table(array_sample_map_ht(data_source, freeze))
     sample_map_ht = sample_map_ht.key_by('ukbb_app_26041_id')
     ukbb_age = ukbb_age.key_by(s=sample_map_ht[ukbb_age.key].s)
+    ukbb_age = ukbb_age.rename({'f.21022.0.0': 'age'})
     return ukbb_age
 
 
