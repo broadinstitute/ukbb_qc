@@ -1,5 +1,5 @@
 from gnomad_hail import *
-from gnomad_qc.annotations.generate_frequency_data import generate_downsamplings_cumulative
+from gnomad_qc.annotations.generate_frequency_data import add_faf_expr,generate_downsamplings_cumulative
 from ukbb_qc.resources import * 
 from collections import Counter
 
@@ -15,49 +15,20 @@ logger = logging.getLogger("generate_frequency_data")
 logger.setLevel(logging.INFO)
 
 
-def add_faf_expr(freq: hl.expr.ArrayExpression, freq_meta: hl.expr.ArrayExpression, locus: hl.expr.LocusExpression, populations: Set[str]) -> hl.expr.ArrayExpression:
-    """
-    Calculates popmax (add an additional entry into freq with popmax: pop)
-
-    :param ArrayExpression freq: ArrayExpression of Structs with ['ac', 'an', 'hom']
-    :param ArrayExpression freq_meta: ArrayExpression of meta dictionaries corresponding to freq
-    :param LocusExpression locus: LocusExpression
-    :param set of str populations: Set of populations over which to calculate popmax
-    :return: Frequency data with annotated popmax
-    :rtype: ArrayExpression
-    """
-    pops_to_use = hl.literal(populations)
-    freq = hl.map(lambda x: x[0].annotate(meta=x[1]), hl.zip(freq, freq_meta))
-    freqs_to_use = hl.filter(lambda f:
-                             ((f.meta.size() == 1) & (f.meta.get('group') == 'adj')) |
-                             ((f.meta.size() == 2) & (f.meta.get('group') == 'adj') & pops_to_use.contains(f.meta.get('pop'))) |
-                             (~locus.in_autosome_or_par() & (
-                                     ((f.meta.size() == 2) & (f.meta.get('group') == 'adj') & f.meta.contains('sex')) |
-                                     ((f.meta.size() == 3) & (f.meta.get('group') == 'adj') & pops_to_use.contains(f.meta.get('pop')) & f.meta.contains('sex')))),
-                             freq)
-    return freqs_to_use.map(lambda f: hl.struct(
-        meta=f.meta,
-        faf95=hl.experimental.filtering_allele_frequency(f.AC, f.AN, 0.95),
-        faf99=hl.experimental.filtering_allele_frequency(f.AC, f.AN, 0.99)
-    ))
-
-
 def generate_frequency_data(mt: hl.MatrixTable, calculate_downsampling: bool = False,
-                            calculate_by_platform: bool = False,
-                            pop_field: str) -> Tuple[hl.Table, hl.Table]:
+                            calculate_by_platform: bool = False) -> Tuple[hl.Table, hl.Table]:
     """
     :param MatrixTable mt: Input MatrixTable
     :param bool calculate_downsampling: Calculate frequencies for downsampled data
     :param bool calculate_by_platform: Calculate frequencies for PCR-free data
-    :param str pop_field: Name of population field ('hybrid_pop' or 'gnomad_pc_project_pop')
     """
     if calculate_downsampling:
         mt, downsamplings = generate_downsamplings_cumulative(mt)
         logger.info(f'Got {len(downsamplings)} downsamplings: {downsamplings}')
-    cut_dict = {'pop': hl.agg.filter(hl.is_defined(mt.meta[f'{pop_field}']), hl.agg.counter(mt.meta[f'{pop_field}'])),
+    cut_dict = {'pop': hl.agg.filter(hl.is_defined(mt.meta.gnomad_pc_project_pop), hl.agg.counter(mt.meta.gnomad_pc_project_pop)),
                 'sex': hl.agg.filter(hl.is_defined(mt.meta.sex), hl.agg.collect_as_set(mt.meta.sex)),
-                'subpop': hl.agg.filter(hl.is_defined(mt.meta.subpop) & hl.is_defined(mt.meta[f'{pop_field}']),
-                                        hl.agg.collect_as_set(hl.struct(subpop=mt.meta.subpop, pop=mt.meta[f'{pop_field}'])))
+                'subpop': hl.agg.filter(hl.is_defined(mt.meta.hybrid_pop) & hl.is_defined(mt.meta.gnomad_pc_project_pop),
+                                        hl.agg.collect_as_set(hl.struct(subpop=mt.meta.hybrid_pop, pop=mt.meta.gnomad_pc_project_pop)))
                 }
     logger.info(cut_dict)
 
@@ -68,12 +39,16 @@ def generate_frequency_data(mt: hl.MatrixTable, calculate_downsampling: bool = F
 
     sample_group_filters = [({}, True)]
     sample_group_filters.extend([
-        ({'pop': pop}, mt.meta[f'{pop_field}'] == pop) for pop in cut_data[f'{pop_field}']
+        ({'pop': pop}, mt.meta.gnomad_pc_project_pop == pop) for pop in cut_data.pop
     ] + [
         ({'sex': sex}, mt.meta.sex == sex) for sex in cut_data.sex
     ] + [
-        ({'pop': pop, 'sex': sex}, (mt.meta.sex == sex) & (mt.meta[f'{pop_field}'] == pop))
-        for sex in cut_data.sex for pop in cut_data[f'{pop_field}']
+        ({'pop': pop, 'sex': sex}, (mt.meta.sex == sex) & (mt.meta.gnomad_pc_project_pop == pop))
+        for sex in cut_data.sex for pop in cut_data.pop
+    ] + [
+        ({'subpop': subpop.subpop, 'pop': subpop.pop},
+         mt.meta.hybrid_pop == subpop.subpop)
+        for subpop in cut_data.subpop
     ])
 
     if calculate_by_platform:
@@ -89,10 +64,10 @@ def generate_frequency_data(mt: hl.MatrixTable, calculate_downsampling: bool = F
         ])
         sample_group_filters.extend([
             ({'downsampling': str(ds), 'pop': pop},
-             (mt.downsampling[f'{pop_field}']_idx < ds) & (mt.meta[f'{pop_field}'] == pop))
-            for ds in downsamplings for pop, pop_count in cut_data[f'{pop_field}'].items() if ds <= pop_count
+             (mt.downsampling[f'{pop_field}_idx'] < ds) & (mt.meta.gnomad_pc_project_pop == pop))
+            for ds in downsamplings for pop, pop_count in cut_data.gnomad_pc_project_pop.items() if ds <= pop_count
         ])
-    mt = mt.select_cols(group_membership=tuple(x[1] for x in sample_group_filters), project_id=mt.meta.project_id, age=mt.meta.age)
+    mt = mt.select_cols(group_membership=tuple(x[1] for x in sample_group_filters), age=mt.meta.age)
     mt = mt.select_rows()
 
     frequency_expression = []
@@ -125,12 +100,11 @@ def generate_frequency_data(mt: hl.MatrixTable, calculate_downsampling: bool = F
     mt = mt.annotate_globals(**global_expression)
     sample_data = mt.cols()
 
-    pops = set(cut_data[f'{pop_field}'].keys())
+    pops = set(cut_data.pop.keys())
     [pops.discard(x) for x in POPS_TO_REMOVE_FOR_POPMAX]
 
     mt = mt.annotate_rows(popmax=add_popmax_expr(mt.freq, mt.freq_meta, populations=pops),
                           faf=add_faf_expr(mt.freq, mt.freq_meta, mt.locus, populations=pops))
-    mt = get_projectmax(mt, mt.project_id)
 
     return mt.rows(), sample_data
 
@@ -144,8 +118,19 @@ def join_gnomad(ht: hl.Table, data_type: str) -> hl.Table:
     :return: UKBB ht with gnomAD frequency information added as annotation
     :rtype: Table
     """
-    gnomad_ht = hl.read_table(get_gnomad_liftover_data_path(f'{data_type}', '2.1.1')).select('freq', 'popmax', 'faf')
-    return ht.annotate(hl.format('gnomad_%s', data_type)=gnomad_ht[ht.locus, ht.alleles])
+    #gnomad_ht = hl.read_table(get_gnomad_liftover_data_path(f'{data_type}', '2.1.1')).select('freq', 'popmax', 'faf')
+    #annotation = f'gnomad_{data_type}'
+    #return ht.annotate(**{annotation: gnomad_ht[ht.locus, ht.alleles]})
+    gnomad_ht = hl.read_table(get_gnomad_liftover_data_path(f'{data_type}', '2.1.1')).select(
+        'freq', 'popmax', 'faf').select_globals(
+        'freq_meta', 'freq_index_dict', 'popmax_index_dict', 'faf_index_dict')
+    ht = ht.join(gnomad_ht, how='left')
+    ht = ht.rename({'freq': f'gnomad_{data_type}.freq', 'popmax': f'gnomad_{data_type}.popmax',
+                   'faf': f'gnomad_{data_type}.faf', 'freq_meta': f'gnomad_{data_type}.freq_meta',
+                   'freq_index_dict': f'gnomad_{data_type}.freq_index_dict',
+                   'popmax_index_dict': f'gnomad_{data_type}.popmax_index_dict',
+                   'faf_index_dict': f'gnomad_{data_type}.faf_index_dict'})
+    return ht
 
 
 def main(args):
@@ -156,29 +141,22 @@ def main(args):
     mt = get_ukbb_data(data_source, freeze, meta_root='meta')
     mt.describe()
 
-    # get desired  population field from metadata
-    if args.gnomad:
-        pop_field = 'gnomad_pc_project_pop'
-    else:
-        pop_field = 'hybrid_pop'
-
     if args.calculate_frequencies:
-        ht, sample_table = generate_frequency_data(mt, args.downsampling, args.by_platform, pop_field)
+        ht, sample_table = generate_frequency_data(mt, args.downsampling, args.by_platform)
 
         write_temp_gcs(ht, annotations_ht_path(data_source, freeze, 'ukb_freq'), args.overwrite)
         if args.downsampling:
             sample_table.write(sample_annotations_table_path(data_type, 'downsampling'), args.overwrite)
 
     if args.join_gnomad:
-        exomes_ht = hl.read_table(get_gnomad_liftover_data_path('exomes', '2.1.1')).select('freq', 'popmax', 'faf')
-        genomes_ht = hl.read_table(get_gnomad_liftover_data_path('genomes', '2.1.1')).select('freq', 'popmax', 'faf')
+        ht = join_gnomad(ht, 'exomes')
+        ht = join_gnomad(ht, 'genomes')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
     parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE, type=int)
-    parser.add_argument('-g', '--gnomad', help='Calculate frequencies using gnomAD pc project pop', action='store_true')
     parser.add_argument('--downsampling', help='Also calculate downsampling frequency data', action='store_true')
     parser.add_argument('--calculate_frequencies', help='Calculate most frequency data', action='store_true')
     parser.add_argument('--by_platform', help='Also calculate frequencies by platform', action='store_true')
