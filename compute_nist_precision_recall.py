@@ -69,15 +69,6 @@ def create_binned_concordance(data_source: str, freeze: int, metric: str, nbins:
         if filter_difficult_regions:
             ht = ht.filter(hl.is_defined(ht.info.difficultregion), keep=False)
 
-        # lcr = hl.import_locus_intervals(lcr_intervals_path, reference_genome='GRCh38')
-        # count1 = ht.count()
-        # high_conf_intervals = hl.import_locus_intervals(NA12878_high_conf_regions_bed_path)  # Check 38 paths
-        # segdup = hl.import_locus_intervals(segdup_intervals_path)  # Check 38 paths
-        # ht = ht.filter(
-        #     hl.is_missing(lcr[ht.locus])  # TODO: add in 38 paths as they become available
-        # )
-        # logger.info(f'Found {ht.count()} variants out of {count1} after removing LCR regions')
-
         if metric == 'vqsr':
             metric_ht = hl.read_table(score_ranking_path(data_source, freeze, metric))
         elif metric == 'gnomad_exomes':
@@ -215,27 +206,26 @@ def main(args):
                                                joint_ht.pass_nist, joint_ht[f'pass_{data_source}']).aggregate(n=hl.agg.count())
             filter_summary.show(20)
 
-    # if args.filter_difficult_regions:
-    #     for sample_id in truth_samples.keys():
-    #         joint_ht = hl.read_table(f'{variant_qc_prefix(data_source, freeze)}/assessment/joint_nist_{data_source}.{sample_id}.{args.run_hash}.ht')
-    #         joint_ht = joint_ht.filter(hl.is_defined(joint_ht.info.difficultregion), keep=False)
-    #
-    #         filter_summary = joint_ht.group_by(joint_ht.pass_nist, joint_ht[f'pass_{data_source}']).aggregate(
-    #             n=hl.agg.count())
-    #         filter_summary.show()
-    #
-    #         joint_ht = joint_ht.annotate(is_snp=hl.is_snp(joint_ht.alleles[0], joint_ht.alleles[1]))
-    #         filter_summary = joint_ht.group_by(joint_ht.is_snp, joint_ht.was_split_1,
-    #                                            joint_ht.pass_nist, joint_ht[f'pass_{data_source}']).aggregate(
-    #             n=hl.agg.count())
-    #         filter_summary.show(20)
+    if args.filter_difficult_regions:
+        for sample_id in truth_samples.keys():
+            joint_ht = hl.read_table(f'{variant_qc_prefix(data_source, freeze)}/assessment/joint_nist_{data_source}.{sample_id}.{args.run_hash}.ht')
+            joint_ht = joint_ht.filter(hl.is_defined(joint_ht.info.difficultregion), keep=False)
+
+            filter_summary = joint_ht.group_by(joint_ht.pass_nist, joint_ht[f'pass_{data_source}']).aggregate(
+                n=hl.agg.count())
+            filter_summary.show()
+
+            joint_ht = joint_ht.annotate(is_snp=hl.is_snp(joint_ht.alleles[0], joint_ht.alleles[1]))
+            filter_summary = joint_ht.group_by(joint_ht.is_snp, joint_ht.was_split_1,
+                                               joint_ht.pass_nist, joint_ht[f'pass_{data_source}']).aggregate(
+                n=hl.agg.count())
+            filter_summary.show(20)
 
     if args.compute_binned_concordance:
         for sample_id in truth_samples.keys():
             create_binned_concordance(data_source, freeze, args.run_hash, args.n_bins, overwrite=args.overwrite,
                                       truth_sample=sample_id, filter_difficult_regions=args.filter_difficult_regions)
 
-# Run Regeneron filtering against NIST
 # TODO: make the filtering of "difficult" region variants required for future tranche runs
 
 
