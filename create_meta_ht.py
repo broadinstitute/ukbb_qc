@@ -62,6 +62,12 @@ def main(args):
     logger.info('Joining hard filters ht and qc ht to start making meta ht')
     left_ht = join_tables(left_ht, 's', right_ht, 's', 'outer')
 
+    logger.info('Reading in ht mapping ukbb pharma id to ukbb application 26041 id')
+    right_ht = hl.read_table(array_sample_map_ht(data_source, freeze))
+
+    logger.info('Joining ukbb application 26041 id map into current join (meta ht)')
+    left_ht = join_tables(left_ht, 's', right_ht, 's', 'left')
+
     logger.info('Reading in platform PCA ht')
     right_ht = hl.read_table(platform_pca_results_ht_path(data_source, freeze))
     right_ht = right_ht.transmute(platform_pca_scores=right_ht.scores)
@@ -108,12 +114,13 @@ def main(args):
     left_ht = left_ht.annotate(high_quality=((hl.len(left_ht.hard_filters) == 0) &
                                             (hl.len(left_ht.pop_platform_filters) == 0)))
     logger.info('Writing out meta ht')
-    left_ht.write(meta_ht_path(data_source, freeze), overwrite = True)
+    left_ht.write(meta_ht_path(data_source, freeze), overwrite=args.overwrite)
     logger.info('Complete') 
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='This script applies hard filters to UKBB data')
+    parser.add_argument('-o', '--overwrite', help='Overwrite all data from this subset (default: False)', action='store_true')
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
     parser.add_argument('-f', '--freeze', help='Current freeze #', default=CURRENT_FREEZE, type=int)
     parser.add_argument('-d', '--dup_sets', help='Dup sets for duplicate ht table', action='store_true', default=False)

@@ -1,4 +1,5 @@
 from gnomad_hail import *
+from gnomad_hail.utils.liftover import *
 from gnomad_hail.utils.sample_qc import *
 import gnomad_hail.resources.sample_qc as gres
 from ukbb_qc.resources import *
@@ -15,7 +16,7 @@ logger = logging.getLogger("population_pca")
 logger.setLevel(logging.INFO)
 
 
-# The following are from Mike with some changes made
+# TODO: The two following functions are from Mike with some changes made - will change to use Mike's code when it is committed
 def prep_meta(ht: hl.Table) -> hl.Table:
     """
     Preps gnomAD exome and genome metadata for population PC
@@ -30,27 +31,6 @@ def prep_meta(ht: hl.Table) -> hl.Table:
     return ht
 
 
-def liftover_ht(ht: hl.Table, ref_from: str = 'GRCh37', ref_to: str = 'GRCh38') -> hl.Table:
-    """
-    Liftover input ht from one build to another
-    :param Table ht: Table to be lifted over
-    :param str ref_from: Current reference of ht
-    :param str ref_to: Reference to liftover to
-    :return: lifted over Table
-    :rtype: Table
-    """
-    logger.info(f'Lifting a {ref_from} genome over to {ref_to}')
-    rgfrom = hl.get_reference(ref_from)
-    rgto = hl.get_reference(ref_to)
-    rgfrom.add_liftover(f'gs://hail-common/references/{ref_from.lower()}_to_{ref_to.lower()}.over.chain.gz', rgto)
-    ht = ht.annotate(new_locus=hl.liftover(ht.locus, ref_to, include_strand=True),
-                     old_locus=ht.locus)
-    ht = ht.filter(hl.is_defined(ht.new_locus) & ~ht.new_locus.is_negative_strand)
-    ht = ht.key_by(locus=ht.new_locus.result, alleles=ht.alleles)
-
-    return ht
-
-
 def project_on_gnomad_pop_pcs(mt: hl.MatrixTable) -> hl.Table:
     """
     Performs pc_project on a mt using gnomAD population pca loadings and known pops
@@ -58,14 +38,14 @@ def project_on_gnomad_pop_pcs(mt: hl.MatrixTable) -> hl.Table:
     :return: pc_project scores Table and
     :rtype: tuple(Table, Table)
     """
-    mt = mt.select_entries('GT')
 
     # Load gnomAD metadata and population pc loadings
     gnomad_meta_exomes_ht = prep_meta(hl.read_table(metadata_exomes_ht_path(version=CURRENT_EXOME_META)))
     gnomad_meta_genomes_ht = prep_meta(hl.read_table(metadata_genomes_ht_path(version=CURRENT_GENOME_META)))
     gnomad_meta_ht = gnomad_meta_exomes_ht.union(gnomad_meta_genomes_ht)
-    gnomad_loadings_ht = hl.read_table(gres.ancestry_pca_loadings_ht_path())
-    gnomad_loadings_ht = liftover_ht(gnomad_loadings_ht)
+    gnomad_loadings_ht = hl.read_table(gnomad_ancestry_loadings_liftover_path)
+    gnomad_loadings_ht = gnomad_loadings_ht.filter(
+        ~gnomad_loadings_ht.reference_mismatch & ~gnomad_loadings_ht.new_locus.is_negative_strand)
 
     scores_ht = pc_project(mt, gnomad_loadings_ht)
     scores_ht = scores_ht.annotate(pop_for_rf=hl.null(hl.tstr))
@@ -76,7 +56,8 @@ def project_on_gnomad_pop_pcs(mt: hl.MatrixTable) -> hl.Table:
     return joint_scores_ht
 
 
-def assign_cluster_pcs(pca_ht: hl.Table, pc_scores_ann: str = 'scores', hdbscan_min_cluster_size: int = 50, hdbscan_min_samples: int = None) -> hl.Table:
+def assign_cluster_pcs(pca_ht: hl.Table, pc_scores_ann: str = 'scores', hdbscan_min_cluster_size: int = 50,
+                       hdbscan_min_samples: int = None) -> hl.Table:
     """
 
     :param MatrixTable pca_ht:
@@ -92,7 +73,8 @@ def assign_cluster_pcs(pca_ht: hl.Table, pc_scores_ann: str = 'scores', hdbscan_
 
     clusterer = hdbscan.HDBSCAN(min_cluster_size=hdbscan_min_cluster_size, min_samples=hdbscan_min_samples)
     cluster_labels = clusterer.fit_predict(pc_scores)
-    n_clusters = len(set(cluster_labels)) - (-1 in cluster_labels)  # NOTE: -1 is the label for noisy (un-classifiable) data points
+    n_clusters = len(set(cluster_labels)) - (
+                -1 in cluster_labels)  # NOTE: -1 is the label for noisy (un-classifiable) data points
     logger.info('Found {} unique clusters...'.format(n_clusters))
 
     pca_pd['ancestry_cluster'] = cluster_labels
@@ -101,13 +83,13 @@ def assign_cluster_pcs(pca_ht: hl.Table, pc_scores_ann: str = 'scores', hdbscan_
     return ht
 
 
-def load_ukbb_array_pcs(num_pcs=16):
-    sample_map = hl.import_table('gs://broad-ukbb/resources/array/Project_26041_bridge.csv', delimiter=',')
+def load_ukbb_array_pcs(data_source, freeze, num_pcs=16):
+    sample_map_ht = hl.read_table(array_sample_map_ht(data_source, freeze))
     array_pcs = hl.import_table('gs://broad-ukbb/resources/array/ukb_sqc_v2_ukb26041.txt', impute=True, delimiter='\t',
                                 no_header=True)
 
-    sample_map = sample_map.key_by(s=sample_map.eid_26041)
-    array_pcs = array_pcs.key_by(s=sample_map[hl.str(array_pcs.f1)].eid_sample)
+    sample_map_ht = sample_map_ht.key_by('ukbb_app_26041_id')
+    array_pcs = array_pcs.key_by(s=sample_map_ht[hl.str(array_pcs.f1)].s)
     array_pcs = array_pcs.filter(hl.is_defined(array_pcs.s))
     array_pcs = array_pcs.annotate(scores=hl.array([array_pcs[f'f{i+26}'] for i in range(0, num_pcs)]))
 
@@ -120,6 +102,21 @@ def main(args):
     data_source = args.data_source
     freeze = args.freeze
     n_pcs = args.n_pcs
+
+    if args.liftover_gnomad_ancestry_loadings:
+        gnomad_loadings_ht = hl.read_table(gres.ancestry_pca_loadings_ht_path())
+
+        logger.info('Preparing reference genomes for liftover')
+        source, target = get_liftover_genome(gnomad_loadings_ht)
+
+        logger.info(f'Lifting data to {target.name}')
+        gnomad_loadings_ht = lift_data(gnomad_loadings_ht, gnomad=False, data_type=None,
+                                       path=gnomad_ancestry_loadings_liftover_path(checkpoint=True), rg=target,
+                                       overwrite=args.overwrite)
+
+        logger.info('Checking SNPs for reference mismatches')
+        gnomad_loadings_ht = annotate_snp_mismatch(gnomad_loadings_ht, data_type=None, rg=target)
+        gnomad_loadings_ht.write(gnomad_ancestry_loadings_liftover_path())
 
     if args.run_pca:
         logger.info("Running population PCA")
@@ -145,7 +142,7 @@ def main(args):
 
     if args.assign_clusters_array_pcs:
         logger.info("Load UKBB array PC data")
-        array_pc_ht = load_ukbb_array_pcs()
+        array_pc_ht = load_ukbb_array_pcs(datasource, freeze)
         logger.info("Assigning PCA clustering")
         pops_ht = assign_cluster_pcs(array_pc_ht,
                                      hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
@@ -156,17 +153,14 @@ def main(args):
     if args.assign_clusters_joint_scratch_array_pcs:
         logger.info("Load exome scratch PC data")
         scores_ht = hl.read_table(ancestry_pca_scores_ht_path(data_source, freeze))
-        scores_ht = scores_ht.key_by(s_array=scores_ht.s.split("_")[1])
+
         logger.info("Load UKBB array PC data")
-        array_pc_ht = load_ukbb_array_pcs()
-        array_pc_ht = array_pc_ht.annotate(exome_scores=scores_ht[array_pc_ht.key].scores,
-                                           s_exome=scores_ht[array_pc_ht.key].s)
+        array_pc_ht = load_ukbb_array_pcs(data_source, freeze)
+        array_pc_ht = array_pc_ht.annotate(exome_scores=scores_ht[array_pc_ht.key].scores)
         array_pc_ht = array_pc_ht.filter(hl.is_defined(array_pc_ht.exome_scores))
-        array_pc_ht = array_pc_ht.select('s_exome',
-                                         **{f'PC{i + 1}': array_pc_ht.exome_scores[i] for i in range(n_pcs)},
+        array_pc_ht = array_pc_ht.select(**{f'PC{i + 1}': array_pc_ht.exome_scores[i] for i in range(n_pcs)},
                                          **{f'PC{i + n_pcs + 1}': array_pc_ht.scores[i] for i in range(args.n_array_pcs)})
         array_pc_ht = array_pc_ht.annotate(scores=hl.array([array_pc_ht[f'PC{i + 1}'] for i in range(n_pcs + args.n_array_pcs)]))
-        array_pc_ht = array_pc_ht.key_by('s_exome')
 
         logger.info("Assigning PCA clustering")
         pops_ht = assign_cluster_pcs(array_pc_ht,
@@ -250,6 +244,7 @@ if __name__ == '__main__':
                         default=0.5,
                         type=float)
 
+    parser.add_argument('--liftover_gnomad_ancestry_loadings', help='Performs liftover on the gnomad joint ancestry loadings', action='store_true')
     parser.add_argument('--run_pca', help='Runs pop PCA on pruned qc MT', action='store_true')
     parser.add_argument('--assign_clusters', help='Assigns clusters based on PCA results using HDBSCAN', action='store_true')
     parser.add_argument('--assign_clusters_array_pcs', help='Assigns clusters based on PCA results using HDBSCAN', action='store_true')

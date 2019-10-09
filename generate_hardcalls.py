@@ -9,7 +9,7 @@ logger.setLevel(logging.INFO)
 
 
 def main(args):
-    hl.init()
+    hl.init(log='/generate_hardcalls.log')
 
     data_source = args.data_source
     freeze = args.freeze

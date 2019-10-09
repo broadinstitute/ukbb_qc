@@ -269,6 +269,8 @@ def create_rf_ht(
         omni=ht.truth_data.omni,
         mills=ht.truth_data.mills,
         ukbb_array=ht.truth_data.ukbb_array,
+        ukbb_array_con=ht.truth_data.ukbb_array_con,
+        ukbb_array_con_common=ht.truth_data.ukbb_array_con_common,
         sib_singletons=ht.truth_data.sib_singletons,
         n_nonref=ht.n_nonref,
         singleton=ht.singleton,
@@ -283,6 +285,9 @@ def create_rf_ht(
     ht = ht.annotate_globals(variants_by_type=variants_by_type)
     ht = ht.repartition(2000, shuffle=False)
     ht = ht.persist()
+
+    ht = ht.checkpoint("gs://broad-ukbb-jgoodric/variant_qc_annotations.ht", overwrite=True)
+    #ht = hl.read_table("gs://broad-ukbb-jgoodric/variant_qc_annotations.ht")
 
     # Compute medians
     # numerical_features = [k for k, v in ht.row.dtype.items() if annotation_type_is_numeric(v)]
@@ -335,6 +340,8 @@ def get_run_data(
         freeze: int,
         vqsr_training: bool,
         no_transmitted_singletons: bool,
+        array_con: bool,
+        array_con_common: bool,
         adj: bool,
         test_intervals: List[str],
         features_importance: Dict[str, float],
@@ -346,6 +353,8 @@ def get_run_data(
         'input_args': {
             'vqsr_training': vqsr_training,
             'no_transmitted_singletons': no_transmitted_singletons,
+            'array_con': array_con,
+            'array_con_common': array_con_common,
             'adj': adj
         },
         'features_importance': features_importance,
@@ -375,18 +384,25 @@ def train_rf(data_source: str, freeze: int, args):
         run_hash = str(uuid.uuid4())[:8]
 
     ht = hl.read_table(rf_annotated_path(data_source, freeze, args.adj))
+    ht = ht.filter(~hl.is_nan(ht.qd)) # Todo: Probably need to figure out a better way to deal with variants that have nan for qd, but there are not many
 
-    summary = ht.group_by('omni', 'mills', 'transmitted_singleton', 'ukbb_array', 'sib_singletons').aggregate(n=hl.agg.count())
+    summary = ht.group_by('omni', 'mills', 'transmitted_singleton', 'ukbb_array', 'ukbb_array_con', 'ukbb_array_con_common', 'sib_singletons').aggregate(n=hl.agg.count())
     logger.info("Summary of truth data annotations:")
     summary.show(20)
 
     # ht = ht.repartition(500, shuffle=False)
 
     if not args.vqsr_training:
-        if args.no_transmitted_singletons:
-            tp_expr = ht.omni | ht.mills | ht.ukbb_array  # | ht.info_POSITIVE_TRAIN_SITE
+        if args.array_con_common:
+            tp_expr = ht.ukbb_array_con_common
+        elif args.array_con:
+            tp_expr = ht.ukbb_array_con
         else:
-            tp_expr = ht.omni | ht.mills | ht.ukbb_array | ht.transmitted_singleton | ht.sib_singletons  # | ht.info_POSITIVE_TRAIN_SITE
+            tp_expr = ht.ukbb_array
+        if args.no_transmitted_singletons:
+            tp_expr = tp_expr | ht.omni | ht.mills # | ht.info_POSITIVE_TRAIN_SITE
+        else:
+            tp_expr = tp_expr | ht.omni | ht.mills | ht.transmitted_singleton | ht.sib_singletons  # | ht.info_POSITIVE_TRAIN_SITE
 
         ht = ht.annotate(
             tp=tp_expr
@@ -444,6 +460,7 @@ def train_rf(data_source: str, freeze: int, args):
                                      rf_model,
                                      features=get_features_list(True, not (args.vqsr_features or args.median_features), args.vqsr_features, args.median_features),
                                      label=LABEL_COL)
+
         ht = ht.annotate_globals(
             test_results=test_results
         )
@@ -465,6 +482,8 @@ def train_rf(data_source: str, freeze: int, args):
         freeze,
         args.vqsr_training,
         args.no_transmitted_singletons,
+        args.array_con,
+        args.array_con_common,
         args.adj,
         test_intervals_str,
         features_importance,
@@ -613,6 +632,11 @@ if __name__ == '__main__':
     training_params.add_argument('--vqsr_training', help='Use VQSR training examples', action='store_true')
     training_params.add_argument('--no_transmitted_singletons', help='Do not use transmitted singletons for training.',
                                  action='store_true')
+    training_params.add_argument('--array_con_common', help='Use only array variants >0.1% AF.',
+                                 action='store_true')
+    training_params.add_argument('--array_con', help='Use only highly concordant array variants.',
+                                 action='store_true')
+
 
     args = parser.parse_args()
 
