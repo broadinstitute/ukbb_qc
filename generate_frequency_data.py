@@ -30,7 +30,6 @@ def generate_frequency_data(mt: hl.MatrixTable, calculate_downsampling: bool = F
                 'subpop': hl.agg.filter(hl.is_defined(mt.meta.hybrid_pop) & hl.is_defined(mt.meta.gnomad_pc_project_pop),
                                         hl.agg.collect_as_set(hl.struct(subpop=mt.meta.hybrid_pop, pop=mt.meta.gnomad_pc_project_pop)))
                 }
-    logger.info(cut_dict)
 
     if calculate_by_platform:
         cut_dict['platform'] = hl.agg.filter(hl.is_defined(mt.meta.qc_platform),
@@ -67,31 +66,42 @@ def generate_frequency_data(mt: hl.MatrixTable, calculate_downsampling: bool = F
              (mt.downsampling[f'{pop_field}_idx'] < ds) & (mt.meta.gnomad_pc_project_pop == pop))
             for ds in downsamplings for pop, pop_count in cut_data.gnomad_pc_project_pop.items() if ds <= pop_count
         ])
-    mt = mt.select_cols(group_membership=tuple(x[1] for x in sample_group_filters), age=mt.meta.age)
+    mt = mt.select_cols(group_membership=[x[1] for x in sample_group_filters], project_id=mt.meta.project_id, age=mt.meta.age)
     mt = mt.select_rows()
 
-    frequency_expression = []
-    meta_expressions = []
-    for i in range(len(sample_group_filters)):
-        subgroup_dict = sample_group_filters[i][0]
-        subgroup_dict['group'] = 'adj'
-        call_stats = hl.agg.filter(mt.group_membership[i] & mt.adj, hl.agg.call_stats(mt.GT, mt.alleles))
-        call_stats_bind = hl.bind(lambda cs: cs.annotate(
-            AC=cs.AC[1], AF=cs.AF[1], homozygote_count=cs.homozygote_count[1]
-        ), call_stats)
-        frequency_expression.append(call_stats_bind)
-        meta_expressions.append(subgroup_dict)
+    def get_meta_expressions(sample_group_filters):
+        meta_expressions = []
+        for i in range(len(sample_group_filters)):
+            subgroup_dict = sample_group_filters[i][0]
+            subgroup_dict['group'] = 'adj'
+            meta_expressions.append(subgroup_dict)
+        meta_expressions.insert(1, {'group': 'raw'})
+        return meta_expressions
 
-    raw_stats = hl.agg.call_stats(mt.GT, mt.alleles)
-    raw_stats_bind = hl.bind(lambda cs: cs.annotate(
-        AC=cs.AC[1], AF=cs.AF[1], homozygote_count=cs.homozygote_count[1]
-    ), raw_stats)
-    frequency_expression.insert(1, raw_stats_bind)
-    meta_expressions.insert(1, {'group': 'raw'})
+    def get_freq_expressions(mt, n_groups):
 
-    logger.info(f'Calculating {len(frequency_expression)} aggregators...')
+        adj_freq_expressions = hl.agg.array_agg(
+            lambda i: hl.agg.filter(mt.group_membership[i] & mt.adj, hl.agg.call_stats(mt.GT, mt.alleles)),
+            hl.range(n_groups)
+        )
+
+        # Insert raw as the second element of the array
+        return adj_freq_expressions[:1].extend([
+            hl.agg.call_stats(mt.GT, mt.alleles)
+        ]).extend(
+            adj_freq_expressions[1:]
+        ).map(
+            lambda cs: cs.annotate(
+                AC=cs.AC[1],
+                AF=cs.AF[1],
+                homozygote_count=cs.homozygote_count[1]
+            )
+        )
+
+    frequency_expression = get_freq_expressions(mt, len(sample_group_filters))
+    print(f'Calculating {len(sample_group_filters) + 1} aggregators...')
     global_expression = {
-        'freq_meta': meta_expressions
+        'freq_meta': get_meta_expressions(sample_group_filters)
     }
     mt = mt.annotate_rows(freq=frequency_expression,
                           age_hist_het=hl.agg.filter(mt.adj & mt.GT.is_het(), hl.agg.hist(mt.age, 30, 80, 10)),
@@ -122,8 +132,8 @@ def join_gnomad(ht: hl.Table, data_type: str) -> hl.Table:
         'freq', 'popmax', 'faf').select_globals(
         'freq_meta', 'freq_index_dict', 'popmax_index_dict', 'faf_index_dict')
     ht = ht.join(gnomad_ht, how='left')
-    ht = ht.rename({'freq': f'gnomad_{data_type}.freq', 'popmax': f'gnomad_{data_type}.popmax',
-                   'faf': f'gnomad_{data_type}.faf', 'freq_meta': f'gnomad_{data_type}.freq_meta',
+    ht = ht.rename({'freq_1': f'gnomad_{data_type}.freq', 'popmax_1': f'gnomad_{data_type}.popmax',
+                   'faf_1': f'gnomad_{data_type}.faf', 'freq_meta_1': f'gnomad_{data_type}.freq_meta',
                    'freq_index_dict': f'gnomad_{data_type}.freq_index_dict',
                    'popmax_index_dict': f'gnomad_{data_type}.popmax_index_dict',
                    'faf_index_dict': f'gnomad_{data_type}.faf_index_dict'})
@@ -138,14 +148,18 @@ def main(args):
     mt = get_ukbb_data(data_source, freeze, meta_root='meta')
 
     if args.calculate_frequencies:
+        logger.info('Calculating frequencies')
         ht, sample_table = generate_frequency_data(mt, args.downsampling, args.by_platform)
 
+        #ht = ht.checkpoint(annotations_ht_path(data_source, freeze, 'ukb_freq'), args.overwrite)
         write_temp_gcs(ht, annotations_ht_path(data_source, freeze, 'ukb_freq'), args.overwrite)
         if args.downsampling:
             sample_table.write(sample_annotations_table_path(data_type, 'downsampling'), args.overwrite)
 
     if args.join_gnomad:
         ht = hl.read_table(annotations_ht_path(data_source, freeze, 'ukb_freq'))
+
+        logger.info('Joining UKBB ht to gnomAD exomes and genomes liftover hts')
         ht = join_gnomad(ht, 'exomes')
         ht = join_gnomad(ht, 'genomes')
         write_temp_gcs(ht, annotations_ht_path(data_source, freeze, 'join_freq'), args.overwrite)
