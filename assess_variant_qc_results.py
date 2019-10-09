@@ -34,7 +34,7 @@ def main(args):
         joint_ht = joint_ht.join(regeneron_ht, how='outer')
 
         # Filter to properly covered intervals
-        coverage_ht = hl.read_table(f'{sample_qc_prefix(data_source, freeze)}/interval_qc/coverage_by_target.ht')
+        coverage_ht = hl.read_table(interval_qc_path(data_source, freeze))
         bad_intervals_ht = coverage_ht.filter(coverage_ht.pct_samples_20x < 0.85, keep=True).key_by('locus')
         count1 = joint_ht.count()
         logger.info(f'Found {bad_intervals_ht.count()} low-coverage intervals out of {coverage_ht.count()} total intervals')
@@ -186,7 +186,7 @@ def main(args):
 
 
     if args.eval_sib_singletons:
-        broad_sib_ht = hl.read_table(f'{variant_qc_prefix(data_source, freeze)}/variant_annotations/sibling_singletons.test.ht')
+        broad_sib_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'sib_singletons.test'))
         joint_ht = hl.read_table(f'{variant_qc_prefix(data_source, freeze)}/assessment/joint_gnomad_broad_regeneron.{run_hash}.ht')
         broad_sib_ht = broad_sib_ht.annotate(**joint_ht[broad_sib_ht.key])
 

@@ -7,7 +7,6 @@ logger = logging.getLogger("utils")
 logger.setLevel(logging.INFO)
 
 
-
 def remove_hard_filter_samples(data_source: str, freeze: int, t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTable, hl.Table]:
     """
     Removes samples that failed hard filters from MatrixTable or Table. 
@@ -37,5 +36,25 @@ def remove_hard_filter_samples(data_source: str, freeze: int, t: Union[hl.Matrix
         t = t.annotate_rows(non_refs=hl.agg.count_where(t.GT.is_non_ref()))
         t = t.filter_rows(t.non_refs > 0).drop('non_refs')
     else:
-        t.filter((hl.len(ht[t.row_key].hard_filters) == 0))
+        t.filter((hl.len(ht[t.key].hard_filters) == 0))
     return t
+
+
+def annotate_relationship(relatedness_ht,
+                          first_degree_threshold=[0.1767767, 0.4],
+                          second_degree_threshold=0.08838835,
+                          ibd2_parent_offspring_threshold=0.14):
+    relatedness_ht = relatedness_ht.annotate(relationship_classification=hl.case()
+                                             .when((relatedness_ht.kin > second_degree_threshold) &
+                                                   (relatedness_ht.kin < first_degree_threshold[0]), 'Second-degree')
+                                             .when((relatedness_ht.kin > first_degree_threshold[0]) &
+                                                   (relatedness_ht.kin < first_degree_threshold[1]) &
+                                                   (relatedness_ht.ibd2 >= ibd2_parent_offspring_threshold),
+                                                   'Full-sibling')
+                                             .when((relatedness_ht.kin > first_degree_threshold[0]) &
+                                                   (relatedness_ht.kin < first_degree_threshold[1]) &
+                                                   (relatedness_ht.ibd2 < ibd2_parent_offspring_threshold),
+                                                   'Parent-child')
+                                             .default("None"))
+
+    return relatedness_ht

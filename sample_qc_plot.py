@@ -9,8 +9,28 @@ hv.extension('bokeh')
 
 from IPython.display import display_html
 
+relatedness_kin_cutoffs = {'Second-degree': 0.088388,
+                           'First-degree': 0.17678}
 
-def get_pc_plots(pcs_pd, pc_name, color_col='color', colors=None, palette=None, n_pcs=10, plot_height=600, plot_width=700, alpha=0.7):
+relatedness_kin_means = {'Second-degree': 0.125,
+                         'First-degree': 0.25}
+
+
+def get_pc_plots(pcs_pd,
+                 pc_name,
+                 color_col='color',
+                 colors=None,
+                 palette=None,
+                 n_pcs=10,
+                 plot_height=600,
+                 plot_width=700,
+                 alpha=0.7) -> Tabs:
+    """
+    Description
+    :param type parameter: Description
+    :return: Description of what is returned
+    :rtype: Tabs
+    """
     plots = []
     factors = pcs_pd[color_col].unique()
     factors.sort()
@@ -36,6 +56,7 @@ def get_pc_plots(pcs_pd, pc_name, color_col='color', colors=None, palette=None, 
         legend.click_policy = "hide"
         p.add_layout(legend, 'right')
         plots.append(Panel(child=p, title=f'PC{pc} vs PC{pc + 1}'))
+
     return Tabs(tabs=plots)
 
 
@@ -138,6 +159,81 @@ def get_outlier_plots(outlier_sample_qc,
     return tables, plots
 
 
+def kinship_distribution_plot(relatedness_ht: hl.Table,
+                              kin_label: str = "kin",
+                              degree_cutoffs: Dict[str, float] = relatedness_kin_cutoffs,
+                              degree_means: Dict[str, float] = relatedness_kin_means,
+                              plot_height: int = 600,
+                              plot_width: int = 800,
+                              label_font_size: int = 16,
+                              axis_font_size: int = 14) -> hv.Histogram:
+    """
+    Makes a kinship histogram indicating the kinship means and cutoffs for first and
+    second degree relatives with vertical lines.
+
+    :param Table relatedness_ht: hail Table containing kinship values between sample pairs
+    :param str kin_label: column name containing kinship values
+    :param dict of floats degree_cutoffs: Kinship cutoffs for second and first degree relatives
+    :param dict of floats degree_means: Kinship means for second and first degree relatives
+    :param int plot_height: plot height
+    :param int plot_width: plot width
+    :param int label_font_size: font size for axis labels and legend text
+    :param int axis_font_size: font size for axis tick labels
+    :return: a histogram of kinship values
+    :rtype: Histogram
+    """
+    relatedness_pd = relatedness_ht.to_pandas()
+    kin = relatedness_pd[kin_label]
+    kin = kin[~np.isnan(kin)]
+    frequencies, edges = np.histogram(kin, 200)
+    p = hv.Histogram((edges, frequencies))
+    height = p.data["Frequency"].max() - p.data["Frequency"].min()
+    colors = Category10[10]
+    for rel, cutoff in degree_cutoffs.items():
+        # p = p * hv.VLine(cutoff, label = f'{rel} cutoff').opts(line_dash='dashed')
+        p = p * hv.Spikes(([cutoff], [height]), vdims="height", label=f'{rel} cutoff').opts(line_dash='dashed',
+                                                                                            color=colors.pop(0),
+                                                                                            line_width=3)
+
+    for rel, d_mean in degree_means.items():
+        # p = p * hv.VLine(d_mean, label = f'{rel} mean')
+        p = p * hv.Spikes(([d_mean], [height]), vdims="height", label=f'{rel} mean').opts(color=colors.pop(0),
+                                                                                          line_width=3)
+
+    p.opts(xlabel='Kinship',
+           height=plot_height,
+           width=plot_width,
+           fontsize={'labels': label_font_size, 'xticks': axis_font_size, 'yticks': axis_font_size})
+
+    return p
+
+
+def stacked_bar_AF_proportion(ht,
+                              x_group, x_lab, y_lab,
+                              color_group,
+                              count_group="n",
+                              count_total="n",
+                              width=800,
+                              height=500,
+                              ylim=(0, 1),
+                              cmap='Colorblind'):
+    totals_ht = (ht.group_by(ht[x_group]).aggregate(bin_total=hl.agg.sum(ht[count_total]))).key_by(x_group)
+    frac_ht = (ht.group_by(ht[x_group], ht[color_group]).aggregate(
+        n_group=hl.agg.sum(ht[count_group])))
+    frac_ht = frac_ht.annotate(
+        fraction=frac_ht.n_group / totals_ht[frac_ht[x_group]].bin_total)
+    bars = hv.Bars(frac_ht.to_pandas(),
+                   [(x_group, x_lab), color_group],
+                   ('fraction', y_lab))
+    bars.opts(stacked=True,
+              width=width,
+              height=height,
+              xrotation=45,
+              ylim=(0, 1),
+              legend_position="right",
+              cmap=cmap)
+
+    return bars
 
 def display_tables(table_list):
     head = """<html>

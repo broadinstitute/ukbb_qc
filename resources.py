@@ -34,10 +34,9 @@ def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, adj: bool = Fa
         mt = filter_to_adj(mt)
 
     if meta_root:
-        meta_ht = hl.read_table(meta_ht_path('regeneron', freeze))  # TODO: set back to 'data_source' once Broad meta is created
+        meta_ht = hl.read_table(meta_ht_path(data_source, freeze))
         mt = mt.annotate_cols(**{meta_root: meta_ht[mt.s]})
-        mt = mt.annotate_cols(meta=mt.meta.annotate(high_quality=(hl.len(mt.meta.hard_filters) == 0) &
-                                                                 (hl.len(mt.meta.pop_platform_filters) == 0)))  # TODO: remove after meta is fixed
+
     return mt
 
 
@@ -125,7 +124,22 @@ array_sample_map = 'gs://broad-ukbb/resources/array/Project_26041_bridge.csv'
 ukbb_calling_intervals_path = 'gs://broad-ukbb/resources/ukbb_exome_calling.interval_list'
 broad_calling_intervals_path = 'gs://broad-ukbb/resources/broad_exome_calling.interval_list'
 lcr_intervals_path = 'gs://broad-ukbb/resources/LCRFromHengH38_chr1-22_XY.txt'
-ukbb_calling_intervals_summary = 'gs://broad-ukbb/regeneron.freeze_4/data/ukbb_exome_calling_intervals.summary.txt'
+ukbb_calling_intervals_summary = 'gs://broad-ukbb/resources/ukbb_exome_calling_intervals.summary.txt'
+
+
+def gnomad_ancestry_loadings_liftover_path(checkpoint: bool = False):
+    if checkpoint:
+        return 'gs://broad-ukbb/temp/gnomad_joint_unrelated_pca_loadings.ht'
+    else:
+        return 'gs://broad-ukbb/resources/gnomad.joint.unrelated.pca_loadings_lift.ht'
+
+
+def array_sample_map_ht(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/array_sample_map.ht'
+
+
+def get_lcr_intervals() -> hl.Table:
+    return hl.import_locus_intervals(lcr_intervals_path, reference_genome='GRCh38', skip_invalid_intervals=True)
 
 
 # Sample QC files
@@ -187,11 +201,11 @@ def qc_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, ld_pruned: bool =
     :rtype: str
     """
     ld_pruned = '.pruned' if ld_pruned else ''
-    return f'{sample_qc_prefix(data_source, freeze)}/high_callrate_common_biallelic_snps{ld_pruned}.mt'
+    return f'{sample_qc_prefix(data_source, freeze)}/qc_data/high_callrate_common_biallelic_snps{ld_pruned}.mt'
 
 
 def qc_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    return f'{sample_qc_prefix(data_source, freeze)}/high_callrate_common_biallelic_snps.ht'
+    return f'{sample_qc_prefix(data_source, freeze)}/qc_data/high_callrate_common_biallelic_snps.ht'
 
 
 def callrate_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
@@ -294,8 +308,13 @@ def get_ht_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE, name:
     return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/{name}.ht'
 
 
-def capture_ht_path() -> str:
-    return 'gs://broad-ukbb/broad.freeze_4/capture.ht'
+def capture_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    if data_source == 'broad' and freeze == 4:
+        return 'gs://broad-ukbb/resources/xgen_plus_spikein.Homo_sapiens_assembly38.targets.pad50.intervals.ht'
+    elif data_source == 'regeneron':
+        return 'gs://broad-ukbb/resources/ukbb_exome_calling_intervals.summary.ht'
+    else:
+        raise DataException("No interval file specified for this data_source and freeze yet")
 
 
 def hg38_selfchain_path() -> str:

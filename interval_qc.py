@@ -22,13 +22,11 @@ def main(args):
     else:
         mt = filter_to_autosomes(mt)
 
-    ht = hl.import_table(ukbb_calling_intervals_summary, impute=True)
-    ht = ht.key_by(locus=hl.locus_interval(ht.seqnames, ht.start, ht.end, includes_end=True, reference_genome='GRCh38'))
-    ht = ht.select('target_type', 'region_type', 'target_id')
+    ht = hl.read_table(capture_ht_path(data_source, freeze))
+    ht = ht.annotate(interval=hl.str(ht.interval))
     mt = mt.annotate_rows(**ht[mt.locus])
-    ht = ht.annotate(chr=ht.locus.start.contig).key_by('target_id').distinct()
-
-    target_mt = (mt.group_rows_by('target_id')
+    ht = ht.key_by('interval')
+    target_mt = (mt.group_rows_by('interval')
                  .partition_hint(1000)
                  .aggregate_entries(mean_dp=hl.agg.filter((hl.is_defined(mt.DP)) & (~hl.is_nan(mt.DP)),
                                                           hl.agg.mean(mt.DP)),
@@ -47,7 +45,7 @@ def main(args):
                                         pct_samples_30x=hl.agg.fraction(target_mt.mean_dp >= 30))
 
     target_ht = target_mt.rows()
-    target_ht = target_ht.annotate(**ht[target_ht.target_id])
+    target_ht = target_ht.annotate(**ht[target_ht.interval])
     target_ht = target_ht.naive_coalesce(100)
 
     target_ht.write(interval_qc_path(data_source, freeze, chrom=args.chromosome), overwrite=args.overwrite)
