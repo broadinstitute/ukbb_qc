@@ -514,18 +514,6 @@ def binned_concordance_path(data_source: str, freeze: int, truth_sample: str, me
     return f'{variant_qc_prefix(data_source, freeze)}/rf/{truth_sample}.{metric}.binned_concordance.ht'
 
 
-def annotations_ht_path(data_source: str, freeze: int, annotation_type: str):
-    """
-    Get sites-level annotations
-    :param str data_source: 'broad' or 'regeneron'
-    :param int freeze: UKBB tranche version
-    :param str annotation_type: One of "vep", "qc_stats", "family_stats", "frequencies", "rf", "omes_concordance", "NA12878_concordance", "syndip_concordance", "omes_by_platform_concordance"
-    :return: Path to annotations Table
-    :rtype: str
-    """
-    return f'{variant_qc_prefix(data_source, freeze)}/annotations/{annotation_type}.ht'
-
-
 def omni_mt_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad-public/truth-sets/hail-{0}/1000G_omni2.5.hg38.mt'.format(hail_version)
 
@@ -544,6 +532,24 @@ def hapmap_ht_path():
 
 def kgp_high_conf_snvs_mt_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad-public/truth-sets/hail-{0}/1000G_phase1.snps.high_confidence.hg38.mt'.format(hail_version)
+
+
+def release_ht_path(data_soure: str, freeze: int, nested=True, temp=False):
+    '''
+    Fetch filepath for release (variant-only) Hail Tables
+
+    :param str data_source: 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param bool nested: If True, fetch Table in which variant annotations (e.g., freq, popmax, faf, and age histograms)
+        are in array format ("nested"); if False, fetch Table in which nested variant annotations are unfurled
+    :param bool temp: If True, fetch Table in which nested variant annotations are unfurled but listed under 'info' rather
+        than at the top level; used for sanity-checking sites
+    :return: Filepath for desired Hail Table
+    :rtype: str
+    '''
+    tag = 'nested' if nested else 'flat'
+    tag = tag + '.temp' if temp else tag
+    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/{data_source}.freeze_{freeze}.{tag}.sites.ht'
 
 
 class DataException(Exception):
