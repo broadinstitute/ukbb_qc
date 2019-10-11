@@ -560,7 +560,7 @@ def release_ht_path(data_soure: str, freeze: int, nested=True, temp=False) -> st
     return f'{release_prefix(data_source, freeze)}/ht/{tag}.sites.ht'
 
 
-def release_vcf_path(data_source: str, freeze: int, release_tag=RELEASE_VERSION, contig=None) -> str:
+def release_vcf_path(data_source: str, freeze: int, contig=None) -> str:
     '''
     Fetch filepath for release (variant-only) VCFs
 
