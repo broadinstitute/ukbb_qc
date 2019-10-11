@@ -224,7 +224,7 @@ if __name__ == '__main__':
     # parser.add_argument('--vep', help='Runs VEP', action='store_true')
     parser.add_argument('--generate_allele_data', help='Calculates allele data', action='store_true')
     parser.add_argument('--generate_qc_annotations', help='Calculates QC annotations', action='store_true')
-    # parser.add_argument('--generate_qual_hists', help='Calculates GQ, DP, AB histograms per variant', action='store_true')
+    parser.add_argument('--generate_qual_hists', help='Calculates GQ, DP, AB histograms per variant', action='store_true')
     parser.add_argument('--generate_call_stats', help='Calculates call stats', action='store_true')
     parser.add_argument('--generate_family_stats', help='Calculates family stats', action='store_true')
     parser.add_argument('--generate_sibling_singletons', help='Creates a hail Table of variants that are sibling singletons', action='store_true')
