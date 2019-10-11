@@ -66,7 +66,7 @@ def generate_frequency_data(mt: hl.MatrixTable, calculate_downsampling: bool = F
              (mt.downsampling[f'{pop_field}_idx'] < ds) & (mt.meta.gnomad_pc_project_pop == pop))
             for ds in downsamplings for pop, pop_count in cut_data.gnomad_pc_project_pop.items() if ds <= pop_count
         ])
-    mt = mt.select_cols(group_membership=[x[1] for x in sample_group_filters], project_id=mt.meta.project_id, age=mt.meta.age)
+    mt = mt.select_cols(group_membership=[x[1] for x in sample_group_filters], age=mt.meta.age)
     mt = mt.select_rows()
 
     def get_meta_expressions(sample_group_filters):
@@ -151,7 +151,6 @@ def main(args):
         logger.info('Calculating frequencies')
         ht, sample_table = generate_frequency_data(mt, args.downsampling, args.by_platform)
 
-        #ht = ht.checkpoint(annotations_ht_path(data_source, freeze, 'ukb_freq'), args.overwrite)
         write_temp_gcs(ht, annotations_ht_path(data_source, freeze, 'ukb_freq'), args.overwrite)
         if args.downsampling:
             sample_table.write(sample_annotations_table_path(data_type, 'downsampling'), args.overwrite)
