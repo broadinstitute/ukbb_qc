@@ -172,7 +172,7 @@ def main(args):
         #mt = get_gnomad_data(data_type, raw=True, split=False, release_samples=True)
         mt = get_ukbb_data(data_source, freeze, raw=True, split=False)
         ht = generate_qual_hists(mt)
-        write_temp_gcs(ht, var_annotations_ht_path(data_type, 'qual_hists'), args.overwrite)
+        write_temp_gcs(ht, var_annotations_ht_path(data_source, freeze, 'qual_hists'), args.overwrite)
 
     if args.generate_call_stats:
         mt = get_ukbb_data(data_source, freeze, meta_root='meta')
