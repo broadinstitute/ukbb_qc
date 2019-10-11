@@ -168,10 +168,11 @@ def main(args):
         mt = generate_qc_annotations(mt, all_annotations=args.calculate_all_annotations, medians=args.calculate_medians)
         mt.write(var_annotations_ht_path(data_source, freeze, 'qc_stats'), stage_locally=True, overwrite=args.overwrite)
 
-    # if args.generate_qual_hists:  # CPU-hours: 4000 (E), 8000 (G)
-    #     mt = get_gnomad_data(data_type, raw=True, split=False, release_samples=True)
-    #     ht = generate_qual_hists(mt)
-    #     write_temp_gcs(ht, annotations_ht_path(data_type, 'qual_hists'), args.overwrite)
+    if args.generate_qual_hists:  # CPU-hours: 4000 (E), 8000 (G)
+        #mt = get_gnomad_data(data_type, raw=True, split=False, release_samples=True)
+        mt = get_ukbb_data(data_source, freeze, raw=True, split=False)
+        ht = generate_qual_hists(mt)
+        write_temp_gcs(ht, var_annotations_ht_path(data_type, 'qual_hists'), args.overwrite)
 
     if args.generate_call_stats:
         mt = get_ukbb_data(data_source, freeze, meta_root='meta')
