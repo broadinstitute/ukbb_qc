@@ -151,7 +151,7 @@ def main(args):
         logger.info('Calculating frequencies')
         ht, sample_table = generate_frequency_data(mt, args.downsampling, args.by_platform)
 
-        write_temp_gcs(ht, annotations_ht_path(data_source, freeze, 'ukb_freq'), args.overwrite)
+        write_temp_gcs(ht, var_annotations_ht_path(data_source, freeze, 'ukb_freq'), args.overwrite)
         if args.downsampling:
             sample_table.write(sample_annotations_table_path(data_type, 'downsampling'), args.overwrite)
 
@@ -161,7 +161,7 @@ def main(args):
         logger.info('Joining UKBB ht to gnomAD exomes and genomes liftover hts')
         ht = join_gnomad(ht, 'exomes')
         ht = join_gnomad(ht, 'genomes')
-        write_temp_gcs(ht, annotations_ht_path(data_source, freeze, 'join_freq'), args.overwrite)
+        write_temp_gcs(ht, var_annotations_ht_path(data_source, freeze, 'join_freq'), args.overwrite)
 
 
 if __name__ == '__main__':
