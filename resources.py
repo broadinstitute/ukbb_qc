@@ -520,9 +520,9 @@ def binned_concordance_path(data_source: str, freeze: int, truth_sample: str, me
     return f'{variant_qc_prefix(data_source, freeze)}/rf/{truth_sample}.{metric}.binned_concordance.ht'
 
 
-
 def omni_mt_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad-public/truth-sets/hail-{0}/1000G_omni2.5.hg38.mt'.format(hail_version)
+
 
 def mills_mt_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad-public/truth-sets/hail-{0}/Mills_and_1000G_gold_standard.indels.hg38.mt'.format(hail_version)
@@ -538,6 +538,48 @@ def hapmap_ht_path():
 
 def kgp_high_conf_snvs_mt_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad-public/truth-sets/hail-{0}/1000G_phase1.snps.high_confidence.hg38.mt'.format(hail_version)
+
+
+def release_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    if data_source not in DATA_SOURCES:
+        raise DataException("This data_source is currently not present")
+    if freeze not in FREEZES:
+        raise DataException("This freeze is currently not present")
+    return  f'gs://broad-ukbb/{data_source}.freeze_{freeze}/release/'
+
+
+def release_ht_path(data_soure: str, freeze: int, nested=True, temp=False) -> str:
+    '''
+    Fetch filepath for release (variant-only) Hail Tables
+
+    :param str data_source: 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param bool nested: If True, fetch Table in which variant annotations (e.g., freq, popmax, faf, and age histograms)
+        are in array format ("nested"); if False, fetch Table in which nested variant annotations are unfurled
+    :param bool temp: If True, fetch Table in which nested variant annotations are unfurled but listed under 'info' rather
+        than at the top level; used for sanity-checking sites
+    :return: Filepath for desired Hail Table
+    :rtype: str
+    '''
+    tag = 'nested' if nested else 'flat'
+    tag = tag + '.temp' if temp else tag
+    return f'{release_prefix(data_source, freeze)}/ht/{tag}.sites.ht'
+
+
+def release_vcf_path(data_source: str, freeze: int, contig=None) -> str:
+    '''
+    Fetch filepath for release (variant-only) VCFs
+
+    :param str data_source: 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param str contig: String containing the name of the desired reference contig
+    :return: Filepath for the desired VCF
+    :rtype: str
+    '''
+    if contig:
+        return f'{release_prefix(data_source, freeze)}/vcf/sites.{contig}.vcf.bgz'
+    else:
+        return f'gs://gnomad-public/release/{release}/vcf/{data_type}/gnomad.{data_type}.{release_tag}.sites.vcf.bgz'
 
 
 class DataException(Exception):
