@@ -429,7 +429,7 @@ def main(args):
 
     
     if args.sanity_check_sites:
-        ht = hl.read_table(release_ht_path(data_type, nested=False, temp=True))
+        ht = hl.read_table(release_ht_path(data_source, freeze, nested=False, temp=True))
         sanity_check_ht(ht, missingness_threshold=0.5, verbose=args.verbose)
 
 
