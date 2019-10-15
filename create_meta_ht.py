@@ -45,6 +45,25 @@ def join_tables(
     return left_ht.key_by(left_key).join(right_ht.key_by(right_key), how=join_type)
 
 
+def get_age_ht(data_source: str, freeze: int) -> hl.Table:
+    """
+    Pull age information from UKBB phenotype file
+
+    :param str data_source: regeneron or broad
+    :param int freeze: One of data freezes
+    :return: Table with age at recruitment per sample
+    :rtype: Table
+    """
+    ukbb_phenotypes = hl.import_table(ukbb_phenotype_path, impute=True)
+    ukbb_phenotypes = ukbb_phenotypes.key_by(s_old=hl.str(ukbb_phenotypes['f.eid']))
+    ukbb_age = ukbb_phenotypes.select('f.21022.0.0')
+    sample_map_ht = hl.read_table(array_sample_map_ht(data_source, freeze))
+    sample_map_ht = sample_map_ht.key_by('ukbb_app_26041_id')
+    ukbb_age = ukbb_age.key_by(s=sample_map_ht[ukbb_age.key].s)
+    ukbb_age = ukbb_age.rename({'f.21022.0.0': 'age'})
+    return ukbb_age
+
+
 def main(args):
 
     data_source = args.data_source
@@ -81,6 +100,10 @@ def main(args):
     logger.info('Joining population PC ht into current join')
     left_ht = join_tables(left_ht, 's', right_ht, 's', 'outer')
 
+    logger.info('Getting age information from phenotype file')
+    right_ht = get_age_ht(data_source, freeze)
+    left_ht = join_tables(left_ht, 's', right_ht, 's', 'left') 
+
     logger.info('Creating checkpoint')
     left_ht = left_ht.checkpoint(get_ht_checkpoint_path(data_source, freeze, 'intermediate_ht_join'), overwrite=True)
 
@@ -115,6 +138,7 @@ def main(args):
                                             (hl.len(left_ht.pop_platform_filters) == 0)))
     logger.info('Writing out meta ht')
     left_ht.write(meta_ht_path(data_source, freeze), overwrite=args.overwrite)
+    logger.info(f'Final count: {left_ht.count()}')
     logger.info('Complete') 
 
 
