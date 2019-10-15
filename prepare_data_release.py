@@ -11,12 +11,16 @@ logger.setLevel(logging.INFO)
 
 
 GROUPS = ['adj', 'raw']
-SEXES = ['male', 'female']
+SEXES = ['male', 'female', 'ambiguous_sex', 'sex_aneuploidy']
 POPS = ['afr', 'amr', 'asj', 'eas', 'fin', 'nfe', 'oth', 'sas']
 FAF_POPS = ['afr', 'amr', 'eas', 'nfe', 'sas']
-NFE_SUBPOPS = ['onf', 'bgr', 'swe', 'nwe', 'seu', 'est']
-EAS_SUBPOPS = ['kor', 'oea', 'jpn']
-
+# hybrid pops (freeze 4): 0 (afr -- Caribbean/African), 1 (sas/eas -- Chinese), 2 (afr -- White and Black African/Caribbean), 3 (sas/eas -- Indian/Pakistani)
+# 4: (asj/nfe/amr -- British/other white), 5: (nfe/amr --other/other Asian), 6 (nfe -- British), 7 (nfe/fin -- British), 8 (nfe/fin -- other white)
+# 9: (nfe -- British/Irish)
+NFE_SUBPOPS = ['4', '6', '7', '8', '9']
+AFR_SUBPOPS = ['0', '2']
+SAS_SUBPOPS = ['3']
+EAS_SUBPOPS = ['1']
 SORT_ORDER = ['popmax', 'group', 'pop', 'subpop', 'sex']
 
 
@@ -132,10 +136,10 @@ def sanity_check_ht(ht: hl.Table, missingness_threshold=0.5, verbose=False):
     logger.info('RAW AND ADJ CHECKS:')
     for subfield in ['AC', 'AN', 'AF']:
         # Check AC, AN, AF > 0
-        generic_field_check(ht, (ht.info[f'gnomad_{subfield}_raw'] <= 0), f'gnomad {subfield}_raw > 0',
-                            [f'info.gnomad_{subfield}_raw'], verbose)
-        generic_field_check(ht, (ht.info[f'gnomad_{subfield}_adj'] < 0), f'gnomad {subfield}_adj >= 0',
-                            [f'info.gnomad_{subfield}_adj', 'filters'], verbose)
+        generic_field_check(ht, (ht.info[f'{subfield}_raw'] <= 0), f'{subfield}_raw > 0',
+                            [f'info.{subfield}_raw'], verbose)
+        generic_field_check(ht, (ht.info[f'{subfield}_adj'] < 0), f'{subfield}_adj >= 0',
+                            [f'info.{subfield}_adj', 'filters'], verbose)
 
     for subfield in ['AC', 'AN', 'nhomalt']:
         # Check AC_raw >= AC adj
@@ -328,7 +332,8 @@ def get_age_distributions():
 def main(args):
     hl.init(log='/release.log', default_reference='GRCh38')
 
-    #import_ht_path = release_ht_path(data_type) if args.include_subset_frequencies else release_ht_path(data_type, with_subsets=False)
+    data_source = args.data_source
+    freeze = args.freeze
     age_hist_data = get_age_distributions()
 
     if args.prepare_internal_ht:
@@ -346,11 +351,11 @@ def main(args):
         ht = prepare_table_annotations(freq_ht, rf_ht, vep_ht, dbsnp_ht, hist_ht, index_dict, allele_ht)
         ht = ht.annotate_globals(freq_index_dict=make_index_dict(ht), faf_index_dict=make_faf_index_dict(ht),
                                  age_distribution=age_hist_data)
-        ht.write(release_ht_path(data_type), args.overwrite)
+        ht.write(release_ht_path(data_source, freeze), args.overwrite)
 
 
     if args.prepare_release_vcf:
-        ht = hl.read_table(import_ht_path)
+        ht = hl.read_table(release_ht_path(data_source, freeze))
         bin_edges = make_hist_bin_edges_expr(ht)
 
         # Make INFO dictionary for VCF
@@ -367,7 +372,8 @@ def main(args):
         INFO_DICT.update(make_hist_dict(bin_edges))
 
         # Adjust keys to remove gnomad, adj tags before exporting to VCF
-        new_info_dict = {i.replace('gnomad_', '').replace('_adj', ''): j for i,j in INFO_DICT.items()}
+        #new_info_dict = {i.replace('gnomad_', '').replace('_adj', ''): j for i,j in INFO_DICT.items()}
+        new_info_dct = {i.replace('_adj', ''): j for i,j in INFO_DICT.items()}
 
         # Construct INFO field
         ht = ht.annotate(info=hl.struct(**make_info_expr(ht)))
@@ -389,10 +395,10 @@ def main(args):
         rg = hl.get_reference('GRCh38')
         contigs = rg.contigs[:24] # autosomes + X/Y
         #contigs = hl.eval(ht.aggregate(hl.agg.collect_as_set(ht.locus.contig)))
-
         ht = ht.drop('vep')
         row_annots = list(ht.row.info)
-        new_row_annots = [x.replace('gnomad_', '').replace('_adj', '') for x in row_annots]
+        #new_row_annots = [x.replace('gnomad_', '').replace('_adj', '') for x in row_annots]
+        new_row_annots = [x.replace('_adj', '') for x in row_annots]
         info_annot_mapping = dict(zip(new_row_annots, [ht.info[f'{x}'] for x in row_annots]))
         ht = ht.transmute(info=hl.struct(**info_annot_mapping))
 
@@ -429,20 +435,15 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--exomes', help='Input MT is exomes. One of --exomes or --genomes is required.', action='store_true')
-    parser.add_argument('--genomes', help='Input MT is genomes. One of --exomes or --genomes is required.', action='store_true')
+    parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
+    parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE, type=int)
     parser.add_argument('--prepare_internal_ht', help='Prepare internal HailTable', action='store_true')
-    parser.add_argument('--add_subset_frequencies', help='Add frequency annotations for gnomAD subsets', action='store_true')
-    parser.add_argument('--include_subset_frequencies', help='Include frequency annotations for gnomAD subsets in release', action='store_true')
     parser.add_argument('--prepare_release_vcf', help='Prepare release VCF', action='store_true')
     parser.add_argument('--sanity_check_sites', help='Run sanity checks function', action='store_true')
     parser.add_argument('--verbose', help='Run sanity checks function with verbose output', action='store_true')
     parser.add_argument('--slack_channel', help='Slack channel to post results and notifications to.')
     parser.add_argument('--overwrite', help='Overwrite data', action='store_true')
     args = parser.parse_args()
-
-    if int(args.exomes) + int(args.genomes) != 1:
-        sys.exit('Error: One and only one of --exomes or --genomes must be specified')
 
     if args.slack_channel:
         try_slack(args.slack_channel, main, args)
