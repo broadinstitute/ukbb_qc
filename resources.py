@@ -120,7 +120,13 @@ def get_array_data_path(extension: str, chrom: str) -> str:
         return 'gs://broad-ukbb/resources/array/ukb26041_cal_chr22_v2_s488292.fam'
 
 
-array_sample_map = 'gs://broad-ukbb/resources/array/Project_26041_bridge.csv'
+def array_sample_map(freeze: int):
+    if freeze == 4:
+        return 'gs://broad-ukbb/resources/array/Project_26041_bridge.csv'
+    elif freeze == 5:
+        return 'gs://broad-ukbb/resources/array/linking_file_200K_withbatch.csv'
+
+
 ukbb_calling_intervals_path = 'gs://broad-ukbb/resources/ukbb_exome_calling.interval_list'
 broad_calling_intervals_path = 'gs://broad-ukbb/resources/broad_exome_calling.interval_list'
 lcr_intervals_path = 'gs://broad-ukbb/resources/LCRFromHengH38_chr1-22_XY.txt'
