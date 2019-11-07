@@ -340,7 +340,7 @@ def main(args):
         
         freq_ht = hl.read_table(var_annotations_ht_path(data_type, 'join_freq'))
         index_dict = make_index_dict(freq_ht)
-        rf_ht = hl.read_table(annotations_ht_path(data_type, 'rf')).drop('info_ac', 'ac', 'ac_raw')
+        rf_ht = hl.read_table(var_annotations_ht_path(data_type, 'rf')).drop('info_ac', 'ac', 'ac_raw')
         vep_ht = hl.read_table(var_annotations_ht_path(data_type, 'vep'))
         dbsnp_ht = hl.read_table(dbsnp_ht_path)
         hist_ht = hl.read_table(var_annotations_ht_path(data_type, 'qual_hists'))
