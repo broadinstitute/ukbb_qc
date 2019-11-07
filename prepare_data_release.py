@@ -1,6 +1,7 @@
 from gnomad_hail import *
 from gnomad_hail.resources.variant_qc import *
 from gnomad_qc.variant_qc.prepare_data_release import * 
+from ukbb_qc.resources import *
 import copy
 import itertools
 
