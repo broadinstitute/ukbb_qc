@@ -102,7 +102,7 @@ def sanity_check_ht(ht: hl.Table, missingness_threshold=0.5, verbose=False):
     '''
     n_sites = ht.count()
     contigs = ht.aggregate(hl.agg.collect_as_set(ht.locus.contig))
-    logger.info(f'Found {n_sites} sites in {data_type} for contigs {contigs}')
+    logger.info(f'Found {n_sites} sites in {data_source} for contigs {contigs}')
     info_metrics = list(ht.row.info)
     non_info_metrics = list(ht.row)
     non_info_metrics.remove('info')
@@ -326,7 +326,7 @@ def get_age_distributions(data_source, freeze):
     sample_map_ht = sample_map_ht.key_by('ukbb_app_26041_id')
     ukbb_age = ukbb_age.key_by(s=sample_map_ht[ukbb_age.key].s)
 
-    age_hist_data = ukbb_age.aggregate(hl.agg.hist(ukbb_age.age, 30, 80, 10))
+    age_hist_data = ukbb_age.aggregate(hl.agg.hist(ukbb_age['f.21022.0.0'], 30, 80, 10))
     age_hist_data.bin_freq.insert(0, age_hist_data.n_smaller)
     age_hist_data.bin_freq.append(age_hist_data.n_larger)
     return age_hist_data.bin_freq
@@ -341,14 +341,14 @@ def main(args):
 
     if args.prepare_internal_ht:
         
-        freq_ht = hl.read_table(var_annotations_ht_path(data_type, 'join_freq'))
+        freq_ht = hl.read_table(var_annotations_ht_path(data_source, 'join_freq'))
         index_dict = make_index_dict(freq_ht)
-        rf_ht = hl.read_table(var_annotations_ht_path(data_type, 'rf')).drop('info_ac', 'ac', 'ac_raw')
-        vep_ht = hl.read_table(var_annotations_ht_path(data_type, 'vep'))
+        rf_ht = hl.read_table(var_annotations_ht_path(data_source, 'rf')).drop('info_ac', 'ac', 'ac_raw')
+        vep_ht = hl.read_table(var_annotations_ht_path(data_source, 'vep'))
         dbsnp_ht = hl.read_table(dbsnp_ht_path)
-        hist_ht = hl.read_table(var_annotations_ht_path(data_type, 'qual_hists'))
+        hist_ht = hl.read_table(var_annotations_ht_path(data_source, 'qual_hists'))
         hist_ht = hist_ht.select('gq_hist_alt', 'gq_hist_all', 'dp_hist_alt', 'dp_hist_all', 'ab_hist_alt')
-        allele_ht = hl.read_table(var_annotations_ht_path(data_type, 'allele_data'))
+        allele_ht = hl.read_table(var_annotations_ht_path(data_source, 'allele_data'))
 
         logger.info('Adding annotations...')
         ht = prepare_table_annotations(freq_ht, rf_ht, vep_ht, dbsnp_ht, hist_ht, index_dict, allele_ht)
@@ -385,16 +385,16 @@ def main(args):
 
         # Select relevant fields for VCF export
         ht = ht.select('info', 'filters', 'rsid', 'qual', 'vep')
-        ht.write(release_ht_path(data_type, nested=False, temp=True), args.overwrite)
+        ht.write(release_ht_path(data_source, nested=False, temp=True), args.overwrite)
 
         # Move 'info' annotations to top level for browser release
-        ht = hl.read_table(release_ht_path(data_type, nested=False, temp=True))
+        ht = hl.read_table(release_ht_path(data_source, nested=False, temp=True))
         ht = ht.transmute(**ht.info)
         ht = ht.select_globals('rf')
-        ht.write(release_ht_path(data_type, nested=False), args.overwrite)
+        ht.write(release_ht_path(data_source, nested=False), args.overwrite)
 
         # Remove gnomad_ prefix for VCF export
-        ht = hl.read_table(release_ht_path(data_type, nested=False, temp=True))
+        ht = hl.read_table(release_ht_path(data_source, nested=False, temp=True))
         rg = hl.get_reference('GRCh38')
         contigs = rg.contigs[:24] # autosomes + X/Y
         #contigs = hl.eval(ht.aggregate(hl.agg.collect_as_set(ht.locus.contig)))
@@ -411,7 +411,7 @@ def main(args):
                                              *ht.info.drop('AC', 'AN', 'AF', 'rf_tp_probability', *drop_hists)))
 
         # Add VEP annotations
-        vep_csq_ht = hl.read_table(annotations_ht_path(data_type, 'vep_csq'))
+        vep_csq_ht = hl.read_table(annotations_ht_path(data_source, 'vep_csq'))
         new_info_dict.update({'vep': {'Description': hl.eval(vep_csq_ht.globals.vep_csq_header)}})
         header_dict = {'info': new_info_dict,
                        'filter': make_filter_dict(ht)}
@@ -425,10 +425,10 @@ def main(args):
         for contig in contigs:
             contig_ht = hl.filter_intervals(ht, [hl.parse_locus_interval(contig)])
             mt = hl.MatrixTable.from_rows_table(contig_ht).key_cols_by(s='foo')
-            hl.export_vcf(mt, release_vcf_path(data_type, contig=contig), metadata=header_dict)
+            hl.export_vcf(mt, release_vcf_path(data_source, contig=contig), metadata=header_dict)
 
         mt = hl.MatrixTable.from_rows_table(ht).key_cols_by(s='foo')
-        hl.export_vcf(mt, release_vcf_path(data_type), metadata=header_dict)
+        hl.export_vcf(mt, release_vcf_path(data_source), metadata=header_dict)
 
     
     if args.sanity_check_sites:
