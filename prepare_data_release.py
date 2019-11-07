@@ -310,11 +310,12 @@ def make_index_dict(ht):
     return index_dict
 
 
-def get_age_distributions(data_source):
+def get_age_distributions(data_source, freeze):
     """
     Get background distribution of age (field 21022 is age at recruitment)
 
     :param str data_source: One of regeneron or broad
+    :param int freeze: One of data freezes
     :return: pipe-delimited string with ages in pre-determined bins (<30, 30-35, ..., 75-80, 80+)
     :rtype: str
     """
@@ -336,7 +337,7 @@ def main(args):
 
     data_source = args.data_source
     freeze = args.freeze
-    age_hist_data = get_age_distributions(data_source)
+    age_hist_data = get_age_distributions(data_source, freeze)
 
     if args.prepare_internal_ht:
         
