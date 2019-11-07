@@ -542,7 +542,7 @@ def release_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return  f'gs://broad-ukbb/{data_source}.freeze_{freeze}/release/'
 
 
-def release_ht_path(data_soure: str, freeze: int, nested=True, temp=False) -> str:
+def release_ht_path(data_source: str, freeze: int, nested=True, temp=False) -> str:
     '''
     Fetch filepath for release (variant-only) Hail Tables
 
