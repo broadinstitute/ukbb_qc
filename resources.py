@@ -124,6 +124,10 @@ array_sample_map = 'gs://broad-ukbb/resources/array/Project_26041_bridge.csv'
 ukbb_calling_intervals_path = 'gs://broad-ukbb/resources/ukbb_exome_calling.interval_list'
 broad_calling_intervals_path = 'gs://broad-ukbb/resources/broad_exome_calling.interval_list'
 lcr_intervals_path = 'gs://broad-ukbb/resources/LCRFromHengH38_chr1-22_XY.txt'
+hg38_selfchain_path = 'gs://broad-ukbb/resources/hg38_self_chain_nosamepos_withalts_gt10k.bed.gz'
+hg38_segdup_path = 'gs://broad-ukbb/resources/hg38.segdups_sorted_merged_gt10kb.bed.gz'
+
+
 ukbb_calling_intervals_summary = 'gs://broad-ukbb/resources/ukbb_exome_calling_intervals.summary.txt'
 
 
@@ -140,6 +144,12 @@ def array_sample_map_ht(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
 
 def get_lcr_intervals() -> hl.Table:
     return hl.import_locus_intervals(lcr_intervals_path, reference_genome='GRCh38', skip_invalid_intervals=True)
+
+def get_selfchain_intervals() -> hl.Table:
+    return hl.import_locus_intervals(hg38_selfchain_path, reference_genome='GRCh38', skip_invalid_intervals=True)
+
+def get_segdup_intervals() -> hl.Table:
+    return hl.import_locus_intervals(hg38_segdup_path, reference_genome='GRCh38', skip_invalid_intervals=True)
 
 
 # Sample QC files
@@ -315,10 +325,6 @@ def capture_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
         return 'gs://broad-ukbb/resources/ukbb_exome_calling_intervals.summary.ht'
     else:
         raise DataException("No interval file specified for this data_source and freeze yet")
-
-
-def hg38_selfchain_path() -> str:
-    return 'gs://broad-ukbb/resources/hg38_self_chain_nosamepos_withalts_gt10k.bed.gz'
 
 
 def get_mt_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE, name: str = None) -> str:
@@ -542,7 +548,7 @@ def release_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
         raise DataException("This data_source is currently not present")
     if freeze not in FREEZES:
         raise DataException("This freeze is currently not present")
-    return  f'gs://broad-ukbb/{data_source}.freeze_{freeze}/release/'
+    return  f'gs://broad-ukbb/{data_source}.freeze_{freeze}/release'
 
 
 def release_mt_path(data_source: str, freeze: int, nested=True, temp=False) -> str:
@@ -563,7 +569,7 @@ def release_mt_path(data_source: str, freeze: int, nested=True, temp=False) -> s
     return f'{release_prefix(data_source, freeze)}/mt/{tag}.mt'
 
 
-def release_mt_path(data_source: str, freeze: int, nested=True, temp=False) -> str:
+def release_ht_path(data_source: str, freeze: int, nested=True, temp=False) -> str:
     '''
     Fetch filepath for release Hail Tables
 
