@@ -25,6 +25,32 @@ EAS_SUBPOPS = ['1']
 SORT_ORDER = ['popmax', 'group', 'pop', 'subpop', 'sex']
 
 
+def prepare_table_annotations(freq_ht: hl.Table, rf_ht: hl.Table, vep_ht: hl.Table, dbsnp_ht: hl.Table, hist_ht: hl.Table,
+                              index_dict, allele_ht: hl.Table) -> hl.Table:
+    '''
+    Join Tables with variant annotations for gnomAD release, dropping sensitive annotations and keeping only variants with nonzero AC
+    :param Table freq_ht: Table with frequency annotations
+    :param Table rf_ht: Table with random forest variant annotations
+    :param Table vep_ht: Table with VEP variant annotations
+    :param Table dbsnp_ht: Table with updated dbSNP rsid annotations
+    :param Table hist_ht: Table with quality histogram annotations
+    :param dict index_dict: Dictionary containing index values for each entry in the frequency HT array, keyed by metadata label
+    :param Table allele_ht: Table containing allele annotations
+    :return: Table containing joined annotations
+    :rtype: Table
+    '''
+    freq_ht = hl.filter_intervals(freq_ht, [hl.parse_locus_interval('chrM')], keep=False)
+    raw_idx = index_dict['raw']
+    ht = freq_ht.filter(freq_ht.freq[raw_idx].AC <= 0, keep=False)
+    ht = flag_problematic_regions(ht)  # NOTE: waiting on hail bug to be fixed
+
+    ht = ht.annotate(**rf_ht[ht.key], **hist_ht[ht.key], qual=allele_ht[ht.key].qual, vep=vep_ht[ht.key].vep,
+                     allele_info=allele_ht[ht.key].info.drop('AC', 'AN', 'AF', 'MLEAC', 'MLEAF'),
+                     rsid=dbsnp_ht[ht.locus].rsid)
+    ht = ht.annotate_globals(rf=rf_ht.index_globals())
+    return ht
+
+
 def sample_sum_check(ht: hl.Table, prefix: str, label_groups: Dict[str, List[str]], verbose: bool, subpop=None):
     '''
     Compute afresh the sum of annotations for a specified group of annotations, and compare to the annotated version;
@@ -341,14 +367,14 @@ def main(args):
 
     if args.prepare_internal_ht:
         
-        freq_ht = hl.read_table(var_annotations_ht_path(data_source, 'join_freq'))
+        freq_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'join_freq'))
         index_dict = make_index_dict(freq_ht)
-        rf_ht = hl.read_table(var_annotations_ht_path(data_source, 'rf')).drop('info_ac', 'ac', 'ac_raw')
-        vep_ht = hl.read_table(var_annotations_ht_path(data_source, 'vep'))
+        rf_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'rf'))
+        vep_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vep'))
         dbsnp_ht = hl.read_table(dbsnp_ht_path)
-        hist_ht = hl.read_table(var_annotations_ht_path(data_source, 'qual_hists'))
+        hist_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'qual_hists'))
         hist_ht = hist_ht.select('gq_hist_alt', 'gq_hist_all', 'dp_hist_alt', 'dp_hist_all', 'ab_hist_alt')
-        allele_ht = hl.read_table(var_annotations_ht_path(data_source, 'allele_data'))
+        allele_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'allele_data'))
 
         logger.info('Adding annotations...')
         ht = prepare_table_annotations(freq_ht, rf_ht, vep_ht, dbsnp_ht, hist_ht, index_dict, allele_ht)
