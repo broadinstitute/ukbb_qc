@@ -35,25 +35,25 @@ def flag_problematic_regions(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.Mat
     '''
     lcr_intervals = get_lcr_intervals()
     #decoy_intervals = hl.import_locus_intervals(decoy_intervals_path)
-    segdup_intervals = get_segdup_intervals()
+    #segdup_intervals = get_segdup_intervals()
     #self_chain_intervals = get_self_chain_intervals()
     if isinstance(t, hl.Table):
         t = t.annotate(lcr=hl.is_defined(lcr_intervals[t.locus]), 
                     #decoy=hl.is_defined(decoy_intervals[t.locus]),
                     #self_chain=hl.is_defined(self_chain_intervals[t.locus]),
-                    segdup=hl.is_defined(segdup_intervals[t.locus]), 
+                    #segdup=hl.is_defined(segdup_intervals[t.locus]), 
                     nonpar=(t.locus.in_x_nonpar() | t.locus.in_y_nonpar()))
     else:
         t = t.annotate_rows(lcr=hl.is_defined(lcr_intervals[t.locus]), 
                     #decoy=hl.is_defined(decoy_intervals[t.locus]),
                     #self_chain=hl.is_defined(self_chain_intervals[t.locus]),
-                    segdup=hl.is_defined(segdup_intervals[t.locus]), 
+                    #segdup=hl.is_defined(segdup_intervals[t.locus]), 
                     nonpar=(t.locus.in_x_nonpar() | t.locus.in_y_nonpar()))
     return t
 
 
 def prepare_annotations(mt: hl.MatrixTable, freq_ht: hl.Table, rf_ht: hl.Table, vep_ht: hl.Table, dbsnp_ht: hl.Table, hist_ht: hl.Table,
-                              index_dict, allele_ht: hl.Table) -> hl.MatrixTable:
+                              index_dict, allele_ht: hl.Table, vqsr_ht: hl.Table) -> hl.MatrixTable:
     '''
     Join Tables with variant annotations for gnomAD release, dropping sensitive annotations and keeping only variants with nonzero AC
 
@@ -65,6 +65,7 @@ def prepare_annotations(mt: hl.MatrixTable, freq_ht: hl.Table, rf_ht: hl.Table, 
     :param Table hist_ht: Table with quality histogram annotations
     :param dict index_dict: Dictionary containing index values for each entry in the frequency HT array, keyed by metadata label
     :param Table allele_ht: Table containing allele annotations
+    :param Table vqsr_ht: Table containing vqsr annotations
     :return: Table containing joined annotations
     :rtype: Table
     '''
@@ -84,11 +85,60 @@ def prepare_annotations(mt: hl.MatrixTable, freq_ht: hl.Table, rf_ht: hl.Table, 
     logger.info(f'hardcalls mt count after filtering out freq: {mt.count()}')
 
     mt = mt.annotate_rows(**rf_ht[mt.row_key], **hist_ht[mt.row_key], vep=vep_ht[mt.row_key].vep,
-                     allele_info=allele_ht[mt.row_key].allele_data, rsid=dbsnp_ht[mt.row_key].rsid)
+                     allele_info=allele_ht[mt.row_key].allele_data, vqsr=vqsr_ht[mt.row_key].info, rsid=dbsnp_ht[mt.row_key].rsid)
     mt = mt.annotate_globals(rf=rf_ht.index_globals())
     mt.describe()
     logger.info(f'hardcalls mt count: {mt.count()}')
     return mt
+
+
+def make_info_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression]:
+    '''
+    Make Hail expression for variant annotations to be included in VCF INFO
+    :param Table ht: Table containing variant annotations to be reformatted for VCF export
+    :return: Dictionary containing Hail expressions for relevant INFO annotations
+    :rtype: Dict of str: Expression
+    '''
+    info_dict = {
+        'FS': ht.info_FS,
+        'InbreedingCoeff': ht.info_InbreedingCoeff,
+        'MQ': ht.info_MQ,
+        'MQRankSum': ht.info_MQRankSum,
+        'QD': ht.info_QD,
+        'ReadPosRankSum': ht.info_ReadPosRankSum,
+        'SOR': ht.info_SOR,
+        'VQSR_POSITIVE_TRAIN_SITE': ht.vqsr.POSITIVE_TRAIN_SITE,
+        'VQSR_NEGATIVE_TRAIN_SITE': ht.vqsr.NEGATIVE_TRAIN_SITE,
+        'BaseQRankSum': ht.info.BaseQRankSum,
+        'DP': ht.info.DP,
+        'VQSLOD': ht.vqsr.VQSLOD,
+        'VQSR_culprit': ht.vqsr.culprit,
+        'segdup': ht.segdup,
+        'lcr': ht.lcr,
+        'decoy': ht.decoy,
+        'nonpar': ht.nonpar,
+        'rf_positive_label': ht.tp,
+        'rf_negative_label': ht.fail_hard_filters,
+        'rf_label': ht.rf_label,
+        'rf_train': ht.rf_train,
+        'rf_tp_probability': ht.rf_probability,
+        'transmitted_singleton': ht.transmitted_singleton,
+        'variant_type': ht.variant_type,
+        'allele_type': ht.allele_type,
+        'n_alt_alleles': ht.n_alt_alleles,
+        'was_mixed': ht.was_mixed,
+        'has_star': ht.has_star,
+        'pab_max': ht.pab_max,
+    }
+    for hist in HISTS:
+        hist_dict = {
+            f'{hist}_bin_freq': hl.delimit(ht[hist].bin_freq, delimiter="|"),
+            f'{hist}_bin_edges': hl.delimit(ht[hist].bin_edges, delimiter="|"),
+            f'{hist}_n_smaller': ht[hist].n_smaller,
+            f'{hist}_n_larger': ht[hist].n_larger
+        }
+        info_dict.update(hist_dict)
+    return info_dict
 
 
 def sample_sum_check(ht: hl.Table, prefix: str, label_groups: Dict[str, List[str]], verbose: bool, subpop=None):
@@ -330,13 +380,13 @@ def make_info_dict(label_groups=None, bin_edges=None, faf=False, popmax=False, a
         info_dict.update(popmax_dict)
         age_hist_dict = {
             "age_hist_het_bin_freq": {"Number": "A",
-                                                "Description": f"Histogram of ages of heterozygous individuals; bin edges are: {bin_edges[f'{prefix}_het']}; total number of individuals of any genotype bin: {age_hist_data}"},
+                                                "Description": f"Histogram of ages of heterozygous individuals; bin edges are: {bin_edges['het']}; total number of individuals of any genotype bin: {age_hist_data}"},
             "age_hist_het_n_smaller": {"Number": "A",
                                                  "Description": "Count of age values falling below lowest histogram bin edge for heterozygous individuals"},
             "age_hist_het_n_larger": {"Number": "A",
                                                 "Description": "Count of age values falling above highest histogram bin edge for heterozygous individuals"},
             "age_hist_hom_bin_freq": {"Number": "A",
-                                                "Description": f"Histogram of ages of homozygous alternate individuals; bin edges are: {bin_edges[f'{prefix}_hom']}; total number of individuals of any genotype bin: {age_hist_data}"},
+                                                "Description": f"Histogram of ages of homozygous alternate individuals; bin edges are: {bin_edges['hom']}; total number of individuals of any genotype bin: {age_hist_data}"},
             "age_hist_hom_n_smaller": {"Number": "A",
                                                  "Description": "Count of age values falling below lowest histogram bin edge for homozygous alternate individuals"},
             "age_hist_hom_n_larger": {"Number": "A",
@@ -355,8 +405,8 @@ def make_hist_bin_edges_expr(ht):
     :return: Dictionary keyed by histogram annotation name, with corresponding reformatted bin edges for values
     :rtype: Dict of str: str
     '''
-    edges_dict = {'het': '|'.join(map(lambda x: f'{x:.1f}', ht.take(1)[0].age_hist_het[0].bin_edges)),
-                  'hom': '|'.join(map(lambda x: f'{x:.1f}', ht.take(1)[0].age_hist_hom[0].bin_edges))}
+    edges_dict = {'het': '|'.join(map(lambda x: f'{x:.1f}', ht.head(1).age_hist_het.collect()[0].bin_edges)),
+                  'hom': '|'.join(map(lambda x: f'{x:.1f}', ht.head(1).age_hist_hom.collect()[0].bin_edges))}
     for hist in HISTS:
         edges_dict[hist] = '|'.join(map(lambda x: f'{x:.2f}', ht.take(1)[0][hist].bin_edges)) if 'ab' in hist else \
             '|'.join(map(lambda x: str(int(x)), ht.take(1)[0][hist].bin_edges))
@@ -374,6 +424,24 @@ def make_index_dict(ht):
     freq_meta = hl.eval(ht.globals.freq_meta)
     index_dict = make_freq_meta_index_dict(freq_meta)
     return index_dict
+
+
+def set_female_y_metrics_to_na(mt):
+    '''
+    Set AC, AN, and nhomalt Y variant annotations for females to NA (instead of 0)
+    :param Table ht: Hail Table containing female variant annotations
+    :return: Table with reset annotations
+    :rtype: Table
+    '''
+    metrics = list(mt.row.info)
+    female_metrics = [x for x in metrics if '_female' in x]
+    female_metrics = [x for x in female_metrics if ('nhomalt' in x) or ('AC' in x) or ('AN' in x)]
+
+    female_metrics_dict = {}
+    for metric in female_metrics:
+        female_metrics_dict.update({f'{metric}': hl.cond(ht.locus.contig == 'Y', hl.null(hl.tint32), ht.info[f'{metric}'])})
+    mt = mt.annotate_rows(info=mt.info.annotate(**female_metrics_dict))
+    return mt
 
 
 def get_age_distributions(data_source, freeze):
@@ -423,17 +491,20 @@ def main(args):
         hist_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'qual_hists'))
         hist_ht = hist_ht.select('gq_hist_alt', 'gq_hist_all', 'dp_hist_alt', 'dp_hist_all', 'ab_hist_alt', 'qual')
         allele_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'allele_data'))
+        vqsr_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vqsr'))
 
         logger.info('Adding annotations...')
-        mt = prepare_annotations(mt, freq_ht, rf_ht, vep_ht, dbsnp_ht, hist_ht, index_dict, allele_ht)
+        mt = prepare_annotations(mt, freq_ht, rf_ht, vep_ht, dbsnp_ht, hist_ht, index_dict, allele_ht, vqsr_ht)
+        mt.describe()
         mt = mt.annotate_globals(freq_index_dict=make_index_dict(mt.rows()), faf_index_dict=make_faf_index_dict(mt.rows()),
                                  age_distribution=age_hist_data)
         mt.write(release_mt_path(data_source, freeze), args.overwrite)
 
 
     if args.prepare_release_vcf:
-        ht = hl.read_table(release_ht_path(data_source, freeze))
-        bin_edges = make_hist_bin_edges_expr(ht)
+        logger.info('Starting VCF process')
+        mt = hl.read_matrix_table(release_mt_path(data_source, freeze))
+        bin_edges = make_hist_bin_edges_expr(mt.rows())
 
         # Make INFO dictionary for VCF
         INFO_DICT.update(make_info_dict(bin_edges=bin_edges, popmax=True,
@@ -453,55 +524,58 @@ def main(args):
         new_info_dct = {i.replace('_adj', ''): j for i,j in INFO_DICT.items()}
 
         # Construct INFO field
-        ht = ht.annotate(info=hl.struct(**make_info_expr(ht)))
-        ht = ht.annotate(info=ht.info.annotate(**unfurl_nested_annotations(ht)))
-        ht = set_female_y_metrics_to_na(ht)
+        mt.describe()
+        mt = mt.transmute_rows(info_InbreedingCoeff=mt.inbreeding_coeff)
+        mt.describe()
+        mt = mt.annotate_rows(info=hl.struct(**make_info_expr(mt)))
+        mt = mt.annotate_rows(info=mt.info.annotate(**unfurl_nested_annotations(mt)))
+        mt = set_female_y_metrics_to_na(mt)
 
         # Select relevant fields for VCF export
-        ht = ht.select('info', 'filters', 'rsid', 'qual', 'vep')
-        ht.write(release_ht_path(data_source, nested=False, temp=True), args.overwrite)
+        mt = mt.select_rows('info', 'filters', 'rsid', 'qual', 'vep')
+        mt.write(release_mt_path(data_source, nested=False, temp=True), args.overwrite)
 
         # Move 'info' annotations to top level for browser release
-        ht = hl.read_table(release_ht_path(data_source, nested=False, temp=True))
-        ht = ht.transmute(**ht.info)
-        ht = ht.select_globals('rf')
-        ht.write(release_ht_path(data_source, nested=False), args.overwrite)
+        mt = ml.read_matrix_table(release_mt_path(data_source, nested=False, temp=True))
+        mt = mt.transmute_rows(**mt.info)
+        mt = mt.select_globals('rf')
+        mt.write(release_mt_path(data_source, nested=False), args.overwrite)
 
         # Remove gnomad_ prefix for VCF export
-        ht = hl.read_table(release_ht_path(data_source, nested=False, temp=True))
+        mt = hl.read_matrix_table(release_mt_path(data_source, nested=False, temp=True))
         rg = hl.get_reference('GRCh38')
         contigs = rg.contigs[:24] # autosomes + X/Y
         #contigs = hl.eval(ht.aggregate(hl.agg.collect_as_set(ht.locus.contig)))
-        ht = ht.drop('vep')
-        row_annots = list(ht.row.info)
+        mt = mt.drop('vep')
+        row_annots = list(mt.row.info)
         #new_row_annots = [x.replace('gnomad_', '').replace('_adj', '') for x in row_annots]
         new_row_annots = [x.replace('_adj', '') for x in row_annots]
-        info_annot_mapping = dict(zip(new_row_annots, [ht.info[f'{x}'] for x in row_annots]))
-        ht = ht.transmute(info=hl.struct(**info_annot_mapping))
+        info_annot_mapping = dict(zip(new_row_annots, [mt.info[f'{x}'] for x in row_annots]))
+        mt = mt.transmute_rows(info=hl.struct(**info_annot_mapping))
 
         # Rearrange INFO field in desired ordering
         drop_hists = [x + '_n_smaller' for x in HISTS] + [x + '_bin_edges' for x in HISTS] + [x + '_n_larger' for x in HISTS if 'dp_' not in x] + ['age_hist_hom_bin_edges', 'age_hist_het_bin_edges']
-        ht = ht.annotate(info=ht.info.select('AC', 'AN', 'AF', 'rf_tp_probability',
-                                             *ht.info.drop('AC', 'AN', 'AF', 'rf_tp_probability', *drop_hists)))
+        mt = nt.annotate_rows(info=mt.info.select('AC', 'AN', 'AF', 'rf_tp_probability',
+                                             *mt.info.drop('AC', 'AN', 'AF', 'rf_tp_probability', *drop_hists)))
 
         # Add VEP annotations
-        vep_csq_ht = hl.read_table(annotations_ht_path(data_source, 'vep_csq'))
+        vep_csq_mt = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vep_csq'))
         new_info_dict.update({'vep': {'Description': hl.eval(vep_csq_ht.globals.vep_csq_header)}})
         header_dict = {'info': new_info_dict,
                        'filter': make_filter_dict(ht)}
-        ht = ht.annotate(info=ht.info.annotate(vep=vep_csq_ht[ht.key].vep))
+        mt = mt.annotate_rows(info=mt.info.annotate(vep=vep_csq_ht[mt.row_key].vep))
 
         # Export VCFs, full and by chromosome
         #gnomad_ref = hl.ReferenceGenome.read('gs://gnomad-public/resources/gnomad_grch37.json')
-        ht = ht.key_by(locus=hl.locus(ht.locus.contig, ht.locus.position),
-                       alleles=ht.alleles)
+        mt = mt.key_rows_by(locus=hl.locus(mt.locus.contig, mt.locus.position),
+                       alleles=mt.alleles)
 
         for contig in contigs:
-            contig_ht = hl.filter_intervals(ht, [hl.parse_locus_interval(contig)])
-            mt = hl.MatrixTable.from_rows_table(contig_ht).key_cols_by(s='foo')
-            hl.export_vcf(mt, release_vcf_path(data_source, contig=contig), metadata=header_dict)
+            contig_mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
+            #mt = hl.MatrixTable.from_rows_table(contig_ht).key_cols_by(s='foo')
+            hl.export_vcf(contig_mt, release_vcf_path(data_source, contig=contig), metadata=header_dict)
 
-        mt = hl.MatrixTable.from_rows_table(ht).key_cols_by(s='foo')
+        #mt = hl.MatrixTable.from_rows_table(ht).key_cols_by(s='foo')
         hl.export_vcf(mt, release_vcf_path(data_source), metadata=header_dict)
 
     
