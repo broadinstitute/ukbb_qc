@@ -45,7 +45,7 @@ def prepare_table_annotations(freq_ht: hl.Table, rf_ht: hl.Table, vep_ht: hl.Tab
     ht = flag_problematic_regions(ht)  # NOTE: waiting on hail bug to be fixed
 
     ht = ht.annotate(**rf_ht[ht.key], **hist_ht[ht.key], qual=hist_ht[ht.key].qual, vep=vep_ht[ht.key].vep,
-                     allele_info=allele_ht[ht.key].info.drop('AC', 'AN', 'AF', 'MLEAC', 'MLEAF'),
+                     allele_info=allele_ht[ht.key].allele_data,
                      rsid=dbsnp_ht[ht.locus].rsid)
     ht = ht.annotate_globals(rf=rf_ht.index_globals())
     return ht
@@ -373,7 +373,7 @@ def main(args):
         vep_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vep'))
         dbsnp_ht = hl.read_table(dbsnp_ht_path)
         hist_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'qual_hists'))
-        hist_ht = hist_ht.select('gq_hist_alt', 'gq_hist_all', 'dp_hist_alt', 'dp_hist_all', 'ab_hist_alt')
+        hist_ht = hist_ht.select('gq_hist_alt', 'gq_hist_all', 'dp_hist_alt', 'dp_hist_all', 'ab_hist_alt', 'qual')
         allele_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'allele_data'))
 
         logger.info('Adding annotations...')
