@@ -33,15 +33,22 @@ def flag_problematic_regions(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.Mat
     :return: Table/MatrixTable containing new annotations ['lcr', 'decoy', 'segdup', 'nonpar']
     :rtype: Table/MatrixTable
     '''
-    lcr_intervals = hl.import_locus_intervals(lcr_intervals_path)
-    decoy_intervals = hl.import_locus_intervals(decoy_intervals_path)
-    segdup_intervals = hl.import_locus_intervals(segdup_intervals_path)
+    lcr_intervals = get_lcr_intervals()
+    #decoy_intervals = hl.import_locus_intervals(decoy_intervals_path)
+    segdup_intervals = get_segdup_intervals()
+    #self_chain_intervals = get_self_chain_intervals()
     if isinstance(t, hl.Table):
-        t = t.annotate(lcr=hl.is_defined(lcr_intervals[ht.locus]), decoy=hl.is_defined(decoy_intervals[ht.locus]),
-                     segdup=hl.is_defined(segdup_intervals[ht.locus]), nonpar=(ht.locus.in_x_nonpar() | ht.locus.in_y_nonpar()))
+        t = t.annotate(lcr=hl.is_defined(lcr_intervals[t.locus]), 
+                    #decoy=hl.is_defined(decoy_intervals[t.locus]),
+                    #self_chain=hl.is_defined(self_chain_intervals[t.locus]),
+                    segdup=hl.is_defined(segdup_intervals[t.locus]), 
+                    nonpar=(t.locus.in_x_nonpar() | t.locus.in_y_nonpar()))
     else:
-        t = t.annotate_rows(lcr=hl.is_defined(lcr_intervals[ht.locus]), decoy=hl.is_defined(decoy_intervals[ht.locus]),
-                     segdup=hl.is_defined(segdup_intervals[ht.locus]), nonpar=(ht.locus.in_x_nonpar() | ht.locus.in_y_nonpar()))
+        t = t.annotate_rows(lcr=hl.is_defined(lcr_intervals[t.locus]), 
+                    #decoy=hl.is_defined(decoy_intervals[t.locus]),
+                    #self_chain=hl.is_defined(self_chain_intervals[t.locus]),
+                    segdup=hl.is_defined(segdup_intervals[t.locus]), 
+                    nonpar=(t.locus.in_x_nonpar() | t.locus.in_y_nonpar()))
     return t
 
 
@@ -61,24 +68,26 @@ def prepare_annotations(mt: hl.MatrixTable, freq_ht: hl.Table, rf_ht: hl.Table, 
     :return: Table containing joined annotations
     :rtype: Table
     '''
-    logger.info(f'freq_ht count before filtering out mt: {freq_ht.count()}')
+    logger.info(f'freq_ht count before filtering out chrM: {freq_ht.count()}')
     freq_ht = hl.filter_intervals(freq_ht, [hl.parse_locus_interval('chrM')], keep=False)
     raw_idx = index_dict['raw']
     freq_ht = freq_ht.filter(freq_ht.freq[raw_idx].AC <= 0, keep=False)
-    logger.info(f'freq_ht count after filtering out mt and AC<=1: {freq_ht.count()}')
+    logger.info(f'freq_ht count after filtering out chrM and AC<=1: {freq_ht.count()}')
 
     logger.info(f'hardcalls mt count before filtering out freq rows: {mt.count()}')
     mt = mt.semi_join_rows(freq_ht)
     mt = mt.annotate_rows(**freq_ht[mt.row_key])
-    mt = mt.annotate_globals(freq=freq_ht.index_globals())
+    mt = mt.annotate_globals(freq_globals=freq_ht.index_globals())
+    mt = mt.transmute_globals(**mt.freq_globals)
+    mt.describe()
     mt = flag_problematic_regions(mt)
-    logger.info(f'hardcalls mt count after filtering out freq: {mtt.count()}')
+    logger.info(f'hardcalls mt count after filtering out freq: {mt.count()}')
 
     mt = mt.annotate_rows(**rf_ht[mt.row_key], **hist_ht[mt.row_key], vep=vep_ht[mt.row_key].vep,
                      allele_info=allele_ht[mt.row_key].allele_data, rsid=dbsnp_ht[mt.row_key].rsid)
     mt = mt.annotate_globals(rf=rf_ht.index_globals())
     mt.describe()
-    logger.info(f'hardcalls mt count: {mtt.count()}')
+    logger.info(f'hardcalls mt count: {mt.count()}')
     return mt
 
 
@@ -357,7 +366,7 @@ def make_hist_bin_edges_expr(ht):
 def make_index_dict(ht):
     '''
     Create a look-up Dictionary for entries contained in the frequency annotation array
-    :param Table ht: Table containing freq_meta global annotation to be indexed
+    :param MatrixTable/Table t: Table or MatrixTable containing freq_meta global annotation to be indexed
     :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
         of each grouping entry in the frequency array
     :rtype: Dict of str: int
@@ -398,7 +407,14 @@ def main(args):
 
     if args.prepare_internal_mt:
        
-        mt = get_ukbb_data(data_source, freeze) # get hardcalls
+        mt = get_ukbb_data(data_source, freeze, meta_root='meta') # get hardcalls with metadata information
+        mt = mt.select_globals()
+        logger.info(f'mt count before filtering out low quality samples: {mt.count()}')
+        mt = mt.filter_cols(mt.meta.high_quality)
+        mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
+        logger.info(f'mt count after filtering out low quality samples and their variants: {mt.count()}')
+        mt = mt.select_cols()
+
         freq_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'join_freq'))
         index_dict = make_index_dict(freq_ht)
         rf_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'rf'))
@@ -410,7 +426,7 @@ def main(args):
 
         logger.info('Adding annotations...')
         mt = prepare_annotations(mt, freq_ht, rf_ht, vep_ht, dbsnp_ht, hist_ht, index_dict, allele_ht)
-        mt = mt.annotate_globals(freq_index_dict=make_index_dict(ht), faf_index_dict=make_faf_index_dict(ht),
+        mt = mt.annotate_globals(freq_index_dict=make_index_dict(mt.rows()), faf_index_dict=make_faf_index_dict(mt.rows()),
                                  age_distribution=age_hist_data)
         mt.write(release_mt_path(data_source, freeze), args.overwrite)
 
@@ -498,7 +514,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
     parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE, type=int)
-    parser.add_argument('--prepare_internal_ht', help='Prepare internal MatrixTable', action='store_true')
+    parser.add_argument('--prepare_internal_mt', help='Prepare internal MatrixTable', action='store_true')
     parser.add_argument('--prepare_release_vcf', help='Prepare release VCF', action='store_true')
     parser.add_argument('--sanity_check_sites', help='Run sanity checks function', action='store_true')
     parser.add_argument('--verbose', help='Run sanity checks function with verbose output', action='store_true')
