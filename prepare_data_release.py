@@ -25,10 +25,32 @@ EAS_SUBPOPS = ['1']
 SORT_ORDER = ['popmax', 'group', 'pop', 'subpop', 'sex']
 
 
-def prepare_table_annotations(freq_ht: hl.Table, rf_ht: hl.Table, vep_ht: hl.Table, dbsnp_ht: hl.Table, hist_ht: hl.Table,
-                              index_dict, allele_ht: hl.Table) -> hl.Table:
+def flag_problematic_regions(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTable, hl.Table]:
+    '''
+    Annotate HT/MT with flags for problematic regions (i.e., LCR, decoy, segdup, and nonpar regions)
+
+    :param Table/MatrixTable t: Table/MatrixTable to be annotated
+    :return: Table/MatrixTable containing new annotations ['lcr', 'decoy', 'segdup', 'nonpar']
+    :rtype: Table/MatrixTable
+    '''
+    lcr_intervals = hl.import_locus_intervals(lcr_intervals_path)
+    decoy_intervals = hl.import_locus_intervals(decoy_intervals_path)
+    segdup_intervals = hl.import_locus_intervals(segdup_intervals_path)
+    if isinstance(t, hl.Table):
+        t = t.annotate(lcr=hl.is_defined(lcr_intervals[ht.locus]), decoy=hl.is_defined(decoy_intervals[ht.locus]),
+                     segdup=hl.is_defined(segdup_intervals[ht.locus]), nonpar=(ht.locus.in_x_nonpar() | ht.locus.in_y_nonpar()))
+    else:
+        t = t.annotate_rows(lcr=hl.is_defined(lcr_intervals[ht.locus]), decoy=hl.is_defined(decoy_intervals[ht.locus]),
+                     segdup=hl.is_defined(segdup_intervals[ht.locus]), nonpar=(ht.locus.in_x_nonpar() | ht.locus.in_y_nonpar()))
+    return t
+
+
+def prepare_annotations(mt: hl.MatrixTable, freq_ht: hl.Table, rf_ht: hl.Table, vep_ht: hl.Table, dbsnp_ht: hl.Table, hist_ht: hl.Table,
+                              index_dict, allele_ht: hl.Table) -> hl.MatrixTable:
     '''
     Join Tables with variant annotations for gnomAD release, dropping sensitive annotations and keeping only variants with nonzero AC
+
+    :param MatrixTable mt: MatrixTable to be annotated
     :param Table freq_ht: Table with frequency annotations
     :param Table rf_ht: Table with random forest variant annotations
     :param Table vep_ht: Table with VEP variant annotations
@@ -39,16 +61,25 @@ def prepare_table_annotations(freq_ht: hl.Table, rf_ht: hl.Table, vep_ht: hl.Tab
     :return: Table containing joined annotations
     :rtype: Table
     '''
+    logger.info(f'freq_ht count before filtering out mt: {freq_ht.count()}')
     freq_ht = hl.filter_intervals(freq_ht, [hl.parse_locus_interval('chrM')], keep=False)
     raw_idx = index_dict['raw']
-    ht = freq_ht.filter(freq_ht.freq[raw_idx].AC <= 0, keep=False)
-    ht = flag_problematic_regions(ht)  # NOTE: waiting on hail bug to be fixed
+    freq_ht = freq_ht.filter(freq_ht.freq[raw_idx].AC <= 0, keep=False)
+    logger.info(f'freq_ht count after filtering out mt and AC<=1: {freq_ht.count()}')
 
-    ht = ht.annotate(**rf_ht[ht.key], **hist_ht[ht.key], qual=hist_ht[ht.key].qual, vep=vep_ht[ht.key].vep,
-                     allele_info=allele_ht[ht.key].allele_data,
-                     rsid=dbsnp_ht[ht.locus].rsid)
-    ht = ht.annotate_globals(rf=rf_ht.index_globals())
-    return ht
+    logger.info(f'hardcalls mt count before filtering out freq rows: {mt.count()}')
+    mt = mt.semi_join_rows(freq_ht)
+    mt = mt.annotate_rows(**freq_ht[mt.row_key])
+    mt = mt.annotate_globals(freq=freq_ht.index_globals())
+    mt = flag_problematic_regions(mt)
+    logger.info(f'hardcalls mt count after filtering out freq: {mtt.count()}')
+
+    mt = mt.annotate_rows(**rf_ht[mt.row_key], **hist_ht[mt.row_key], vep=vep_ht[mt.row_key].vep,
+                     allele_info=allele_ht[mt.row_key].allele_data, rsid=dbsnp_ht[mt.row_key].rsid)
+    mt = mt.annotate_globals(rf=rf_ht.index_globals())
+    mt.describe()
+    logger.info(f'hardcalls mt count: {mtt.count()}')
+    return mt
 
 
 def sample_sum_check(ht: hl.Table, prefix: str, label_groups: Dict[str, List[str]], verbose: bool, subpop=None):
@@ -365,22 +396,23 @@ def main(args):
     freeze = args.freeze
     age_hist_data = get_age_distributions(data_source, freeze)
 
-    if args.prepare_internal_ht:
-        
+    if args.prepare_internal_mt:
+       
+        mt = get_ukbb_data(data_source, freeze) # get hardcalls
         freq_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'join_freq'))
         index_dict = make_index_dict(freq_ht)
         rf_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'rf'))
         vep_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vep'))
-        dbsnp_ht = hl.read_table(dbsnp_ht_path)
+        dbsnp_ht = hl.read_table(dbsnp_ht_path())
         hist_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'qual_hists'))
         hist_ht = hist_ht.select('gq_hist_alt', 'gq_hist_all', 'dp_hist_alt', 'dp_hist_all', 'ab_hist_alt', 'qual')
         allele_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'allele_data'))
 
         logger.info('Adding annotations...')
-        ht = prepare_table_annotations(freq_ht, rf_ht, vep_ht, dbsnp_ht, hist_ht, index_dict, allele_ht)
-        ht = ht.annotate_globals(freq_index_dict=make_index_dict(ht), faf_index_dict=make_faf_index_dict(ht),
+        mt = prepare_annotations(mt, freq_ht, rf_ht, vep_ht, dbsnp_ht, hist_ht, index_dict, allele_ht)
+        mt = mt.annotate_globals(freq_index_dict=make_index_dict(ht), faf_index_dict=make_faf_index_dict(ht),
                                  age_distribution=age_hist_data)
-        ht.write(release_ht_path(data_source, freeze), args.overwrite)
+        mt.write(release_mt_path(data_source, freeze), args.overwrite)
 
 
     if args.prepare_release_vcf:
@@ -466,7 +498,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
     parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE, type=int)
-    parser.add_argument('--prepare_internal_ht', help='Prepare internal HailTable', action='store_true')
+    parser.add_argument('--prepare_internal_ht', help='Prepare internal MatrixTable', action='store_true')
     parser.add_argument('--prepare_release_vcf', help='Prepare release VCF', action='store_true')
     parser.add_argument('--sanity_check_sites', help='Run sanity checks function', action='store_true')
     parser.add_argument('--verbose', help='Run sanity checks function with verbose output', action='store_true')
