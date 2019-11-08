@@ -545,9 +545,27 @@ def release_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return  f'gs://broad-ukbb/{data_source}.freeze_{freeze}/release/'
 
 
-def release_ht_path(data_source: str, freeze: int, nested=True, temp=False) -> str:
+def release_mt_path(data_source: str, freeze: int, nested=True, temp=False) -> str:
     '''
-    Fetch filepath for release (variant-only) Hail Tables
+    Fetch filepath for release Hail MatrixTables
+
+    :param str data_source: 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param bool nested: If True, fetch Table in which variant annotations (e.g., freq, popmax, faf, and age histograms)
+        are in array format ("nested"); if False, fetch Table in which nested variant annotations are unfurled
+    :param bool temp: If True, fetch Table in which nested variant annotations are unfurled but listed under 'info' rather
+        than at the top level; used for sanity-checking sites
+    :return: Filepath for desired Hail Table
+    :rtype: str
+    '''
+    tag = 'nested' if nested else 'flat'
+    tag = tag + '.temp' if temp else tag
+    return f'{release_prefix(data_source, freeze)}/mt/{tag}.mt'
+
+
+def release_mt_path(data_source: str, freeze: int, nested=True, temp=False) -> str:
+    '''
+    Fetch filepath for release Hail Tables
 
     :param str data_source: 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
