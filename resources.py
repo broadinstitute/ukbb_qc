@@ -529,6 +529,9 @@ def hapmap_mt_path(hail_version=CURRENT_HAIL_VERSION):
 def hapmap_ht_path():
     return 'gs://broad-ukbb/resources//hapmap_3.3.hg38.ht'
 
+def dbsnp_ht_path():
+    return 'gs://gnomad-public/resources/grch38/dbsnp_b151_grch38_all_20180418.ht'
+
 
 def kgp_high_conf_snvs_mt_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad-public/truth-sets/hail-{0}/1000G_phase1.snps.high_confidence.hg38.mt'.format(hail_version)
