@@ -44,7 +44,7 @@ def prepare_table_annotations(freq_ht: hl.Table, rf_ht: hl.Table, vep_ht: hl.Tab
     ht = freq_ht.filter(freq_ht.freq[raw_idx].AC <= 0, keep=False)
     ht = flag_problematic_regions(ht)  # NOTE: waiting on hail bug to be fixed
 
-    ht = ht.annotate(**rf_ht[ht.key], **hist_ht[ht.key], qual=allele_ht[ht.key].qual, vep=vep_ht[ht.key].vep,
+    ht = ht.annotate(**rf_ht[ht.key], **hist_ht[ht.key], qual=hist_ht[ht.key].qual, vep=vep_ht[ht.key].vep,
                      allele_info=allele_ht[ht.key].info.drop('AC', 'AN', 'AF', 'MLEAC', 'MLEAF'),
                      rsid=dbsnp_ht[ht.locus].rsid)
     ht = ht.annotate_globals(rf=rf_ht.index_globals())
