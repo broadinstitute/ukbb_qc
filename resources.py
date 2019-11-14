@@ -598,9 +598,9 @@ def release_vcf_path(data_source: str, freeze: int, contig=None) -> str:
     :rtype: str
     '''
     if contig:
-        return f'{release_prefix(data_source, freeze)}/vcf/sites.{contig}.vcf.bgz'
+        return f'{release_prefix(data_source, freeze)}/vcf/{contig}.vcf.bgz'
     else:
-        return f'gs://gnomad-public/release/{release}/vcf/{data_type}/gnomad.{data_type}.{release_tag}.sites.vcf.bgz'
+        return f'gs://gnomad-public/release/{release}/vcf/{data_type}/gnomad.{data_type}.{release_tag}.vcf.bgz'
 
 
 class DataException(Exception):
