@@ -584,17 +584,18 @@ def unfurl_nested_annotations(ht, gnomad, genome):
         }
         expr_dict.update(combo_dict)
 
-        age_hist_dict = {
-            "age_hist_het_bin_freq": hl.delimit(ht.age_hist_het.bin_freq, delimiter="|"),
-            "age_hist_het_bin_edges": hl.delimit(ht.age_hist_het.bin_edges, delimiter="|"),
-            "age_hist_het_n_smaller": ht.age_hist_het.n_smaller,
-            "age_hist_het_n_larger": ht.age_hist_het.n_larger,
-            "age_hist_hom_bin_freq": hl.delimit(ht.age_hist_hom.bin_freq, delimiter="|"),
-            "age_hist_hom_bin_edges": hl.delimit(ht.age_hist_hom.bin_edges, delimiter="|"),
-            "age_hist_hom_n_smaller": ht.age_hist_hom.n_smaller,
-            "age_hist_hom_n_larger": ht.age_hist_hom.n_larger
-        }
-        expr_dict.update(age_hist_dict)
+        if not gnomad:
+            age_hist_dict = {
+                "age_hist_het_bin_freq": hl.delimit(ht.age_hist_het.bin_freq, delimiter="|"),
+                "age_hist_het_bin_edges": hl.delimit(ht.age_hist_het.bin_edges, delimiter="|"),
+                "age_hist_het_n_smaller": ht.age_hist_het.n_smaller,
+                "age_hist_het_n_larger": ht.age_hist_het.n_larger,
+                "age_hist_hom_bin_freq": hl.delimit(ht.age_hist_hom.bin_freq, delimiter="|"),
+                "age_hist_hom_bin_edges": hl.delimit(ht.age_hist_hom.bin_edges, delimiter="|"),
+                "age_hist_hom_n_smaller": ht.age_hist_hom.n_smaller,
+                "age_hist_hom_n_larger": ht.age_hist_hom.n_larger
+            }
+            expr_dict.update(age_hist_dict)
     return expr_dict
 
 
@@ -820,10 +821,12 @@ def main(args):
         mt = mt.annotate_rows(info=mt.info.annotate(**call_unfurl_nested_annotations(mt, gnomad=True, genome=True)))
         mt = mt.annotate_rows(info=mt.info.annotate(**call_unfurl_nested_annotations(mt, gnomad=True, genome=False)))
         mt = set_female_y_metrics_to_na(mt)
+        mt.describe()
+        return
 
         # Select relevant fields for VCF export
         mt = mt.select_rows('info', 'filters', 'rsid', 'qual', 'vep')
-        #mt.write(release_mt_path(data_source, freeze, nested=False, temp=True), args.overwrite)
+        mt.write(release_mt_path(data_source, freeze, nested=False, temp=True), args.overwrite)
 
         # Move 'info' annotations to top level for browser release
         #mt = hl.read_matrix_table(release_mt_path(data_source, freeze, nested=False, temp=True))
@@ -831,7 +834,7 @@ def main(args):
         mt = mt.transmute_entries(sDP=mt.DP)
         mt = mt.transmute_rows(**mt.info)
         #mt = mt.select_globals('rf')
-        #mt.write(release_mt_path(data_source, freeze, nested=False), args.overwrite)
+        mt.write(release_mt_path(data_source, freeze, nested=False), args.overwrite)
 
         # Remove gnomad_ prefix for VCF export
         mt = hl.read_matrix_table(release_mt_path(data_source, freeze, nested=False, temp=True))
