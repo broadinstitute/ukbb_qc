@@ -27,6 +27,7 @@ def main(args):
     logger.info(f'Count after filtration: {mt.count()}')
 
     logger.info('Writing out mt')
+    mt = mt.repartition(30000)
     mt.write(raw_mt_path('broad', freeze), args.overwrite)
    
 
