@@ -419,7 +419,7 @@ def make_info_dict(prefix, label_groups=None, bin_edges=None, faf=False, popmax=
 
     if popmax:
         if 'gnomad' in prefix:
-            popmax_text = 'in gnomAD'
+            popmax_text = ' in gnomAD'
         else:
             popmax_text = '' 
             age_hist_dict = {
@@ -842,22 +842,24 @@ def main(args):
 
         # Select relevant fields for VCF export
         mt = mt.select_rows('info', 'filters', 'rsid', 'qual', 'vep')
-        mt.write(release_mt_path(data_source, freeze, nested=False, temp=True), args.overwrite)
+        #mt.write(release_mt_path(data_source, freeze, nested=False, temp=True), args.overwrite)
 
         # Move 'info' annotations to top level for browser release
         mt = hl.read_matrix_table(release_mt_path(data_source, freeze, nested=False, temp=True))
         # NOTE: rename sample DP to sDP (sample depth; hail complains about name collision)
         mt = mt.transmute_entries(sDP=mt.DP)
         mt = mt.transmute_rows(**mt.info)
-        mt.write(release_mt_path(data_source, freeze, nested=False), args.overwrite)
+        #mt.write(release_mt_path(data_source, freeze, nested=False), args.overwrite)
 
         # Remove gnomad_ prefix for VCF export
         mt = hl.read_matrix_table(release_mt_path(data_source, freeze, nested=False, temp=True))
         rg = hl.get_reference('GRCh38')
         contigs = rg.contigs[:24] # autosomes + X/Y
+
         mt = mt.drop('vep')
         row_annots = list(mt.row.info)
         new_row_annots = [x.replace('adj_', '').replace('_adj', '').replace('_adj_', '') for x in row_annots]
+        info_annot_mapping = dict(zip(new_row_annots, [mt.info[f'{x}'] for x in row_annots]))
         mt = mt.transmute_rows(info=hl.struct(**info_annot_mapping))
 
         # Rearrange INFO field in desired ordering
