@@ -1,7 +1,7 @@
 import hail as hl
 from typing import *
 
-CURRENT_FREEZE = 4
+CURRENT_FREEZE = 5
 DATA_SOURCES = ['regeneron', 'broad']
 FREEZES = [4, 5]
 CURRENT_HAIL_VERSION = "0.2"
@@ -600,8 +600,7 @@ def release_vcf_path(data_source: str, freeze: int, contig=None) -> str:
     if contig:
         return f'{release_prefix(data_source, freeze)}/vcf/{contig}.vcf.bgz'
     else:
-        return f'gs://gnomad-public/release/{release}/vcf/{data_type}/gnomad.{data_type}.{release_tag}.vcf.bgz'
-
+        pass
 
 class DataException(Exception):
     pass
