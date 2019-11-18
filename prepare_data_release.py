@@ -418,50 +418,39 @@ def make_info_dict(prefix, label_groups=None, bin_edges=None, faf=False, popmax=
     info_dict = dict()
 
     if popmax:
-        popmax_text = ""
+        if 'gnomad' in prefix:
+            popmax_text = 'in gnomAD'
+        else:
+            popmax_text = '' 
+            age_hist_dict = {
+                "age_hist_het_bin_freq": {"Number": "A",
+                                                    "Description": f"Histogram of ages of heterozygous individuals; bin edges are: {bin_edges['het']}; total number of individuals of any genotype bin: {age_hist_data}"},
+                "age_hist_het_n_smaller": {"Number": "A",
+                                                     "Description": "Count of age values falling below lowest histogram bin edge for heterozygous individuals"},
+                "age_hist_het_n_larger": {"Number": "A",
+                                                    "Description": "Count of age values falling above highest histogram bin edge for heterozygous individuals"},
+                "age_hist_hom_bin_freq": {"Number": "A",
+                                                    "Description": f"Histogram of ages of homozygous alternate individuals; bin edges are: {bin_edges['hom']}; total number of individuals of any genotype bin: {age_hist_data}"},
+                "age_hist_hom_n_smaller": {"Number": "A",
+                                                     "Description": "Count of age values falling below lowest histogram bin edge for homozygous alternate individuals"},
+                "age_hist_hom_n_larger": {"Number": "A",
+                                                    "Description": "Count of age values falling above highest histogram bin edge for homozygous alternate individuals"}
+            }
+            info_dict.update(age_hist_dict)
+
         popmax_dict = {
-            'popmax': {"Number": "A",
-                                 "Description": "Population with maximum AF{}".format(popmax_text)},
-            'AC_popmax': {"Number": "A",
-                                    "Description": "Allele count in the population with the maximum AF{}".format(popmax_text)},
-            'AN_popmax': {"Number": "A",
-                                    "Description": "Total number of alleles in the population with the maximum AF{}".format(popmax_text)},
-            'AF_popmax': {"Number": "A",
-                                    "Description": "Maximum allele frequency across populations (excluding samples of Ashkenazi, Finnish, and indeterminate ancestry){}".format(popmax_text)},
-            'nhomalt_popmax': {"Number": "A",
-                                         "Description": "Count of homozygous individuals in the population with the maximum allele frequency{}".format(popmax_text)}
+        f'{prefix}popmax': {"Number": "A",
+                             "Description": "Population with maximum AF{}".format(popmax_text)},
+        f'{prefix}AC_popmax': {"Number": "A",
+                                "Description": "Allele count in the population with the maximum AF{}".format(popmax_text)},
+        f'{prefix}AN_popmax': {"Number": "A",
+                                "Description": "Total number of alleles in the population with the maximum AF{}".format(popmax_text)},
+        f'{prefix}AF_popmax': {"Number": "A",
+                                "Description": "Maximum allele frequency across populations (excluding samples of Ashkenazi, Finnish, and indeterminate ancestry){}".format(popmax_text)},
+        f'{prefix}nhomalt_popmax': {"Number": "A",
+                                     "Description": "Count of homozygous individuals in the population with the maximum allele frequency{}".format(popmax_text)}
         }
         info_dict.update(popmax_dict)
-        age_hist_dict = {
-            "age_hist_het_bin_freq": {"Number": "A",
-                                                "Description": f"Histogram of ages of heterozygous individuals; bin edges are: {bin_edges['het']}; total number of individuals of any genotype bin: {age_hist_data}"},
-            "age_hist_het_n_smaller": {"Number": "A",
-                                                 "Description": "Count of age values falling below lowest histogram bin edge for heterozygous individuals"},
-            "age_hist_het_n_larger": {"Number": "A",
-                                                "Description": "Count of age values falling above highest histogram bin edge for heterozygous individuals"},
-            "age_hist_hom_bin_freq": {"Number": "A",
-                                                "Description": f"Histogram of ages of homozygous alternate individuals; bin edges are: {bin_edges['hom']}; total number of individuals of any genotype bin: {age_hist_data}"},
-            "age_hist_hom_n_smaller": {"Number": "A",
-                                                 "Description": "Count of age values falling below lowest histogram bin edge for homozygous alternate individuals"},
-            "age_hist_hom_n_larger": {"Number": "A",
-                                                "Description": "Count of age values falling above highest histogram bin edge for homozygous alternate individuals"}
-        }
-        info_dict.update(age_hist_dict)
-        if 'gnomad' in prefix:
-            popmax_test = 'in gnomAD'
-            popmax_dict = {
-            f'{prefix}popmax': {"Number": "A",
-                                 "Description": "Population with maximum AF{}".format(popmax_text)},
-            f'{prefix}AC_popmax': {"Number": "A",
-                                    "Description": "Allele count in the population with the maximum AF{}".format(popmax_text)},
-            f'{prefix}AN_popmax': {"Number": "A",
-                                    "Description": "Total number of alleles in the population with the maximum AF{}".format(popmax_text)},
-            f'{prefix}AF_popmax': {"Number": "A",
-                                    "Description": "Maximum allele frequency across populations (excluding samples of Ashkenazi, Finnish, and indeterminate ancestry){}".format(popmax_text)},
-            f'{prefix}nhomalt_popmax': {"Number": "A",
-                                         "Description": "Count of homozygous individuals in the population with the maximum allele frequency{}".format(popmax_text)}
-            }
-            info_dict.update(popmax_dict)
 
     else:
         group_types = sorted(label_groups.keys(), key=lambda x: SORT_ORDER.index(x))
@@ -526,15 +515,18 @@ def unfurl_nested_annotations(ht, gnomad, genome):
             freq_idx = 'gnomad_genomes.freq_index_dict'
             faf_idx = 'gnomad_genomes.faf_index_dict'
             gnomad_prefix = 'gnomad_genomes'
+            popmax = 'gnomad_genomes.popmax'
         else:
             freq_idx = 'gnomad_exomes.freq_index_dict'
             faf_idx = 'gnomad_exomes.faf_index_dict'
             gnomad_prefix = 'gnomad_exomes'
+            popmax = 'gnomad_exomes.popmax'
     else:
         freq_idx = 'freq_index_dict'
         faf_idx = 'faf_index_dict'
-        gnomad_prefix = ''
+        popmax = 'popmax'
 
+    ## Unfurl freq index dict
     for k, i in hl.eval(ht.globals[freq_idx]).items():
         entry = k.split("_")
 
@@ -561,6 +553,7 @@ def unfurl_nested_annotations(ht, gnomad, genome):
             }
         expr_dict.update(combo_dict)
 
+    ## Unfurl FAF index dict
     for k, i in hl.eval(ht.globals[faf_idx]).items():  # NOTE: faf annotations are all done on adj-only groupings
         entry = k.split("_")
 
@@ -583,18 +576,43 @@ def unfurl_nested_annotations(ht, gnomad, genome):
             }
         expr_dict.update(combo_dict)
 
-        if not gnomad:
-            age_hist_dict = {
-                "age_hist_het_bin_freq": hl.delimit(ht.age_hist_het.bin_freq, delimiter="|"),
-                "age_hist_het_bin_edges": hl.delimit(ht.age_hist_het.bin_edges, delimiter="|"),
-                "age_hist_het_n_smaller": ht.age_hist_het.n_smaller,
-                "age_hist_het_n_larger": ht.age_hist_het.n_larger,
-                "age_hist_hom_bin_freq": hl.delimit(ht.age_hist_hom.bin_freq, delimiter="|"),
-                "age_hist_hom_bin_edges": hl.delimit(ht.age_hist_hom.bin_edges, delimiter="|"),
-                "age_hist_hom_n_smaller": ht.age_hist_hom.n_smaller,
-                "age_hist_hom_n_larger": ht.age_hist_hom.n_larger
+    ## Unfurl popmax
+    if gnomad:
+        prefix = gnomad_prefix + '_'
+    else:
+        prefix = ''
+    if gnomad and not genome:
+        idx = hl.eval(ht.globals['gnomad_exomes.popmax_index_dict']['gnomad']) 
+        combo_dict = {
+                f'{prefix}popmax': ht[popmax][idx].pop,
+                f'{prefix}AC_popmax': ht[popmax][idx].AC,
+                f'{prefix}AN_popmax': ht[popmax][idx].AN,
+                f'{prefix}AF_popmax': ht[popmax][idx].AF,
+                f'{prefix}nhomalt_popmax': ht[popmax][idx].homozygote_count,
             }
-            expr_dict.update(age_hist_dict)
+    else:
+        combo_dict = {
+                f'{prefix}popmax': ht[popmax].pop,
+                f'{prefix}AC_popmax': ht[popmax].AC,
+                f'{prefix}AN_popmax': ht[popmax].AN,
+                f'{prefix}AF_popmax': ht[popmax].AF,
+                f'{prefix}nhomalt_popmax': ht[popmax].homozygote_count,
+            }
+    expr_dict.update(combo_dict)
+
+    # Unfurl UKBB ages
+    if not gnomad:
+        age_hist_dict = {
+            "age_hist_het_bin_freq": hl.delimit(ht.age_hist_het.bin_freq, delimiter="|"),
+            "age_hist_het_bin_edges": hl.delimit(ht.age_hist_het.bin_edges, delimiter="|"),
+            "age_hist_het_n_smaller": ht.age_hist_het.n_smaller,
+            "age_hist_het_n_larger": ht.age_hist_het.n_larger,
+            "age_hist_hom_bin_freq": hl.delimit(ht.age_hist_hom.bin_freq, delimiter="|"),
+            "age_hist_hom_bin_edges": hl.delimit(ht.age_hist_hom.bin_edges, delimiter="|"),
+            "age_hist_hom_n_smaller": ht.age_hist_hom.n_smaller,
+            "age_hist_hom_n_larger": ht.age_hist_hom.n_larger
+        }
+        expr_dict.update(age_hist_dict)
 
     '''print('expr_dict (unfurl)')
     for i in expr_dict:
@@ -744,7 +762,7 @@ def main(args):
 
     data_source = args.data_source
     freeze = args.freeze
-    #age_hist_data = get_age_distributions(data_source, freeze)
+    age_hist_data = get_age_distributions(data_source, freeze)
 
     if args.prepare_internal_mt:
        
@@ -789,8 +807,8 @@ def main(args):
         # Make INFO dictionary for VCF
         subset_list = ['', 'gnomad_exomes.', 'gnomad_genomes.'] # empty for ukbb
         for subset in subset_list:
-            #INFO_DICT.update(make_info_dict(subset, bin_edges=bin_edges, popmax=True,
-            #                                age_hist_data='|'.join(str(x) for x in age_hist_data)))
+            INFO_DICT.update(make_info_dict(subset, bin_edges=bin_edges, popmax=True,
+                                            age_hist_data='|'.join(str(x) for x in age_hist_data)))
             INFO_DICT.update(make_info_dict(subset, dict(group=GROUPS)))
             INFO_DICT.update(make_info_dict(subset, dict(group=GROUPS, pop=POPS)))
 
@@ -813,8 +831,6 @@ def main(args):
 
         # Adjust keys to remove adj tags before exporting to VCF
         new_info_dict = {i.replace('_adj', '').replace('adj_', '').replace('_adj_', '').replace('.', '_'): j for i,j in INFO_DICT.items()}
-        for i in new_info_dict:
-            print(i, new_info_dict[i])
 
         # Construct INFO field
         mt = mt.transmute_rows(info_InbreedingCoeff=mt.inbreeding_coeff)
@@ -823,20 +839,17 @@ def main(args):
         mt = mt.annotate_rows(info=mt.info.annotate(**call_unfurl_nested_annotations(mt, gnomad=True, genome=True)))
         mt = mt.annotate_rows(info=mt.info.annotate(**call_unfurl_nested_annotations(mt, gnomad=True, genome=False)))
         mt = set_female_y_metrics_to_na(mt)
-        mt.describe()
-        return
 
         # Select relevant fields for VCF export
         mt = mt.select_rows('info', 'filters', 'rsid', 'qual', 'vep')
-        #mt.write(release_mt_path(data_source, freeze, nested=False, temp=True), args.overwrite)
+        mt.write(release_mt_path(data_source, freeze, nested=False, temp=True), args.overwrite)
 
         # Move 'info' annotations to top level for browser release
         mt = hl.read_matrix_table(release_mt_path(data_source, freeze, nested=False, temp=True))
         # NOTE: rename sample DP to sDP (sample depth; hail complains about name collision)
         mt = mt.transmute_entries(sDP=mt.DP)
         mt = mt.transmute_rows(**mt.info)
-        #mt = mt.select_globals('rf')
-        #mt.write(release_mt_path(data_source, freeze, nested=False), args.overwrite)
+        mt.write(release_mt_path(data_source, freeze, nested=False), args.overwrite)
 
         # Remove gnomad_ prefix for VCF export
         mt = hl.read_matrix_table(release_mt_path(data_source, freeze, nested=False, temp=True))
