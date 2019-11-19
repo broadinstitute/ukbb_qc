@@ -38,7 +38,7 @@ pop_names = {
     '9': 'Non-Finnish European hybrid PCA cluster 9',
     '0': 'African-American/African hybrid PCA cluster 0',
     '2': 'African-American/African hybrid PCA cluster 2',
-    '3': 'South Asian hybrid PCA cluster3',
+    '3': 'South Asian hybrid PCA cluster 3',
     '1': 'East Asian hybrid PCA cluster 1',
     'oth': 'Other',
     'afr': 'African-American/African',
@@ -458,6 +458,7 @@ def make_info_dict(prefix, label_groups=None, bin_edges=None, faf=False, popmax=
 
         for combo in combos:
             combo_fields = combo.split("_")
+            
             if not faf:
                 combo_dict = {
                     f"{prefix}AC_{combo}": {"Number": "A",
@@ -539,10 +540,10 @@ def unfurl_nested_annotations(ht, gnomad, genome):
             else:
                 prefix = entry[0]
 
-            combo_fields = ['adj'] + entry[1:]
-
-            if combo_fields == ['adj', 'raw']:
+            if entry == ['raw'] or entry == ['gnomad', 'raw']:
                 combo_fields = ['raw']
+            else:
+                combo_fields = ['adj'] + entry[1:]
 
             combo = "_".join(combo_fields)
             combo_dict = {
@@ -614,9 +615,6 @@ def unfurl_nested_annotations(ht, gnomad, genome):
         }
         expr_dict.update(age_hist_dict)
 
-    '''print('expr_dict (unfurl)')
-    for i in expr_dict:
-        print(i)'''
     return expr_dict
 
 
@@ -632,7 +630,6 @@ def make_combo_header_text(preposition, group_types, combo_fields, prefix, faf=F
     :rtype: str
     '''
     combo_dict = dict(zip(group_types, combo_fields))
-
     if not faf:
         header_text = " " + preposition
         if 'sex' in combo_dict.keys():
@@ -642,6 +639,7 @@ def make_combo_header_text(preposition, group_types, combo_fields, prefix, faf=F
             header_text = header_text + " gnomAD samples"
         else:
             header_text = header_text + " samples"
+
         if 'subpop' in combo_dict.keys():
             header_text = header_text + f" of {pop_names[combo_dict['subpop']]} ancestry"
             combo_dict.pop('pop')
@@ -810,20 +808,20 @@ def main(args):
             INFO_DICT.update(make_info_dict(subset, bin_edges=bin_edges, popmax=True,
                                             age_hist_data='|'.join(str(x) for x in age_hist_data)))
             INFO_DICT.update(make_info_dict(subset, dict(group=GROUPS)))
-            INFO_DICT.update(make_info_dict(subset, dict(group=GROUPS, pop=POPS)))
+            INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=POPS)))
 
             if 'gnomad' in subset:
-                INFO_DICT.update(make_info_dict(subset, dict(group=GROUPS, sex=GNOMAD_SEXES)))
-                INFO_DICT.update(make_info_dict(subset, dict(group=GROUPS, pop=POPS, sex=GNOMAD_SEXES)))
-                INFO_DICT.update(make_info_dict(subset, dict(group=GROUPS, pop=['nfe'], subpop=GNOMAD_NFE_SUBPOPS)))
-                INFO_DICT.update(make_info_dict(subset, dict(group=GROUPS, pop=['eas'], subpop=GNOMAD_EAS_SUBPOPS)))
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], sex=GNOMAD_SEXES)))
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=POPS, sex=GNOMAD_SEXES)))
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=['nfe'], subpop=GNOMAD_NFE_SUBPOPS)))
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=['eas'], subpop=GNOMAD_EAS_SUBPOPS)))
             else:
-                INFO_DICT.update(make_info_dict(subset, dict(group=GROUPS, sex=SEXES)))
-                INFO_DICT.update(make_info_dict(subset, dict(group=GROUPS, pop=POPS, sex=SEXES)))
-                INFO_DICT.update(make_info_dict(subset, dict(group=GROUPS, pop=['nfe'], subpop=NFE_SUBPOPS)))
-                INFO_DICT.update(make_info_dict(subset, dict(group=GROUPS, pop=['eas'], subpop=EAS_SUBPOPS)))
-                INFO_DICT.update(make_info_dict(subset, dict(group=GROUPS, pop=['afr'], subpop=AFR_SUBPOPS)))
-                INFO_DICT.update(make_info_dict(subset, dict(group=GROUPS, pop=['sas'], subpop=SAS_SUBPOPS)))
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], sex=SEXES)))
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=POPS, sex=SEXES)))
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=['nfe'], subpop=NFE_SUBPOPS)))
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=['eas'], subpop=EAS_SUBPOPS)))
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=['afr'], subpop=AFR_SUBPOPS)))
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=['sas'], subpop=SAS_SUBPOPS)))
 
             INFO_DICT.update(make_info_dict(subset, dict(group=['adj']), faf=True))
             INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=FAF_POPS), faf=True))
@@ -839,20 +837,14 @@ def main(args):
         mt = mt.annotate_rows(info=mt.info.annotate(**call_unfurl_nested_annotations(mt, gnomad=True, genome=True)))
         mt = mt.annotate_rows(info=mt.info.annotate(**call_unfurl_nested_annotations(mt, gnomad=True, genome=False)))
         mt = set_female_y_metrics_to_na(mt)
-
+        
         # Select relevant fields for VCF export
         mt = mt.select_rows('info', 'filters', 'rsid', 'qual', 'vep')
-        #mt.write(release_mt_path(data_source, freeze, nested=False, temp=True), args.overwrite)
-
-        # Move 'info' annotations to top level for browser release
-        mt = hl.read_matrix_table(release_mt_path(data_source, freeze, nested=False, temp=True))
-        # NOTE: rename sample DP to sDP (sample depth; hail complains about name collision)
-        mt = mt.transmute_entries(sDP=mt.DP)
-        mt = mt.transmute_rows(**mt.info)
-        #mt.write(release_mt_path(data_source, freeze, nested=False), args.overwrite)
+        mt.write(release_mt_path(data_source, freeze, nested=False, temp=True), args.overwrite)
 
         # Remove gnomad_ prefix for VCF export
         mt = hl.read_matrix_table(release_mt_path(data_source, freeze, nested=False, temp=True))
+        mt.describe()
         rg = hl.get_reference('GRCh38')
         contigs = rg.contigs[:24] # autosomes + X/Y
 
@@ -890,7 +882,15 @@ def main(args):
             logger.info(f'{contig} mt count: {contig_mt.count()}')
             hl.export_vcf(contig_mt, release_vcf_path(data_source, freeze, contig=contig), metadata=header_dict)'''
 
-    
+    if args.prepare_browser_ht:
+        # Move 'info' annotations to top level for browser release
+        mt = hl.read_matrix_table(release_mt_path(data_source, freeze, nested=False, temp=True))
+        # NOTE: rename sample DP to sDP (sample depth; hail complains about name collision)
+        mt = mt.transmute_entries(sDP=mt.DP)
+        mt = mt.transmute_rows(**mt.info)
+        mt.write(release_mt_path(data_source, freeze, nested=False), args.overwrite)
+        mt.rows().write(release_ht_path(data_source, freeze, nested=False), args.overwrite)
+ 
     if args.sanity_check_sites:
         ht = hl.read_table(release_ht_path(data_source, freeze, nested=False, temp=True))
         sanity_check_ht(ht, missingness_threshold=0.5, verbose=args.verbose)
@@ -902,6 +902,7 @@ if __name__ == '__main__':
     parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE, type=int)
     parser.add_argument('--prepare_internal_mt', help='Prepare internal MatrixTable', action='store_true')
     parser.add_argument('--prepare_release_vcf', help='Prepare release VCF', action='store_true')
+    parser.add_argument('--prepare_browser_ht', help='Prepare sites ht for browser', action='store_true')
     parser.add_argument('--sanity_check_sites', help='Run sanity checks function', action='store_true')
     parser.add_argument('--verbose', help='Run sanity checks function with verbose output', action='store_true')
     parser.add_argument('--slack_channel', help='Slack channel to post results and notifications to.')
