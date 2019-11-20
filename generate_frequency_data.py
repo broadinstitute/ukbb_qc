@@ -172,8 +172,7 @@ def main(args):
             sample_table.write(sample_annotations_table_path(data_type, 'downsampling'), args.overwrite)
 
     if args.join_gnomad:
-        #ht = hl.read_table(annotations_ht_path(data_source, freeze, 'ukb_freq'))
-        ht = hl.read_table('gs://broad-ukbb/broad.freeze_4/variant_qc/annotations/ukb_freq.ht')
+        ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'ukb_freq'))
 
         logger.info('Joining UKBB ht to gnomAD exomes and genomes liftover hts')
         ht = join_gnomad(ht, 'exomes')
