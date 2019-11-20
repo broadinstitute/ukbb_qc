@@ -828,7 +828,7 @@ def main(args):
         INFO_DICT.update(make_hist_dict(bin_edges))
 
         # Adjust keys to remove adj tags before exporting to VCF
-        new_info_dict = {i.replace('_adj', '').replace('adj_', '').replace('_adj_', '').replace('.', '_'): j for i,j in INFO_DICT.items()}
+        new_info_dict = {i.replace('_adj', '').replace('adj_', '').replace('_adj_', '').replace('.', '_').replace('raw_', ''): j for i,j in INFO_DICT.items()}
 
         # Construct INFO field
         mt = mt.transmute_rows(info_InbreedingCoeff=mt.inbreeding_coeff)
@@ -850,7 +850,7 @@ def main(args):
 
         mt = mt.drop('vep')
         row_annots = list(mt.row.info)
-        new_row_annots = [x.replace('adj_', '').replace('_adj', '').replace('_adj_', '') for x in row_annots]
+        new_row_annots = [x.replace('adj_', '').replace('_adj', '').replace('_adj_', '').replace('raw_', '') for x in row_annots]
         info_annot_mapping = dict(zip(new_row_annots, [mt.info[f'{x}'] for x in row_annots]))
         mt = mt.transmute_rows(info=hl.struct(**info_annot_mapping))
 
@@ -872,15 +872,10 @@ def main(args):
                        alleles=mt.alleles)
 
         logger.info(f'full mt count: {mt.count()}')
-        mt = mt.filter_cols(mt.s == 'UKB_1000026_233144425')
-        mt = hl.filter_intervals(mt, [hl.parse_locus_interval('chr20:87662-87663', reference_genome='GRCh38')])
-        hl.export_vcf(mt, release_vcf_path(data_source, freeze, contig='chr20'), metadata=header_dict)
-
-        '''for contig in contigs:
+        for contig in contigs:
             contig_mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
-            contig_mt.rows().show(1)
             logger.info(f'{contig} mt count: {contig_mt.count()}')
-            hl.export_vcf(contig_mt, release_vcf_path(data_source, freeze, contig=contig), metadata=header_dict)'''
+            hl.export_vcf(contig_mt, release_vcf_path(data_source, freeze, contig=contig), metadata=header_dict)
 
     if args.prepare_browser_ht:
         # Move 'info' annotations to top level for browser release
