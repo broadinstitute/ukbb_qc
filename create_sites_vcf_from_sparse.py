@@ -16,7 +16,6 @@ def main(args):
     temp_prefix = f'gs://broad-ukbb/broad.freeze_{freeze}/temp'
 
     logger.info('Reading in input mt (raw sparse mt)')
-    #mt = get_ukbb_data('broad', freeze, adj=False, split=False, raw=True)
     mt = hl.read_matrix_table(args.input)
     logger.info(f'Sparse mt count: {mt.count()}')
     logger.info('Filtering out ref blocks')
@@ -25,7 +24,7 @@ def main(args):
    
     if args.test: 
         logger.info('Trimming to chr20')
-        mt = hl.filter_intervals(mt, [hl.parse_locus_interval('chr20', reference_genome='GRCh38')])
+        mt = hl.filter_intervals(mt, [hl.parse_locus_interval('chr20')])
         logger.info(f'Count after filtration: {mt.count()}')
 
     logger.info('Getting site info')
