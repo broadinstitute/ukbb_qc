@@ -319,7 +319,7 @@ def get_ht_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE, name:
 
 
 def capture_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    if data_source == 'broad'
+    if data_source == 'broad':
         if freeze == 4:
             return 'gs://broad-ukbb/resources/xgen_plus_spikein.Homo_sapiens_assembly38.targets.pad50.intervals.ht'
         return 'gs://broad-ukbb/resources/ukbb_exome_calling_intervals.summary.ht'
