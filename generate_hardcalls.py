@@ -84,7 +84,7 @@ def main(args):
                    )
         ht = ht.annotate(allele_data=ht.allele_data.annotate(allele_type=allele_type,
                                                               was_mixed=ht.allele_data.variant_type == 'mixed'))
-        ht.write(var_annotations_ht_path(data_source, freeze 'allele_data'), args.overwrite)
+        ht.write(var_annotations_ht_path(data_source, freeze, 'allele_data'), args.overwrite)
 
     if args.write_nonrefs:
         logger.info("Creating sparse MT with only non-ref genotypes...")
