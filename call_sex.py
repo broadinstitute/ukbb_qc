@@ -91,4 +91,4 @@ def run_impute_sex(mt: hl.MatrixTable, data_source: str, freeze: str) -> hl.Tabl
 
     sex_ht = impute_sex(mt)
     sex_ht = sex_ht.checkpoint(sex_ht_path(data_source, freeze), overwrite=True)
-    sex_ht.export(sex_tsv_path(data_source, freeze))
+    #sex_ht.export(sex_tsv_path(data_source, freeze))
