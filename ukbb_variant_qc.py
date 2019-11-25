@@ -3,7 +3,6 @@ from gnomad_hail.utils import rf
 from gnomad_qc.variant_qc.variantqc import sample_rf_training_examples
 from ukbb_qc.resources import *
 from ukbb_qc.variant_qc_functions import *
-from pprint import pformat
 import json
 import uuid
 
@@ -286,9 +285,6 @@ def create_rf_ht(
     ht = ht.repartition(2000, shuffle=False)
     ht = ht.persist()
 
-    ht = ht.checkpoint("gs://broad-ukbb-jgoodric/variant_qc_annotations.ht", overwrite=True)
-    #ht = hl.read_table("gs://broad-ukbb-jgoodric/variant_qc_annotations.ht")
-
     # Compute medians
     # numerical_features = [k for k, v in ht.row.dtype.items() if annotation_type_is_numeric(v)]
     numerical_features = [k for k, v in ht.row.dtype.items() if v == hl.tint or v == hl.tfloat]
@@ -384,7 +380,6 @@ def train_rf(data_source: str, freeze: int, args):
         run_hash = str(uuid.uuid4())[:8]
 
     ht = hl.read_table(rf_annotated_path(data_source, freeze, args.adj))
-    ht = ht.filter(~hl.is_nan(ht.qd)) # Todo: Probably need to figure out a better way to deal with variants that have nan for qd, but there are not many
 
     summary = ht.group_by('omni', 'mills', 'transmitted_singleton', 'ukbb_array', 'ukbb_array_con', 'ukbb_array_con_common', 'sib_singletons').aggregate(n=hl.agg.count())
     logger.info("Summary of truth data annotations:")
@@ -393,16 +388,19 @@ def train_rf(data_source: str, freeze: int, args):
     # ht = ht.repartition(500, shuffle=False)
 
     if not args.vqsr_training:
+        tp_expr = ht.omni | ht.mills
         if args.array_con_common:
-            tp_expr = ht.ukbb_array_con_common
+            tp_expr = tp_expr | ht.ukbb_array_con_common
         elif args.array_con:
-            tp_expr = ht.ukbb_array_con
-        else:
-            tp_expr = ht.ukbb_array
-        if args.no_transmitted_singletons:
-            tp_expr = tp_expr | ht.omni | ht.mills # | ht.info_POSITIVE_TRAIN_SITE
-        else:
-            tp_expr = tp_expr | ht.omni | ht.mills | ht.transmitted_singleton | ht.sib_singletons  # | ht.info_POSITIVE_TRAIN_SITE
+            tp_expr = tp_expr | ht.ukbb_array_con
+        elif args.array:
+            tp_expr = tp_expr | ht.ukbb_array
+
+        if not args.no_transmitted_singletons:
+            tp_expr = tp_expr | ht.transmitted_singleton  # | ht.info_POSITIVE_TRAIN_SITE
+
+        if not args.no_sibling_singletons:
+            tp_expr = tp_expr | ht.sib_singletons  # | ht.info_POSITIVE_TRAIN_SITE
 
         ht = ht.annotate(
             tp=tp_expr
@@ -495,18 +493,18 @@ def train_rf(data_source: str, freeze: int, args):
     return run_hash
 
 
-def prepare_final_ht(data_type: str, run_hash: str, snp_bin_cutoff: int, indel_bin_cutoff: int) -> hl.Table:
+def prepare_final_ht(data_source: str, freeze: int, run_hash: str, snp_bin_cutoff: int, indel_bin_cutoff: int) -> hl.Table:
 
     # Get snv and indel RF cutoffs based on bin
-    binned_ht_path = score_ranking_path(data_type, run_hash, binned=True)
-    if not hl.hadoop_exists(score_ranking_path(data_type, run_hash, binned=True)):
+    binned_ht_path = score_ranking_path(data_source, freeze, run_hash, binned=True)
+    if not hl.hadoop_exists(score_ranking_path(data_source, freeze, run_hash, binned=True)):
         sys.exit(f"Could not find binned HT for RF  run {run_hash} ({binned_ht_path}). Please run create_ranked_scores.py for that hash.")
     binned_ht = hl.read_table(binned_ht_path)
     snp_rf_cutoff, indel_rf_cutoff = binned_ht.aggregate([hl.agg.filter(binned_ht.snv & (binned_ht.bin == snp_bin_cutoff), hl.agg.min(binned_ht.min_score)),
                                                           hl.agg.filter(~binned_ht.snv & (binned_ht.bin == indel_bin_cutoff), hl.agg.min(binned_ht.min_score))])
 
     # Add filters to RF HT
-    ht = hl.read_table(rf_path(data_type, 'rf_result', run_hash=run_hash))
+    ht = hl.read_table(rf_path(data_source, freeze, 'rf_result', run_hash=run_hash))
     ht = ht.annotate_globals(rf_hash=run_hash,
                              rf_snv_cutoff=hl.struct(bin=snp_bin_cutoff, min_score=snp_rf_cutoff),
                              rf_indel_cutoff=hl.struct(bin=indel_bin_cutoff, min_score=indel_rf_cutoff))
@@ -517,13 +515,13 @@ def prepare_final_ht(data_type: str, run_hash: str, snp_bin_cutoff: int, indel_b
                      .when(~rf_filter_criteria, hl.empty_set(hl.tstr))
                      .or_error('Missing RF probability!'))
 
-    inbreeding_coeff_filter_criteria = hl.is_defined(ht.info_InbreedingCoeff) & (
-            ht.info_InbreedingCoeff < INBREEDING_COEFF_HARD_CUTOFF)
+    inbreeding_coeff_filter_criteria = hl.is_defined(ht.inbreeding_coeff) & (
+            ht.inbreeding_coeff < INBREEDING_COEFF_HARD_CUTOFF)
     ht = ht.annotate(filters=hl.cond(inbreeding_coeff_filter_criteria,
                                      ht.filters.add('InbreedingCoeff'), ht.filters))
 
-    freq_ht = hl.read_table(annotations_ht_path(data_type, 'frequencies'))
-    ac0_filter_criteria = freq_ht[ht.key].freq[0].AC[1] == 0
+    freq_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'join_freq'))
+    ac0_filter_criteria = freq_ht[ht.key].freq[0].AC == 0
 
     ht = ht.annotate(
         filters=hl.cond(ac0_filter_criteria, ht.filters.add('AC0'), ht.filters)
@@ -532,7 +530,7 @@ def prepare_final_ht(data_type: str, run_hash: str, snp_bin_cutoff: int, indel_b
     # Fix annotations for release
     annotations_expr = {
         'tp': hl.or_else(ht.tp, False),
-        'transmitted_singleton': hl.or_missing(freq_ht[ht.key].freq[1].AC[1] == 1, ht.transmitted_singleton),
+        'transmitted_singleton': hl.or_missing(freq_ht[ht.key].freq[1].AC == 1, ht.transmitted_singleton),
         'rf_probability': ht.rf_probability["TP"]
     }
     if 'feature_imputed' in ht.row:
@@ -545,7 +543,7 @@ def prepare_final_ht(data_type: str, run_hash: str, snp_bin_cutoff: int, indel_b
     )
 
     #This column is added by the RF module based on a 0.5 threshold which doesn't correspond to what we use
-    ht = ht.drop(ht.rf_prediction)
+    ht = ht.drop(ht.rf_prediction,ht.old_info_MQ)
 
     return ht
 
@@ -589,8 +587,8 @@ def main(args):
 
 
     if args.finalize:
-        ht = prepare_final_ht(data_type, args.run_hash, args.snp_bin_cutoff, args.indel_bin_cutoff)
-        ht.write(annotations_ht_path(data_type, 'rf'), args.overwrite)
+        ht = prepare_final_ht(data_source, freeze, args.run_hash, args.snp_bin_cutoff, args.indel_bin_cutoff)
+        ht.write(var_annotations_ht_path(data_source, freeze, 'rf'), args.overwrite)
 
 
 if __name__ == '__main__':
@@ -632,9 +630,13 @@ if __name__ == '__main__':
     training_params.add_argument('--vqsr_training', help='Use VQSR training examples', action='store_true')
     training_params.add_argument('--no_transmitted_singletons', help='Do not use transmitted singletons for training.',
                                  action='store_true')
+    training_params.add_argument('--no_sibling_singletons', help='Do not use sibling singletons for training.',
+                                 action='store_true')
     training_params.add_argument('--array_con_common', help='Use only array variants >0.1% AF.',
                                  action='store_true')
     training_params.add_argument('--array_con', help='Use only highly concordant array variants.',
+                                 action='store_true')
+    training_params.add_argument('--array', help='Use all array variants.',
                                  action='store_true')
 
 
