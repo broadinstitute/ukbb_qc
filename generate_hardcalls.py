@@ -17,6 +17,10 @@ def main(args):
     if args.impute_sex:
         logger.info('Imputing sex...')
         mt = get_ukbb_data(data_source, freeze, split=False, raw=True)
+
+        # NOTE: correct densified sparse mt for hardcalls
+        mt = mt.key_rows_by('locus', 'alleles')
+        mt = mt.annotate_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
         sex_check_intervals = [hl.parse_locus_interval(x, reference_genome='GRCh38') for x in ['chr20', 'chrX', 'chrY']]
         mt = hl.filter_intervals(mt, sex_check_intervals)
         mt = hl.variant_qc(mt)
