@@ -32,7 +32,7 @@ def main(args):
     freeze = args.freeze
 
     if args.create_exome_array_id_map_ht:
-        sample_map = hl.import_table(array_sample_map, delimiter=',')
+        sample_map = hl.import_table(array_sample_map(freeze), delimiter=',')
         logger.info(f'Total number of IDs in the array to exome sample map: {sample_map.count()}...')
 
         sample_map = sample_map.key_by(s=sample_map.eid_sample)
