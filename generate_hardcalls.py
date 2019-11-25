@@ -10,20 +10,6 @@ logger = logging.getLogger("hardcalls")
 logger.setLevel(logging.INFO)
 
 
-def annotate_adj(
-        mt: hl.MatrixTable,
-        adj_gq: int = 20,
-        adj_dp: int = 10,
-        adj_ab: float = 0.2,
-        haploid_adj_dp: int = 10
-) -> hl.MatrixTable:
-    """
-    Annotate genotypes with adj criteria (assumes diploid)
-    Defaults correspond to gnomAD values.
-    """
-    return mt.annotate_entries(adj=get_adj_expr(mt.GT, mt.GQ, mt.DP, adj_gq, adj_dp, haploid_adj_dp))
-
-
 def main(args):
     hl.init(log='/generate_hardcalls.log')
 
