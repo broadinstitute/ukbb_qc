@@ -32,14 +32,18 @@ def main(args):
 
     if args.impute_sex:
         logger.info('Imputing sex...')
+        # TODO: Delete below after export -- wanted to check whether all Y sites are defined in the new pipeline
+        ht = hl.read_table(sex_ht_path(data_source, freeze))
+        ht.export(sex_tsv_path(data_source, freeze))
+
         mt = get_ukbb_data(data_source, freeze, split=False, raw=True)
 
         # NOTE: correct densified sparse mt for hardcalls
         mt = mt.key_rows_by('locus', 'alleles')
         # NOTE: as of 11/25 densify no longer converts LGT to GT
-        mt = mt.annotate_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
         sex_check_intervals = [hl.parse_locus_interval(x, reference_genome='GRCh38') for x in ['chr20', 'chrX', 'chrY']]
         mt = hl.filter_intervals(mt, sex_check_intervals)
+        mt = mt.annotate_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
         mt = hl.variant_qc(mt)
         run_impute_sex(mt, data_source, freeze)
     # NOTE: check distributions here before continuing with hardcalls
