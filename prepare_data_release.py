@@ -191,195 +191,6 @@ def make_info_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression]:
     return info_dict
 
 
-def sample_sum_check(ht: hl.Table, prefix: str, label_groups: Dict[str, List[str]], verbose: bool, subpop=None):
-    '''
-    Compute afresh the sum of annotations for a specified group of annotations, and compare to the annotated version;
-    display results from checking the sum of the specified annotations in the terminal
-    :param Table ht: Hail Table containing annotations to be summed
-    :param str prefix: Subset of gnomAD
-    :param dict label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
-        e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"])
-    :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
-        show only top values of annotations that fail checks
-    :param str subpop: Subpop abbreviation, supplied only if subpopulations are included in the annotation groups being checked
-    :rtype: None
-    '''
-    combo_AC = [ht.info[f'{prefix}_AC_{x}'] for x in make_label_combos(label_groups)]
-    combo_AN = [ht.info[f'{prefix}_AN_{x}'] for x in make_label_combos(label_groups)]
-    combo_nhomalt = [ht.info[f'{prefix}_nhomalt_{x}'] for x in make_label_combos(label_groups)]
-    group = label_groups.pop('group')[0]
-    alt_groups = "_".join(sorted(label_groups.keys(), key=lambda x: SORT_ORDER.index(x)))
-
-    annot_dict = {f'sum_AC_{group}_{alt_groups}': hl.sum(combo_AC),
-                  f'sum_AN_{group}_{alt_groups}': hl.sum(combo_AN),
-                  f'sum_nhomalt_{group}_{alt_groups}': hl.sum(combo_nhomalt)}
-
-    ht = ht.annotate(**annot_dict)
-
-    for subfield in ['AC', 'AN', 'nhomalt']:
-        if not subpop:
-            generic_field_check(ht, (ht.info[f'{prefix}_{subfield}_{group}'] != ht[f'sum_{subfield}_{group}_{alt_groups}']),
-                                f'{prefix}_{subfield}_{group} = sum({subfield}_{group}_{alt_groups})',
-                                [f'info.{prefix}_{subfield}_{group}', f'sum_{subfield}_{group}_{alt_groups}'], verbose)
-        else:
-            generic_field_check(ht, (ht.info[f'{prefix}_{subfield}_{group}_{subpop}'] != ht[f'sum_{subfield}_{group}_{alt_groups}']),
-                                f'{prefix}_{subfield}_{group}_{subpop} = sum({subfield}_{group}_{alt_groups})',
-                                [f'info.{prefix}_{subfield}_{group}_{subpop}', f'sum_{subfield}_{group}_{alt_groups}'], verbose)
-
-
-def generic_field_check(ht: hl.Table, cond_expr, check_description, display_fields, verbose):
-    '''
-    Check a generic logical condition involving annotations in a Hail Table and print the results to terminal
-    :param Table ht: Table containing annotations to be checked
-    :param Expression cond_expr: logical expression referring to annotations in ht to be checked
-    :param str check_description: String describing the condition being checked; is displayed in terminal summary message
-    :param list of str display_fields: List of names of ht annotations to be displayed in case of failure (for troubleshooting purposes);
-        these fields are also displayed if verbose is True
-    :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
-        show only top values of annotations that fail checks
-    :rtype: None
-    '''
-    ht_orig = ht
-    ht = ht.filter(cond_expr)
-    n_fail = ht.count()
-    if n_fail > 0:
-        logger.info(f'Found {n_fail} sites that fail {check_description} check:')
-        ht = ht.flatten()
-        ht.select('locus', 'alleles', *display_fields).show()
-    else:
-        logger.info(f'PASSED {check_description} check')
-        if verbose:
-            ht_orig = ht_orig.flatten()
-            ht_orig.select(*display_fields).show()
-
-
-def sanity_check_ht(ht: hl.Table, missingness_threshold=0.5, verbose=False):
-    '''
-    Perform a battery of sanity checks on a specified group of subsets in a Hail Table containing variant annotations;
-    includes summaries of % filter status for different partitions of variants; histogram outlier bin checks; checks on
-    AC, AN, and AF annotations; checks that subgroup annotation values add up to the supergroup annotation values;
-    checks on sex-chromosome annotations; and summaries of % missingness in variant annotations
-
-    :param Table ht: Table containing variant annotations to check
-    :param bool verbose: If True, display top values of relevant annotations being checked, regardless of whether check
-        conditions are violated; if False, display only top values of relevant annotations if check conditions are violated
-    :return: Terminal display of results from the battery of sanity checks
-    :rtype: None
-    '''
-    n_sites = ht.count()
-    contigs = ht.aggregate(hl.agg.collect_as_set(ht.locus.contig))
-    logger.info(f'Found {n_sites} sites in {data_source} for contigs {contigs}')
-    info_metrics = list(ht.row.info)
-    non_info_metrics = list(ht.row)
-    non_info_metrics.remove('info')
-
-    logger.info('VARIANT FILTER SUMMARIES:')
-    ht = ht.annotate(is_filtered=ht.filters.length() > 0,
-                    #in_problematic_region=hl.any(lambda x: x, [ht.info.lcr, ht.info.segdup, ht.info.decoy]))
-                    in_problematic_region=hl.any(lambda x: x, [ht.info.lcr]))
-
-    ht_filter_check1 = ht.group_by(ht.is_filtered).aggregate(**make_filters_sanity_check_expr(ht)).order_by(hl.desc('n'))
-    ht_filter_check1.show()
-
-    ht_filter_check2 = ht.group_by(ht.info.allele_type).aggregate(**make_filters_sanity_check_expr(ht)).order_by(hl.desc('n'))
-    ht_filter_check2.show()
-
-    ht_filter_check3 = (ht.group_by(ht.info.allele_type, ht.in_problematic_region)
-                        .aggregate(**make_filters_sanity_check_expr(ht)).order_by(hl.desc('n')))
-    ht_filter_check3.show(50, 140)
-
-    ht_filter_check4 = (ht.group_by(ht.info.allele_type, ht.in_problematic_region, ht.info.n_alt_alleles)
-                        .aggregate(**make_filters_sanity_check_expr(ht)).order_by(hl.desc('n')))
-    ht_filter_check4.show(50, 140)
-
-    logger.info('HISTOGRAM CHECKS:')
-    for hist in ['gq_hist_alt', 'gq_hist_all', 'dp_hist_alt', 'dp_hist_all', 'ab_hist_alt']:
-        # Check subfield == 0
-        generic_field_check(ht, (ht.info[f'{hist}_n_smaller'] != 0), f'{hist}_n_smaller == 0',
-                            [f'info.{hist}_n_smaller'], verbose)
-        if hist not in ['dp_hist_alt', 'dp_hist_all']:  # NOTE: DP hists can have nonzero values in n_larger bin
-            generic_field_check(ht, (ht.info[f'{hist}_n_larger'] != 0), f'{hist}_n_larger == 0',
-                                [f'info.{hist}_n_larger'], verbose)
-
-    logger.info('RAW AND ADJ CHECKS:')
-    for subfield in ['AC', 'AN', 'AF']:
-        # Check AC, AN, AF > 0
-        generic_field_check(ht, (ht.info[f'{subfield}_raw'] <= 0), f'{subfield}_raw > 0',
-                            [f'info.{subfield}_raw'], verbose)
-        generic_field_check(ht, (ht.info[f'{subfield}_adj'] < 0), f'{subfield}_adj >= 0',
-                            [f'info.{subfield}_adj', 'filters'], verbose)
-
-    for subfield in ['AC', 'AN', 'nhomalt']:
-        # Check AC_raw >= AC adj
-        generic_field_check(ht, (ht.info[f'{subfield}_raw'] < ht.info[f'{subfield}_adj']),
-                            f'{subfield}_raw >= {subfield}_adj',
-                            [f'info.{subfield}_raw', f'info.{subfield}_adj'], verbose)
-
-    logger.info('SAMPLE SUM CHECKS:')
-    # NOTE: group entry in dict is required here to be a list of length 1
-    sample_sum_check(ht, dict(group=['adj'], pop=pop_adjusted), verbose)
-    sample_sum_check(ht, dict(group=['adj'], sex=SEXES), verbose)
-    sample_sum_check(ht, dict(group=['adj'], pop=pop_adjusted, sex=SEXES), verbose)
-
-    logger.info('SEX CHROMOSOME ANNOTATION CHECKS:')
-    female_metrics = [x for x in info_metrics if '_female' in x]
-    male_metrics = [x for x in info_metrics if '_male' in x]
-
-    if 'Y' in contigs:
-        logger.info('Check values of female metrics for Y variants are NA:')
-        ht_y = hl.filter_intervals(ht, [hl.parse_locus_interval('Y')])
-        metrics_values = {}
-        for metric in female_metrics:
-            metrics_values[metric] = hl.agg.collect_as_set(ht_y.info[metric])
-        output = ht_y.aggregate(hl.struct(**metrics_values))
-        for metric,values in dict(output).items():
-            if values == {None}:
-                logger.info(f"PASSED {metric} = {None} check for Y variants")
-            else:
-                logger.info(f"FAILED Y check: Found {values} in {metric}")
-
-    logger.info('Check values of male nhomalt metrics for X nonpar variants are 0:')
-    ht_x = hl.filter_intervals(ht, [hl.parse_locus_interval('X')])
-    ht_xnonpar = ht_x.filter(ht_x.locus.in_x_nonpar())
-    n = ht_xnonpar.count()
-    logger.info(f"Found {n} X nonpar sites")  # Lots of values found in male X nonpar sites
-
-    male_metrics = [x for x in male_metrics if 'nhomalt' in x]
-    metrics_values = {}
-    for metric in male_metrics:
-        metrics_values[metric] = hl.agg.collect_as_set(ht_xnonpar.info[metric])
-    output = ht_xnonpar.aggregate(hl.struct(**metrics_values))
-    for metric, values in dict(output).items():
-        if values == {0}:
-            logger.info(f"PASSED {metric} = 0 check for X nonpar variants")
-        else:
-            logger.info(f"FAILED X nonpar check: Found {values} in {metric}")
-
-    logger.info('Check (nhomalt == nhomalt_female) for X nonpar variants:')
-    female_metrics = [x for x in female_metrics if 'nhomalt' in x]
-    for metric in female_metrics:
-        standard_field = metric.replace('_female', '')
-        generic_field_check(ht_xnonpar, (ht_xnonpar.info[f'{metric}'] != ht_xnonpar.info[f'{standard_field}']),
-                            f'{metric} == {standard_field}', [f'info.{metric}', f'info.{standard_field}'], verbose)
-
-    logger.info('MISSINGNESS CHECKS:')
-    metrics_frac_missing = {}
-    for x in info_metrics:
-        metrics_frac_missing[x] = hl.agg.sum(hl.is_missing(ht.info[x])) / n_sites
-    for x in non_info_metrics:
-        metrics_frac_missing[x] = hl.agg.sum(hl.is_missing(ht[x])) / n_sites
-    output = ht.aggregate(hl.struct(**metrics_frac_missing))
-
-    n_fail = 0
-    for metric, value in dict(output).items():
-        if value > missingness_threshold:
-            logger.info("FAILED missing check for {}: {}% missing".format(metric, 100 * value))
-            n_fail += 1
-        else:
-            logger.info("Missingness check for {}: {}% missing".format(metric, 100 * value))
-    logger.info("{} missing metrics checks failed".format(n_fail))
-
-
 def make_freq_meta_index_dict(freq_meta):
     '''
     Make dictionary of the entries in the frequency array annotation, where keys are the grouping combinations and the values
@@ -840,7 +651,7 @@ def main(args):
         
         # Select relevant fields for VCF export
         mt = mt.select_rows('info', 'filters', 'rsid', 'qual', 'vep')
-        mt.write(release_mt_path(data_source, freeze, nested=False, temp=True), args.overwrite)
+        #mt.write(release_mt_path(data_source, freeze, nested=False, temp=True), args.overwrite)
 
         # Remove gnomad_ prefix for VCF export
         mt = hl.read_matrix_table(release_mt_path(data_source, freeze, nested=False, temp=True))
@@ -872,6 +683,7 @@ def main(args):
                        alleles=mt.alleles)
 
         logger.info(f'full mt count: {mt.count()}')
+        # NOTE: need to run this on all workers
         for contig in contigs:
             contig_mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
             logger.info(f'{contig} mt count: {contig_mt.count()}')
@@ -886,10 +698,6 @@ def main(args):
         mt.write(release_mt_path(data_source, freeze, nested=False), args.overwrite)
         mt.rows().write(release_ht_path(data_source, freeze, nested=False), args.overwrite)
  
-    if args.sanity_check_sites:
-        ht = hl.read_table(release_ht_path(data_source, freeze, nested=False, temp=True))
-        sanity_check_ht(ht, missingness_threshold=0.5, verbose=args.verbose)
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -898,8 +706,6 @@ if __name__ == '__main__':
     parser.add_argument('--prepare_internal_mt', help='Prepare internal MatrixTable', action='store_true')
     parser.add_argument('--prepare_release_vcf', help='Prepare release VCF', action='store_true')
     parser.add_argument('--prepare_browser_ht', help='Prepare sites ht for browser', action='store_true')
-    parser.add_argument('--sanity_check_sites', help='Run sanity checks function', action='store_true')
-    parser.add_argument('--verbose', help='Run sanity checks function with verbose output', action='store_true')
     parser.add_argument('--slack_channel', help='Slack channel to post results and notifications to.')
     parser.add_argument('--overwrite', help='Overwrite data', action='store_true')
     args = parser.parse_args()
