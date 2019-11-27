@@ -203,7 +203,7 @@ def array_variant_concordance_path(data_source: str, freeze: int = CURRENT_FREEZ
 
 def ploidy_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     if data_source == 'broad' and freeze >= 5:
-        return f'{sample_qc_prefix(data_source, freeze)/sex_check/ploidy.ht')
+        return f'{sample_qc_prefix(data_source, freeze)}/sex_check/ploidy.ht'
     else:
         raise DataException("No ploidy file specified for this data_source and freeze yet")
 
