@@ -324,16 +324,19 @@ def unfurl_nested_annotations(ht, gnomad, genome):
 
     if gnomad:
         if genome:
+            freq = 'gnomad_genomes.freq'
             freq_idx = 'gnomad_genomes.freq_index_dict'
             faf_idx = 'gnomad_genomes.faf_index_dict'
             gnomad_prefix = 'gnomad_genomes'
             popmax = 'gnomad_genomes.popmax'
         else:
+            freq = 'gnomad_exomes.freq'
             freq_idx = 'gnomad_exomes.freq_index_dict'
             faf_idx = 'gnomad_exomes.faf_index_dict'
             gnomad_prefix = 'gnomad_exomes'
             popmax = 'gnomad_exomes.popmax'
     else:
+        freq = 'freq'
         freq_idx = 'freq_index_dict'
         faf_idx = 'faf_index_dict'
         popmax = 'popmax'
@@ -358,10 +361,10 @@ def unfurl_nested_annotations(ht, gnomad, genome):
 
             combo = "_".join(combo_fields)
             combo_dict = {
-                f"{prefix}_AC_{combo}": ht.freq[i].AC,
-                f"{prefix}_AN_{combo}": ht.freq[i].AN,
-                f"{prefix}_AF_{combo}": ht.freq[i].AF,
-                f"{prefix}_nhomalt_{combo}": ht.freq[i].homozygote_count
+                f"{prefix}_AC_{combo}": ht[freq][i].AC,
+                f"{prefix}_AN_{combo}": ht[freq][i].AN,
+                f"{prefix}_AF_{combo}": ht[freq][i].AF,
+                f"{prefix}_nhomalt_{combo}": ht[freq][i].homozygote_count
             }
         expr_dict.update(combo_dict)
 
