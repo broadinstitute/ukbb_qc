@@ -308,6 +308,7 @@ def make_hist_bin_edges_expr(ht):
             '|'.join(map(lambda x: str(int(x)), ht.take(1)[0][hist].bin_edges))
     return edges_dict
 
+
 def call_unfurl_nested_annotations(ht, gnomad, genome):
     return unfurl_nested_annotations(ht, gnomad, genome)
    
@@ -324,18 +325,21 @@ def unfurl_nested_annotations(ht, gnomad, genome):
 
     if gnomad:
         if genome:
+            faf = 'gnomad_genomes.faf'
             freq = 'gnomad_genomes.freq'
             freq_idx = 'gnomad_genomes.freq_index_dict'
             faf_idx = 'gnomad_genomes.faf_index_dict'
             gnomad_prefix = 'gnomad_genomes'
             popmax = 'gnomad_genomes.popmax'
         else:
+            faf = 'gnomad_exomes.faf'
             freq = 'gnomad_exomes.freq'
             freq_idx = 'gnomad_exomes.freq_index_dict'
             faf_idx = 'gnomad_exomes.faf_index_dict'
             gnomad_prefix = 'gnomad_exomes'
             popmax = 'gnomad_exomes.popmax'
     else:
+        faf = 'faf'
         freq = 'freq'
         freq_idx = 'freq_index_dict'
         faf_idx = 'faf_index_dict'
@@ -384,10 +388,10 @@ def unfurl_nested_annotations(ht, gnomad, genome):
 
             combo = "_".join(combo_fields)
             combo_dict = {
-                f"{prefix}_faf95_{combo}": hl.or_missing(hl.set(ht.faf[i].meta.values()) == set(combo_fields),
-                                                         ht.faf[i].faf95),
-                f"{prefix}_faf99_{combo}": hl.or_missing(hl.set(ht.faf[i].meta.values()) == set(combo_fields),
-                                                         ht.faf[i].faf99),
+                f"{prefix}_faf95_{combo}": hl.or_missing(hl.set(ht[faf][i].meta.values()) == set(combo_fields),
+                                                         ht[faf][i].faf95),
+                f"{prefix}_faf99_{combo}": hl.or_missing(hl.set(ht[faf][i].meta.values()) == set(combo_fields),
+                                                         ht[faf][i].faf99),
             }
         expr_dict.update(combo_dict)
 
@@ -569,15 +573,226 @@ def make_format_dict() -> dict:
     return format_dict
 
 
+def sample_sum_check(ht: hl.Table, prefix: str, label_groups: Dict[str, List[str]], verbose: bool, subpop=None):
+    '''
+    Compute afresh the sum of annotations for a specified group of annotations, and compare to the annotated version;
+    display results from checking the sum of the specified annotations in the terminal
+    :param Table ht: Hail Table containing annotations to be summed
+    :param str prefix: Subset of gnomAD
+    :param dict label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
+        e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"])
+    :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
+        show only top values of annotations that fail checks
+    :param str subpop: Subpop abbreviation, supplied only if subpopulations are included in the annotation groups being checked
+    :rtype: None
+    '''
+    combo_AC = [ht.info[f'{prefix}AC_{x}'] for x in make_label_combos(label_groups)]
+    combo_AN = [ht.info[f'{prefix}AN_{x}'] for x in make_label_combos(label_groups)]
+    combo_nhomalt = [ht.info[f'{prefix}nhomalt_{x}'] for x in make_label_combos(label_groups)]
+
+    group = label_groups.pop('group')[0]
+    alt_groups = "_".join(sorted(label_groups.keys(), key=lambda x: SORT_ORDER.index(x)))
+
+    annot_dict = {f'sum_AC_{group}_{alt_groups}': hl.sum(combo_AC),
+                  f'sum_AN_{group}_{alt_groups}': hl.sum(combo_AN),
+                  f'sum_nhomalt_{group}_{alt_groups}': hl.sum(combo_nhomalt)}
+
+    ht = ht.annotate(**annot_dict)
+
+    for subfield in ['AC', 'AN', 'nhomalt']:
+        if not subpop:
+            generic_field_check(ht, (ht.info[f'{prefix}{subfield}_{group}'] != ht[f'sum_{subfield}_{group}_{alt_groups}']),
+                                f'adj_{prefix}{subfield}_{group} = sum({subfield}_{group}_{alt_groups})',
+                                [f'info.{prefix}{subfield}_{group}', f'sum_{subfield}_{group}_{alt_groups}'], verbose)
+        else:
+            generic_field_check(ht, (ht.info[f'{prefix}{subfield}_{group}_{subpop}'] != ht[f'sum_{subfield}_{group}_{alt_groups}']),
+                                f'{prefix}{subfield}_{group}_{subpop} = sum({subfield}_{group}_{alt_groups})',
+                                [f'info.{prefix}{subfield}_{group}_{subpop}', f'sum_{subfield}_{group}_{alt_groups}'], verbose)
+
+
+def sanity_check_ht(ht: hl.Table, subsets, missingness_threshold=0.5, verbose=False):
+    '''
+    Perform a battery of sanity checks on a specified group of subsets in a Hail Table containing variant annotations;
+    includes summaries of % filter status for different partitions of variants; histogram outlier bin checks; checks on
+    AC, AN, and AF annotations; checks that subgroup annotation values add up to the supergroup annotation values;
+    checks on sex-chromosome annotations; and summaries of % missingness in variant annotations
+    :param Table ht: Table containing variant annotations to check
+    :param list of str subsets: List of subsets to be checked
+    :param bool verbose: If True, display top values of relevant annotations being checked, regardless of whether check
+        conditions are violated; if False, display only top values of relevant annotations if check conditions are violated
+    :return: Terminal display of results from the battery of sanity checks
+    :rtype: None
+    '''
+    n_sites = ht.count()
+    contigs = ht.aggregate(hl.agg.collect_as_set(ht.locus.contig))
+    logger.info(f'Found {n_sites} sites in for contigs {contigs}')
+    info_metrics = list(ht.row.info)
+    non_info_metrics = list(ht.row)
+    non_info_metrics.remove('info')
+
+    logger.info('VARIANT FILTER SUMMARIES:')
+    ht = ht.annotate(is_filtered=ht.filters.length() > 0,
+                     in_problematic_region=hl.any(lambda x: x, [ht.info.lcr]))#, ht.info.segdup, ht.info.decoy]))
+
+    ht_filter_check1 = ht.group_by(ht.is_filtered).aggregate(**make_filters_sanity_check_expr(ht)).order_by(hl.desc('n'))
+    ht_filter_check1.show()
+
+    ht_filter_check2 = ht.group_by(ht.info.allele_type).aggregate(**make_filters_sanity_check_expr(ht)).order_by(hl.desc('n'))
+    ht_filter_check2.show()
+
+    ht_filter_check3 = (ht.group_by(ht.info.allele_type, ht.in_problematic_region)
+                        .aggregate(**make_filters_sanity_check_expr(ht)).order_by(hl.desc('n')))
+    ht_filter_check3.show(50, 140)
+
+    ht_filter_check4 = (ht.group_by(ht.info.allele_type, ht.in_problematic_region, ht.info.n_alt_alleles)
+                        .aggregate(**make_filters_sanity_check_expr(ht)).order_by(hl.desc('n')))
+    ht_filter_check4.show(50, 140)
+
+    logger.info('HISTOGRAM CHECKS:')
+    for hist in ['gq_hist_alt', 'gq_hist_all', 'dp_hist_alt', 'dp_hist_all', 'ab_hist_alt']:
+        # Check subfield == 0
+        generic_field_check(ht, (ht.info[f'{hist}_n_smaller'] != 0), f'{hist}_n_smaller == 0',
+                            [f'info.{hist}_n_smaller'], verbose)
+        if hist not in ['dp_hist_alt', 'dp_hist_all']:  # NOTE: DP hists can have nonzero values in n_larger bin
+            generic_field_check(ht, (ht.info[f'{hist}_n_larger'] != 0), f'{hist}_n_larger == 0',
+                                [f'info.{hist}_n_larger'], verbose)
+
+    logger.info('RAW AND ADJ CHECKS:')
+    for subfield in ['AC', 'AN', 'AF']:
+        # Check AC, AN, AF > 0
+        generic_field_check(ht, (ht.info[f'raw_{subfield}_raw'] <= 0), f'raw_{subfield}_raw > 0',
+                            [f'info.raw_{subfield}_raw'], verbose)
+        generic_field_check(ht, (ht.info[f'adj_{subfield}_adj'] < 0), f'adj_{subfield}_adj >= 0',
+                            [f'info.adj_{subfield}_adj', 'filters'], verbose)
+
+    for subset in subsets:
+        if subset == '': 
+            continue
+        for subfield in ['AC', 'AN', 'nhomalt']:
+            # Check AC_raw >= AC adj
+            generic_field_check(ht, (ht.info[f'{subset}{subfield}_raw'] < ht.info[f'{subset}{subfield}_adj']),
+                                f'{subset} {subfield}_raw >= {subfield}_adj',
+                                [f'info.{subset}{subfield}_raw', f'info.{subset}{subfield}_adj'], verbose)
+
+    logger.info('SAMPLE SUM CHECKS:')
+    for subset in subsets:
+        # Check if pops are present
+        if subset == 'gnomad':
+            pop_adjusted = list(set([x for x in info_metrics if subset in x and 'raw' not in x]))
+        else:
+            pop_adjusted = list(set([x for x in info_metrics if (('adj' in x or 'raw' in x) and ('gnomad' not in x) and ('raw' not in x))]))
+       
+        pop_adjusted = [i.replace('adj_', '').replace('_adj', '').replace('_adj_', '') for i in pop_adjusted] 
+        found = []
+        for i in pop_adjusted:
+            for z in POPS:
+                if z in i:
+                    found.append(z)
+        missing_pops = set(POPS) - set(found)
+        if len(missing_pops) != 0:
+            logger.warn(f'Missing {missing_pops} pops in {subset} subset!')
+
+        if subset == 'gnomad':
+            sample_sum_check(ht, subset, dict(group=['adj'], pop=POPS), verbose)
+            sample_sum_check(ht, subset, dict(group=['adj'], sex=GNOMAD_SEXES), verbose)
+            sample_sum_check(ht, subset, dict(group=['adj'], pop=POPS, sex=GNOMAD_SEXES), verbose)
+            # Adjust subpops to those found in subset
+            nfe_subpop_adjusted = list(set([x for x in pop_adjusted if 'nfe_' in x and 'male' not in x]))
+            if nfe_subpop_adjusted != []:
+                sample_sum_check(ht, subset, dict(group=['adj'], pop=['nfe'], subpop=GNOMAD_NFE_SUBPOPS), verbose, subpop='nfe')
+            eas_subpop_adjusted = list(set([x for x in pop_adjusted if subset in x and 'eas_' in x and 'male' not in x]))
+            if eas_subpop_adjusted != []:
+                sample_sum_check(ht, subset, dict(group=['adj'], pop=['eas'], subpop=EAS_NFE_SUBPOPS), verbose, subpop='eas')
+        else:
+            subset = 'adj_' # hacky add; UKB fields are weirdly named adj_AC_adj
+            sample_sum_check(ht, subset, dict(group=['adj'], pop=POPS), verbose)
+            sample_sum_check(ht, subset, dict(group=['adj'], sex=GNOMAD_SEXES), verbose)
+            sample_sum_check(ht, subset, dict(group=['adj'], pop=POPS, sex=GNOMAD_SEXES), verbose)
+
+            # Adjust subpops to those found in subset
+            nfe_subpop_adjusted = list(set([x for x in pop_adjusted if 'nfe_' in x and 'male' not in x]))
+            if nfe_subpop_adjusted != []:
+                sample_sum_check(ht, subset, dict(group=['adj'], pop=['nfe'], subpop=NFE_SUBPOPS), verbose, subpop='nfe')
+            eas_subpop_adjusted = list(set([x for x in pop_adjusted if subset in x and 'eas_' in x and 'male' not in x]))
+            if eas_subpop_adjusted != []:
+                sample_sum_check(ht, subset, dict(group=['adj'], pop=['eas'], subpop=EAS_SUBPOPS), verbose, subpop='eas')
+            afr_subpop_adjusted = list(set([x for x in pop_adjusted if 'afr_' in x and 'male' not in x]))
+            if afr_subpop_adjusted != []:
+                sample_sum_check(ht, subset, dict(group=['adj'], pop=['afr'], subpop=AFR_SUBPOPS), verbose, subpop='afr')
+            sas_subpop_adjusted = list(set([x for x in pop_adjusted if 'sas_' in x and 'male' not in x]))
+            if sas_subpop_adjusted != []:
+                sample_sum_check(ht, subset, dict(group=['adj'], pop=['sas'], subpop=SAS_SUBPOPS), verbose, subpop='sas')
+
+    logger.info('SEX CHROMOSOME ANNOTATION CHECKS:')
+    female_metrics = [x for x in info_metrics if '_female' in x]
+    male_metrics = [x for x in info_metrics if '_male' in x]
+
+    if 'chrY' in contigs:
+        logger.info('Check values of female metrics for Y variants are NA:')
+        ht_y = hl.filter_intervals(ht, [hl.parse_locus_interval('chrY')])
+        metrics_values = {}
+        for metric in female_metrics:
+            metrics_values[metric] = hl.agg.collect_as_set(ht_y.info[metric])
+        output = ht_y.aggregate(hl.struct(**metrics_values))
+        for metric,values in dict(output).items():
+            if values == {None}:
+                logger.info(f"PASSED {metric} = {None} check for Y variants")
+            else:
+                logger.info(f"FAILED Y check: Found {values} in {metric}")
+
+    logger.info('Check values of male nhomalt metrics for X nonpar variants are 0:')
+    ht_x = hl.filter_intervals(ht, [hl.parse_locus_interval('chrX')])
+    ht_xnonpar = ht_x.filter(ht_x.locus.in_x_nonpar())
+    n = ht_xnonpar.count()
+    logger.info(f"Found {n} X nonpar sites")  # Lots of values found in male X nonpar sites
+
+    male_metrics = [x for x in male_metrics if 'nhomalt' in x]
+    metrics_values = {}
+    for metric in male_metrics:
+        metrics_values[metric] = hl.agg.collect_as_set(ht_xnonpar.info[metric])
+    output = ht_xnonpar.aggregate(hl.struct(**metrics_values))
+    for metric, values in dict(output).items():
+        if values == {0}:
+            logger.info(f"PASSED {metric} = 0 check for X nonpar variants")
+        else:
+            logger.info(f"FAILED X nonpar check: Found {values} in {metric}")
+
+    logger.info('Check (nhomalt == nhomalt_female) for X nonpar variants:')
+    female_metrics = [x for x in female_metrics if 'nhomalt' in x]
+    for metric in female_metrics:
+        standard_field = metric.replace('_female', '')
+        generic_field_check(ht_xnonpar, (ht_xnonpar.info[f'{metric}'] != ht_xnonpar.info[f'{standard_field}']),
+                            f'{metric} == {standard_field}', [f'info.{metric}', f'info.{standard_field}'], verbose)
+
+    logger.info('MISSINGNESS CHECKS:')
+    metrics_frac_missing = {}
+    for x in info_metrics:
+        metrics_frac_missing[x] = hl.agg.sum(hl.is_missing(ht.info[x])) / n_sites
+    for x in non_info_metrics:
+        metrics_frac_missing[x] = hl.agg.sum(hl.is_missing(ht[x])) / n_sites
+    output = ht.aggregate(hl.struct(**metrics_frac_missing))
+
+    n_fail = 0
+    for metric, value in dict(output).items():
+        if value > missingness_threshold:
+            logger.info("FAILED missing check for {}: {}% missing".format(metric, 100 * value))
+            n_fail += 1
+        else:
+            logger.info("Missingness check for {}: {}% missing".format(metric, 100 * value))
+    logger.info("{} missing metrics checks failed".format(n_fail))
+
+
 def main(args):
     hl.init(log='/release.log', default_reference='GRCh38')
 
     data_source = args.data_source
     freeze = args.freeze
-    age_hist_data = get_age_distributions(data_source, freeze)
 
     if args.prepare_internal_mt:
-       
+
+        logger.info('Getting age hist data')
+        age_hist_data = get_age_distributions(data_source, freeze)
+
         logger.info('Getting raw mt with metadata information')
         mt = get_ukbb_data(data_source, freeze, split=False, raw=True, meta_root='meta')
         logger.info(f'raw mt count: {mt.count()}')
@@ -612,6 +827,9 @@ def main(args):
 
 
     if args.prepare_release_vcf:
+        logger.info('Getting age hist data')
+        age_hist_data = get_age_distributions(data_source, freeze)
+
         logger.info('Starting VCF process')
         mt = hl.read_matrix_table(release_mt_path(data_source, freeze))
         bin_edges = make_hist_bin_edges_expr(mt.rows())
@@ -654,7 +872,7 @@ def main(args):
         
         # Select relevant fields for VCF export
         mt = mt.select_rows('info', 'filters', 'rsid', 'qual', 'vep')
-        #mt.write(release_mt_path(data_source, freeze, nested=False, temp=True), args.overwrite)
+        mt.write(release_mt_path(data_source, freeze, nested=False, temp=True), args.overwrite)
 
         # Remove gnomad_ prefix for VCF export
         mt = hl.read_matrix_table(release_mt_path(data_source, freeze, nested=False, temp=True))
@@ -693,13 +911,13 @@ def main(args):
             hl.export_vcf(contig_mt, release_vcf_path(data_source, freeze, contig=contig), metadata=header_dict)
 
     if args.prepare_browser_ht:
-        # Move 'info' annotations to top level for browser release
         mt = hl.read_matrix_table(release_mt_path(data_source, freeze, nested=False, temp=True))
-        # NOTE: rename sample DP to sDP (sample depth; hail complains about name collision)
-        mt = mt.transmute_entries(sDP=mt.DP)
-        mt = mt.transmute_rows(**mt.info)
-        mt.write(release_mt_path(data_source, freeze, nested=False), args.overwrite)
-        mt.rows().write(release_ht_path(data_source, freeze, nested=False), args.overwrite)
+        mt.rows().write(release_ht_path(data_source, freeze, nested=False, temp=True), args.overwrite)
+
+    if args.sanity_check_sites:
+        subset_list = ['', 'gnomad_exomes_', 'gnomad_genomes_'] 
+        ht = hl.read_table(release_ht_path(data_source, freeze, nested=False, temp=True))
+        sanity_check_ht(ht, subset_list, missingness_threshold=0.5, verbose=args.verbose)
  
 
 if __name__ == '__main__':
@@ -709,6 +927,8 @@ if __name__ == '__main__':
     parser.add_argument('--prepare_internal_mt', help='Prepare internal MatrixTable', action='store_true')
     parser.add_argument('--prepare_release_vcf', help='Prepare release VCF', action='store_true')
     parser.add_argument('--prepare_browser_ht', help='Prepare sites ht for browser', action='store_true')
+    parser.add_argument('--sanity_check_sites', help='Run sanity checks function', action='store_true') 
+    parser.add_argument('--verbose', help='Run sanity checks function with verbose output', action='store_true')
     parser.add_argument('--slack_channel', help='Slack channel to post results and notifications to.')
     parser.add_argument('--overwrite', help='Overwrite data', action='store_true')
     args = parser.parse_args()
