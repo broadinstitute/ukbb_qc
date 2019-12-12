@@ -58,3 +58,36 @@ def annotate_relationship(relatedness_ht,
                                              .default("None"))
 
     return relatedness_ht
+
+
+def import_capture_regions(interval_path: str, output_path: str, ow: bool) -> None:
+    '''
+    Imports capture region text file into Table and writes Table at specified path
+
+    :param str interval_path: Path to input file
+    :param str output_path: Path to output file
+    :param bool ow: Whether to overwrite data
+    :return: None
+    :rtype: None
+    '''
+
+    logger.info('Importing capture table')
+    capture_ht = hl.import_table(
+                    interval_path,
+                    no_header=True,
+                    impute=True,
+                    min_partitions=10)
+
+    # seqnames	start	end	width	strand	target_type	region_type	target_id
+    #chr1	11719	12377	659	*	processed_transcript|transcribed_unprocessed_pseudogene|ice_target_1	gnomad	target_1
+    capture_ht = capture_ht.transmute(interval=hl.parse_locus_interval(
+                                    hl.format('[%s:%s-%s]',
+                                               capture_ht.f0,
+                                               capture_ht.f1,
+                                               capture_ht.f2),
+                                    reference_genome='GRCh38'))
+    capture_ht = capture_ht.select('interval').key_by('interval')
+
+    capture_ht.describe()
+    logger.info('Writing capture ht')
+    capture_ht.write(output_path, overwrite=ow)
