@@ -32,11 +32,11 @@ def main(args):
     freeze = args.freeze
 
     if args.create_exome_array_id_map_ht:
-        sample_map = hl.import_table(array_sample_map(freeze), delimiter=',')
+        sample_map = hl.import_table(array_sample_map(freeze), delimiter=',', quote='"')
         logger.info(f'Total number of IDs in the array to exome sample map: {sample_map.count()}...')
 
         sample_map = sample_map.key_by(s=sample_map.eid_sample)
-        exome_ht = get_ukbb_data(data_source, freeze).cols()
+        exome_ht = get_ukbb_data(data_source, freeze, raw=True, split=False).cols()
         exome_ht = exome_ht.annotate(ukbb_app_26041_id=sample_map[exome_ht.s.split("_")[1]].eid_26041)
         logger.info(f'Total number of samples in the exome data: {exome_ht.count()}...')
 
@@ -52,16 +52,37 @@ def main(args):
         s_exome_not_in_map.show(s_exome_not_in_map.count())
 
         exome_ht = exome_ht.select('ukbb_app_26041_id')
-        exome_ht.write(get_array_sample_map_ht(data_source, freeze), overwrite=overwrite)
+        exome_ht.write(array_sample_map_ht(data_source, freeze), overwrite=args.overwrite)
 
     if args.compute_qc_mt:
         logger.info("Filtering to bi-allelic, high-callrate, common SNPs for sample QC...")
-        mt = get_ukbb_data(data_source, freeze, raw=True, adj=True, split=False)
+        mt = get_ukbb_data(data_source, freeze, raw=True, adj=False, split=False)
+        mt = mt.filter_rows(
+            (hl.len(mt.alleles) == 2) &
+            hl.is_snp(mt.alleles[0], mt.alleles[1])
+        )
+        mt = mt.key_rows_by('locus', 'alleles')
+        mt = mt.checkpoint(get_mt_checkpoint_path(data_source, freeze, f'{data_source}.freeze_{freeze}.rekey.biallelic.GT.mt'))
+        logger.info(f'Total number of variants in raw unsplit matrix table: {mt.count_rows()}')
+        mt = hl.experimental.sparse_split_multi(mt)
+        mt = filter_to_adj(mt)
 
         lcr = get_lcr_intervals()
-        logger.info(f'Total number of variants in raw unsplit matrix table: {mt.count()[0]}')
-        mt = mt.filter_rows(hl.is_missing(lcr[mt.locus]))
-        logger.info(f'Total number of variants after LCR filtering: {mt.count()[0]}')
+        if args.interval_qc_filter:
+            interval_qc_ht = hl.read_table(interval_qc_path(data_source, freeze))
+            good_intervals_ht = interval_qc_ht.filter(interval_qc_ht.pct_samples_20x > args.pct_samples_20x).key_by('interval')
+            mt = mt.filter_rows(hl.is_missing(lcr[mt.locus]) & hl.is_defined(good_intervals_ht[mt.locus]))
+        else:
+            mt = mt.filter_rows(hl.is_missing(lcr[mt.locus]))
+
+        mt = mt.checkpoint(
+            get_mt_checkpoint_path(data_source, freeze, f'{data_source}.freeze_{freeze}.rekey.biallelic.adj.lcr.mt'),overwrite=True)
+        logger.info(f'Total number of variants after LCR and interval filtering: {mt.count_rows()}')
+        #sites_ht = hl.import_vcf('gs://broad-ukbb/broad.freeze_5/temp/broad.freeze_5.sites.vcf.bgz',reference_genome='GRCh38')
+        sites_ht = hl.read_matrix_table('gs://broad-ukbb/broad.freeze_5/temp/broad.freeze_5.sites.ht').rows()
+
+        mt = mt.drop(mt.gvcf_info)
+        mt = mt.annotate_rows(info=sites_ht[mt.row_key].info)
 
         if data_source == 'regeneron':
             apply_hard_filters = False
@@ -71,7 +92,7 @@ def main(args):
         # Todo: changed to use Laurent's code for the qc_mt, change is that it uses inbreeding_coeff and hardy_weinberg_threshold, is this OK and are defaults OK?
         # Todo: add segdup and decoy filter
         qc_mt = get_qc_mt(mt,
-                          min_af=arg.min_af,
+                          min_af=args.min_af,
                           min_callrate=args.min_callrate,
                           apply_hard_filters=apply_hard_filters,
                           ld_r2=None,
@@ -79,9 +100,9 @@ def main(args):
                           filter_decoy=False,
                           filter_segdup=False)
         qc_mt = qc_mt.naive_coalesce(5000)
-        qc_mt.write(qc_mt_path(data_source, freeze), overwrite=args.overwrite)
+        qc_mt = qc_mt.checkpoint(qc_mt_path(data_source, freeze), overwrite=args.overwrite)
         logger.info(
-            f'Total number of variants in bi-allelic, high-callrate, common SNPs for sample QC: {qc_mt.count()[0]}')
+            f'Total number of variants in bi-allelic, high-callrate, common SNPs for sample QC: {qc_mt.count_rows()}')
 
     if args.compute_sample_qc_ht:
         qc_mt = hl.read_matrix_table(qc_mt_path(data_source, freeze))
@@ -95,9 +116,24 @@ def main(args):
         qc_mt = hl.read_matrix_table(qc_mt_path(data_source, freeze))
         qc_mt = qc_mt.unfilter_entries()
         pruned_qc_mt = ld_prune_qc_mt(qc_mt, ld_r2=args.ld_r2)
-        variants, samples = pruned_qc_mt.count()
-        logger.info(f'{variants} variants found in LD-pruned MT')
-        pruned_qc_mt.write(qc_mt_path(data_source, freeze, ld_pruned=True), overwrite=args.overwrite)
+        pruned_qc_mt = pruned_qc_mt.checkpoint(qc_mt_path(data_source, freeze, ld_pruned=True), overwrite=args.overwrite)
+        logger.info(f'{pruned_qc_mt.count_rows()} variants found in LD-pruned MT')
+
+    if args.extract_truth_samples:
+        mt = get_ukbb_data(data_source, freeze, raw=True, adj=False, split=False)
+        truth_samples = get_truth_sample_info(data_source, freeze)
+        samples = [s['s'] for s in truth_samples.values()]
+        mt = mt.filter_cols(hl.literal(samples).contains(mt.s))
+        logger.info(f"Extracting {mt.count_cols()} truth samples.")
+        mt.checkpoint(get_mt_checkpoint_path(data_source, freeze, 'truth_samples'), overwrite=args.overwrite)
+
+        for truth_sample in get_truth_sample_info(data_source, freeze):
+            mt = hl.read_matrix_table(get_mt_checkpoint_path(data_source, freeze, 'truth_samples'))
+            mt = mt.filter_cols(mt.s == truth_samples[truth_sample]['s'])
+            mt = mt.key_rows_by('locus', 'alleles')
+            mt = hl.experimental.sparse_split_multi(mt)
+            mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
+            mt.naive_coalesce(100).write(truth_sample_mt_path(data_source, freeze, truth_samples[truth_sample]['mt']), overwrite=args.overwrite)
 
 
 if __name__ == '__main__':
@@ -119,7 +155,13 @@ if __name__ == '__main__':
                         help='Minimum variant allele frequency to retain variant in qc matrix table.',
                         default=0.001,
                         type=float)
+    parser.add_argument('--interval_qc_filter', help='Should interval QC be applied', action='store_true')
+    parser.add_argument('--pct_samples_20x',
+                        help='Percent samples at 20X to filter intervals',
+                        default=0.85,
+                        type=float)
     parser.add_argument('--compute_sample_qc_ht', help='Compute sample qc on qc matrix table', action='store_true')
+    parser.add_argument('--extract_truth_samples', help='Extract truth samples from matrix table', action='store_true')
     parser.add_argument('--ld_prune_qc_mt', help='LD prunes the qc matrix', action='store_true')
     parser.add_argument('--ld_r2',
                         help='r2 to LD prune the QC matrix to.',
