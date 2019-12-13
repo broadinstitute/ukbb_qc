@@ -2,6 +2,8 @@ from gnomad_hail import *
 import hail as hl
 from ukbb_qc.resources import *
 from ukbb_qc.call_sex import *
+from gnomad_qc.annotations.generate_qc_annotations import *
+from ukbb_qc.utils import *
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("hardcalls")
@@ -16,9 +18,18 @@ def main(args):
 
     if args.impute_sex:
         logger.info('Imputing sex...')
+        # TODO: Delete below after export -- wanted to check whether all Y sites are defined in the new pipeline
+        ht = hl.read_table(sex_ht_path(data_source, freeze))
+        ht.export(sex_tsv_path(data_source, freeze))
+
         mt = get_ukbb_data(data_source, freeze, split=False, raw=True)
+
+        # NOTE: correct densified sparse mt for hardcalls
+        mt = mt.key_rows_by('locus', 'alleles')
+        # NOTE: as of 11/25 densify no longer converts LGT to GT
         sex_check_intervals = [hl.parse_locus_interval(x, reference_genome='GRCh38') for x in ['chr20', 'chrX', 'chrY']]
         mt = hl.filter_intervals(mt, sex_check_intervals)
+        mt = mt.annotate_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
         mt = hl.variant_qc(mt)
         run_impute_sex(mt, data_source, freeze)
     # NOTE: check distributions here before continuing with hardcalls
@@ -27,17 +38,43 @@ def main(args):
         logger.info("Generating hardcalls...")
         mt = get_ukbb_data(data_source, freeze, split=False, raw=True)
         ht = hl.read_table(sex_ht_path(data_source, freeze))
+        mt = mt.annotate_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
         mt = annotate_adj(mt.select_cols(sex=ht[mt.col_key].sex))
         mt = mt.select_entries(GT=mt.GT, adj=mt.adj)  # Note: this is different from gnomAD hardcalls file because no PGT or PID
         mt = adjust_sex_ploidy(mt, mt.sex)
-        mt = mt.select_cols().naive_coalesce(10000)
+        mt = mt.select_cols().naive_coalesce(15000)
         mt.write(get_ukbb_data_path(data_source, freeze, hardcalls=True, split=False), args.overwrite)
 
     if args.split_hardcalls:
         logger.info("Running split_multi on the hardcalls...")
-        mt = get_ukbb_data(data_source, freeze, split=False, raw=False)
-        mt = hl.split_multi_hts(mt)
-        mt.write(get_ukbb_data_path(data_source, freeze, hardcalls=True, split=True), args.overwrite)
+        #mt = get_ukbb_data(data_source, freeze, split=False, raw=False)
+        #mt = hl.split_multi_hts(mt)
+        mt = get_ukbb_data(data_source, freeze, split=False, raw=True)
+
+        # Add allele data to mt
+        allele_data = hl.struct(nonsplit_alleles=mt.alleles,
+                            has_star=hl.any(lambda a: a == '*', mt.alleles))
+        mt = mt.annotate_rows(allele_data=allele_data.annotate(**add_variant_type(mt.alleles)))
+
+        sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
+        mt = hl.experimental.sparse_split_multi(mt)
+        mt = annotate_adj(mt.select_cols(sex=sex_ht[mt.col_key].sex))
+        mt = mt.select_entries(GT=mt.GT, adj=mt.adj)
+        mt = adjust_sex_ploidy(mt, mt.sex)
+        mt = mt.select_cols().naive_coalesce(15000)
+        mt = mt.checkpoint(get_ukbb_data_path(data_source, freeze, hardcalls=True, split=True), args.overwrite)
+
+        # Finish generating allele data
+        ht = mt.rows().select('allele_data')
+        allele_type = (hl.case()
+                   .when(hl.is_snp(ht.alleles[0], ht.alleles[1]), 'snv')
+                   .when(hl.is_insertion(ht.alleles[0], ht.alleles[1]), 'ins')
+                   .when(hl.is_deletion(ht.alleles[0], ht.alleles[1]), 'del')
+                   .default('complex')
+                   )
+        ht = ht.annotate(allele_data=ht.allele_data.annotate(allele_type=allele_type,
+                                                              was_mixed=ht.allele_data.variant_type == 'mixed'))
+        ht.write(var_annotations_ht_path(data_source, freeze, 'allele_data'), args.overwrite)
 
     if args.write_nonrefs:
         logger.info("Creating sparse MT with only non-ref genotypes...")

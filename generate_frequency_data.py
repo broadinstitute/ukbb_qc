@@ -128,14 +128,26 @@ def join_gnomad(ht: hl.Table, data_type: str) -> hl.Table:
     :return: UKBB ht with gnomAD frequency information added as annotation
     :rtype: Table
     """
-    gnomad_ht = hl.read_table(get_gnomad_liftover_data_path(f'{data_type}', '2.1.1')).select(
-        'freq', 'popmax', 'faf').select_globals(
-        'freq_meta', 'freq_index_dict', 'popmax_index_dict', 'faf_index_dict')
-    ht = ht.join(gnomad_ht, how='left')
-    ht = ht.rename({'freq_1': f'gnomad_{data_type}.freq', 'popmax_1': f'gnomad_{data_type}.popmax',
+    if data_type == 'exomes':
+        gnomad_ht = hl.read_table(get_gnomad_liftover_data_path(f'{data_type}', '2.1.1')).select(
+            'freq', 'popmax', 'faf').select_globals(
+            'freq_meta', 'freq_index_dict', 'popmax_index_dict', 'faf_index_dict')
+        ht = ht.join(gnomad_ht, how='left')
+        ht = ht.rename({'freq_1': f'gnomad_{data_type}.freq', 'popmax_1': f'gnomad_{data_type}.popmax',
                    'faf_1': f'gnomad_{data_type}.faf', 'freq_meta_1': f'gnomad_{data_type}.freq_meta',
                    'freq_index_dict': f'gnomad_{data_type}.freq_index_dict',
                    'popmax_index_dict': f'gnomad_{data_type}.popmax_index_dict',
+                   'faf_index_dict': f'gnomad_{data_type}.faf_index_dict'})
+
+    else:
+        gnomad_ht = hl.read_table('gs://gnomad-public/release/3.0/ht/genomes/gnomad.genomes.r3.0.sites.ht').select(
+            'freq', 'popmax', 'faf').select_globals(
+            'freq_meta', 'freq_index_dict', 'faf_index_dict')
+
+        ht = ht.join(gnomad_ht, how='left')
+        ht = ht.rename({'freq_1': f'gnomad_{data_type}.freq', 'popmax_1': f'gnomad_{data_type}.popmax',
+                   'faf_1': f'gnomad_{data_type}.faf', 'freq_meta_1': f'gnomad_{data_type}.freq_meta',
+                   'freq_index_dict': f'gnomad_{data_type}.freq_index_dict',
                    'faf_index_dict': f'gnomad_{data_type}.faf_index_dict'})
     return ht
 
@@ -146,6 +158,10 @@ def main(args):
     data_source = args.data_source
     freeze = args.freeze
     mt = get_ukbb_data(data_source, freeze, meta_root='meta')
+    logger.info(f'mt count before filtering out low quality samples: {mt.count()}')
+    mt = mt.filter_cols(mt.meta.high_quality)
+    mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
+    logger.info(f'mt count after filtering out low quality samples and their variants: {mt.count()}')
 
     if args.calculate_frequencies:
         logger.info('Calculating frequencies')
@@ -156,7 +172,7 @@ def main(args):
             sample_table.write(sample_annotations_table_path(data_type, 'downsampling'), args.overwrite)
 
     if args.join_gnomad:
-        ht = hl.read_table(annotations_ht_path(data_source, freeze, 'ukb_freq'))
+        ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'ukb_freq'))
 
         logger.info('Joining UKBB ht to gnomAD exomes and genomes liftover hts')
         ht = join_gnomad(ht, 'exomes')

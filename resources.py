@@ -1,7 +1,7 @@
 import hail as hl
 from typing import *
 
-CURRENT_FREEZE = 4
+CURRENT_FREEZE = 5
 DATA_SOURCES = ['regeneron', 'broad']
 FREEZES = [4, 5]
 CURRENT_HAIL_VERSION = "0.2"
@@ -133,6 +133,10 @@ def array_sample_map(freeze: int):
 ukbb_calling_intervals_path = 'gs://broad-ukbb/resources/ukbb_exome_calling.interval_list'
 broad_calling_intervals_path = 'gs://broad-ukbb/resources/broad_exome_calling.interval_list'
 lcr_intervals_path = 'gs://broad-ukbb/resources/LCRFromHengH38_chr1-22_XY.txt'
+hg38_selfchain_path = 'gs://broad-ukbb/resources/hg38_self_chain_nosamepos_withalts_gt10k.bed.gz'
+hg38_segdup_path = 'gs://broad-ukbb/resources/hg38.segdups_sorted_merged_gt10kb.bed.gz'
+
+
 ukbb_calling_intervals_summary = 'gs://broad-ukbb/resources/ukbb_exome_calling_intervals.summary.txt'
 
 
@@ -149,6 +153,12 @@ def array_sample_map_ht(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
 
 def get_lcr_intervals() -> hl.Table:
     return hl.import_locus_intervals(lcr_intervals_path, reference_genome='GRCh38', skip_invalid_intervals=True)
+
+def get_selfchain_intervals() -> hl.Table:
+    return hl.import_locus_intervals(hg38_selfchain_path, reference_genome='GRCh38', skip_invalid_intervals=True)
+
+def get_segdup_intervals() -> hl.Table:
+    return hl.import_locus_intervals(hg38_segdup_path, reference_genome='GRCh38', skip_invalid_intervals=True)
 
 
 # Sample QC files
@@ -192,6 +202,13 @@ def array_sample_concordance_path(data_source: str, freeze: int = CURRENT_FREEZE
 
 def array_variant_concordance_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'{sample_qc_prefix(data_source, freeze)}/array_concordance/variant_concordance.ht'
+
+
+def ploidy_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    if data_source == 'broad' and freeze >= 5:
+        return f'{sample_qc_prefix(data_source, freeze)}/sex_check/ploidy.ht'
+    else:
+        raise DataException("No ploidy file specified for this data_source and freeze yet")
 
 
 def sex_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
@@ -324,10 +341,6 @@ def capture_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
         return 'gs://broad-ukbb/resources/ukbb_exome_calling_intervals.summary.ht'
     else:
         raise DataException("No interval file specified for this data_source and freeze yet")
-
-
-def hg38_selfchain_path() -> str:
-    return 'gs://broad-ukbb/resources/hg38_self_chain_nosamepos_withalts_gt10k.bed.gz'
 
 
 def get_mt_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE, name: str = None) -> str:
@@ -547,6 +560,7 @@ def score_ranking_path(data_source: str, freeze: int,
 
     return f'{variant_qc_prefix(data_source, freeze)}/score_rankings/{data}{"_binned" if binned else ""}.ht'
 
+
 def binned_concordance_path(data_source: str, freeze: int, truth_sample: str, metric: str):
     '''
     :param str data_source: 'broad' or 'regeneron'
@@ -575,6 +589,9 @@ def hapmap_mt_path(hail_version=CURRENT_HAIL_VERSION):
 def hapmap_ht_path():
     return 'gs://broad-ukbb/resources//hapmap_3.3.hg38.ht'
 
+def dbsnp_ht_path():
+    return 'gs://gnomad-public/resources/grch38/dbsnp_b151_grch38_all_20180418.ht'
+
 
 def kgp_high_conf_snvs_mt_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad-public/truth-sets/hail-{0}/1000G_phase1.snps.high_confidence.hg38.mt'.format(hail_version)
@@ -585,12 +602,30 @@ def release_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
         raise DataException("This data_source is currently not present")
     if freeze not in FREEZES:
         raise DataException("This freeze is currently not present")
-    return  f'gs://broad-ukbb/{data_source}.freeze_{freeze}/release/'
+    return  f'gs://broad-ukbb/{data_source}.freeze_{freeze}/release'
 
 
-def release_ht_path(data_soure: str, freeze: int, nested=True, temp=False) -> str:
+def release_mt_path(data_source: str, freeze: int, nested=True, temp=False) -> str:
     '''
-    Fetch filepath for release (variant-only) Hail Tables
+    Fetch filepath for release Hail MatrixTables
+
+    :param str data_source: 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param bool nested: If True, fetch Table in which variant annotations (e.g., freq, popmax, faf, and age histograms)
+        are in array format ("nested"); if False, fetch Table in which nested variant annotations are unfurled
+    :param bool temp: If True, fetch Table in which nested variant annotations are unfurled but listed under 'info' rather
+        than at the top level; used for sanity-checking sites
+    :return: Filepath for desired Hail Table
+    :rtype: str
+    '''
+    tag = 'nested' if nested else 'flat'
+    tag = tag + '.temp' if temp else tag
+    return f'{release_prefix(data_source, freeze)}/mt/{tag}.mt'
+
+
+def release_ht_path(data_source: str, freeze: int, nested=True, temp=False) -> str:
+    '''
+    Fetch filepath for release Hail Tables
 
     :param str data_source: 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
@@ -617,10 +652,9 @@ def release_vcf_path(data_source: str, freeze: int, contig=None) -> str:
     :rtype: str
     '''
     if contig:
-        return f'{release_prefix(data_source, freeze)}/vcf/sites.{contig}.vcf.bgz'
+        return f'{release_prefix(data_source, freeze)}/vcf/{contig}.vcf.bgz'
     else:
-        return f'gs://gnomad-public/release/{release}/vcf/{data_type}/gnomad.{data_type}.{release_tag}.sites.vcf.bgz'
-
+        pass
 
 class DataException(Exception):
     pass
