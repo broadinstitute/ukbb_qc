@@ -64,13 +64,16 @@ def get_ukbb_data_path(data_source: str, freeze: int = CURRENT_FREEZE, hardcalls
         return raw_mt_path(data_source, freeze)
 
 
-def array_mt_path(liftover: bool = False) -> str:
+def array_mt_path(liftover: bool = False, checkpoint: bool = False) -> str:
     """
     :param bool liftover: One of data freezes
     :return: Path to array MT
     :rtype: str
     """
-    return f'gs://broad-ukbb/resources/array/ukbb_array{"_liftover_GRCh38" if liftover else ""}.mt'
+    if checkpoint:
+        return f'gs://broad-ukbb/temp/ukbb_array{"_liftover_GRCh38" if liftover else ""}.mt'
+    else:
+        return f'gs://broad-ukbb/resources/array/ukbb_array{"_liftover_GRCh38" if liftover else ""}.mt'
 
 
 def raw_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, is_temp = False) -> str:
@@ -315,7 +318,7 @@ def get_ht_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE, name:
 
 
 def capture_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    if data_source == 'broad' and freeze == 4:
+    if data_source == 'broad':
         return 'gs://broad-ukbb/resources/xgen_plus_spikein.Homo_sapiens_assembly38.targets.pad50.intervals.ht'
     elif data_source == 'regeneron':
         return 'gs://broad-ukbb/resources/ukbb_exome_calling_intervals.summary.ht'
@@ -402,6 +405,30 @@ def interval_qc_path(data_source: str, freeze: int = CURRENT_FREEZE, chrom: int 
 
 
 # Variant QC annotations
+
+syndip_bed_path = 'gs://gnomad-public/truth-sets/hail-0.2/syndip.b38.bed'
+syndip_truth_mt_path = 'gs://gnomad-public/truth-sets/hail-0.2/syndip.b38.mt'
+na12878_truth_mt_path = 'gs://gnomad-public/truth-sets/hail-0.2/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.mt'
+na12878_bed_path = 'gs://gnomad-public/truth-sets/source/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_nosomaticdel_noCENorHET7.bed'
+
+def get_truth_sample_info(data_source: str, freeze: int = CURRENT_FREEZE) -> Dict[str, str]:
+    truth_samples = {
+        'syndip': {
+            's': "CHMI_CHMI3_Nex1",
+            'truth_mt': syndip_truth_mt_path,
+            'mt': truth_sample_mt_path(data_source, freeze, 'syndip'),
+            'bed': syndip_bed_path
+        },
+        'na12878': {
+            's': "Coriell_NA12878_NA12878",
+            'truth_mt': na12878_truth_mt_path,
+            'mt': truth_sample_mt_path(data_source, freeze, 'na12878'),
+            'bed': na12878_bed_path
+        }
+    }
+    return truth_samples
+
+
 def variant_qc_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     if data_source not in DATA_SOURCES:
         raise DataException("This data_source is currently not present")
@@ -422,6 +449,19 @@ def var_annotations_ht_path(data_source: str, freeze: int, annotation_type: str)
     :rtype: str
     """
     return f'{variant_qc_prefix(data_source, freeze)}/variant_annotations/{annotation_type}.ht'
+
+
+def truth_sample_mt_path(data_source: str, freeze: int, truth_sample: str) -> str:
+    """
+    Get truth sample path
+
+    :param str data_source: 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param str truth_sample: Name of the truth sample
+    :return: Path to annotations Table
+    :rtype: str
+    """
+    return f'{variant_qc_prefix(data_source, freeze)}/truth_samples/{truth_sample}.ht'
 
 
 def sample_annotations_table_path(data_source: str, freeze: int, annotation_type: str) -> str:
