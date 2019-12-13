@@ -35,7 +35,13 @@ def main(args):
 
     if args.import_vqsr:
         logger.info('Importing VQSR annotations...')
-        mt = hl.import_vcf(args.import_vqsr_regex, force_bgz=True, reference_genome='GRCh38').naive_coalesce(args.num_vqsr_partitions)
+        mt = hl.import_vcf(
+            args.import_vqsr_regex,
+            force_bgz=True,
+            reference_genome='GRCh38',
+            header_file=args.import_vqsr_header
+        ).naive_coalesce(args.num_vqsr_partitions)
+
         ht = mt.rows()
         row_count1 = ht.count()
         ht = hl.split_multi_hts(ht).checkpoint(var_annotations_ht_path(data_source, freeze, 'vqsr'), overwrite=args.overwrite)
@@ -65,6 +71,7 @@ if __name__ == '__main__':
 
     parser.add_argument('-i', '--import_regex', help='Regex string containing VCF(s) for import', type=str)
     parser.add_argument('-v', '--import_vqsr_regex', help='Regex string containing VQSR VCF(s) for import', type=str)
+    parser.add_argument('--import_vqsr_header', help='In needed can pass a specific header to use for the vcfs',type=str)
     parser.add_argument('-n', '--num_partitions', help='Number of partitions to be used for raw MT', type=int)
     parser.add_argument('-m', '--num_vqsr_partitions', help='Number of partitions to be used for VQSR HT', type=int)
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
