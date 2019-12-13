@@ -136,6 +136,10 @@ def main(args):
     logger.info('Annotating high_quality field')
     left_ht = left_ht.annotate(high_quality=((hl.len(left_ht.hard_filters) == 0) &
                                             (hl.len(left_ht.pop_platform_filters) == 0)))
+
+    logger.info('Dropping control samples')
+    left_ht = left_ht.filter(~(left_ht.s == 'CHMI_CHMI3_Nex1') & ~(left_ht.s == 'Coriell_NA12878_NA12878'))
+
     logger.info('Writing out meta ht')
     left_ht.write(meta_ht_path(data_source, freeze), overwrite=args.overwrite)
     logger.info(f'Final count: {left_ht.count()}')
