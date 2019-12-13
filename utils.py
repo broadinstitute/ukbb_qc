@@ -40,6 +40,30 @@ def remove_hard_filter_samples(data_source: str, freeze: int, t: Union[hl.Matrix
     return t
 
 
+def interval_qc_filter(data_source: str,
+                       freeze: int,
+                       t: Union[hl.MatrixTable, hl.Table],
+                       pct_samples_20x: float = 0.85) -> Union[hl.MatrixTable, hl.Table]:
+    """
+    Removes poorly covered intervals from a MatrixTable or Table.
+
+    :param str data_source: 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param MatrixTable/able t: Input MatrixTable or Table
+    :param float pct_samples_20x: Percent of samples with coverage greater than 20X over the interval for filtering
+    :return: MatrixTable or Table with samples removed
+    :rtype: MatrixTable or Table
+    """
+    interval_qc_ht = hl.read_table(interval_qc_path(data_source, freeze))
+    good_intervals_ht = interval_qc_ht.filter(interval_qc_ht.pct_samples_20x > pct_samples_20x).key_by('interval')
+
+    if isinstance(t, hl.MatrixTable):
+        t = t.filter_rows(hl.is_defined(good_intervals_ht[t.locus]))
+    else:
+        t = t.filter(hl.is_defined(good_intervals_ht[t.locus]))
+    return t
+
+
 def annotate_relationship(relatedness_ht,
                           first_degree_threshold=[0.1767767, 0.4],
                           second_degree_threshold=0.08838835,
