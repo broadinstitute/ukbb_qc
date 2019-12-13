@@ -133,7 +133,7 @@ def main(args):
             mt = mt.key_rows_by('locus', 'alleles')
             mt = hl.experimental.sparse_split_multi(mt)
             mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
-            mt.naive_coalesce(100).write(truth_sample_mt_path(data_source, freeze, truth_samples[truth_sample]['mt']), overwrite=args.overwrite)
+            mt.naive_coalesce(100).write(truth_samples[truth_sample]['mt'], overwrite=args.overwrite)
 
 
 if __name__ == '__main__':
