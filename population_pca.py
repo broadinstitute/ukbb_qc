@@ -43,7 +43,7 @@ def project_on_gnomad_pop_pcs(mt: hl.MatrixTable) -> hl.Table:
     gnomad_meta_exomes_ht = prep_meta(hl.read_table(metadata_exomes_ht_path(version=CURRENT_EXOME_META)))
     gnomad_meta_genomes_ht = prep_meta(hl.read_table(metadata_genomes_ht_path(version=CURRENT_GENOME_META)))
     gnomad_meta_ht = gnomad_meta_exomes_ht.union(gnomad_meta_genomes_ht)
-    gnomad_loadings_ht = hl.read_table(gnomad_ancestry_loadings_liftover_path)
+    gnomad_loadings_ht = hl.read_table(gnomad_ancestry_loadings_liftover_path())
     gnomad_loadings_ht = gnomad_loadings_ht.filter(
         ~gnomad_loadings_ht.reference_mismatch & ~gnomad_loadings_ht.new_locus.is_negative_strand)
 
