@@ -72,6 +72,39 @@ def get_pc_plots_hail(pcs_ht, pc_name, color_col='color', colors=None, n_pcs=10,
     return Tabs(tabs=plots)
 
 
+def get_broad_relatedness_plots(ibd_pd,
+                          color_col={'Broad': 'Broad_classification'},
+                          related_factors=['Full-sibling', 'Parent-child', 'Second-degree', 'None'],
+                          related_colors=['#e41a1c', '#377eb8', '#4daf4a', '#984ea3'],
+                          ibd_axes=[("0", "1"), ("1", "2"), ("0", "2")],
+                          data_sources=["Broad"]):
+    colors = CategoricalColorMapper(palette=related_colors, factors=related_factors)
+
+    def plot_ibd(data_source, ibd_1, ibd_2):
+        p = figure(title=f'{data_source} IBD{ibd_1} vs IBD{ibd_2}')
+        for factor in related_factors:
+            source = ColumnDataSource(ibd_pd[ibd_pd[color_col[data_source]] == factor])
+            c = p.circle(x=f'{data_source}_IBD{ibd_1}',
+                         y=f'{data_source}_IBD{ibd_2}',
+                         source=source,
+                         color={'field': color_col[data_source], 'transform': colors},
+                         alpha=0.6,
+                         legend=factor)
+        p.xaxis.axis_label = f'{data_source} IBD{ibd_1}'
+        p.yaxis.axis_label = f'{data_source} IBD{ibd_2}'
+        p.legend.click_policy = "hide"
+        p.legend.location = "top_right"
+
+        return p
+
+    plots = []
+    for ibd_1, ibd_2 in ibd_axes:
+        ibd_plots = [plot_ibd(data_source, ibd_1, ibd_2) for data_source in data_sources]
+        p = gridplot(ibd_plots, ncols=len(ibd_plots), plot_width=500, plot_height=500)
+        plots.append(Panel(child=p, title=f'IBD{ibd_1} vs IBD{ibd_2}'))
+
+    return Tabs(tabs=plots)
+
 
 def get_relatedness_plots(ibd_pd,
                           color_col={'Broad': 'Broad_classification', 'Regeneron': 'Regeneron_classification'},
