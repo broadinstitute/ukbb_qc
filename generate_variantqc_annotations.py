@@ -1,5 +1,6 @@
 from gnomad_hail import *
 from gnomad_qc.annotations.generate_qc_annotations import *
+import gnomad_hail.resources.basics as gres
 from ukbb_qc.resources import *
 from ukbb_qc.utils import *
 import argparse
@@ -29,12 +30,14 @@ def generate_call_stats(mt: hl.MatrixTable) -> hl.Table:
     return mt.annotate_rows(qc_callstats=call_stats_expression).rows()
 
 # NOTE: altered from gnomAD version to create HTs for annotation
-def annotate_truth_data(mt: hl.MatrixTable) -> hl.Table:
+def annotate_truth_data(mt: hl.MatrixTable, data_source: str, freeze: int) -> hl.Table:
     """
     Writes bi-allelic sites MT with the following annotations:
      - truth_data (presence in Omni, HapMap, 1KG high conf SNVs, Mills)
 
     :param MatrixTable mt: Full MT
+    :param str data_source: 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
     :return: Table with qc annotations
     :rtype: Table
     """
@@ -44,35 +47,32 @@ def annotate_truth_data(mt: hl.MatrixTable) -> hl.Table:
         # 'hapmap': hapmap_mt_path(),
         'omni': omni_mt_path(),
         'mills': mills_mt_path(),
-        'kgp_high_conf_snvs': kgp_high_conf_snvs_mt_path(),
-        'ukbb_array': 'gs://broad-ukbb/broad.freeze_4/temp/exome_subset_concordance.rekeyed.mt'
+        'kgp_high_conf_snvs': kgp_high_conf_snvs_mt_path()
     }
 
     truth_htes = {key: hl.split_multi_hts(hl.read_matrix_table(path).repartition(1000).rows(), left_aligned=False)
                   for key, path in truth_mtes.items()}
     # TODO: formalize code to create this resource
     truth_htes.update({'hapmap': hl.read_table(hapmap_ht_path()),
-                       'sib_singletons': hl.read_table('gs://broad-ukbb/broad.freeze_4/variant_qc/variant_annotations/sibling_singletons.train.ht'),
-                       'ukbb_array_con':hl.read_table('gs://broad-ukbb/broad.freeze_4/temp/array_variant_concordance_callrate_0.95_non_ref_con_0.9.ht'),
-                       'ukbb_array_con_common':hl.read_table('gs://broad-ukbb/broad.freeze_4/temp/array_variant_concordance_callrate_0.95_non_ref_con_0.9_AF_0.001.ht')})
+                       'sib_singletons': hl.read_table(var_annotations_ht_path(data_source, freeze, 'sib_singletons.train')),
+                       'ukbb_array_con':hl.read_table(f'{variant_qc_prefix(data_source, freeze)}/array_variant_concordance_callrate_0.95_non_ref_con_0.9.ht'),
+                       'ukbb_array_con_common':hl.read_table(f'{variant_qc_prefix(data_source, freeze)}/array_variant_concordance_callrate_0.95_non_ref_con_0.9_AF_0.001.ht')})
 
     return mt.annotate_rows(truth_data=hl.struct(**{root: hl.is_defined(truth_ht[mt.row_key])
                                                     for root, truth_ht in truth_htes.items()})).rows()
 
 
-def generate_array_concordant_variants(mt: hl.MatrixTable) -> hl.Table:
-    """
-
-    :param mt:
-    :return: Table containing concordant variants found in both the UKBB array data and the UKBB exome data
-    :rtype: Table
-    """
-
-    mt = hl.read_matrix_table(array_mt_path(liftover=True))
-    return
-
-
 def generate_sibling_singletons(mt, relatedness_ht, num_var_per_sibs_cutoff=None):
+    """
+    Gets a MatrixTable of all the variants that are found in sibling pairs and not in the rest of the input MatrixTable
+    Columns of the MatrixTable are sibling pairs not individuals
+
+    :param MatrixTable mt: Full MT
+    :param Table relatedness_ht: output Table from relatedness inference, contains sample pairs with kin and ibd
+    :param int num_var_per_sibs_cutoff: Max number of sibling singletons in a pair for the pair to be included in truth set
+    :return: MatrixTable of sibling pairs filtered to variant unique to the sibling pair (sibling singletons)
+    :rtype: MatrixTable
+    """
     mt = filter_to_autosomes(mt)
     relatedness_ht = annotate_relationship(relatedness_ht)
     relatedness_siblings_ht = relatedness_ht.filter(relatedness_ht.relationship_classification == 'Full-sibling')
@@ -147,16 +147,16 @@ def generate_sibling_singletons(mt, relatedness_ht, num_var_per_sibs_cutoff=None
 
 def main(args):
     hl.init(log='/generate_variantqc_annotations.log')
-    hl._set_flags(newaggs=None)
     data_source = args.data_source
     freeze = args.freeze
 
-    # if args.vep:  # CPU-hours: 250 (E), 600 (G)
-    #     mt = get_gnomad_data(data_type).rows().select()
-    #     hl.vep(mt, vep_config).write(annotations_ht_path(data_type, 'vep'), args.overwrite)
-    #
-    #     mt = get_gnomad_data(data_type).rows().select()
-    #     hl.vep(mt, vep_config, csq=True).write(annotations_ht_path(data_type, 'vep_csq'), args.overwrite)
+    if args.vep:  # CPU-hours: 250 (E), 600 (G)
+        logger.info(f'Running VEP on the MT...')
+        ht = get_ukbb_data(data_source, freeze).rows().select()
+        hl.vep(ht, gres.vep_config_path('GRCh38')).write(var_annotations_ht_path(data_source, freeze, 'vep'), args.overwrite)
+
+        ht = get_ukbb_data(data_source, freeze).rows().select()
+        hl.vep(ht, gres.vep_config_path('GRCh38'), csq=True).write(var_annotations_ht_path(data_source, freeze, 'vep_csq'), args.overwrite)
 
     if args.generate_allele_data:
         mt = get_ukbb_data(data_source, freeze, split=False)
@@ -175,11 +175,23 @@ def main(args):
         write_temp_gcs(ht, var_annotations_ht_path(data_source, freeze, 'qual_hists'), args.overwrite)
 
     if args.generate_call_stats:
-        mt = get_ukbb_data(data_source, freeze, meta_root='meta')
+        if data_source == "regeneron":
+            mt = get_ukbb_data(data_source, freeze)
+            meta_ht = hl.read_table(meta_ht_path(data_source, freeze))
+            meta_ht = meta_ht.annotate(high_quality=~meta_ht.is_filtered)
+            mt = mt.annotate_cols(**{'meta': meta_ht[mt.s]})
+        else:
+            mt = get_ukbb_data(data_source, freeze, meta_root='meta')
         generate_call_stats(mt).write(var_annotations_ht_path(data_source, freeze, 'call_stats'), overwrite=args.overwrite)
 
     if args.generate_family_stats:  # CPU-hours: 8K (E), 13K (G)
-        mt = get_ukbb_data(data_source, freeze, meta_root='meta')
+        if data_source == "regeneron":
+            mt = get_ukbb_data(data_source, freeze)
+            meta_ht = hl.read_table(meta_ht_path(data_source, freeze))
+            meta_ht = meta_ht.annotate(high_quality=~meta_ht.is_filtered)
+            mt = mt.annotate_cols(**{'meta': meta_ht[mt.s]})
+        else:
+            mt = get_ukbb_data(data_source, freeze, meta_root='meta')
         ht, sample_table = generate_family_stats(mt, inferred_ped_path(data_source, freeze), args.include_adj_family_stats)
         ht.write(var_annotations_ht_path(data_source, freeze, 'family_stats'), stage_locally=True, overwrite=args.overwrite)
         sample_table.write(sample_annotations_table_path(data_source, freeze, 'family_stats'), stage_locally=True, overwrite=args.overwrite)
@@ -188,6 +200,7 @@ def main(args):
         relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
         mt = get_ukbb_data(data_source, freeze, split=True)
         sib_mt = generate_sibling_singletons(mt, relatedness_ht, args.num_var_per_sibs_cutoff)
+        sib_mt = sib_mt.checkpoint(get_mt_checkpoint_path(data_source, freeze, 'sib_singletons'), overwrite=args.overwrite)
         sib_mt.rows().naive_coalesce(500).write(var_annotations_ht_path(data_source, freeze, 'sib_singletons'), overwrite=args.overwrite)
 
     # if args.generate_de_novos:  # (2.2 min/part @ 100K = 3K CPU-hours) + (7.4 m/p = 12K) + (34 m/p = ~44K) = 59K
@@ -205,11 +218,13 @@ def main(args):
         sib_ht_train = sib_ht.anti_join(sib_ht_test)
         logger.info(f'Keeping {sib_ht_test.count()} variants for testing and {sib_ht_train.count()} variants for training out of {sib_ht.count()} total variants')
         sib_ht_test.write(var_annotations_ht_path(data_source, freeze, 'sib_singletons.test'), overwrite=args.overwrite)
-        sib_ht_train.write(var_annotations_ht_path(data_source, freeze, 'sib_singletons.train'), overwrite=args.overwrite)
+        sib_ht_train.write(var_annotations_ht_path(data_source, freeze, 'sib_singletons.train'),
+                           overwrite=args.overwrite)
 
     if args.annotate_truth_data:
         mt = get_ukbb_data(data_source, freeze, meta_root=None)
-        mt = annotate_truth_data(mt).checkpoint(var_annotations_ht_path(data_source, freeze, 'truth_data'), overwrite=args.overwrite)
+        mt = annotate_truth_data(mt, data_source, freeze).checkpoint(
+            var_annotations_ht_path(data_source, freeze, 'truth_data'), overwrite=args.overwrite)
         mt.summarize()
 
 
@@ -221,14 +236,14 @@ if __name__ == '__main__':
     parser.add_argument('--slack_channel', help='Slack channel to post results and notifications to.')
     parser.add_argument('-o','--overwrite', help='Overwrite data', action='store_true')
 
-    # parser.add_argument('--vep', help='Runs VEP', action='store_true')
+    parser.add_argument('--vep', help='Runs VEP', action='store_true')
     parser.add_argument('--generate_allele_data', help='Calculates allele data', action='store_true')
     parser.add_argument('--generate_qc_annotations', help='Calculates QC annotations', action='store_true')
     parser.add_argument('--generate_qual_hists', help='Calculates GQ, DP, AB histograms per variant', action='store_true')
     parser.add_argument('--generate_call_stats', help='Calculates call stats', action='store_true')
     parser.add_argument('--generate_family_stats', help='Calculates family stats', action='store_true')
     parser.add_argument('--generate_sibling_singletons', help='Creates a hail Table of variants that are sibling singletons', action='store_true')
-    parser.add_argument('--num_var_per_sibs_cutoff', help='Percentage of truth data to hold back for testing', default=40)
+    parser.add_argument('--num_var_per_sibs_cutoff', help='Max number of sibling singletons in a pair for the pair to be included in truth set', default=40)
     parser.add_argument('--include_adj_family_stats', help='Also calculate family stats for adj genotypes', action='store_true')
     # parser.add_argument('--generate_de_novos', help='Calculates de novo data', action='store_true')
     parser.add_argument('--create_truth_data', help='Create additional UKBB truth data by selecting sibling singletons and array-concordant variants', action='store_true')
@@ -238,7 +253,6 @@ if __name__ == '__main__':
 
     parser.add_argument('--calculate_medians', help='Calculate metric medians (warning: slow)', action='store_true')
     parser.add_argument('--calculate_all_annotations', help='Calculation many more annotations (warning: slow)', action='store_true')
-
     args = parser.parse_args()
 
     if args.slack_channel:
