@@ -70,7 +70,7 @@ def main(args):
 
         logger.info('Running PC-Relate...')
         # NOTE: This needs SSDs on your workers (for the temp files) and no preemptible workers while the BlockMatrix writes
-        relatedness_ht = hl.pc_relate(pruned_qc_mt.GT, min_individual_maf=min_individual_maf,
+        relatedness_ht = hl.pc_relate(pruned_qc_mt.GT, min_individual_maf=args.min_individual_maf,
                                       scores_expr=scores[pruned_qc_mt.col_key].scores,
                                       block_size=4096, min_kinship=args.min_emission_kinship, statistics='all')
         relatedness_ht.write(relatedness_ht_path(data_source, freeze), args.overwrite)
@@ -94,10 +94,9 @@ def main(args):
 
     if not args.skip_infer_families:
         logger.info("Inferring families")
-        dups_ht = hl.read_table(duplicates_ht_path(data_source, freeze))
-        if dups_ht.aggregate(hl.agg.count_where(dups_ht.duplicate)) > 0:
-            dups_ht = hl.read_table(duplicates_ht_path(data_source, freeze, dup_sets=True))
-        else:
+        dups_ht = hl.read_table(duplicates_ht_path(data_source, freeze))    
+        dups_ht.describe()
+        if dups_ht.aggregate(hl.agg.count_where(dups_ht.duplicate)) == 0:
             dups_ht = None
         ped = get_ped(
             hl.read_table(relatedness_ht_path(data_source, freeze)),
