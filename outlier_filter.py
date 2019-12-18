@@ -66,7 +66,8 @@ def main(args):
         # NOTE: we run outlier detection without adj filtration to get better separation between high and low quality samples
         # this is per Julia's discussion with Konrad in #ukbb_qc
         # Need all workers for the mini qc
-        mt = get_ukbb_data(data_source, freeze, split=False, adj=False)
+        #mt = get_ukbb_data(data_source, freeze, split=False, adj=False)
+        mt = get_ukbb_data(data_source, freeze, split=True, adj=False) # NOTE using split hardcalls for tranche 5
         logger.info('Filtering samples that fail hard filters...')
         qc_ht = hl.read_table(hard_filters_ht_path(data_source, freeze)).key_by('s')
         mt = mt.filter_cols(hl.len(qc_ht[mt.col_key].hard_filters) == 0).select_cols()
@@ -75,31 +76,47 @@ def main(args):
         sample_qc_ht.write(qc_temp_data_prefix(data_source, freeze) + 'outlier_sample_qc.ht', args.overwrite)
 
     sample_qc_ht = hl.read_table(qc_temp_data_prefix(data_source, freeze) + 'outlier_sample_qc.ht')
-    strata = []
-    if not args.skip_platform_filter:
-        logger.info('Annotating platform assignments...')
-        platform_ht = hl.read_table(platform_pca_results_ht_path(data_source, freeze))
-        sample_qc_ht = sample_qc_ht.annotate(qc_platform=platform_ht[sample_qc_ht.key].qc_platform)
-        strata.append('qc_platform')
+    strata = {}
+    
+    logger.info('Annotating platform assignments...')
+    #platform_ht = hl.read_table(platform_pca_results_ht_path(data_source, freeze))
+    #sample_qc_ht = sample_qc_ht.annotate(qc_platform=platform_ht[sample_qc_ht.key].qc_platform)
+    # NOTE using tranche as a proxy for platform in freeze 5
+    sample_map_ht = hl.read_table(array_sample_map_ht(data_source, freeze))
+    sample_map = hl.import_table(array_sample_map(freeze), delimiter=',', quote='"')
+    sample_map = sample_map.key_by(s=sample_map.eid_26041)
+    sample_qc_ht = sample_qc_ht.annotate(**sample_map_ht[sample_qc_ht.s])
+    sample_qc_ht = sample_qc_ht.annotate(**sample_map[sample_qc_ht.ukbb_app_26041_id])
+    sample_qc_ht = sample_qc_ht.transmute(batch=sample_qc_ht['batch.c'])
+    
+    logger.info('Annotating population assignments...')
+    pop_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
+    sample_qc_ht = sample_qc_ht.annotate(qc_pop=pop_ht[sample_qc_ht.key][pop_assignment_method])
 
+    if not args.skip_platform_filter:
+        strata['qc_pop'] = sample_qc_ht.qc_pop
     if not args.skip_population_filter:
-        logger.info('Annotating population assignments...')
-        pop_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
-        sample_qc_ht = sample_qc_ht.annotate(qc_pop=pop_ht[sample_qc_ht.key][pop_assignment_method])
-        strata.append('qc_pop')
+        strata['qc_platform'] = sample_qc_ht.batch
     else:
         pop_assignment_method = None
+
+    # Make qc_metrics a dict (needs to be dict for compute_stratified_metrics_filte
+    metrics = args.filtering_qc_metrics.split(",")
+    qc_metrics = {}
+    for m in metrics:
+        qc_metrics[m] = sample_qc_ht.sample_qc[f'{m}']
 
     # For each platform and population, aggregate sample QC metrics and calculate the MAD/mean/stdev
     logger.info('Flagging samples failing pop/platform-specific sample qc thresholds...')
     pop_platform_filter_ht = compute_stratified_metrics_filter(
         sample_qc_ht,
-        args.filtering_qc_metrics.split(","),
+        qc_metrics,
         strata
     )
-    pop_platform_filter_ht.write(platform_pop_outlier_ht_path(data_source, freeze, pop_assignment_method), overwrite=args.overwrite)
+    #pop_platform_filter_ht.write(platform_pop_outlier_ht_path(data_source, freeze, pop_assignment_method), overwrite=args.overwrite)
+    pop_platform_filter_ht.write('gs://broad-ukbb/broad.freeze_5/temp/outlier_detection_tranche_platform.ht', overwrite=args.overwrite)
 
-    num_pass = pop_platform_filter_ht.aggregate(hl.agg.count_where(hl.len(pop_platform_filter_ht.pop_platform_filters) == 0))
+    num_pass = pop_platform_filter_ht.aggregate(hl.agg.count_where(hl.len(pop_platform_filter_ht.qc_metrics_filters) == 0))
     logger.info(f'{num_pass} exome samples found passing pop/platform-specific filtering')
 
 
