@@ -1,6 +1,7 @@
 import argparse
 from gnomad_hail.utils.sample_qc import add_filters_expr
-from ukbb_qc.call_sex import * 
+from ukbb_qc.call_sex import *
+from ukbb_qc.utils import interval_qc_filter 
 
 
 logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
@@ -44,18 +45,32 @@ def main(args):
 
     data_source = args.data_source
     freeze = args.freeze
+    temp_ht_path = f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/interval_qc_sample_qc.ht'
 
-    logger.info('Adding sex imputation annotations...')
-    mt = get_ukbb_data(data_source, freeze, split=False, raw=True)
-    ht = hl.read_table(sex_ht_path(data_source, freeze))
-    mt = mt.annotate_cols(**ht[mt.col_key])
+    if args.intervals:
+        logger.info('Adding sex imputation annotations...')
+        logger.info('Filtering to well covered intervals...')
+        mt = get_ukbb_data(data_source, freeze, split=False, raw=True)
+        mt = interval_qc_filter(data_source, freeze, mt)
 
-    logger.info('Computing raw sample QC metrics...')
-    mt = hl.sample_qc(mt)
-    mt = mt.transmute_cols(raw_sample_qc=mt.sample_qc.select('call_rate', 'gq_stats', 'dp_stats')).cols() 
+        logger.info('Adding sex imputation annotations...')
+        ht = hl.read_table(sex_ht_path(data_source, freeze))
+        mt = mt.annotate_cols(**ht[mt.col_key])
+
+        logger.info('Computing raw sample QC metrics...')
+        mt = mt.annotate_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
+        mt = mt.key_rows_by('locus', 'alleles')
+        mt = hl.sample_qc(mt)
+        ht = mt.transmute_cols(raw_sample_qc=mt.sample_qc.select('call_rate', 'gq_stats', 'dp_stats')).cols()
+        #ht = ht.write('gs://broad-ukbb/broad.freeze_5/temp/dense_interval_qc.ht')
+        ht.write(temp_ht_path, overwrite=args.overwrite)
+
+    #ht = hl.read_table('gs://broad-ukbb/broad.freeze_5/temp/dense_interval_qc.ht')
+    ht = hl.read_table(temp_ht_path)
     ht = apply_hard_filters_expr(ht, args.callrate, args.depth)
     
     logger.info('Writing out hard filters HT...')
+    ht = ht.naive_coalesce(10000)
     ht = ht.checkpoint(hard_filters_ht_path(data_source, freeze), overwrite=args.overwrite)
     
     logger.info('Checking number of samples flagged with hard filters...')
@@ -72,6 +87,7 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--callrate', help='Minimum callrate', default=0.99, type=float)
     parser.add_argument('-d', '--depth', help='Minimum depth', default=20.0, type=float)
     parser.add_argument('-o', '--overwrite', help='Overwrite pre-existing data', action='store_true', default=True)
+    parser.add_argument('-i', '--intervals', help='Filter to intervals to check distributions', action='store_true')
     args = parser.parse_args()
 
     main(args)
