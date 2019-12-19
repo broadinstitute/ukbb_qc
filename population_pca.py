@@ -122,9 +122,11 @@ def main(args):
         logger.info("Running population PCA")
         qc_mt = remove_hard_filter_samples(data_source, freeze,
                                            hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned=True)))
+        related_ht = related_drop_path(data_source, freeze)
+        related_ht = related_ht.filter(related_ht.relationship == "second-degree")
         pca_evals, pop_pca_scores_ht, pop_pca_loadings_ht = run_pca_with_relateds(
             qc_mt,
-            hl.read_table(related_drop_path(data_source, freeze)),
+            hl.read_table(related_ht),
             n_pcs
         )
         pop_pca_scores_ht = pop_pca_scores_ht.annotate_globals(n_pcs=n_pcs)

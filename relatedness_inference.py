@@ -54,6 +54,22 @@ def rank_related_samples(
     return relatedness_ht, tie_breaker
 
 
+def filter_related_samples(relatedness_ht, data_source, freeze, kinship_cutoff):
+    relatedness_ht = relatedness_ht.filter(relatedness_ht.kin > kinship_cutoff)
+    related_pairs_ht, related_pairs_tie_breaker = rank_related_samples(
+        relatedness_ht,
+        hl.read_table(qc_ht_path(data_source, freeze))
+    )
+
+    related_samples_to_drop_ht = hl.maximal_independent_set(related_pairs_ht.i, related_pairs_ht.j,
+                                                            keep=False, tie_breaker=related_pairs_tie_breaker)
+    related_samples_to_drop_ht = related_samples_to_drop_ht.key_by()
+    related_samples_to_drop_ht = related_samples_to_drop_ht.select(**related_samples_to_drop_ht.node)
+    related_samples_to_drop_ht = related_samples_to_drop_ht.key_by('s')
+
+    return related_samples_to_drop_ht
+
+
 def main(args):
     hl.init(log='/relatedness.log', tmp_dir='hdfs:///pc_relate.tmp/')
 
@@ -108,19 +124,28 @@ def main(args):
     if not args.skip_filter_related_samples:
         logger.info("Filtering related samples")
         relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
-        relatedness_ht = relatedness_ht.filter(relatedness_ht.kin > args.min_filtering_kinship)
-        related_pairs_ht, related_pairs_tie_breaker = rank_related_samples(
-            relatedness_ht,
-            hl.read_table(qc_ht_path(data_source, freeze))
-        )
+        related_samples_to_drop_second_deg_ht = filter_related_samples(relatedness_ht, data_source, freeze,
+                                                                       args.min_filtering_kinship)
+        related_samples_to_drop_second_deg_ht = related_samples_to_drop_second_deg_ht.annotate(
+            relationship="second-degree")
+        related_samples_to_drop_dup_ht = filter_related_samples(relatedness_ht, data_source, freeze,
+                                                                args.dup_kinship_cutoff)
+        related_samples_to_drop_dup_ht = related_samples_to_drop_dup_ht.annotate(
+            relationship="duplicate")
+        related_samples_to_drop_first_deg_ht = filter_related_samples(relatedness_ht, data_source, freeze,
+                                                                      args.first_kinship_cutoff)
+        related_samples_to_drop_first_deg_ht = related_samples_to_drop_first_deg_ht.annotate(
+            relationship="first-degree")
+        related_samples_to_drop_ht = related_samples_to_drop_second_deg_ht.union(related_samples_to_drop_dup_ht,
+                                                                                 related_samples_to_drop_first_deg_ht)
 
-        related_samples_to_drop_ht = hl.maximal_independent_set(related_pairs_ht.i, related_pairs_ht.j,
-                                                                keep=False, tie_breaker=related_pairs_tie_breaker)
-        related_samples_to_drop_ht = related_samples_to_drop_ht.key_by()
-        related_samples_to_drop_ht = related_samples_to_drop_ht.select(**related_samples_to_drop_ht.node)
-        related_samples_to_drop_ht = related_samples_to_drop_ht.key_by('s')
-        related_samples_to_drop_ht.write(related_drop_path(data_source, freeze), overwrite=args.overwrite)
-        logger.info(f'{related_samples_to_drop_ht.count()} samples flagged in callset using maximal independent set')
+        # related_samples_to_drop_ht = related_samples_to_drop_ht.checkpoint(related_drop_path(data_source, freeze), overwrite=args.overwrite)
+        related_samples_to_drop_ht = related_samples_to_drop_ht.checkpoint(
+            'gs://broad-ukbb-jgoodric/test_relatednesstable.ht',
+            overwrite=True)
+        logger.info(f'{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == "second-degree").count()} second degree samples flagged in callset using maximal independent set')
+        logger.info(f'{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == "first-degree").count()} first degree samples flagged in callset using maximal independent set')
+        logger.info(f'{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == "duplicate").count()} duplicate samples flagged in callset using maximal independent set')
 
 
 if __name__ == '__main__':
@@ -152,7 +177,12 @@ if __name__ == '__main__':
     parser.add_argument('--skip_filter_related_samples',
                         help='Skip Filter related samples (based on the pairs present from the --run_pc_relate and using the --min_filtering_kinship value for that run)',
                         action='store_true')
-
+    parser.add_argument('--dup_kinship_cutoff',
+                        help='Kinship threshold for filtering a pair of duplicate samples. (Default = 0.4)',
+                        default=0.4, type=float)
+    parser.add_argument('--first_kinship_cutoff',
+                        help='First degree kinship threshold for filtering a pair of samples with a first degree relationship. (Default = 0.1767767; 1st degree relatives)',
+                        default=0.1767767, type=float)
     args = parser.parse_args()
 
     if args.slack_channel:
