@@ -139,10 +139,7 @@ def main(args):
         related_samples_to_drop_ht = related_samples_to_drop_second_deg_ht.union(related_samples_to_drop_dup_ht,
                                                                                  related_samples_to_drop_first_deg_ht)
 
-        # related_samples_to_drop_ht = related_samples_to_drop_ht.checkpoint(related_drop_path(data_source, freeze), overwrite=args.overwrite)
-        related_samples_to_drop_ht = related_samples_to_drop_ht.checkpoint(
-            'gs://broad-ukbb-jgoodric/test_relatednesstable.ht',
-            overwrite=True)
+        related_samples_to_drop_ht = related_samples_to_drop_ht.checkpoint(related_drop_path(data_source, freeze), overwrite=args.overwrite)
         logger.info(f'{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == "second-degree").count()} second degree samples flagged in callset using maximal independent set')
         logger.info(f'{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == "first-degree").count()} first degree samples flagged in callset using maximal independent set')
         logger.info(f'{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == "duplicate").count()} duplicate samples flagged in callset using maximal independent set')
