@@ -123,9 +123,14 @@ def main(args):
 
     logger.info('Reading in related samples ht')
     related_samples_to_drop_ht = hl.read_table(related_drop_path(data_source, freeze))
+    related_samples_to_drop_second_ht = related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == "second-degree")
+    related_samples_to_drop_first_ht = related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == "first-degree")
+    related_samples_to_drop_dup_ht = related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == "dup-degree")
 
     logger.info('Annotating meta ht with related samples')
-    left_ht = left_ht.annotate(related_filter=hl.is_defined(related_samples_to_drop_ht[left_ht.s]))
+    left_ht = left_ht.annotate(related_filter=hl.is_defined(related_samples_to_drop_second_ht[left_ht.s]))
+    left_ht = left_ht.annotate(related_dup_filter=hl.is_defined(related_samples_to_drop_dup_ht[left_ht.s]))
+    left_ht = left_ht.annotate(related_first_filter=hl.is_defined(related_samples_to_drop_first_ht[left_ht.s]))
    
     logger.info('Reading in outlier ht')
     right_ht = hl.read_table(platform_pop_outlier_ht_path(data_source, freeze, args.pop_assignment_method))
