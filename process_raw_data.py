@@ -52,7 +52,6 @@ def main(args):
             f'Total number of IDs in the exome data that are not in the sample map: {s_exome_not_in_map.count()}...')
         s_exome_not_in_map.show(s_exome_not_in_map.count())
 
-        exome_ht = exome_ht.select('ukbb_app_26041_id')
         exome_ht.write(array_sample_map_ht(data_source, freeze), overwrite=args.overwrite)
 
     if args.compute_qc_mt:
