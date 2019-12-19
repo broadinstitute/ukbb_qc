@@ -11,22 +11,20 @@ logger.setLevel(logging.INFO)
 
 
 def main(args):
-    hl.init(log='/generate_hardcalls.log')
+    hl.init(log='/generate_hardcalls.log', default_reference='GRCh38')
 
     data_source = args.data_source
     freeze = args.freeze
 
+    # NOTE: do not use autoscale when running this; run with 100 normal workers
     if args.impute_sex:
         logger.info('Imputing sex...')
-        # TODO: Delete below after export -- wanted to check whether all Y sites are defined in the new pipeline
-        ht = hl.read_table(sex_ht_path(data_source, freeze))
-        ht.export(sex_tsv_path(data_source, freeze))
-
+        if data_source == 'broad' and freeze == 5:
+            raw_mt = hl.read_matrix_table('gs://broad-pharma5-ukbb-outputs/hail_dataproc_20191108115937')
         mt = get_ukbb_data(data_source, freeze, split=False, raw=True)
 
-        # NOTE: correct densified sparse mt for hardcalls
+        # prepare densified sparse ht for sex imputation
         mt = mt.key_rows_by('locus', 'alleles')
-        # NOTE: as of 11/25 densify no longer converts LGT to GT
         sex_check_intervals = [hl.parse_locus_interval(x, reference_genome='GRCh38') for x in ['chr20', 'chrX', 'chrY']]
         mt = hl.filter_intervals(mt, sex_check_intervals)
         mt = mt.annotate_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
@@ -49,6 +47,7 @@ def main(args):
         logger.info("Running split_multi on the hardcalls...")
         #mt = get_ukbb_data(data_source, freeze, split=False, raw=False)
         #mt = hl.split_multi_hts(mt)
+        # NOTE: reading in raw, densified mt because need sparse_split_multi to handle local alleles
         mt = get_ukbb_data(data_source, freeze, split=False, raw=True)
 
         # Add allele data to mt
@@ -57,11 +56,12 @@ def main(args):
         mt = mt.annotate_rows(allele_data=allele_data.annotate(**add_variant_type(mt.alleles)))
 
         sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
+        mt = mt.key_rows_by('locus', 'alleles')
         mt = hl.experimental.sparse_split_multi(mt)
         mt = annotate_adj(mt.select_cols(sex=sex_ht[mt.col_key].sex))
         mt = mt.select_entries(GT=mt.GT, adj=mt.adj)
         mt = adjust_sex_ploidy(mt, mt.sex)
-        mt = mt.select_cols().naive_coalesce(15000)
+        mt = mt.select_cols().naive_coalesce(20000)
         mt = mt.checkpoint(get_ukbb_data_path(data_source, freeze, hardcalls=True, split=True), args.overwrite)
 
         # Finish generating allele data
