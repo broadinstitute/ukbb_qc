@@ -61,6 +61,7 @@ def get_age_ht(data_source: str, freeze: int) -> hl.Table:
     sample_map_ht = sample_map_ht.key_by('ukbb_app_26041_id')
     ukbb_age = ukbb_age.key_by(s=sample_map_ht[ukbb_age.key].s)
     ukbb_age = ukbb_age.rename({'f.21022.0.0': 'age'})
+    ukbb_age = ukbb_age.drop('s_old')
     return ukbb_age
 
 
@@ -109,6 +110,7 @@ def main(args):
 
     logger.info('Reading in array sample concordance ht')
     right_ht = hl.read_table(array_sample_concordance_path(data_source, freeze))
+    right_ht = right_ht.drop('left_col', 'right_col')
 
     logger.info('Joining array sample concordance ht to current join')
     left_ht = left_ht.annotate(array_id=left_ht.s.split("_")[1])
@@ -126,7 +128,7 @@ def main(args):
     related_samples_to_drop_second_ht = related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == "second-degree")
     related_samples_to_drop_first_ht = related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == "first-degree")
     related_samples_to_drop_dup_ht = related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == "dup-degree")
-
+    
     logger.info('Annotating meta ht with related samples')
     left_ht = left_ht.annotate(related_filter=hl.is_defined(related_samples_to_drop_second_ht[left_ht.s]))
     left_ht = left_ht.annotate(related_dup_filter=hl.is_defined(related_samples_to_drop_dup_ht[left_ht.s]))
@@ -140,7 +142,8 @@ def main(args):
 
     logger.info('Annotating high_quality field')
     left_ht = left_ht.annotate(high_quality=((hl.len(left_ht.hard_filters) == 0) &
-                                            (hl.len(left_ht.pop_platform_filters) == 0)))
+                                            (hl.len(left_ht.qc_metrics_filters) == 0)))
+
 
     logger.info('Dropping control samples')
     left_ht = left_ht.filter(~(left_ht.s == 'CHMI_CHMI3_Nex1') & ~(left_ht.s == 'Coriell_NA12878_NA12878'))
