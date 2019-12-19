@@ -37,7 +37,8 @@ def main(args):
 
         sample_map = sample_map.key_by(s=sample_map.eid_sample)
         exome_ht = get_ukbb_data(data_source, freeze, raw=True, split=False).cols()
-        exome_ht = exome_ht.annotate(ukbb_app_26041_id=sample_map[exome_ht.s.split("_")[1]].eid_26041)
+        exome_ht = exome_ht.annotate(ukbb_app_26041_id=sample_map[exome_ht.s.split("_")[1]].eid_26041,
+                                     **sample_map[exome_ht.s.split("_")[1]])
         logger.info(f'Total number of samples in the exome data: {exome_ht.count()}...')
 
         s_exome_not_in_map = exome_ht.filter(hl.is_missing(exome_ht.ukbb_app_26041_id)).select()
