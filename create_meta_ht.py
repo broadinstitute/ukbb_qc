@@ -133,6 +133,9 @@ def main(args):
     left_ht = left_ht.annotate(related_filter=hl.is_defined(related_samples_to_drop_second_ht[left_ht.s]))
     left_ht = left_ht.annotate(related_dup_filter=hl.is_defined(related_samples_to_drop_dup_ht[left_ht.s]))
     left_ht = left_ht.annotate(related_first_filter=hl.is_defined(related_samples_to_drop_first_ht[left_ht.s]))
+    left_ht = left_ht.annotate_globals(
+        **related_samples_to_drop_ht.globals
+    )
    
     logger.info('Reading in outlier ht')
     right_ht = hl.read_table(platform_pop_outlier_ht_path(data_source, freeze, args.pop_assignment_method))
