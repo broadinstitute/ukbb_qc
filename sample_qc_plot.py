@@ -192,6 +192,70 @@ def get_outlier_plots(outlier_sample_qc,
     return tables, plots
 
 
+def get_multi_outlier_plots(outlier_sample_qc,
+                      meta_ht,
+                      facet_cols={'pop': 'hybrid_pop', 'plat': 'batch'},
+                      qc_metrics=["n_snp", "r_ti_tv", "r_insertion_deletion", "n_insertion", "n_deletion",
+                                  "r_het_hom_var"]):
+    
+    outlier_sample_qc = outlier_sample_qc.annotate(**meta_ht[outlier_sample_qc.key])
+    outlier_sample_qc = outlier_sample_qc.filter(hl.is_defined(outlier_sample_qc.batch))
+    
+    cols = list(facet_cols.values())
+    key = 's'
+    colnames = cols + [key] + [f'sample_qc.{metric}' for metric in qc_metrics]
+    new_colnames = cols + [key] + [f'{metric}' for metric in qc_metrics]
+    sample_qc_pd = outlier_sample_qc.flatten().select(*colnames).rename(dict(zip(colnames, new_colnames))).key_by(
+        key).to_pandas()
+    sample_qc_pd = sample_qc_pd.set_index(key)
+
+    sample_qc_fail_pd = sample_qc_pd.groupby(cols).transform(
+        lambda x: (x < (x.median() - (4 * mad(x)))) | (x > (x.median() + (4 * mad(x)))))
+    sample_qc_fail_pd[cols] = sample_qc_pd[cols]
+    plots = None
+    tables = []
+    pop_factors = sample_qc_pd[facet_cols['pop']].unique()
+    plat_factors = sample_qc_pd[facet_cols['plat']].unique()
+    pop_factors.sort()
+    plat_factors.sort()
+
+    for metric in qc_metrics:
+        curve_dict = {}
+        sample_qc_fail_pd.groupby(['hybrid_pop', 'batch'])[metric].value_counts().fillna(0)
+        fail_table = sample_qc_fail_pd.groupby(cols)[metric].value_counts().unstack().fillna(0)
+        #fail_table = fail_table.rename_axis(mapper="None")
+        fail_table.columns = ['Pass', 'Fail']
+        fail_table['Pct_fail'] = (fail_table['Fail'] / fail_table.sum(axis=1)) * 100
+        decimals = pd.Series([0, 0, 2], index=['Pass', 'Fail', 'Pct_fail'])
+        fail_table["Pass"] = pd.to_numeric(fail_table["Pass"], downcast='integer')
+        fail_table["Fail"] = pd.to_numeric(fail_table["Fail"], downcast='integer')
+        fail_table = fail_table.round(2)  # (decimals)
+        fail_table = fail_table.fillna(0)
+        tables.append((metric, fail_table))
+        for plat in plat_factors:
+            for pop in pop_factors:
+                factor = f'{plat}_{pop}'
+                source = sample_qc_pd[(sample_qc_pd[facet_cols['pop']] == pop) & 
+                                      (sample_qc_pd[facet_cols['plat']] == plat)][metric]
+                
+                # account for empty groups, otherwise get numpy NaN errors
+                if source.empty:
+                    continue
+                upper = source.median() + (4 * mad(source))
+                lower = source.median() - (4 * mad(source))
+                p = hv.Distribution(source).opts(xrotation=45)  
+                p = p * hv.VLine(lower).opts(line_dash='dashed')
+                p = p * hv.VLine(upper).opts(line_dash='dashed')
+                curve_dict[factor] = p
+                
+        if plots is not None:
+            plots = plots + hv.NdLayout(curve_dict, kdims='batch_population', label=metric).opts(sizing_mode='scale_both')
+        else:
+            plots = hv.NdLayout(curve_dict, kdims='batch_population', label=metric).opts(sizing_mode='scale_both')
+
+    return tables, plots
+
+
 def kinship_distribution_plot(relatedness_ht: hl.Table,
                               kin_label: str = "kin",
                               degree_cutoffs: Dict[str, float] = relatedness_kin_cutoffs,
@@ -272,6 +336,36 @@ def display_tables(table_list):
     head = """<html>
 <body>
 <table style="width:100%">
+<thead align="center">
+<tr>
+{}
+</tr>
+</thead>
+<tr>
+"""
+    titles = ""
+    row = ""
+    for title, serie in table_list:
+        s = serie.copy()
+        titles += f'<th style="text-align: center;">{title}</th>\n'
+        s.name = ''
+        row += "<td>{}</td>".format(s.to_html())
+
+    head = head.format(titles)
+    head += row
+    head += """
+</tr>
+</table>
+</body>
+</html>"""
+    display_html(head, raw=True)
+
+
+# NOTE: created for tranche 2, outlier tables were too wide
+def display_wide_tables(table_list):
+    head = """<html>
+<body>
+<table style="width:150%">
 <thead align="center">
 <tr>
 {}
