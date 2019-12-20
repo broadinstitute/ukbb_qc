@@ -138,8 +138,13 @@ def main(args):
             relationship="first-degree")
         related_samples_to_drop_ht = related_samples_to_drop_second_deg_ht.union(related_samples_to_drop_dup_ht,
                                                                                  related_samples_to_drop_first_deg_ht)
+        related_samples_to_drop_ht = related_samples_to_drop_ht.annotate_globals(
+            second_degree_kin_cutoff=args.min_filtering_kinship,
+            first_degree_kin_cutoff=args.first_kinship_cutoff,
+            dup_kin_cutoff=args.dup_kinship_cutoff
+        )
 
-        related_samples_to_drop_ht = related_samples_to_drop_ht.checkpoint(related_drop_path(data_source, freeze), overwrite=args.overwrite)
+        related_samples_to_drop_ht = related_samples_to_drop_ht.checkpoint(f'{sample_qc_prefix(data_source, freeze)}/relatedness/related_samples_to_drop.pc_relate.new2.ht', overwrite=args.overwrite)
         logger.info(f'{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == "second-degree").count()} second degree samples flagged in callset using maximal independent set')
         logger.info(f'{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == "first-degree").count()} first degree samples flagged in callset using maximal independent set')
         logger.info(f'{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == "duplicate").count()} duplicate samples flagged in callset using maximal independent set')
