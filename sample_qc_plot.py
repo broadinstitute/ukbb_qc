@@ -142,14 +142,14 @@ def get_relatedness_plots(ibd_pd,
 
 def get_outlier_plots(outlier_sample_qc,
                       meta_ht,
-                      facet_col='qc_pop',
+                      facet_cols=['qc_pop', 'batch'],
                       qc_metrics=["n_snp", "r_ti_tv", "r_insertion_deletion", "n_insertion", "n_deletion",
                                   "r_het_hom_var"]):
     #outlier_sample_qc = outlier_sample_qc.annotate(qc_pop=meta_ht[outlier_sample_qc.key].pop.pop,
     #                                               pop_platform_filters=meta_ht[
     #                                                   outlier_sample_qc.key].pop_platform_filters)
     outlier_sample_qc = outlier_sample_qc.annotate(**meta_ht[outlier_sample_qc.key])
-    cols = [facet_col]
+    cols = facet_cols
     key = 's'
     colnames = cols + [key] + [f'sample_qc.{metric}' for metric in qc_metrics]
     new_colnames = cols + [key] + [f'{metric}' for metric in qc_metrics]
