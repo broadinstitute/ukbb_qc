@@ -147,9 +147,10 @@ def main(args):
     left_ht = left_ht.annotate(high_quality=((hl.len(left_ht.hard_filters) == 0) &
                                             (hl.len(left_ht.qc_metrics_filters) == 0)))
 
-
-    logger.info('Dropping control samples')
-    left_ht = left_ht.filter(~(left_ht.s == 'CHMI_CHMI3_Nex1') & ~(left_ht.s == 'Coriell_NA12878_NA12878'))
+    logger.info('Annotating releasable field')
+    left_ht = left_ht.annotate(releasable=hl.if_else(left_ht.s.contains('UKB'), True, False))
+    logger.info(f'Releasable and non-releasable counts: {left_ht.aggregate(hl.struct(release=hl.agg.count_where(left_ht.releasable),
+                                            control=hl.agg.count_where(~left_ht.releasable)))}')
 
     logger.info('Writing out meta ht')
     left_ht.write(meta_ht_path(data_source, freeze), overwrite=args.overwrite)
