@@ -148,9 +148,9 @@ def main(args):
                                             (hl.len(left_ht.qc_metrics_filters) == 0)))
 
     logger.info('Annotating releasable field')
-    left_ht = left_ht.annotate(releasable=hl.if_else((left_ht.s.contains('UKB') & left_ht.high_quality), True, False))
-    logger.info(f'Releasable and non-releasable counts: {left_ht.aggregate(hl.struct(release=hl.agg.count_where(left_ht.releasable),
-                                            control=hl.agg.count_where(~left_ht.releasable)))}')
+    left_ht = left_ht.annotate(release=hl.if_else((left_ht.s.contains('UKB') & left_ht.high_quality), True, False))
+    logger.info(f'Releasable and non-releasable counts: {left_ht.aggregate(hl.struct(release=hl.agg.count_where(left_ht.release),
+                                            control=hl.agg.count_where(~left_ht.release)))}')
 
     logger.info('Writing out meta ht')
     left_ht.write(meta_ht_path(data_source, freeze), overwrite=args.overwrite)
