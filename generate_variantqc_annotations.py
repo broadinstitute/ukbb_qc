@@ -55,7 +55,7 @@ def annotate_truth_data(mt: hl.MatrixTable, data_source: str, freeze: int) -> hl
     # TODO: formalize code to create this resource
     truth_htes.update({'hapmap': hl.read_table(hapmap_ht_path()),
                        'sib_singletons': hl.read_table(var_annotations_ht_path(data_source, freeze, 'sib_singletons.train')),
-                       'ukbb_array_con':hl.read_table(f'{variant_qc_prefix(data_source, freeze)}/array_variant_concordance_callrate_0.95_non_ref_con_0.9.ht'),
+                       #'ukbb_array_con':hl.read_table(f'{variant_qc_prefix(data_source, freeze)}/array_variant_concordance_callrate_0.95_non_ref_con_0.9.ht'),
                        'ukbb_array_con_common':hl.read_table(f'{variant_qc_prefix(data_source, freeze)}/array_variant_concordance_callrate_0.95_non_ref_con_0.9_AF_0.001.ht')})
 
     return mt.annotate_rows(truth_data=hl.struct(**{root: hl.is_defined(truth_ht[mt.row_key])
@@ -144,6 +144,16 @@ def generate_sibling_singletons(mt, relatedness_ht, num_var_per_sibs_cutoff=None
 #     return de_novo_table
 
 
+def generate_qual_hists(mt: hl.MatrixTable) -> hl.Table:
+    #mt = hl.split_multi_hts(mt)
+    return mt.annotate_rows(
+        gq_hist_alt=hl.agg.filter(mt.GT.is_non_ref(), hl.agg.hist(mt.GQ, 0, 100, 20)),
+        gq_hist_all=hl.agg.hist(mt.GQ, 0, 100, 20),
+        dp_hist_alt=hl.agg.filter(mt.GT.is_non_ref(), hl.agg.hist(mt.DP, 0, 100, 20)),
+        dp_hist_all=hl.agg.hist(mt.DP, 0, 100, 20),
+        ab_hist_alt=hl.agg.filter(mt.GT.is_het(), hl.agg.hist(mt.AD[1] / hl.sum(mt.AD), 0, 1, 20))
+    ).rows()
+
 
 def main(args):
     hl.init(log='/generate_variantqc_annotations.log')
@@ -169,8 +179,10 @@ def main(args):
         mt.write(var_annotations_ht_path(data_source, freeze, 'qc_stats'), stage_locally=True, overwrite=args.overwrite)
 
     if args.generate_qual_hists:  # CPU-hours: 4000 (E), 8000 (G)
-        #mt = get_gnomad_data(data_type, raw=True, split=False, release_samples=True)
         mt = get_ukbb_data(data_source, freeze, raw=True, split=False)
+        mt = mt.drop('gvcf_info')
+        mt = mt.key_rows_by('locus', 'alleles')
+        mt = hl.experimental.sparse_split_multi(mt)
         ht = generate_qual_hists(mt)
         write_temp_gcs(ht, var_annotations_ht_path(data_source, freeze, 'qual_hists'), args.overwrite)
 
@@ -198,7 +210,7 @@ def main(args):
 
     if args.generate_sibling_singletons:
         relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
-        mt = get_ukbb_data(data_source, freeze, split=True)
+        mt = get_ukbb_data(data_source, freeze)
         sib_mt = generate_sibling_singletons(mt, relatedness_ht, args.num_var_per_sibs_cutoff)
         sib_mt = sib_mt.checkpoint(get_mt_checkpoint_path(data_source, freeze, 'sib_singletons'), overwrite=args.overwrite)
         sib_mt.rows().naive_coalesce(500).write(var_annotations_ht_path(data_source, freeze, 'sib_singletons'), overwrite=args.overwrite)
