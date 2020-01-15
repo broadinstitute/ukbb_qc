@@ -87,11 +87,19 @@ def main(args):
 
     if args.split_nonrefs:
         logger.info("Running split_multi on non-ref MT...")
-        mt = get_ukbb_data(data_source, freeze, split=False, non_refs_only=True)
+        #mt = get_ukbb_data(data_source, freeze, split=False, non_refs_only=True)
+        mt = get_ukbb_data(data_source, freeze, split=False, raw=True).select_cols()
+        mt = mt.drop('gvcf_info')
+        mt = mt.key_rows_by('locus', 'alleles')
+        mt = mt.annotate_entries(is_missing=hl.is_missing(mt.LGT))
+        mt = mt.filter_entries(mt.is_missing | mt.LGT.is_non_ref())
+
         if data_source == 'regeneron':
             mt = mt.drop('PL')  # Note: I guess we need to check if PL has issues rather than just always dropping
-        mt = hl.split_multi_hts(mt)
+        mt = hl.experimental.sparse_split_multi(mt)
         mt = mt.filter_entries(mt.is_missing | mt.GT.is_non_ref())
+        mt = annotate_adj(mt)
+        mt = mt.naive_coalesce(10000)
         mt.write(get_ukbb_data_path(data_source, freeze, split=True, non_refs_only=True), args.overwrite)
 
 
