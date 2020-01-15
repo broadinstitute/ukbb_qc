@@ -210,11 +210,9 @@ def create_binned_data(ht: hl.Table, data: str, data_source: str, freeze: int, n
     )
     ht = ht.filter(hl.is_defined(ht.bin))
 
-    ht.write(f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/score_binning.{data}.ht', overwrite=True)
+    ht = ht.checkpoint(f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/score_binning.{data}.ht', overwrite=True)
 
     # Create binned data
-    ht = hl.read_table(f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/score_binning.{data}.ht')
-
     return (
         ht.group_by(
             rank_id=ht.rank_id,
