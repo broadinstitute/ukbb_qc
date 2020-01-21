@@ -26,7 +26,7 @@ VQSR_FEATURES = [
     'info_FS',
     'info_QD',
     'info_MQ',
-    'info_DP'
+    'info_VarDP'
 ]
 
 ALLELE_FEATURES = [
@@ -171,7 +171,7 @@ def create_rf_ht(
             ht.info.FS,
             ht.info.QD,
             ht.info.MQ,
-            ht.info.DP
+            ht.info.VarDP
         ]))
 
     def get_allele_features_expr(ht: hl.Table, qc_stats_group_index: int) -> Dict[str, hl.expr.Expression]:
@@ -233,6 +233,11 @@ def create_rf_ht(
     ht_truth_data = hl.read_table(var_annotations_ht_path(data_source, freeze, 'truth_data'))
     ht_allele_data = hl.read_table(var_annotations_ht_path(data_source, freeze, 'allele_data'))
 
+    # TODO: remove hard path for info HT
+    info_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vqsr'))
+    mt = mt.annotate_rows(info=info_ht[mt.row_key].info)
+    mt = mt.annotate_rows(info=mt.info.annotate(AC=hl.agg.sum(mt.GT.n_alt_alleles())))
+
     # Add inbreeding coefficient
     ic_mt = mt.filter_cols(mt.meta.related_filter, keep=False)
     ic_mt = ic_mt.filter_rows(hl.agg.sum(ic_mt.GT.n_alt_alleles()) > 0)
@@ -242,8 +247,8 @@ def create_rf_ht(
 
     ht = mt.annotate_rows(
         n_nonref=ht_call_stats[mt.row_key].qc_callstats[0].AC[1],
-        singleton=mt.info.AC[mt.a_index - 1] == 1,
-        info_ac=mt.info.AC[mt.a_index - 1],
+        singleton=mt.info.AC == 1,#[mt.a_index - 1] == 1,
+        info_ac=mt.info.AC, #[mt.a_index - 1],
         **ht_call_stats[mt.row_key],
         **ht_family_stats[mt.row_key],
         **ht_qc_stats[mt.row_key],
@@ -252,7 +257,9 @@ def create_rf_ht(
     ).rows()
 
     ht = ht.annotate(AC=ht.qc_callstats.find(lambda x: x.meta.get('group') == group).AC[1])
-    ht = ht.filter(ht.qc_callstats.find(lambda x: x.meta.get('group') == group).AC[1] > 0)
+
+    # Filter to only variants found in high qual samples and with no LowQual filter
+    ht = ht.filter((ht.qc_callstats.find(lambda x: x.meta.get('group') == group).AC[1] > 0) & ~info_ht[ht.key].filters.contains("LowQual"))
 
     qc_stats_groups = ht_qc_stats.aggregate(hl.agg.take(ht_qc_stats.qc_stats.map(lambda x: x.meta['group']), 1))[0]
     qc_stats_group_index = next(x[0] for x in enumerate(qc_stats_groups) if x[1] == group)
@@ -267,8 +274,8 @@ def create_rf_ht(
         **get_median_features_expr(ht, qc_stats_group_index),
         omni=ht.truth_data.omni,
         mills=ht.truth_data.mills,
-        ukbb_array=ht.truth_data.ukbb_array,
-        ukbb_array_con=ht.truth_data.ukbb_array_con,
+        #ukbb_array=ht.truth_data.ukbb_array,
+        #ukbb_array_con=ht.truth_data.ukbb_array_con,
         ukbb_array_con_common=ht.truth_data.ukbb_array_con_common,
         sib_singletons=ht.truth_data.sib_singletons,
         n_nonref=ht.n_nonref,
@@ -282,8 +289,11 @@ def create_rf_ht(
     logger.info('Variants by type:\n{}'.format('\n'.join(['{}: {}'.format(k, v) for k, v in variants_by_type.items()])))
 
     ht = ht.annotate_globals(variants_by_type=variants_by_type)
-    ht = ht.repartition(2000, shuffle=False)
-    ht = ht.persist()
+
+    #ht = ht.persist()
+    ht = ht.checkpoint(f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/rf_annotations_cp.ht', overwrite=True)
+
+    ht = ht.repartition(5000, shuffle=False)
 
     # Compute medians
     # numerical_features = [k for k, v in ht.row.dtype.items() if annotation_type_is_numeric(v)]
@@ -334,6 +344,7 @@ def create_rf_ht(
 def get_run_data(
         data_source: str,
         freeze: int,
+        interval_qc_filter,
         vqsr_training: bool,
         no_transmitted_singletons: bool,
         array_con: bool,
@@ -347,6 +358,7 @@ def get_run_data(
         'data': data_source,
         'freeze': freeze,
         'input_args': {
+            'interval_qc_filter':interval_qc_filter,
             'vqsr_training': vqsr_training,
             'no_transmitted_singletons': no_transmitted_singletons,
             'array_con': array_con,
@@ -381,7 +393,14 @@ def train_rf(data_source: str, freeze: int, args):
 
     ht = hl.read_table(rf_annotated_path(data_source, freeze, args.adj))
 
-    summary = ht.group_by('omni', 'mills', 'transmitted_singleton', 'ukbb_array', 'ukbb_array_con', 'ukbb_array_con_common', 'sib_singletons').aggregate(n=hl.agg.count())
+
+    interval_qc_ht = hl.read_table(interval_qc_path(data_source, freeze))
+    good_intervals_ht = interval_qc_ht.filter(interval_qc_ht.pct_samples_20x > args.pct_samples_20x).key_by('interval')
+    ht = ht.annotate(interval_qc_pass=hl.is_defined(good_intervals_ht[ht.locus]))
+
+    # TODO: Revisit this
+    #summary = ht.group_by('omni', 'mills', 'transmitted_singleton', 'ukbb_array', 'ukbb_array_con', 'ukbb_array_con_common', 'sib_singletons').aggregate(n=hl.agg.count())
+    summary = ht.group_by('omni', 'mills', 'transmitted_singleton', 'ukbb_array_con_common', 'sib_singletons').aggregate(n=hl.agg.count())
     logger.info("Summary of truth data annotations:")
     summary.show(20)
 
@@ -391,10 +410,11 @@ def train_rf(data_source: str, freeze: int, args):
         tp_expr = ht.omni | ht.mills
         if args.array_con_common:
             tp_expr = tp_expr | ht.ukbb_array_con_common
-        elif args.array_con:
-            tp_expr = tp_expr | ht.ukbb_array_con
-        elif args.array:
-            tp_expr = tp_expr | ht.ukbb_array
+        # TODO: Revisit this
+        #elif args.array_con:
+        #    tp_expr = tp_expr | ht.ukbb_array_con
+        #elif args.array:
+        #    tp_expr = tp_expr | ht.ukbb_array
 
         if not args.no_transmitted_singletons:
             tp_expr = tp_expr | ht.transmitted_singleton  # | ht.info_POSITIVE_TRAIN_SITE
@@ -425,6 +445,9 @@ def train_rf(data_source: str, freeze: int, args):
     summary.show(n=20)
 
     rf_ht = ht.filter(ht[TRAIN_COL])
+    if args.interval_qc_filter:
+        rf_ht = rf_ht.filter(rf_ht.interval_qc_pass)
+
     rf_features = get_features_list(True,
                                     not (args.vqsr_features or args.median_features),
                                     args.vqsr_features,
@@ -478,6 +501,7 @@ def train_rf(data_source: str, freeze: int, args):
     rf_runs[run_hash] = get_run_data(
         data_source,
         freeze,
+        args.interval_qc_filter,
         args.vqsr_training,
         args.no_transmitted_singletons,
         args.array_con,
@@ -493,21 +517,27 @@ def train_rf(data_source: str, freeze: int, args):
     return run_hash
 
 
-def prepare_final_ht(data_source: str, freeze: int, run_hash: str, snp_bin_cutoff: int, indel_bin_cutoff: int) -> hl.Table:
+def prepare_final_ht(data_source: str, freeze: int, run_hash: str, snp_cutoff: int, indel_cutoff: int, treat_cutoff_as_prob: bool) -> hl.Table:
 
     # Get snv and indel RF cutoffs based on bin
     binned_ht_path = score_ranking_path(data_source, freeze, run_hash, binned=True)
     if not hl.hadoop_exists(score_ranking_path(data_source, freeze, run_hash, binned=True)):
         sys.exit(f"Could not find binned HT for RF  run {run_hash} ({binned_ht_path}). Please run create_ranked_scores.py for that hash.")
     binned_ht = hl.read_table(binned_ht_path)
-    snp_rf_cutoff, indel_rf_cutoff = binned_ht.aggregate([hl.agg.filter(binned_ht.snv & (binned_ht.bin == snp_bin_cutoff), hl.agg.min(binned_ht.min_score)),
-                                                          hl.agg.filter(~binned_ht.snv & (binned_ht.bin == indel_bin_cutoff), hl.agg.min(binned_ht.min_score))])
+    if treat_cutoff_as_prob:
+        snp_cutoff_global = hl.struct(min_score=snp_cutoff)
+        indel_cutoff_global = hl.struct(min_score=indel_cutoff)
+    else:
+        snp_rf_cutoff, indel_rf_cutoff = binned_ht.aggregate([hl.agg.filter(binned_ht.snv & (binned_ht.bin == snp_cutoff), hl.agg.min(binned_ht.min_score)),
+                                                          hl.agg.filter(~binned_ht.snv & (binned_ht.bin == indel_cutoff), hl.agg.min(binned_ht.min_score))])
+        snp_cutoff_global = hl.struct(bin=snp_cutoff, min_score=snp_rf_cutoff)
+        indel_cutoff_global = hl.struct(bin=indel_cutoff, min_score=indel_rf_cutoff)
 
     # Add filters to RF HT
     ht = hl.read_table(rf_path(data_source, freeze, 'rf_result', run_hash=run_hash))
     ht = ht.annotate_globals(rf_hash=run_hash,
-                             rf_snv_cutoff=hl.struct(bin=snp_bin_cutoff, min_score=snp_rf_cutoff),
-                             rf_indel_cutoff=hl.struct(bin=indel_bin_cutoff, min_score=indel_rf_cutoff))
+                             rf_snv_cutoff=snp_cutoff_global,
+                             rf_indel_cutoff=indel_cutoff_global)
     rf_filter_criteria = (hl.is_snp(ht.alleles[0], ht.alleles[1]) & (ht.rf_probability['TP'] < ht.rf_snv_cutoff.min_score)) | (
             ~hl.is_snp(ht.alleles[0], ht.alleles[1]) & (ht.rf_probability['TP'] < ht.rf_indel_cutoff.min_score))
     ht = ht.annotate(filters=hl.case()
@@ -530,7 +560,7 @@ def prepare_final_ht(data_source: str, freeze: int, run_hash: str, snp_bin_cutof
     # Fix annotations for release
     annotations_expr = {
         'tp': hl.or_else(ht.tp, False),
-        'transmitted_singleton': hl.or_missing(freq_ht[ht.key].freq[1].AC == 1, ht.transmitted_singleton),
+        'transmitted_singleton': hl.or_missing(freq_ht[ht.key].freq[1].AC == 2, ht.transmitted_singleton),
         'rf_probability': ht.rf_probability["TP"]
     }
     if 'feature_imputed' in ht.row:
@@ -543,7 +573,7 @@ def prepare_final_ht(data_source: str, freeze: int, run_hash: str, snp_bin_cutof
     )
 
     #This column is added by the RF module based on a 0.5 threshold which doesn't correspond to what we use
-    ht = ht.drop(ht.rf_prediction,ht.old_info_MQ)
+    ht = ht.drop(ht.rf_prediction)
 
     return ht
 
@@ -579,6 +609,7 @@ def main(args):
         ht = hl.read_table(rf_path(data_source, freeze, data='training', run_hash=run_hash))  #.persist()
 
         ht = rf.apply_rf_model(ht, rf_model, get_features_list(True, not (args.vqsr_features or args.median_features), args.vqsr_features, args.median_features), label=LABEL_COL)
+
         logger.info('Finished applying RF model')
         ht = ht.checkpoint(rf_path(data_source, freeze, 'rf_result', run_hash=run_hash), overwrite=args.overwrite)
 
@@ -587,7 +618,13 @@ def main(args):
 
 
     if args.finalize:
-        ht = prepare_final_ht(data_source, freeze, args.run_hash, args.snp_bin_cutoff, args.indel_bin_cutoff)
+        ht = prepare_final_ht(data_source, freeze, args.run_hash, args.snp_cutoff, args.indel_cutoff, args.treat_cutoff_as_prob)
+        interval_qc_ht = hl.read_table(interval_qc_path(data_source, freeze))
+        good_intervals_ht = interval_qc_ht.filter(interval_qc_ht.pct_samples_20x > args.pct_samples_20x).key_by(
+            'interval')
+        ht = ht.annotate(interval_qc_pass=hl.is_defined(good_intervals_ht[ht.locus]))
+        ht.describe()
+        ht.show(20)
         ht.write(var_annotations_ht_path(data_source, freeze, 'rf'), args.overwrite)
 
 
@@ -597,8 +634,10 @@ if __name__ == '__main__':
     parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE, type=int)
 
     parser.add_argument('--run_hash', help='Run hash. Created by --train_rf and only needed for --apply_rf without running --train_rf', required=False)
-    parser.add_argument('--snp_bin_cutoff', help='Percentile to set RF cutoff', type=int, default=90)
-    parser.add_argument('--indel_bin_cutoff', help='Percentile to set RF cutoff', type=int, default=80)
+    parser.add_argument('--snp_cutoff', help='Percentile to set RF cutoff', type=float, default=90.0)
+    parser.add_argument('--indel_cutoff', help='Percentile to set RF cutoff', type=float, default=80.0)
+    parser.add_argument('--treat_cutoff_as_prob', help='If set snp_cutoff and indel_cutoff will be probability rather than percentile ', action='store_true')
+
     parser.add_argument('--debug', help='Prints debug statements', action='store_true')
     parser.add_argument('--slack_channel', help='Slack channel to post results and notifications to.')
     parser.add_argument('--overwrite', help='Overwrite all data from this subset (default: False)', action='store_true')
@@ -638,6 +677,11 @@ if __name__ == '__main__':
                                  action='store_true')
     training_params.add_argument('--array', help='Use all array variants.',
                                  action='store_true')
+    training_params.add_argument('--interval_qc_filter', help='Should interval QC be applied', action='store_true')
+    training_params.add_argument('--pct_samples_20x',
+                        help='Percent samples at 20X to filter intervals',
+                        default=0.85,
+                        type=float)
 
 
     args = parser.parse_args()

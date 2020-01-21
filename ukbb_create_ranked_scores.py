@@ -54,7 +54,15 @@ def create_rf_rank(data_source: str, freeze: int, run_hash: str) -> None:
                       'adj_rank': ht.ac_adj > 0,
                       'adj_biallelic_rank': ~ht.was_split & (ht.ac_adj > 0),
                       'adj_singleton_rank': ht.singleton & (ht.ac_adj > 0),
-                      'adj_biallelic_singleton_rank': ~ht.was_split & ht.singleton & (ht.ac_adj > 0)
+                      'adj_biallelic_singleton_rank': ~ht.was_split & ht.singleton & (ht.ac_adj > 0),
+                      'interval_rank': ht.interval_qc_pass,
+                      'interval_singleton_rank': ht.singleton & ht.interval_qc_pass,
+                      'interval_biallelic_rank': ~ht.was_split & ht.interval_qc_pass,
+                      'interval_biallelic_singleton_rank': ~ht.was_split & ht.singleton & ht.interval_qc_pass,
+                      'interval_adj_rank': (ht.ac_adj > 0) & ht.interval_qc_pass,
+                      'interval_adj_biallelic_rank': ~ht.was_split & (ht.ac_adj > 0) & ht.interval_qc_pass,
+                      'interval_adj_singleton_rank': ht.singleton & (ht.ac_adj > 0) & ht.interval_qc_pass,
+                      'interval_adj_biallelic_singleton_rank': ~ht.was_split & ht.singleton & (ht.ac_adj > 0) & ht.interval_qc_pass
                   }
                   )
     ht.write(rf_path(data_source, freeze, 'rf_result', run_hash=run_hash), overwrite=True)
@@ -73,17 +81,25 @@ def create_vqsr_rank_ht(data_source: str, freeze: int):
     if not hl.utils.hadoop_exists(f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/vqsr.ht/_SUCCESS'):
         rf_ht = hl.read_table(rf_annotated_path(data_source, freeze))
         adj_ht = add_adj_annotations(data_source, freeze)
+        interval_qc_ht = hl.read_table(interval_qc_path(data_source, freeze))
+        # TODO: Need to fix this to add argument
+        good_intervals_ht = interval_qc_ht.filter(interval_qc_ht.pct_samples_20x > 0.85).key_by(
+            'interval')
         ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vqsr')).repartition(1000)
+        ht = ht.annotate(AS_VQSLOD=hl.float(ht.info.AS_VQSLOD[ht.a_index-1]),
+                         AS_culprit=ht.info.AS_culprit[ht.a_index-1])
         logger.info('Filtering to high_quality samples and n_nonref==1...')
         ht = ht.annotate(**adj_ht[ht.key],
                          **rf_ht[ht.key],
-                         score=ht.info.VQSLOD,
-                         culprit=ht.info.culprit)
+                         score=ht.AS_VQSLOD,
+                         culprit=ht.AS_culprit,
+                         interval_qc_pass=hl.is_defined(good_intervals_ht[ht.locus]))
         ht = ht.filter(ht.n_nonref > 0)
         # ht = ht.repartition(1000, shuffle=False)
         ht.write(f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/vqsr.ht', overwrite=True)
     ht = hl.read_table(f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/vqsr.ht')
 
+    ht = ht.filter(~ht.filters.contains("LowQual"))
     ht = add_rank(ht,
                   score_expr=-1*ht.score,
                   subrank_expr={
@@ -93,7 +109,15 @@ def create_vqsr_rank_ht(data_source: str, freeze: int):
                       'adj_rank': ht.ac_adj > 0,
                       'adj_biallelic_rank': ~ht.was_split & (ht.ac_adj > 0),
                       'adj_singleton_rank': ht.singleton & (ht.ac_adj > 0),
-                      'adj_biallelic_singleton_rank': ~ht.was_split & ht.singleton & (ht.ac_adj > 0)
+                      'adj_biallelic_singleton_rank': ~ht.was_split & ht.singleton & (ht.ac_adj > 0),
+                      'interval_rank': ht.interval_qc_pass,
+                      'interval_singleton_rank': ht.singleton & ht.interval_qc_pass,
+                      'interval_biallelic_rank': ~ht.was_split & ht.interval_qc_pass,
+                      'interval_biallelic_singleton_rank': ~ht.was_split & ht.singleton & ht.interval_qc_pass,
+                      'interval_adj_rank': (ht.ac_adj > 0) & ht.interval_qc_pass,
+                      'interval_adj_biallelic_rank': ~ht.was_split & (ht.ac_adj > 0) & ht.interval_qc_pass,
+                      'interval_adj_singleton_rank': ht.singleton & (ht.ac_adj > 0) & ht.interval_qc_pass,
+                      'interval_adj_biallelic_singleton_rank': ~ht.was_split & ht.singleton & (ht.ac_adj > 0) & ht.interval_qc_pass
                   }
                   )
     ht.write(score_ranking_path(data_source, freeze, 'vqsr'), overwrite=True)
@@ -163,15 +187,10 @@ def create_binned_data(ht: hl.Table, data: str, data_source: str, freeze: int, n
     fam_ht = fam_ht.select(
         family_stats=fam_ht.family_stats[0]
     )
-    ukbb_ht = get_ukbb_data(data_source, freeze).rows()
-    ukbb_ht = ukbb_ht.select(
-        fail_hard_filters=(ukbb_ht.info.QD < 2) | (ukbb_ht.info.FS > 60) | (ukbb_ht.info.MQ < 30)
-    )
 
     ht = ht.annotate(
         **ht_truth_data[ht.key],
         **fam_ht[ht.key],
-        **ukbb_ht[ht.key],
         # **denovo_ht[ht.key],
         clinvar=hl.is_defined(clinvar_ht[ht.key]),
         indel_length=hl.abs(ht.alleles[0].length()-ht.alleles[1].length()),
@@ -191,11 +210,9 @@ def create_binned_data(ht: hl.Table, data: str, data_source: str, freeze: int, n
     )
     ht = ht.filter(hl.is_defined(ht.bin))
 
-    ht.write(f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/score_binning.{data}.ht', overwrite=True)
+    ht = ht.checkpoint(f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/score_binning.{data}.ht', overwrite=True)
 
     # Create binned data
-    ht = hl.read_table(f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/score_binning.{data}.ht')
-
     return (
         ht.group_by(
             rank_id=ht.rank_id,
@@ -226,8 +243,6 @@ def create_binned_data(ht: hl.Table, data: str, data_source: str, freeze: int, n
             n_train_trans_singletons=hl.agg.count_where((ht.family_stats.unrelated_qc_callstats.AC[1] == 1) & (ht.family_stats.tdt.t == 1)),
             n_omni=hl.agg.count_where(ht.truth_data.omni),
             n_mills=hl.agg.count_where(ht.truth_data.mills),
-            n_ukbb_array=hl.agg.count_where(ht.truth_data.ukbb_array),
-            n_ukbb_array_con=hl.agg.count_where(ht.truth_data.ukbb_array_con),
             n_ukbb_array_con_common=hl.agg.count_where(ht.truth_data.ukbb_array_con_common),
             n_sib_singletons=hl.agg.count_where(ht.truth_data.sib_singletons),
             n_hapmap=hl.agg.count_where(ht.truth_data.hapmap),

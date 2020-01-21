@@ -159,25 +159,30 @@ def main(args):
     freeze = args.freeze
     mt = get_ukbb_data(data_source, freeze, meta_root='meta')
     logger.info(f'mt count before filtering out low quality samples: {mt.count()}')
-    mt = mt.filter_cols(mt.meta.high_quality)
+    mt = mt.filter_cols(mt.meta.high_quality & mt.meta.releasable)
     mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
     logger.info(f'mt count after filtering out low quality samples and their variants: {mt.count()}')
+
+    if args.filter_related:
+        mt = mt.filter_cols(~mt.meta.related_filter)
+        mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
+        logger.info(f'mt count after filtering out related samples and their variants: {mt.count()}')
 
     if args.calculate_frequencies:
         logger.info('Calculating frequencies')
         ht, sample_table = generate_frequency_data(mt, args.downsampling, args.by_platform)
 
-        write_temp_gcs(ht, var_annotations_ht_path(data_source, freeze, 'ukb_freq'), args.overwrite)
+        write_temp_gcs(ht, var_annotations_ht_path(data_source, freeze, f'ukb_freq{"_unrelated" if args.filter_related else ""}'), args.overwrite)
         if args.downsampling:
             sample_table.write(sample_annotations_table_path(data_type, 'downsampling'), args.overwrite)
 
     if args.join_gnomad:
-        ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'ukb_freq'))
+        ht = hl.read_table(var_annotations_ht_path(data_source, freeze, f'ukb_freq{"_unrelated" if args.filter_related else ""}'))
 
         logger.info('Joining UKBB ht to gnomAD exomes and genomes liftover hts')
         ht = join_gnomad(ht, 'exomes')
         ht = join_gnomad(ht, 'genomes')
-        write_temp_gcs(ht, var_annotations_ht_path(data_source, freeze, 'join_freq'), args.overwrite)
+        write_temp_gcs(ht, var_annotations_ht_path(data_source, freeze, f'join_freq{"_unrelated" if args.filter_related else ""}'), args.overwrite)
 
 
 if __name__ == '__main__':
@@ -187,6 +192,7 @@ if __name__ == '__main__':
     parser.add_argument('--downsampling', help='Also calculate downsampling frequency data', action='store_true')
     parser.add_argument('--calculate_frequencies', help='Calculate most frequency data', action='store_true')
     parser.add_argument('--by_platform', help='Also calculate frequencies by platform', action='store_true')
+    parser.add_argument('--filter_related', help='Filter related individuals before calculating allele frequencies', action='store_true')
     parser.add_argument('-j', '--join_gnomad', help='Join table with gnomAD tables to get gnomAD frequencies', action='store_true')
     parser.add_argument('--slack_channel', help='Slack channel to post results and notifications to.')
     parser.add_argument('--overwrite', help='Overwrite data', action='store_true')
