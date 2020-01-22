@@ -1,5 +1,6 @@
 from gnomad_hail import *
 from ukbb_qc.resources import *
+from ukbb_qc.utils import annotate_interval_qc_filter
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -68,7 +69,7 @@ def create_rf_rank(data_source: str, freeze: int, run_hash: str) -> None:
     ht.write(rf_path(data_source, freeze, 'rf_result', run_hash=run_hash), overwrite=True)
 
 
-def create_vqsr_rank_ht(data_source: str, freeze: int):
+def create_vqsr_rank_ht(data_source: str, freeze: int, vqsr_type: str):
     """
     Creates a rank table for VQSR and writes it to its correct location in annotations.
 
@@ -78,26 +79,28 @@ def create_vqsr_rank_ht(data_source: str, freeze: int):
     :rtype: None
     """
     logger.info(f"Creating rank file for {data_source}.freeze_{freeze} VQSR")
-    if not hl.utils.hadoop_exists(f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/vqsr.ht/_SUCCESS'):
+    if not hl.utils.hadoop_exists(f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/{"vqsr" if vqsr_type == "AS" else "AS_TS_vqsr"}/_SUCCESS'):
+        var_annotations_ht_path(data_source, freeze, 'vqsr' if vqsr_type == 'AS' else 'AS_TS_vqsr')
         rf_ht = hl.read_table(rf_annotated_path(data_source, freeze))
         adj_ht = add_adj_annotations(data_source, freeze)
-        interval_qc_ht = hl.read_table(interval_qc_path(data_source, freeze))
+        #interval_qc_ht = hl.read_table(interval_qc_path(data_source, freeze))
         # TODO: Need to fix this to add argument
-        good_intervals_ht = interval_qc_ht.filter(interval_qc_ht.pct_samples_20x > 0.85).key_by(
-            'interval')
-        ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vqsr')).repartition(1000)
+        #good_intervals_ht = interval_qc_ht.filter(interval_qc_ht.pct_samples_20x > 0.85).key_by(
+        #    'interval')
+        ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vqsr' if vqsr_type == 'AS' else 'AS_TS_vqsr')).repartition(1000)
         ht = ht.annotate(AS_VQSLOD=hl.float(ht.info.AS_VQSLOD[ht.a_index-1]),
                          AS_culprit=ht.info.AS_culprit[ht.a_index-1])
         logger.info('Filtering to high_quality samples and n_nonref==1...')
         ht = ht.annotate(**adj_ht[ht.key],
                          **rf_ht[ht.key],
                          score=ht.AS_VQSLOD,
-                         culprit=ht.AS_culprit,
-                         interval_qc_pass=hl.is_defined(good_intervals_ht[ht.locus]))
+                         culprit=ht.AS_culprit)
+        ht = annotate_interval_qc_filter(data_source, freeze, ht)
         ht = ht.filter(ht.n_nonref > 0)
         # ht = ht.repartition(1000, shuffle=False)
-        ht.write(f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/vqsr.ht', overwrite=True)
-    ht = hl.read_table(f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/vqsr.ht')
+        ht.write(f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/{"vqsr" if vqsr_type == "AS" else "AS_TS_vqsr"}.ht', overwrite=True)
+
+    ht = hl.read_table(f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/{"vqsr" if vqsr_type == "AS" else "AS_TS_vqsr"}.ht')
 
     ht = ht.filter(~ht.filters.contains("LowQual"))
     ht = add_rank(ht,
@@ -120,7 +123,7 @@ def create_vqsr_rank_ht(data_source: str, freeze: int):
                       'interval_adj_biallelic_singleton_rank': ~ht.was_split & ht.singleton & (ht.ac_adj > 0) & ht.interval_qc_pass
                   }
                   )
-    ht.write(score_ranking_path(data_source, freeze, 'vqsr'), overwrite=True)
+    ht.write(score_ranking_path(data_source, freeze, "vqsr" if vqsr_type == "AS" else "AS_TS_vqsr"), overwrite=True)
 
 
 def add_adj_annotations(data_source: str, freeze: int) -> hl.Table:
@@ -266,8 +269,9 @@ def main(args):
         :return: Nothing -- this runs the script actions
         :rtype:  None
         """
-        if score_type in ['vqsr']:
-            rank_file_path = score_ranking_path(data_source, freeze, score_type)
+        print(score_type)
+        if score_type in ['vqsr','AS_TS_vqsr']:
+            rank_file_path = score_ranking_path(data_source, freeze,  score_type)
         else:
             rank_file_path = rf_path(data_source, freeze, 'rf_result', run_hash=args.run_hash)
 
@@ -288,7 +292,7 @@ def main(args):
         run_data(create_rf_rank, [data_source, freeze, args.run_hash], args.run_hash, data_source, freeze)
 
     if args.vqsr:
-        run_data(create_vqsr_rank_ht, [data_source, freeze], 'vqsr', data_source, freeze)
+        run_data(create_vqsr_rank_ht, [data_source, freeze, args.vqsr_type], "vqsr" if args.vqsr_type == "AS" else "AS_TS_vqsr", data_source, freeze)
 
 
 if __name__ == '__main__':
@@ -301,6 +305,11 @@ if __name__ == '__main__':
 
     parser.add_argument('--run_hash', help='Run hash for RF results to be ranked.')
     parser.add_argument('--vqsr', help='When set, creates the VQSR rank file.', action='store_true')
+    parser.add_argument('--vqsr_type',
+                        help='What type of VQSR was run: allele-specific, or allele-specific with transmitted singletons',
+                        type=str,
+                        choices=['AS', 'AS_TS'],
+                        default="AS")
     parser.add_argument('--create_rank_file', help='When set, creates ranking file.', action='store_true')
     parser.add_argument('--run_sanity_checks', help='When set, runs ranking sanity checks.', action='store_true')
     parser.add_argument('--create_binned_file', help='When set, creates binned ranked file.', action='store_true')
