@@ -2,6 +2,7 @@ from gnomad_hail import *
 from gnomad_hail.utils import rf
 from gnomad_qc.variant_qc.variantqc import sample_rf_training_examples
 from ukbb_qc.resources import *
+from ukbb_qc.utils import annotate_interval_qc_filter
 from ukbb_qc.variant_qc_functions import *
 import json
 import uuid
@@ -234,7 +235,7 @@ def create_rf_ht(
     ht_allele_data = hl.read_table(var_annotations_ht_path(data_source, freeze, 'allele_data'))
 
     # TODO: remove hard path for info HT
-    info_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vqsr'))
+    info_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, "vqsr" if vqsr_type == "AS" else "AS_TS_vqsr"))
     mt = mt.annotate_rows(info=info_ht[mt.row_key].info)
     mt = mt.annotate_rows(info=mt.info.annotate(AC=hl.agg.sum(mt.GT.n_alt_alleles())))
 
@@ -394,9 +395,11 @@ def train_rf(data_source: str, freeze: int, args):
     ht = hl.read_table(rf_annotated_path(data_source, freeze, args.adj))
 
 
-    interval_qc_ht = hl.read_table(interval_qc_path(data_source, freeze))
-    good_intervals_ht = interval_qc_ht.filter(interval_qc_ht.pct_samples_20x > args.pct_samples_20x).key_by('interval')
-    ht = ht.annotate(interval_qc_pass=hl.is_defined(good_intervals_ht[ht.locus]))
+    #interval_qc_ht = hl.read_table(interval_qc_path(data_source, freeze))
+    #good_intervals_ht = interval_qc_ht.filter(interval_qc_ht.pct_samples_20x > args.pct_samples_20x).key_by('interval')
+    #ht = ht.annotate(interval_qc_pass=hl.is_defined(good_intervals_ht[ht.locus]))
+    ht = annotate_interval_qc_filter('broad', 5, ht)
+
 
     # TODO: Revisit this
     #summary = ht.group_by('omni', 'mills', 'transmitted_singleton', 'ukbb_array', 'ukbb_array_con', 'ukbb_array_con_common', 'sib_singletons').aggregate(n=hl.agg.count())
@@ -619,10 +622,7 @@ def main(args):
 
     if args.finalize:
         ht = prepare_final_ht(data_source, freeze, args.run_hash, args.snp_cutoff, args.indel_cutoff, args.treat_cutoff_as_prob)
-        interval_qc_ht = hl.read_table(interval_qc_path(data_source, freeze))
-        good_intervals_ht = interval_qc_ht.filter(interval_qc_ht.pct_samples_20x > args.pct_samples_20x).key_by(
-            'interval')
-        ht = ht.annotate(interval_qc_pass=hl.is_defined(good_intervals_ht[ht.locus]))
+        ht = annotate_interval_qc_filter(data_source, freeze, ht, pct_samples=args.pct_samples_20x)
         ht.describe()
         ht.show(20)
         ht.write(var_annotations_ht_path(data_source, freeze, 'rf'), args.overwrite)

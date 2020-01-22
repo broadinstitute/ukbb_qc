@@ -336,7 +336,7 @@ def get_ht_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE, name:
 
 def capture_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     if data_source == 'broad':
-        return 'gs://broad-ukbb/resources/xgen_plus_spikein.Homo_sapiens_assembly38.targets.pad50.intervals.ht'
+        return 'gs://broad-ukbb/resources/xgen_plus_spikein.Homo_sapiens_assembly38.targets.pad50.merged.ht'
     elif data_source == 'regeneron':
         return 'gs://broad-ukbb/resources/ukbb_exome_calling_intervals.summary.ht'
     else:
@@ -405,11 +405,11 @@ def get_joint_regeneron_ancestry_path(data_source: str, freeze: int = CURRENT_FR
     return f'{sample_qc_prefix(data_source, freeze)}/population_pca/regeneron_ukb_joint_ancestry.ht'
 
 
-def interval_qc_path(data_source: str, freeze: int = CURRENT_FREEZE, chrom: int = None, ht: bool = True) -> str:
+def interval_qc_path(data_source: str, freeze: int = CURRENT_FREEZE, chrom: str = None, ht: bool = True) -> str:
     if chrom is None:
         chrom = ""
     else:
-        chrom = f'.chr{chrom}'
+        chrom = f'.{chrom}'
     prefix = f'{sample_qc_prefix(data_source, freeze)}/interval_qc/coverage_by_target{chrom}'
     if ht:
         return prefix + '.ht'
