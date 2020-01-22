@@ -34,7 +34,7 @@ def main(args):
         # NOTE: stop here to inspect summaries, missing variant annotations, and sample IDs -- there were problems with Broad callset
 
     if args.import_vqsr:
-        logger.info('Importing VQSR annotations...')
+        logger.info(f'Importing VQSR annotations for {args.vqsr_type} VQSR...')
         mt = hl.import_vcf(
             args.import_vqsr_regex,
             force_bgz=True,
@@ -44,7 +44,10 @@ def main(args):
 
         ht = mt.rows()
         row_count1 = ht.count()
-        ht = hl.split_multi_hts(ht).checkpoint(var_annotations_ht_path(data_source, freeze, 'vqsr'), overwrite=args.overwrite)
+        ht = hl.split_multi_hts(ht).checkpoint(
+            var_annotations_ht_path(data_source, freeze, 'vqsr' if args.vqsr_type == 'AS' else 'AS_TS_vqsr'),
+            overwrite=args.overwrite
+        )
         row_count2 = ht.count()
         logger.info(f'Found {row_count1} unsplit and {row_count2} split variants with VQSR annotations')
 
@@ -71,7 +74,12 @@ if __name__ == '__main__':
 
     parser.add_argument('-i', '--import_regex', help='Regex string containing VCF(s) for import', type=str)
     parser.add_argument('-v', '--import_vqsr_regex', help='Regex string containing VQSR VCF(s) for import', type=str)
-    parser.add_argument('--import_vqsr_header', help='In needed can pass a specific header to use for the vcfs',type=str)
+    parser.add_argument('--import_vqsr_header', help='In needed can pass a specific header to use for the vcfs', type=str)
+    parser.add_argument('--vqsr_type',
+                        help='What type of VQSR was run: allele-specific, or allele-specific with transmitted singletons',
+                        type=str,
+                        choices=['AS', 'AS_TS']
+                        )
     parser.add_argument('-n', '--num_partitions', help='Number of partitions to be used for raw MT', type=int)
     parser.add_argument('-m', '--num_vqsr_partitions', help='Number of partitions to be used for VQSR HT', type=int)
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
