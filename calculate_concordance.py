@@ -73,10 +73,12 @@ def create_binned_concordance(data_source: str, freeze: int, truth_sample: str, 
             #hl.is_missing(segdup[ht.locus])
         )
 
-        if metric in ['vqsr']:
+        if metric in ['vqsr', 'AS_TS_vqsr']:
             metric_ht = hl.read_table(score_ranking_path(data_source, freeze, metric))
         else:
             metric_ht = hl.read_table(rf_path(data_source, freeze, 'rf_result', run_hash=metric))
+
+        metric_ht.describe()
 
         ht = ht.filter(ht.alleles[1] != "*")
         metric_ht = metric_ht.filter(metric_ht.alleles[1] != "*")
@@ -183,7 +185,7 @@ def main(args):
 
         metrics = [] if not args.run_hash else [args.run_hash] if isinstance(args.run_hash, str) else args.run_hash
         if args.vqsr:
-            metrics.append('vqsr')
+            metrics.append("vqsr" if args.vqsr_type == "AS" else "AS_TS_vqsr")
 
         for truth_sample in truth_samples:
             for metric in metrics:
@@ -210,6 +212,11 @@ if __name__ == '__main__':
     bin_grp = parser.add_argument_group('Bin concordance options')
     bin_grp.add_argument('--run_hash', help='RF hash(es) for annotation.', nargs='+')
     bin_grp.add_argument('--vqsr', help='When set, annotates with VQSR rank file.', action='store_true')
+    parser.add_argument('--vqsr_type',
+                        help='What type of VQSR was run: allele-specific, or allele-specific with transmitted singletons',
+                        type=str,
+                        choices=['AS', 'AS_TS'],
+                        default="AS")
     bin_grp.add_argument('--n_bins', help='Number of bins for the binned file (default: 100)', default=100, type=int)
 
     args = parser.parse_args()
