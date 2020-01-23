@@ -18,7 +18,7 @@ def main(args):
         # Define Relationship thresholds
         first_degree_threshold = [float(i) for i in args.first_degree_kin_threshold.split(",")]
         second_degree_threshold = args.second_degree_kin_threshold
-        ibd2_parent_offspring_threshold = args.ibd2_parent_offspring_threshold
+        ibd0_parent_offspring_threshold = args.ibd0_parent_offspring_threshold
 
         # Load Regeneron relationship info
         regeneron_rel_SD_ht = hl.import_table(get_regeneron_relatedness_path(freeze, relationship='2nd-degree'), impute=True, delimiter=" ")
@@ -38,10 +38,10 @@ def main(args):
                                                        (relatedness_ht.kin < first_degree_threshold[0]), 'Second-degree')
                                                  .when((relatedness_ht.kin > first_degree_threshold[0]) &
                                                        (relatedness_ht.kin < first_degree_threshold[1]) &
-                                                       (relatedness_ht.ibd2 >= ibd2_parent_offspring_threshold), 'Full-sibling')
+                                                       (relatedness_ht.ibd0 >= ibd0_parent_offspring_threshold), 'Full-sibling')
                                                  .when((relatedness_ht.kin > first_degree_threshold[0]) &
                                                        (relatedness_ht.kin < first_degree_threshold[1]) &
-                                                       (relatedness_ht.ibd2 < ibd2_parent_offspring_threshold), 'Parent-child')
+                                                       (relatedness_ht.ibd0 < ibd0_parent_offspring_threshold), 'Parent-child')
                                                  .default("None"),
                                                  Broad_IBD0=relatedness_ht.ibd0,
                                                  Broad_IBD1=relatedness_ht.ibd1,
@@ -66,9 +66,11 @@ def main(args):
 
 
     if args.filter_ukbb_ancestry:
-        ukbb_phenotypes = hl.import_table(ukbb_phenotype_path , impute=True)
+        ukbb_phenotypes = hl.import_table(ukbb_phenotype_path, impute=True)
         ukbb_phenotypes = ukbb_phenotypes.key_by(s_old=hl.str(ukbb_phenotypes['f.eid']))
         ukbb_ancestry = ukbb_phenotypes.select('f.21000.0.0', 'f.21000.1.0', 'f.21000.2.0')
+        ukbb_phenotypes.describe()
+        ukbb_phenotypes.s_old.show()
         sample_map_ht = hl.read_table(array_sample_map_ht(data_source, freeze))
         sample_map_ht = sample_map_ht.key_by('ukbb_app_26041_id')
         ukbb_ancestry = ukbb_ancestry.key_by(s=sample_map_ht[ukbb_ancestry.key].s)
@@ -79,19 +81,21 @@ def main(args):
                                        .when(3003,"Bangladeshi").when(3004,"Other Asian").when(4,"Black or Black British").when(4001,"Caribbean")
                                        .when(4002,"African").when(4003,"Other Black").when(5,"Chinese").when(6,"Other").when(-1,"Do not Know")
                                        .when(-3,"Prefer not to answer").default("None"))
+        ukbb_ancestry.show()
+        ukbb_ancestry.describe()
         ukbb_ancestry.write(get_ukbb_self_reported_ancestry_path(freeze), overwrite=args.overwrite)
 
 
     if args.join_ancestry:
         ukbb_ancestry = hl.read_table(get_ukbb_self_reported_ancestry_path(freeze))
-        regeneron_pops_ht = hl.import_table(get_regeneron_ancestry_path(freeze), impute=True).key_by('IID')
-        regeneron_pops_ht = regeneron_pops_ht.annotate(Regeneron_pop=regeneron_pops_ht.Class)
+        #regeneron_pops_ht = hl.import_table(get_regeneron_ancestry_path(freeze), impute=True).key_by('IID')
+        #regeneron_pops_ht = regeneron_pops_ht.annotate(Regeneron_pop=regeneron_pops_ht.Class)
         pop_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
-        pop_joint_ht = pop_ht.join(regeneron_pops_ht, 'left')
-        pop_joint_ht = pop_joint_ht.annotate(array_map=pop_joint_ht.s.split("_")[1])
+        #pop_joint_ht = pop_ht.join(regeneron_pops_ht, 'left')
+        pop_joint_ht = pop_ht.annotate(array_map=pop_ht.s.split("_")[1])
         pop_joint_ht = pop_joint_ht.key_by('s')
         pop_joint_ht = pop_joint_ht.join(ukbb_ancestry.key_by('s'), 'left')
-        pop_joint_ht.show()
+        #pop_joint_ht.show()
         pop_joint_ht.write(get_joint_regeneron_ancestry_path(data_source, freeze), overwrite=args.overwrite)
 
 
@@ -107,8 +111,8 @@ if __name__ == '__main__':
                         default="0.1767767,0.4")
     parser.add_argument('--second_degree_kin_threshold', help='Lower kinship threshold to use for second degree relatedness',
                         default=0.08838835)
-    parser.add_argument('--ibd2_parent_offspring_threshold', help='IBD2 cutoff to determine parent offspring vs full sibling',
-                        default=0.14)
+    parser.add_argument('--ibd0_parent_offspring_threshold', help='IBD2 cutoff to determine parent offspring vs full sibling',
+                        default=0.05)
 
 
     parser.add_argument('--filter_ukbb_ancestry', help='Subset UKBB phenotypes to self reported ancestry.', action='store_true')
