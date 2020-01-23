@@ -51,7 +51,8 @@ def main(args):
         logger.info('Adding sex imputation annotations...')
         logger.info('Filtering to well covered intervals...')
         mt = get_ukbb_data(data_source, freeze, split=False, raw=True)
-        mt = interval_qc_filter(data_source, freeze, mt)
+        mt = annotate_interval_qc_filter(data_source, freeze, mt, autosomes_only=True)
+        mt = mt.filter_rows(mt.interval_qc_pass)
 
         logger.info('Adding sex imputation annotations...')
         ht = hl.read_table(sex_ht_path(data_source, freeze))
@@ -62,10 +63,8 @@ def main(args):
         mt = mt.key_rows_by('locus', 'alleles')
         mt = hl.sample_qc(mt)
         ht = mt.transmute_cols(raw_sample_qc=mt.sample_qc.select('call_rate', 'gq_stats', 'dp_stats')).cols()
-        #ht = ht.write('gs://broad-ukbb/broad.freeze_5/temp/dense_interval_qc.ht')
         ht.write(temp_ht_path, overwrite=args.overwrite)
 
-    #ht = hl.read_table('gs://broad-ukbb/broad.freeze_5/temp/dense_interval_qc.ht')
     ht = hl.read_table(temp_ht_path)
     ht = apply_hard_filters_expr(ht, args.callrate, args.depth)
     
