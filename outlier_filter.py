@@ -2,10 +2,11 @@ from gnomad_hail import *
 import hail as hl
 from gnomad_hail.utils.sample_qc import *
 from ukbb_qc.resources import *
+from ukbb_qc.utils import annotate_interval_qc_filter
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
-logger = logging.getLogger("relatedness")
+logger = logging.getLogger("outlier_filter")
 logger.setLevel(logging.INFO)
 
 
@@ -66,22 +67,29 @@ def main(args):
         # NOTE: we run outlier detection without adj filtration to get better separation between high and low quality samples
         # this is per Julia's discussion with Konrad in #ukbb_qc
         # Need all workers for the mini qc
-        #mt = get_ukbb_data(data_source, freeze, split=False, adj=False)
-        mt = get_ukbb_data(data_source, freeze, split=True, adj=False) # NOTE using split hardcalls for tranche 5
+        mt = get_ukbb_data(data_source, freeze, split=True, adj=False) # NOTE using split hardcalls for tranche 2/freeze 5
+        logger.info(f'Split hardcalls count: {mt.count()}')
+        mt = annotate_interval_qc_filter(data_source, freeze, mt, autosomes_only=True)
+        mt = mt.filter_rows(mt.interval_qc_pass)
+        logger.info(f'mt count post interval filtering: {mt.count()}')
+
         logger.info('Filtering samples that fail hard filters...')
         qc_ht = hl.read_table(hard_filters_ht_path(data_source, freeze)).key_by('s')
         mt = mt.filter_cols(hl.len(qc_ht[mt.col_key].hard_filters) == 0).select_cols()
+        mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
+        logger.info(f'mt count post filtering: {mt.count()}')
+
         logger.info('Running mini sample QC for platform- and population-specific filtering...')
         sample_qc_ht = run_sample_qc(mt)
-        sample_qc_ht.write(qc_temp_data_prefix(data_source, freeze) + 'outlier_sample_qc.ht', args.overwrite)
+        sample_qc_ht.write(qc_temp_data_prefix(data_source, freeze) + 'outlier_sample_qc_intervals.ht', args.overwrite)
 
-    sample_qc_ht = hl.read_table(qc_temp_data_prefix(data_source, freeze) + 'outlier_sample_qc.ht')
+    sample_qc_ht = hl.read_table(qc_temp_data_prefix(data_source, freeze) + 'outlier_sample_qc_intervals.ht')
     strata = {}
     
     logger.info('Annotating platform assignments...')
+    # NOTE using tranche as a proxy for platform in freeze 5
     #platform_ht = hl.read_table(platform_pca_results_ht_path(data_source, freeze))
     #sample_qc_ht = sample_qc_ht.annotate(qc_platform=platform_ht[sample_qc_ht.key].qc_platform)
-    # NOTE using tranche as a proxy for platform in freeze 5
     sample_map_ht = hl.read_table(array_sample_map_ht(data_source, freeze))
     sample_map = hl.import_table(array_sample_map(freeze), delimiter=',', quote='"')
     sample_map = sample_map.key_by(s=sample_map.eid_26041)
@@ -113,9 +121,7 @@ def main(args):
         qc_metrics,
         strata
     )
-    #pop_platform_filter_ht.write(platform_pop_outlier_ht_path(data_source, freeze, pop_assignment_method), overwrite=args.overwrite)
-    pop_platform_filter_ht.write('gs://broad-ukbb/broad.freeze_5/temp/outlier_detection_tranche_platform.ht', overwrite=args.overwrite)
-
+    pop_platform_filter_ht.write(platform_pop_outlier_ht_path(data_source, freeze, pop_assignment_method), overwrite=args.overwrite)
     num_pass = pop_platform_filter_ht.aggregate(hl.agg.count_where(hl.len(pop_platform_filter_ht.qc_metrics_filters) == 0))
     logger.info(f'{num_pass} exome samples found passing pop/platform-specific filtering')
 
