@@ -26,7 +26,7 @@ def main(args):
     mt = hl.experimental.densify(mt)
 
     # NOTE: Do NOT do any counts between densifying and writing
-    # NOTE: Used gs://broad-ukbb/resources/xgen_plus_spikein.Homo_sapiens_assembly38.targets.pad50.intervals.ht on tranche 2
+    # NOTE: Used gs://broad-ukbb/resources/ukbb_exome_calling_intervals.summary.ht on tranche 2
     logger.info('Filtering out lines that are only reference or not covered in capture intervals')
     mt = mt.filter_rows(hl.len(mt.alleles) > 1)
     mt = mt.filter_rows(hl.is_defined(capture_ht[mt.locus]))
