@@ -47,7 +47,8 @@ def main(args):
         logger.info("Running split_multi on the hardcalls...")
         #mt = get_ukbb_data(data_source, freeze, split=False, raw=False)
         #mt = hl.split_multi_hts(mt)
-        # NOTE: reading in raw, densified mt because need sparse_split_multi to handle local alleles
+        # NOTE: did not create unsplit hardcalls for tranche 2
+        # NOTE: read in raw, densified mt for tranche 2 because needed sparse_split_multi to handle local alleles
         mt = get_ukbb_data(data_source, freeze, split=False, raw=True)
 
         # Add allele data to mt
