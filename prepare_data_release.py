@@ -74,23 +74,20 @@ pop_names = {
 }
 
 
-def flag_problematic_regions(data_source: str, freeze: int, t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTable, hl.Table]:
+def flag_problematic_regions(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTable, hl.Table]:
     '''
     Annotate HT/MT with `region_flag` struct. Struct contains flags for problematic regions.
     Also adds annotation whether region is non_par (for VCF export purposes only).
     NOTE: No hg38 resources for decoy, segdup, or self chain yet.
 
-    :param str data_source: One of 'regeneron' or 'broad'
-    :param int freeze: One of the UKBB data freezes
     :param Table/MatrixTable t: Input Table/MatrixTable
     :return: Table/MatrixTable with `region_flag` set and `non_par` row annotations.
     :rtype: Table/MatrixTable
     '''
     lcr_intervals = get_lcr_intervals()
-    t = annotate_interval_qc_filter(data_source, freeze, t, autosomes_only=False)
     region_filters = {
         'lcr': hl.is_defined(lcr_intervals[t.locus]),
-        'fail_interval_qc': ~(t.interval_qc_pass)
+        'fail_interval_qc': ~(t.rf.interval_qc_pass)
     }
 
     if isinstance(t, hl.Table):
@@ -104,10 +101,9 @@ def flag_problematic_regions(data_source: str, freeze: int, t: Union[hl.MatrixTa
 
 
 def prepare_annotations(
-                        data_source: str, freeze: int, mt: hl.MatrixTable, freq_ht: hl.Table, 
-                        unrelated_freq_ht: hl.Table, rf_ht: hl.Table, vep_ht: hl.Table, 
-                        dbsnp_ht: hl.Table, hist_ht: hl.Table, adj_hist_ht: hl.Table, 
-                        index_dict: Dict, allele_ht: hl.Table, vqsr_ht: hl.Table
+                        mt: hl.MatrixTable, freq_ht: hl.Table, unrelated_freq_ht: hl.Table, 
+                        rf_ht: hl.Table, vep_ht: hl.Table, dbsnp_ht: hl.Table, hist_ht: hl.Table, 
+                        adj_hist_ht: hl.Table, index_dict: Dict, allele_ht: hl.Table, vqsr_ht: hl.Table
                         ) -> hl.MatrixTable:
     '''
     Join all Tables with variant annotations, keeping only variants with nonzero AC
@@ -137,7 +133,8 @@ def prepare_annotations(
     mt = mt.annotate_rows(**freq_ht[mt.row_key])
     mt = mt.annotate_globals(freq_globals=freq_ht.index_globals())
     mt = mt.transmute_globals(**mt.freq_globals)
-    mt = flag_problematic_regions(mt, data_source, freeze)
+    mt = mt.annotate_rows(rf=rf_ht[mt.row_key])
+    mt = flag_problematic_regions(mt)
     #logger.info(f'mt count after filtering out freq: {mt.count()}')
 
     mt = mt.annotate_rows(**rf_ht[mt.row_key], **hist_ht[mt.row_key], vep=vep_ht[mt.row_key].vep,
@@ -147,7 +144,7 @@ def prepare_annotations(
     return mt
 
 
-def make_info_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression]:
+def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expression]:
     '''
     Make Hail expression for variant annotations to be included in VCF INFO
     :param Table ht: Table containing variant annotations to be reformatted for VCF export
@@ -155,42 +152,40 @@ def make_info_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression]:
     :rtype: Dict of str: Expression
     '''
     info_dict = {
-        'FS': ht.info_FS,
-        'InbreedingCoeff': ht.info_InbreedingCoeff,
-        'MQ': ht.info_MQ,
-        'MQRankSum': ht.info_MQRankSum,
-        'QD': ht.info_QD,
-        'ReadPosRankSum': ht.info_ReadPosRankSum,
-        'SOR': ht.info_SOR,
-        'VQSR_POSITIVE_TRAIN_SITE': ht.vqsr.POSITIVE_TRAIN_SITE,
-        'VQSR_NEGATIVE_TRAIN_SITE': ht.vqsr.NEGATIVE_TRAIN_SITE,
-        'BaseQRankSum': ht.info.BaseQRankSum,
-        'DP': ht.info.DP,
-        'VQSLOD': ht.vqsr.VQSLOD,
-        'VQSR_culprit': ht.vqsr.culprit,
-        #'segdup': ht.segdup,
-        'lcr': ht.lcr,
-        #'decoy': ht.decoy,
-        'nonpar': ht.nonpar,
-        'rf_positive_label': ht.tp,
-        'rf_negative_label': ht.fail_hard_filters,
-        'rf_label': ht.rf_label,
-        'rf_train': ht.rf_train,
-        'rf_tp_probability': ht.rf_probability,
-        'transmitted_singleton': ht.transmitted_singleton,
-        'variant_type': ht.variant_type,
-        'allele_type': ht.allele_type,
-        'n_alt_alleles': ht.n_alt_alleles,
-        'was_mixed': ht.was_mixed,
-        'has_star': ht.has_star,
-        'pab_max': ht.pab_max,
+        'FS': t.rf.info_FS, 
+        'InbreedingCoeff': t.rf.info_InbreedingCoeff, 
+        'MQ': t.rf.info_MQ, 
+        'MQRankSum': t.rf.info_MQRankSum, 
+        'QD': t.rf.info_QD,
+        'ReadPosRankSum': t.rf.info_ReadPosRankSum,
+        'SOR': t.rf.info_SOR,
+        'VQSR_POSITIVE_TRAIN_SITE': t.vqsr.POSITIVE_TRAIN_SITE,
+        'VQSR_NEGATIVE_TRAIN_SITE': t.vqsr.NEGATIVE_TRAIN_SITE,
+        'BaseQRankSum': t.rf.info.BaseQRankSum,
+        'DP': t.rf.info.DP,
+        'VQSLOD': t.vqsr.VQSLOD,
+        'VQSR_culprit': t.vqsr.culprit,
+        'lcr': t.region_flag.contains('lcr'),
+        'nonpar': t.nonpar,
+        'rf_positive_label': t.rf.tp,
+        'rf_negative_label': t.rf.fail_hard_filters,
+        'rf_label': t.rf.rf_label,
+        'rf_train': t.rf.rf_train,
+        'rf_tp_probability': t.rf.rf_probability,
+        'transmitted_singleton': t.rf.transmitted_singleton,
+        'variant_type': t.allele_info.variant_type,
+        'allele_type': t.allele_info.allele_type,
+        'n_alt_alleles': t.allele_info.n_alt_alleles,
+        'was_mixed': t.allele_info.was_mixed,
+        'has_star': t.allel_info.has_star,
+        'pab_max': t.rf.pab_max,
     }
     for hist in HISTS:
         hist_dict = {
-            f'{hist}_bin_freq': hl.delimit(ht[hist].bin_freq, delimiter="|"),
-            f'{hist}_bin_edges': hl.delimit(ht[hist].bin_edges, delimiter="|"),
-            f'{hist}_n_smaller': ht[hist].n_smaller,
-            f'{hist}_n_larger': ht[hist].n_larger
+            f'{hist}_bin_freq': hl.delimit(t[hist].bin_freq, delimiter="|"),
+            f'{hist}_bin_edges': hl.delimit(t[hist].bin_edges, delimiter="|"),
+            f'{hist}_n_smaller': t[hist].n_smaller,
+            f'{hist}_n_larger': t[hist].n_larger
         }
         info_dict.update(hist_dict)
     return info_dict
@@ -803,7 +798,9 @@ def main(args):
 
         logger.info('Dropping gVCF info (selecting all other entries) and keying by locus/alleles')
         mt = mt.select_entries('DP', 'GQ', 'LA', 'LAD', 'LGT', 'LPGT', 'LPL', 'MIN_DP', 'PID', 'RGQ', 'SB')
+        mt = mt.drop('allele_data') # NOTE: dropping this in tranche 2, as hardcalls only has part of the allele data info
         mt = mt.key_by('locus', 'alleles')
+        mt = mt.annotate(original_alleles=mt.alleles)
         logger.info(f'raw mt count: {mt.count()}')
 
         logger.info('Splitting raw mt')
@@ -824,12 +821,16 @@ def main(args):
         vep_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vep'))
         dbsnp_ht = hl.read_table(dbsnp_ht_path())
         hist_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'qual_hists'))
-        hist_ht = hist_ht.select('gq_hist_alt', 'gq_hist_all', 'dp_hist_alt', 'dp_hist_all', 'ab_hist_alt', 'qual')
+        hist_ht = hist_ht.select('gq_hist_alt', 'gq_hist_all', 'dp_hist_alt', 'dp_hist_all', 'ab_hist_alt')
         allele_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'allele_data'))
         vqsr_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vqsr'))
 
         logger.info('Removing colocated variants from vep')
         vep_ht = vep_ht.transmute(vep=vep_ht.vep.drop('colocated_variants')
+        logger.info('Dropping rsid, filters, a_index, was_split from vqsr ht')
+        vqsr_ht = vqsr_ht.drop('rsid', 'filters', 'a_index', 'was_split')
+        logger.info('Dropping variant_type, allele_type from rf ht')
+        rf_ht = rf_ht.drop('variant_type', 'allele_type')
 
         logger.info('Filtering out low QUAL variants')
         mt = mt.filter_rows(~vqsr_ht[mt.row_key].filters.contains("LowQual"))
