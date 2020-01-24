@@ -74,30 +74,30 @@ pop_names = {
 }
 
 
-def flag_problematic_regions(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTable, hl.Table]:
+def flag_problematic_regions(data_source: str, freeze: int, autosomes_only: bool, t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTable, hl.Table]:
     '''
-    Annotate HT/MT with flags for problematic regions (i.e., LCR, decoy, segdup, and nonpar regions)
+    Annotate HT/MT with `region_flag` struct. Struct contains flags for problematic regions.
+    Also adds annotation whether region is non_par (for VCF export purposes only).
+    NOTE: No hg38 resources for decoy, segdup, or self chain yet.
 
-    :param Table/MatrixTable t: Table/MatrixTable to be annotated
-    :return: Table/MatrixTable containing new annotations ['lcr', 'decoy', 'segdup', 'nonpar']
+    :param Table/MatrixTable t: Input Table/MatrixTable
+    :return: Table/MatrixTable with `region_flag` struct and `non_par` row annotation.
     :rtype: Table/MatrixTable
     '''
     lcr_intervals = get_lcr_intervals()
-    #decoy_intervals = hl.import_locus_intervals(decoy_intervals_path)
-    #segdup_intervals = get_segdup_intervals()
-    #self_chain_intervals = get_self_chain_intervals()
+    t = annotate_interval_qc_filter(data_source, freeze, t, autosomes_only=autosomes_only)
+    region_filters = {
+        'lcr': hl.is_defined(lcr_intervals[t.locus]),
+        'fail_interval_qc': ~(t.interval_qc_pass)
+    }
+
     if isinstance(t, hl.Table):
-        t = t.annotate(lcr=hl.is_defined(lcr_intervals[t.locus]), 
-                    #decoy=hl.is_defined(decoy_intervals[t.locus]),
-                    #self_chain=hl.is_defined(self_chain_intervals[t.locus]),
-                    #segdup=hl.is_defined(segdup_intervals[t.locus]), 
-                    nonpar=(t.locus.in_x_nonpar() | t.locus.in_y_nonpar()))
+        t = t.annotate(nonpar=(t.locus.in_x_nonpar() | t.locus.in_y_nonpar()))
+        t = t.annotate(region_flag=add_filters_expr(region_filters, None))
     else:
-        t = t.annotate_rows(lcr=hl.is_defined(lcr_intervals[t.locus]), 
-                    #decoy=hl.is_defined(decoy_intervals[t.locus]),
-                    #self_chain=hl.is_defined(self_chain_intervals[t.locus]),
-                    #segdup=hl.is_defined(segdup_intervals[t.locus]), 
-                    nonpar=(t.locus.in_x_nonpar() | t.locus.in_y_nonpar()))
+        t = t.annotate_rows(nonpar=(t.locus.in_x_nonpar() | t.locus.in_y_nonpar()))
+        t = t.annotate_rows(region_flag=add_filters_expr(region_filters, None))
+
     return t
 
 
