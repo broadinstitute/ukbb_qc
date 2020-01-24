@@ -798,11 +798,16 @@ def main(args):
 
         logger.info('Getting raw mt with metadata information')
         mt = get_ukbb_data(data_source, freeze, split=False, raw=True, meta_root='meta')
+
+        logger.info('Dropping gVCF info (selecting all other entries) and keying by locus/alleles')
+        mt = mt.select_entries('DP', 'GQ', 'LA', 'LAD', 'LGT', 'LPGT', 'LPL', 'MIN_DP', 'PID', 'RGQ', 'SB')
+        mt = mt.key_by('locus', 'alleles')
         logger.info(f'raw mt count: {mt.count()}')
 
         logger.info('Splitting raw mt')
-        mt = hl.split_multi_hts(mt)
+        mt = hl.experimental.sparse_split_multi(mt)
         mt = mt.select_globals()
+        mt = mt.select_entries('GT', 'GQ', 'DP', 'AD', 'MIN_DP', 'PGT', 'PID', 'PL', 'SB')
 
         logger.info(f'mt count before filtering out low quality samples: {mt.count()}')
         mt = mt.filter_cols(mt.meta.high_quality)
