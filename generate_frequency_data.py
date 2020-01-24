@@ -28,7 +28,7 @@ def generate_frequency_data(mt: hl.MatrixTable, POPS_TO_REMOVE_FOR_POPMAX: List[
     mt = annotate_freq(
         mt,
         sex_expr=mt.meta.sex,
-        pop_expr=mt.meta.pop,
+        pop_expr=mt.meta.hybrid_pop,
         additional_strata_expr=additional_strata_expr
     )
 
