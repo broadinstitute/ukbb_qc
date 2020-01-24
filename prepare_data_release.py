@@ -21,7 +21,6 @@ GNOMAD_EAS_SUBPOPS = ['kor', 'oea', 'jpn']
 
 SORT_ORDER = ['popmax', 'group', 'pop', 'subpop', 'sex']
 
-# NOTE: added here because needed to add subpops to pop_names
 pop_names = {
     '0': 'hybrid population inference cluster 0',
     '1': 'hybrid population inference cluster 1',
@@ -74,18 +73,20 @@ pop_names = {
 }
 
 
-def flag_problematic_regions(data_source: str, freeze: int, autosomes_only: bool, t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTable, hl.Table]:
+def flag_problematic_regions(data_source: str, freeze: int, t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTable, hl.Table]:
     '''
     Annotate HT/MT with `region_flag` struct. Struct contains flags for problematic regions.
     Also adds annotation whether region is non_par (for VCF export purposes only).
     NOTE: No hg38 resources for decoy, segdup, or self chain yet.
 
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the UKBB data freezes
     :param Table/MatrixTable t: Input Table/MatrixTable
-    :return: Table/MatrixTable with `region_flag` struct and `non_par` row annotation.
+    :return: Table/MatrixTable with `region_flag` set and `non_par` row annotations.
     :rtype: Table/MatrixTable
     '''
     lcr_intervals = get_lcr_intervals()
-    t = annotate_interval_qc_filter(data_source, freeze, t, autosomes_only=autosomes_only)
+    t = annotate_interval_qc_filter(data_source, freeze, t, autosomes_only=False)
     region_filters = {
         'lcr': hl.is_defined(lcr_intervals[t.locus]),
         'fail_interval_qc': ~(t.interval_qc_pass)
