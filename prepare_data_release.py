@@ -13,15 +13,8 @@ logger.setLevel(logging.INFO)
 
 GROUPS = ['adj', 'raw']
 SEXES = ['male', 'female']
-POPS = ['afr', 'amr', 'asj', 'eas', 'fin', 'nfe', 'oth', 'sas']
-FAF_POPS = ['afr', 'amr', 'eas', 'nfe', 'sas']
-# hybrid pops (freeze 4): 0 (afr -- Caribbean/African), 1 (sas/eas -- Chinese), 2 (afr -- White and Black African/Caribbean), 3 (sas/eas -- Indian/Pakistani)
-# 4: (asj/nfe/amr -- British/other white), 5: (nfe/amr --other/other Asian), 6 (nfe -- British), 7 (nfe/fin -- British), 8 (nfe/fin -- other white)
-# 9: (nfe -- British/Irish)
-NFE_SUBPOPS = ['4', '6', '7', '8', '9']
-AFR_SUBPOPS = ['0', '2']
-SAS_SUBPOPS = ['3']
-EAS_SUBPOPS = ['1']
+POPS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', 'afr', 'amr', 'asj', 'eas', 'fin', 'nfe', 'oth', 'sas']
+FAF_POPS = ['0', '5', '6', '13', 'nfe']
 
 GNOMAD_NFE_SUBPOPS = ['onf', 'bgr', 'swe', 'nwe', 'seu', 'est']
 GNOMAD_EAS_SUBPOPS = ['kor', 'oea', 'jpn']
