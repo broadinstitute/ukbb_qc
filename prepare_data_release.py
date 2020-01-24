@@ -1,6 +1,7 @@
 from gnomad_hail import *
 from gnomad_hail.resources.variant_qc import *
-from gnomad_qc.variant_qc.prepare_data_release import * 
+from gnomad_qc.variant_qc.prepare_data_release import *
+from gnomad_hail.utils.sample_qc import add_filters_expr 
 from ukbb_qc.resources import *
 import copy
 import itertools
@@ -102,17 +103,23 @@ def flag_problematic_regions(data_source: str, freeze: int, t: Union[hl.MatrixTa
     return t
 
 
-def prepare_annotations(mt: hl.MatrixTable, freq_ht: hl.Table, rf_ht: hl.Table, vep_ht: hl.Table, dbsnp_ht: hl.Table, hist_ht: hl.Table,
-                              index_dict: Dict, allele_ht: hl.Table, vqsr_ht: hl.Table) -> hl.MatrixTable:
+def prepare_annotations(
+                        data_source: str, freeze: int, mt: hl.MatrixTable, freq_ht: hl.Table, 
+                        unrelated_freq_ht: hl.Table, rf_ht: hl.Table, vep_ht: hl.Table, 
+                        dbsnp_ht: hl.Table, hist_ht: hl.Table, adj_hist_ht: hl.Table, 
+                        index_dict: Dict, allele_ht: hl.Table, vqsr_ht: hl.Table
+                        ) -> hl.MatrixTable:
     '''
-    Join Tables with variant annotations for UKBB release, keeping only variants with nonzero AC
+    Join all Tables with variant annotations, keeping only variants with nonzero AC
 
     :param MatrixTable mt: MatrixTable to be annotated
-    :param Table freq_ht: Table with frequency annotations
+    :param Table freq_ht: Table with cohort frequency annotations
+    :param Table unrelated_freq_ht: Table with frequency annotations calculated only on unrelated samples
     :param Table rf_ht: Table with random forest variant annotations
     :param Table vep_ht: Table with VEP variant annotations
     :param Table dbsnp_ht: Table with updated dbSNP rsid annotations
     :param Table hist_ht: Table with quality histogram annotations
+    :param Table adj_hist_ht: Table with quality histogram annotations calculated on adj samples
     :param dict index_dict: Dictionary containing index values for each entry in the frequency HT array, keyed by metadata label
     :param Table allele_ht: Table containing allele annotations
     :param Table vqsr_ht: Table containing vqsr annotations
@@ -125,16 +132,12 @@ def prepare_annotations(mt: hl.MatrixTable, freq_ht: hl.Table, rf_ht: hl.Table, 
     freq_ht = freq_ht.filter(freq_ht.freq[raw_idx].AC <= 0, keep=False)
     logger.info(f'freq_ht count after filtering out chrM and AC <= 1: {freq_ht.count()}')
 
-    logger.info('Filtering out low QUAL variants')
-    mt = mt.filter_rows(~vqsr_ht[mt.row_key].filters.contains("LowQual"))
-    logger.info(f'Count after filtering out low QUAL variants {mt.count()}')
-
     #logger.info(f'mt count before filtering out freq rows: {mt.count()}')
     #mt = mt.semi_join_rows(freq_ht)
     mt = mt.annotate_rows(**freq_ht[mt.row_key])
     mt = mt.annotate_globals(freq_globals=freq_ht.index_globals())
     mt = mt.transmute_globals(**mt.freq_globals)
-    mt = flag_problematic_regions(mt)
+    mt = flag_problematic_regions(mt, data_source, freeze)
     #logger.info(f'mt count after filtering out freq: {mt.count()}')
 
     mt = mt.annotate_rows(**rf_ht[mt.row_key], **hist_ht[mt.row_key], vep=vep_ht[mt.row_key].vep,
@@ -814,6 +817,7 @@ def main(args):
         logger.info(f'mt count after filtering out low quality samples and their variants: {mt.count()}')
         mt = mt.select_cols()
 
+        logger.info('Reading in all variant annotation tables')
         freq_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'join_freq'))
         index_dict = make_index_dict(freq_ht)
         rf_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'rf'))
@@ -823,6 +827,13 @@ def main(args):
         hist_ht = hist_ht.select('gq_hist_alt', 'gq_hist_all', 'dp_hist_alt', 'dp_hist_all', 'ab_hist_alt', 'qual')
         allele_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'allele_data'))
         vqsr_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vqsr'))
+
+        logger.info('Removing colocated variants from vep')
+        vep_ht = vep_ht.transmute(vep=vep_ht.vep.drop('colocated_variants')
+
+        logger.info('Filtering out low QUAL variants')
+        mt = mt.filter_rows(~vqsr_ht[mt.row_key].filters.contains("LowQual"))
+        logger.info(f'Count after filtering out low QUAL variants {mt.count()}')
 
         logger.info('Adding annotations...')
         mt = prepare_annotations(mt, freq_ht, rf_ht, vep_ht, dbsnp_ht, hist_ht, index_dict, allele_ht, vqsr_ht)
