@@ -7,13 +7,14 @@ logger = logging.getLogger("generate_frequency_data")
 logger.setLevel(logging.INFO)
 
 
-def generate_frequency_data(mt: hl.MatrixTable, calculate_by_platform: bool = False,
-                            POPS_TO_REMOVE_FOR_POPMAX: List[str]
+def generate_frequency_data(mt: hl.MatrixTable, POPS_TO_REMOVE_FOR_POPMAX: List[str],
+                            calculate_by_platform: bool = False,
                             ) -> hl.Table:
     '''
     Generates frequency struct annotation containing AC, AF, AN, and homozygote count for dataset stratified by population. Optional to stratify by tranche
 
     :param MatrixTable mt: Input MatrixTable
+    :param list POPS_TO_REMOVE_FOR_POPMAX: List of populations to exclude from popmax calculations
     :param bool calculate_by_platform: Calculate frequencies per tranche
     :return: Table with frequency annotations in struct named `freq` and metadata in globals named `freq_meta`
     :rtype: Table
@@ -87,7 +88,8 @@ def main(args):
 
     data_source = args.data_source
     freeze = args.freeze
-    POPS_TO_REMOVE_FOR_POPMAX = set(','.split(args.pops))
+    POPS_TO_REMOVE_FOR_POPMAX = set(args.pops.split(','))
+    logger.info(f'Excluding {POPS_TO_REMOVE_FOR_POPMAX} from popmax and faf calculations')
 
     mt = get_ukbb_data(data_source, freeze, meta_root='meta')
     logger.info(f'mt count before filtering out non-releasable samples: {mt.count()}')
@@ -129,11 +131,8 @@ def main(args):
 
     if args.calculate_frequencies:
         logger.info('Calculating frequencies')
-        ht, sample_table = generate_frequency_data(mt, args.by_platform, POPS_TO_REMOVE_FOR_POPMAX)
-
-        write_temp_gcs(ht, var_annotations_ht_path(data_source, freeze, f'ukb_freq{"_unrelated" if args.filter_related else ""}'), args.overwrite)
-        if args.downsampling:
-            sample_table.write(sample_annotations_table_path(data_type, 'downsampling'), args.overwrite)
+        ht = generate_frequency_data(mt, POPS_TO_REMOVE_FOR_POPMAX, args.by_platform)
+        write_temp_gcs(ht, var_annotations_ht_path(data_source, freeze, f'ukb_freq_hybrid{"_unrelated" if args.filter_related else ""}'), args.overwrite)
 
     if args.join_gnomad:
         ht = hl.read_table(var_annotations_ht_path(data_source, freeze, f'ukb_freq{"_unrelated" if args.filter_related else ""}'))
@@ -141,14 +140,14 @@ def main(args):
         logger.info('Joining UKBB ht to gnomAD exomes and genomes liftover hts')
         ht = join_gnomad(ht, 'exomes')
         ht = join_gnomad(ht, 'genomes')
-        write_temp_gcs(ht, var_annotations_ht_path(data_source, freeze, f'join_freq{"_unrelated" if args.filter_related else ""}'), args.overwrite)
+        write_temp_gcs(ht, var_annotations_ht_path(data_source, freeze, f'join_freq_hybrid{"_unrelated" if args.filter_related else ""}'), args.overwrite)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
     parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE, type=int)
-    parser.add_argument('-p', '--pops', help='Pops to exclude for popmax', default='asj,fin,oth')
+    parser.add_argument('--pops', help='Pops to exclude for popmax', default='asj,fin,oth')
     parser.add_argument('-d', '--densify', help='Densify data (sparse data only)', action='store_true')
     parser.add_argument('--calculate_frequencies', help='Calculate most frequency data', action='store_true')
     parser.add_argument('--by_platform', help='Also calculate frequencies by platform', action='store_true')
