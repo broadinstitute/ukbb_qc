@@ -12,7 +12,7 @@ logger.setLevel(logging.INFO)
 
 
 GROUPS = ['adj', 'raw']
-SEXES = ['male', 'female', 'ambiguous_sex', 'sex_aneuploidy']
+SEXES = ['male', 'female']
 POPS = ['afr', 'amr', 'asj', 'eas', 'fin', 'nfe', 'oth', 'sas']
 FAF_POPS = ['afr', 'amr', 'eas', 'nfe', 'sas']
 # hybrid pops (freeze 4): 0 (afr -- Caribbean/African), 1 (sas/eas -- Chinese), 2 (afr -- White and Black African/Caribbean), 3 (sas/eas -- Indian/Pakistani)
@@ -23,7 +23,6 @@ AFR_SUBPOPS = ['0', '2']
 SAS_SUBPOPS = ['3']
 EAS_SUBPOPS = ['1']
 
-GNOMAD_SEXES = ['male', 'female']
 GNOMAD_NFE_SUBPOPS = ['onf', 'bgr', 'swe', 'nwe', 'seu', 'est']
 GNOMAD_EAS_SUBPOPS = ['kor', 'oea', 'jpn']
 
@@ -105,7 +104,7 @@ def flag_problematic_regions(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.Mat
 
 
 def prepare_annotations(mt: hl.MatrixTable, freq_ht: hl.Table, rf_ht: hl.Table, vep_ht: hl.Table, dbsnp_ht: hl.Table, hist_ht: hl.Table,
-                              index_dict, allele_ht: hl.Table, vqsr_ht: hl.Table) -> hl.MatrixTable:
+                              index_dict: Dict, allele_ht: hl.Table, vqsr_ht: hl.Table) -> hl.MatrixTable:
     '''
     Join Tables with variant annotations for UKBB release, keeping only variants with nonzero AC
 
@@ -125,15 +124,19 @@ def prepare_annotations(mt: hl.MatrixTable, freq_ht: hl.Table, rf_ht: hl.Table, 
     freq_ht = hl.filter_intervals(freq_ht, [hl.parse_locus_interval('chrM')], keep=False)
     raw_idx = index_dict['raw']
     freq_ht = freq_ht.filter(freq_ht.freq[raw_idx].AC <= 0, keep=False)
-    logger.info(f'freq_ht count after filtering out chrM and AC<=1: {freq_ht.count()}')
+    logger.info(f'freq_ht count after filtering out chrM and AC <= 1: {freq_ht.count()}')
 
-    logger.info(f'mt count before filtering out freq rows: {mt.count()}')
-    mt = mt.semi_join_rows(freq_ht)
+    logger.info('Filtering out low QUAL variants')
+    mt = mt.filter_rows(~vqsr_ht[mt.row_key].filters.contains("LowQual"))
+    logger.info(f'Count after filtering out low QUAL variants {mt.count()}')
+
+    #logger.info(f'mt count before filtering out freq rows: {mt.count()}')
+    #mt = mt.semi_join_rows(freq_ht)
     mt = mt.annotate_rows(**freq_ht[mt.row_key])
     mt = mt.annotate_globals(freq_globals=freq_ht.index_globals())
     mt = mt.transmute_globals(**mt.freq_globals)
     mt = flag_problematic_regions(mt)
-    logger.info(f'mt count after filtering out freq: {mt.count()}')
+    #logger.info(f'mt count after filtering out freq: {mt.count()}')
 
     mt = mt.annotate_rows(**rf_ht[mt.row_key], **hist_ht[mt.row_key], vep=vep_ht[mt.row_key].vep,
                      allele_info=allele_ht[mt.row_key].allele_data, vqsr=vqsr_ht[mt.row_key].info, rsid=dbsnp_ht[mt.row_key].rsid)
@@ -694,8 +697,8 @@ def sanity_check_ht(ht: hl.Table, subsets, missingness_threshold=0.5, verbose=Fa
 
         if subset == 'gnomad':
             sample_sum_check(ht, subset, dict(group=['adj'], pop=POPS), verbose)
-            sample_sum_check(ht, subset, dict(group=['adj'], sex=GNOMAD_SEXES), verbose)
-            sample_sum_check(ht, subset, dict(group=['adj'], pop=POPS, sex=GNOMAD_SEXES), verbose)
+            sample_sum_check(ht, subset, dict(group=['adj'], sex=SEXES), verbose)
+            sample_sum_check(ht, subset, dict(group=['adj'], pop=POPS, sex=SEXES), verbose)
             # Adjust subpops to those found in subset
             nfe_subpop_adjusted = list(set([x for x in pop_adjusted if 'nfe_' in x and 'male' not in x]))
             if nfe_subpop_adjusted != []:
@@ -706,8 +709,8 @@ def sanity_check_ht(ht: hl.Table, subsets, missingness_threshold=0.5, verbose=Fa
         else:
             subset = 'adj_' # hacky add; UKB fields are weirdly named adj_AC_adj
             sample_sum_check(ht, subset, dict(group=['adj'], pop=POPS), verbose)
-            sample_sum_check(ht, subset, dict(group=['adj'], sex=GNOMAD_SEXES), verbose)
-            sample_sum_check(ht, subset, dict(group=['adj'], pop=POPS, sex=GNOMAD_SEXES), verbose)
+            sample_sum_check(ht, subset, dict(group=['adj'], sex=SEXES), verbose)
+            sample_sum_check(ht, subset, dict(group=['adj'], pop=POPS, sex=SEXES), verbose)
 
             # Adjust subpops to those found in subset
             nfe_subpop_adjusted = list(set([x for x in pop_adjusted if 'nfe_' in x and 'male' not in x]))
@@ -843,8 +846,8 @@ def main(args):
             INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=POPS)))
 
             if 'gnomad' in subset:
-                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], sex=GNOMAD_SEXES)))
-                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=POPS, sex=GNOMAD_SEXES)))
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], sex=SEXES)))
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=POPS, sex=SEXES)))
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=['nfe'], subpop=GNOMAD_NFE_SUBPOPS)))
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=['eas'], subpop=GNOMAD_EAS_SUBPOPS)))
             else:
