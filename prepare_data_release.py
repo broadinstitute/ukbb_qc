@@ -128,14 +128,18 @@ def prepare_annotations(
     freq_ht = freq_ht.filter(freq_ht.freq[raw_idx].AC <= 0, keep=False)
     logger.info(f'freq_ht count after filtering out chrM and AC <= 1: {freq_ht.count()}')
 
-    #logger.info(f'mt count before filtering out freq rows: {mt.count()}')
-    #mt = mt.semi_join_rows(freq_ht)
-    mt = mt.annotate_rows(**freq_ht[mt.row_key])
-    mt = mt.annotate_globals(freq_globals=freq_ht.index_globals())
-    mt = mt.transmute_globals(**mt.freq_globals)
+    logger.info('Annotating mt with rf ht and flagging problematic regions')
     mt = mt.annotate_rows(rf=rf_ht[mt.row_key])
     mt = flag_problematic_regions(mt)
-    #logger.info(f'mt count after filtering out freq: {mt.count()}')
+    
+    logger.info('Annotating cohort frequencies')
+    mt = mt.annotate_rows(**freq_ht[mt.row_key])
+    mt = mt.transmute_rows(cohort_freq=mt.freq)
+    mt = mt.annotate_globals(cohort_freq_globals=freq_ht.index_globals())
+
+    logger.info('Annotating unrelated frequencies')
+    mt = mt.annotate_rows(**unrelated_freq_ht[mt.row_key])
+    mt = mt.annotate_globals(**unrelated_freq_ht.index_globals())
 
     mt = mt.annotate_rows(adj_qual_hists=hist_ht[mt.row_key], vep=vep_ht[mt.row_key].vep,
                      allele_info=allele_ht[mt.row_key].allele_data, vqsr=vqsr_ht[mt.row_key].info, rsid=dbsnp_ht[mt.row_key].rsid)
@@ -798,18 +802,15 @@ def main(args):
 
         logger.info('Dropping gVCF info (selecting all other entries) and keying by locus/alleles')
         mt = mt.select_entries('DP', 'GQ', 'LA', 'LAD', 'LGT', 'LPGT', 'LPL', 'MIN_DP', 'PID', 'RGQ', 'SB')
-        mt = mt.drop('allele_data') # NOTE: dropping this in tranche 2, as hardcalls only has part of the allele data info
-        mt = mt.key_by('locus', 'alleles')
-        mt = mt.annotate(original_alleles=mt.alleles)
+        mt = mt.key_rows_by('locus', 'alleles')
         logger.info(f'raw mt count: {mt.count()}')
 
         logger.info('Splitting raw mt')
         mt = hl.experimental.sparse_split_multi(mt)
-        mt = mt.select_globals()
         mt = mt.select_entries('GT', 'GQ', 'DP', 'AD', 'MIN_DP', 'PGT', 'PID', 'PL', 'SB')
 
-        logger.info(f'mt count before filtering out low quality samples: {mt.count()}')
-        mt = mt.filter_cols(mt.meta.high_quality)
+        logger.info(f'mt count before filtering out low quality and non-releasable samples: {mt.count()}')
+        mt = mt.filter_cols(mt.meta.high_quality & mt.releasable)
         mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
         logger.info(f'mt count after filtering out low quality samples and their variants: {mt.count()}')
         mt = mt.select_cols()
@@ -819,13 +820,18 @@ def main(args):
 
         logger.info('Reading in all variant annotation tables')
         freq_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'join_freq'))
-        index_dict = make_index_dict(freq_ht)
+        # remove gnomad exomes/genomes index dicts -- only necessary in tranche 2, they won't exist moving forwards
+        freq_ht = freq_ht.drop('gnomad_exomes_freq_index_dict','gnomad_genomes_freq_index_dict')
         rf_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'rf'))
         vep_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vep'))
         dbsnp_ht = hl.read_table(dbsnp_ht_path())
         hist_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'qual_hists'))
         hist_ht = hist_ht.select('gq_hist_alt', 'gq_hist_all', 'dp_hist_alt', 'dp_hist_all', 'ab_hist_alt')
         allele_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'allele_data'))
+        # rename nonsplit_alleles to original_alleles -- only necessary in tranche 2, this will be renamed moving forwards
+        allele_ht = allele_ht.transmute(allele_data=allele_ht.allele_data.annotate(
+                            original_alleles=allele_ht.allele_data.nonsplit_alleles).drop('nonsplit_alleles')
+                    )
         vqsr_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vqsr'))
 
         logger.info('Removing colocated variants from vep')
@@ -840,10 +846,9 @@ def main(args):
         logger.info(f'Count after filtering out low QUAL variants {mt.count()}')
 
         logger.info('Adding annotations...')
-        mt = prepare_annotations(mt, freq_ht, rf_ht, vep_ht, dbsnp_ht, hist_ht, index_dict, allele_ht, vqsr_ht)
+        mt = prepare_annotations(mt, freq_ht, rf_ht, vep_ht, dbsnp_ht, hist_ht, make_index_dict(freq_ht), allele_ht, vqsr_ht)
         mt.describe()
-        mt = mt.annotate_globals(freq_index_dict=make_index_dict(mt.rows()), faf_index_dict=make_faf_index_dict(mt.rows()),
-                                 age_distribution=age_hist_data)
+        mt = mt.annotate_globals(age_distribution=age_hist_data)
         mt = mt.naive_coalesce(20000)
         mt.write(release_mt_path(data_source, freeze), args.overwrite)
 
