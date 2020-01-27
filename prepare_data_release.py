@@ -142,7 +142,7 @@ def flag_problematic_regions(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.Mat
 def prepare_annotations(
                         mt: hl.MatrixTable, freq_ht: hl.Table, unrelated_freq_ht: hl.Table, 
                         rf_ht: hl.Table, vep_ht: hl.Table, dbsnp_ht: hl.Table, hist_ht: hl.Table, 
-                        adj_hist_ht: hl.Table, index_dict: Dict, allele_ht: hl.Table, vqsr_ht: hl.Table
+                        hist_ht: hl.Table, index_dict: Dict, allele_ht: hl.Table, vqsr_ht: hl.Table
                         ) -> hl.MatrixTable:
     '''
     Join all Tables with variant annotations, keeping only variants with nonzero AC
@@ -161,6 +161,32 @@ def prepare_annotations(
     :return: Table containing joined annotations
     :rtype: Table
     '''
+    logger.info('Removing unnecessary annotations from annotation tables') 
+    freq_ht = freq_ht.drop('gnomad_exomes_freq_index_dict','gnomad_genomes_freq_index_dict')
+    rf_ht = rf_ht.select('info_FS', 'inbreeding_coeff', 'info_MQ', 'info_MQRankSum', 'info_QD', 'info_ReadPosRankSum', 
+                 'info_SOR', 'tp', 'fail_hard_filters', 'rf_label', 'rf_train', 'rf_probability',
+                 'transmitted_singleton', 'pab_max', 'info_VarDP', 'interval_qc_pass')
+    vep_ht = vep_ht.transmute(vep=vep_ht.vep.drop('colocated_variants')
+    hist_ht = hist_ht.select('gq_hist_alt', 'gq_hist_all', 'dp_hist_alt', 'dp_hist_all', 'ab_hist_alt')
+    allele_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'allele_data'))
+    # rename nonsplit_alleles to original_alleles -- only necessary in tranche 2, this will be renamed moving forwards
+    allele_ht = allele_ht.transmute(allele_data=allele_ht.allele_data.annotate(
+                        original_alleles=allele_ht.allele_data.nonsplit_alleles).drop('nonsplit_alleles')
+                )
+    logger.info('Removing unnecessary fields from vqsr ht and splitting AS annotations')
+    vqsr_ht = vqsr_ht.transmute(info=vqsr_ht.info.select('NEGATIVE_TRAIN_SITE', 'POSITIVE_TRAIN_SITE', 'AS_VQSLOD',
+                                                'AS_culprit', 'AS_BaseQRankSum')).drop('rsid', 'a_index', 'was_split')
+    vqsr_ht = vqsr_ht.annotate(
+        info=vqsr_ht.info.annotate(
+        **{f: [vqsr_ht.info[f][vqsr_ht.a_index - 1]] for f in vqsr_ht.info if f.startswith("AC") or 
+        (f.startswith("AS_") and not f == 'AS_SB_TABLE')}
+        )
+    )
+        
+    logger.info('Filtering out low QUAL variants')
+    mt = mt.filter_rows(~vqsr_ht[mt.row_key].filters.contains("LowQual"))
+    logger.info(f'Count after filtering out low QUAL variants {mt.count()}')
+
     logger.info(f'freq_ht count before filtering out chrM: {freq_ht.count()}')
     freq_ht = hl.filter_intervals(freq_ht, [hl.parse_locus_interval('chrM')], keep=False)
     raw_idx = index_dict['raw']
@@ -860,39 +886,13 @@ def main(args):
 
         logger.info('Reading in all variant annotation tables')
         freq_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'join_freq'))
-        # remove gnomad exomes/genomes index dicts -- only necessary in tranche 2, they won't exist moving forwards
-        freq_ht = freq_ht.drop('gnomad_exomes_freq_index_dict','gnomad_genomes_freq_index_dict')
         rf_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'rf'))
-        logger.info('Selecting relevant fields from rf ht')
-        rf_ht = rf_ht.select('info_FS', 'inbreeding_coeff', 'info_MQ', 'info_MQRankSum', 'info_QD', 'info_ReadPosRankSum', 
-                     'info_SOR', 'tp', 'fail_hard_filters', 'rf_label', 'rf_train', 'rf_probability',
-                     'transmitted_singleton', 'pab_max', 'info_VarDP')
-        logger.info('Removing colocated variants from vep') 
         vep_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vep'))
-        vep_ht = vep_ht.transmute(vep=vep_ht.vep.drop('colocated_variants')
         dbsnp_ht = hl.read_table(dbsnp_ht_path()).drop('qual', 'filters', 'info')
         hist_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'qual_hists'))
-        hist_ht = hist_ht.select('gq_hist_alt', 'gq_hist_all', 'dp_hist_alt', 'dp_hist_all', 'ab_hist_alt')
         allele_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'allele_data'))
-        # rename nonsplit_alleles to original_alleles -- only necessary in tranche 2, this will be renamed moving forwards
-        allele_ht = allele_ht.transmute(allele_data=allele_ht.allele_data.annotate(
-                            original_alleles=allele_ht.allele_data.nonsplit_alleles).drop('nonsplit_alleles')
-                    )
-        logger.info('Reading in VQSR ht, removing unnecessary fields, and splitting AS annotations')
         vqsr_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vqsr'))
-        vqsr_ht = vqsr_ht.transmute(info=vqsr_ht.info.select('NEGATIVE_TRAIN_SITE', 'POSITIVE_TRAIN_SITE', 'AS_VQSLOD',
-                                                    'AS_culprit', 'AS_BaseQRankSum')).drop('rsid', 'a_index', 'was_split')
-        vqsr_ht = vqsr_ht.annotate(
-            info=vqsr_ht.info.annotate(
-            **{f: [vqsr_ht.info[f][vqsr_ht.a_index - 1]] for f in vqsr_ht.info if f.startswith("AC") or 
-            (f.startswith("AS_") and not f == 'AS_SB_TABLE')}
-            )
-        )
         
-        logger.info('Filtering out low QUAL variants')
-        mt = mt.filter_rows(~vqsr_ht[mt.row_key].filters.contains("LowQual"))
-        logger.info(f'Count after filtering out low QUAL variants {mt.count()}')
-
         logger.info('Adding annotations...')
         mt = prepare_annotations(mt, freq_ht, rf_ht, vep_ht, dbsnp_ht, hist_ht, make_index_dict(freq_ht), allele_ht, vqsr_ht)
         mt.describe()
