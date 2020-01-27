@@ -92,6 +92,7 @@ INFO_DICT = {
     'ClippingRankSum': {
         "Description": "Z-score from Wilcoxon rank sum test of alternate vs. reference number of hard clipped bases"},
     'VarDP': {"Description": "Depth over variant genotypes (does not include depth of reference samples)"},
+    'VarDP': {"Description": "Allele specific depth over variant genotypes (does not include depth of reference samples)"},
     'AS_VQSLOD': {
         "Description": "Allele specific log-odds ratio of being a true variant versus being a false positive under the trained VQSR Gaussian mixture model"},
     'AS_VQSR_culprit': {"Description": "Allele specific worst-performing annotation in the VQSR Gaussian mixture model"},
@@ -175,7 +176,7 @@ def prepare_annotations(
                 )
     logger.info('Removing unnecessary fields from vqsr ht and splitting AS annotations')
     vqsr_ht = vqsr_ht.transmute(info=vqsr_ht.info.select('NEGATIVE_TRAIN_SITE', 'POSITIVE_TRAIN_SITE', 'AS_VQSLOD',
-                                                'AS_culprit', 'AS_BaseQRankSum')).drop('rsid', 'a_index', 'was_split')
+                                                'AS_culprit', 'AS_BaseQRankSum', 'AS_VarDP')).drop('rsid', 'a_index', 'was_split')
     vqsr_ht = vqsr_ht.annotate(
         info=vqsr_ht.info.annotate(
         **{f: [vqsr_ht.info[f][vqsr_ht.a_index - 1]] for f in vqsr_ht.info if f.startswith("AC") or 
@@ -232,6 +233,7 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
         'VQSR_NEGATIVE_TRAIN_SITE': t.vqsr.info.NEGATIVE_TRAIN_SITE,
         'AS_BaseQRankSum': t.vqsr.info.AS_BaseQRankSum,
         'VarDP': t.rf.info_VarDP,
+        'AS_VarDP': t.vqsr.info.AS_VarDP,
         'AS_VQSLOD': t.vqsr.info.AS_VQSLOD,
         'AS_VQSR_culprit': t.vqsr.info.AS_culprit,
         'lcr': t.region_flag.contains('lcr'),
@@ -902,13 +904,13 @@ def main(args):
 
 
     if args.prepare_release_vcf:
-        logger.info('Getting age hist data')
-        age_hist_data = get_age_distributions(data_source, freeze)
-
         logger.info('Starting VCF process')
         mt = hl.read_matrix_table(release_mt_path(data_source, freeze))
         bin_edges = make_hist_bin_edges_expr(mt.rows())
         
+        logger.info('Getting age hist data')
+        age_hist_data = hl.eval(mt.age_distribution)
+
         # Make INFO dictionary for VCF
         subset_list = ['', 'gnomad_exomes_', 'gnomad_genomes_'] # empty for ukbb
         for subset in subset_list:
@@ -947,10 +949,10 @@ def main(args):
         
         # Select relevant fields for VCF export
         mt = mt.select_rows('info', 'filters', 'rsid', 'qual', 'vep')
-        mt.write(release_mt_path(data_source, freeze, nested=False, temp=True), args.overwrite)
+        mt.write(release_mt_path(data_source, freeze, temp=True), args.overwrite)
 
         # Remove gnomad_ prefix for VCF export
-        mt = hl.read_matrix_table(release_mt_path(data_source, freeze, nested=False, temp=True))
+        mt = hl.read_matrix_table(release_mt_path(data_source, freeze, temp=True))
         mt.describe()
         rg = hl.get_reference('GRCh38')
         contigs = rg.contigs[:24] # autosomes + X/Y
@@ -986,8 +988,8 @@ def main(args):
             hl.export_vcf(contig_mt, release_vcf_path(data_source, freeze, contig=contig), metadata=header_dict)
 
     if args.prepare_browser_ht:
-        mt = hl.read_matrix_table(release_mt_path(data_source, freeze, nested=False, temp=True))
-        mt.rows().write(release_ht_path(data_source, freeze, nested=False, temp=True), args.overwrite)
+        mt = hl.read_matrix_table(release_mt_path(data_source, freeze, temp=True))
+        mt.rows().write(release_ht_path(data_source, freeze), args.overwrite)
 
     if args.sanity_check_sites:
         subset_list = ['', 'gnomad_exomes_', 'gnomad_genomes_'] 
