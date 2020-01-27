@@ -325,19 +325,19 @@ def unfurl_nested_annotations(ht, gnomad, genome):
 
     if gnomad:
         if genome:
-            faf = 'gnomad_genomes.faf'
-            freq = 'gnomad_genomes.freq'
-            freq_idx = 'gnomad_genomes.freq_index_dict'
-            faf_idx = 'gnomad_genomes.faf_index_dict'
+            faf = 'gnomad_genomes_faf'
+            freq = 'gnomad_genomes_freq'
+            freq_idx = 'gnomad_genomes_freq_index_dict'
+            faf_idx = 'gnomad_genomes_faf_index_dict'
             gnomad_prefix = 'gnomad_genomes'
-            popmax = 'gnomad_genomes.popmax'
+            popmax = 'gnomad_genomes_popmax'
         else:
-            faf = 'gnomad_exomes.faf'
-            freq = 'gnomad_exomes.freq'
-            freq_idx = 'gnomad_exomes.freq_index_dict'
-            faf_idx = 'gnomad_exomes.faf_index_dict'
+            faf = 'gnomad_exomes_faf'
+            freq = 'gnomad_exomes_freq'
+            freq_idx = 'gnomad_exomes_freq_index_dict'
+            faf_idx = 'gnomad_exomes_faf_index_dict'
             gnomad_prefix = 'gnomad_exomes'
-            popmax = 'gnomad_exomes.popmax'
+            popmax = 'gnomad_exomes_popmax'
     else:
         faf = 'faf'
         freq = 'freq'
@@ -401,7 +401,7 @@ def unfurl_nested_annotations(ht, gnomad, genome):
     else:
         prefix = ''
     if gnomad and not genome:
-        idx = hl.eval(ht.globals['gnomad_exomes.popmax_index_dict']['gnomad']) 
+        idx = hl.eval(ht.globals['gnomad_exomes_popmax_index_dict']['gnomad']) 
         combo_dict = {
                 f'{prefix}popmax': ht[popmax][idx].pop,
                 f'{prefix}AC_popmax': ht[popmax][idx].AC,
@@ -857,7 +857,7 @@ def main(args):
         bin_edges = make_hist_bin_edges_expr(mt.rows())
         
         # Make INFO dictionary for VCF
-        subset_list = ['', 'gnomad_exomes.', 'gnomad_genomes.'] # empty for ukbb
+        subset_list = ['', 'gnomad_exomes_', 'gnomad_genomes_'] # empty for ukbb
         for subset in subset_list:
             INFO_DICT.update(make_info_dict(subset, bin_edges=bin_edges, popmax=True,
                                             age_hist_data='|'.join(str(x) for x in age_hist_data)))
