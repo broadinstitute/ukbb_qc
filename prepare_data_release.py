@@ -17,6 +17,8 @@ SEXES = ['male', 'female']
 POPS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', 'afr', 'amr', 'asj', 'eas', 'fin', 'nfe', 'oth', 'sas']
 FAF_POPS = ['0', '5', '6', '13', 'nfe']
 
+GNOMAD_POPS = ['afr', 'amr', 'asj', 'eas', 'fin', 'nfe', 'oth', 'sas']
+GNOMAD_FAF_POPS = ['afr', 'amr', 'eas', 'nfe', 'sas']
 GNOMAD_NFE_SUBPOPS = ['onf', 'bgr', 'swe', 'nwe', 'seu', 'est']
 GNOMAD_EAS_SUBPOPS = ['kor', 'oea', 'jpn']
 
@@ -886,23 +888,20 @@ def main(args):
             INFO_DICT.update(make_info_dict(subset, bin_edges=bin_edges, popmax=True,
                                             age_hist_data='|'.join(str(x) for x in age_hist_data)))
             INFO_DICT.update(make_info_dict(subset, dict(group=GROUPS)))
-            INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=POPS)))
+            INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], sex=SEXES)))
 
             if 'gnomad' in subset:
-                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], sex=SEXES)))
-                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=POPS, sex=SEXES)))
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=GNOMAD_POPS, sex=SEXES)))
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=['nfe'], subpop=GNOMAD_NFE_SUBPOPS)))
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=['eas'], subpop=GNOMAD_EAS_SUBPOPS)))
-            else:
-                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], sex=SEXES)))
-                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=POPS, sex=SEXES)))
-                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=['nfe'], subpop=NFE_SUBPOPS)))
-                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=['eas'], subpop=EAS_SUBPOPS)))
-                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=['afr'], subpop=AFR_SUBPOPS)))
-                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=['sas'], subpop=SAS_SUBPOPS)))
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj']), faf=True))
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=GNOMAD_FAF_POPS), faf=True))
 
-            INFO_DICT.update(make_info_dict(subset, dict(group=['adj']), faf=True))
-            INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=FAF_POPS), faf=True))
+            else:
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=POPS)))
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=POPS, sex=SEXES)))
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj']), faf=True))
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=FAF_POPS), faf=True))
         INFO_DICT.update(make_hist_dict(bin_edges))
 
         # Adjust keys to remove adj tags before exporting to VCF
