@@ -74,6 +74,45 @@ pop_names = {
 }
 
 
+# NOTE moved this here from common code to update a few fields, also removed segdup, decoy descriptions
+INFO_DICT = {
+    'FS': {"Description": "Phred-scaled p-value of Fisher's exact test for strand bias"},
+    'AS_InbreedingCoeff': {
+        "Description": "Allele spcific inbreeding coefficient as estimated from the genotype likelihoods per-sample when compared against the Hardy-Weinberg expectation"},
+    'MQ': {"Description": "Root mean square of the mapping quality of reads across all samples"},
+    'MQRankSum': {
+        "Description": "Z-score from Wilcoxon rank sum test of alternate vs. reference read mapping qualities"},
+    'QD': {"Description": "Variant call confidence normalized by depth of sample reads supporting a variant"},
+    'ReadPosRankSum': {"Description": "Z-score from Wilcoxon rank sum test of alternate vs. reference read position bias"},
+    'SOR': {"Description": "Strand bias estimated by the symmetric odds ratio test"},
+    'VQSR_POSITIVE_TRAIN_SITE': {"Description": "Variant was used to build the positive training set of high-quality variants for VQSR"},
+    'VQSR_NEGATIVE_TRAIN_SITE': {
+        "Description": "Variant was used to build the negative training set of low-quality variants for VQSR"},
+    'AS_BaseQRankSum': {"Description": "Allele specific Z-score from Wilcoxon rank sum test of alternate vs. reference base qualities"},
+    'ClippingRankSum': {
+        "Description": "Z-score from Wilcoxon rank sum test of alternate vs. reference number of hard clipped bases"},
+    'VarDP': {"Description": "Depth over variant genotypes (does not include depth of reference samples)"},
+    'AS_VQSLOD': {
+        "Description": "Allele specific log-odds ratio of being a true variant versus being a false positive under the trained VQSR Gaussian mixture model"},
+    'AS_VQSR_culprit': {"Description": "Allele specific worst-performing annotation in the VQSR Gaussian mixture model"},
+    'lcr': {"Description": "Variant falls within a low complexity region"},
+    'nonpar': {"Description": "Variant (on sex chromosome) falls outside a pseudoautosomal region"},
+    'rf_positive_label': {"Description": "Variant was labelled as a positive example for training of random forest model"},
+    'rf_negative_label': {"Description": "Variant was labelled as a negative example for training of random forest model"},
+    'rf_label': {"Description": "Random forest training label"},  # export?
+    'rf_train': {"Description": "Variant was used in training random forest model"},  # export?
+    'rf_tp_probability': {"Description": "Random forest prediction probability for a site being a true variant"},
+    'transmitted_singleton': {"Description": "Variant was a callset-wide doubleton that was transmitted within a family (i.e., a singleton amongst unrelated sampes in cohort)"},
+    'original_alleles': {"Description": "Alleles before splitting multiallelics"},
+    'variant_type': {"Description": "Variant type (snv, indel, multi-snv, multi-indel, or mixed)"},
+    'allele_type': {"Number": "A", "Description": "Allele type (snv, ins, del, or mixed)"},
+    'n_alt_alleles': {"Number": "A", "Description": "Total number of alternate alleles observed at variant locus"},
+    'was_mixed': {"Description": "Variant type was mixed"},
+    'has_star': {"Description": "Variant locus coincides with a spanning deletion (represented by a star) observed elsewhere in the callset"},
+    'pab_max': {"Number": "A", "Description": "Maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of AB=0.5"},
+}
+
+
 def flag_problematic_regions(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTable, hl.Table]:
     '''
     Annotate HT/MT with `region_flag` struct. Struct contains flags for problematic regions.
@@ -157,18 +196,18 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
     '''
     info_dict = {
         'FS': t.rf.info_FS, 
-        'InbreedingCoeff': t.rf.info_InbreedingCoeff, 
+        'AS_InbreedingCoeff': t.rf.inbreeding_coeff, 
         'MQ': t.rf.info_MQ, 
         'MQRankSum': t.rf.info_MQRankSum, 
         'QD': t.rf.info_QD,
         'ReadPosRankSum': t.rf.info_ReadPosRankSum,
         'SOR': t.rf.info_SOR,
-        'VQSR_POSITIVE_TRAIN_SITE': t.vqsr.POSITIVE_TRAIN_SITE,
-        'VQSR_NEGATIVE_TRAIN_SITE': t.vqsr.NEGATIVE_TRAIN_SITE,
-        'BaseQRankSum': t.rf.info.BaseQRankSum,
-        'DP': t.rf.info.DP,
-        'VQSLOD': t.vqsr.VQSLOD,
-        'VQSR_culprit': t.vqsr.culprit,
+        'VQSR_POSITIVE_TRAIN_SITE': t.vqsr.info.POSITIVE_TRAIN_SITE,
+        'VQSR_NEGATIVE_TRAIN_SITE': t.vqsr.info.NEGATIVE_TRAIN_SITE,
+        'AS_BaseQRankSum': t.vqsr.info.AS_BaseQRankSum,
+        'VarDP': t.rf.info_VarDP,
+        'AS_VQSLOD': t.vqsr.info.AS_VQSLOD,
+        'AS_VQSR_culprit': t.vqsr.info.AS_culprit,
         'lcr': t.region_flag.contains('lcr'),
         'nonpar': t.nonpar,
         'rf_positive_label': t.rf.tp,
@@ -178,6 +217,7 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
         'rf_tp_probability': t.rf.rf_probability,
         'transmitted_singleton': t.rf.transmitted_singleton,
         'variant_type': t.allele_info.variant_type,
+        'original_alleles': t.allele_info.original_alleles,
         'allele_type': t.allele_info.allele_type,
         'n_alt_alleles': t.allele_info.n_alt_alleles,
         'was_mixed': t.allele_info.was_mixed,
@@ -823,8 +863,14 @@ def main(args):
         # remove gnomad exomes/genomes index dicts -- only necessary in tranche 2, they won't exist moving forwards
         freq_ht = freq_ht.drop('gnomad_exomes_freq_index_dict','gnomad_genomes_freq_index_dict')
         rf_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'rf'))
+        logger.info('Selecting relevant fields from rf ht')
+        rf_ht = rf_ht.select('info_FS', 'inbreeding_coeff', 'info_MQ', 'info_MQRankSum', 'info_QD', 'info_ReadPosRankSum', 
+                     'info_SOR', 'tp', 'fail_hard_filters', 'rf_label', 'rf_train', 'rf_probability',
+                     'transmitted_singleton', 'pab_max', 'info_VarDP')
+        logger.info('Removing colocated variants from vep') 
         vep_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vep'))
-        dbsnp_ht = hl.read_table(dbsnp_ht_path())
+        vep_ht = vep_ht.transmute(vep=vep_ht.vep.drop('colocated_variants')
+        dbsnp_ht = hl.read_table(dbsnp_ht_path()).drop('qual', 'filters', 'info')
         hist_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'qual_hists'))
         hist_ht = hist_ht.select('gq_hist_alt', 'gq_hist_all', 'dp_hist_alt', 'dp_hist_all', 'ab_hist_alt')
         allele_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'allele_data'))
@@ -832,15 +878,17 @@ def main(args):
         allele_ht = allele_ht.transmute(allele_data=allele_ht.allele_data.annotate(
                             original_alleles=allele_ht.allele_data.nonsplit_alleles).drop('nonsplit_alleles')
                     )
+        logger.info('Reading in VQSR ht, removing unnecessary fields, and splitting AS annotations')
         vqsr_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vqsr'))
-
-        logger.info('Removing colocated variants from vep')
-        vep_ht = vep_ht.transmute(vep=vep_ht.vep.drop('colocated_variants')
-        logger.info('Dropping rsid, filters, a_index, was_split from vqsr ht')
-        vqsr_ht = vqsr_ht.drop('rsid', 'filters', 'a_index', 'was_split')
-        logger.info('Dropping variant_type, allele_type from rf ht')
-        rf_ht = rf_ht.drop('variant_type', 'allele_type')
-
+        vqsr_ht = vqsr_ht.transmute(info=vqsr_ht.info.select('NEGATIVE_TRAIN_SITE', 'POSITIVE_TRAIN_SITE', 'AS_VQSLOD',
+                                                    'AS_culprit', 'AS_BaseQRankSum')).drop('rsid', 'a_index', 'was_split')
+        vqsr_ht = vqsr_ht.annotate(
+            info=vqsr_ht.info.annotate(
+            **{f: [vqsr_ht.info[f][vqsr_ht.a_index - 1]] for f in vqsr_ht.info if f.startswith("AC") or 
+            (f.startswith("AS_") and not f == 'AS_SB_TABLE')}
+            )
+        )
+        
         logger.info('Filtering out low QUAL variants')
         mt = mt.filter_rows(~vqsr_ht[mt.row_key].filters.contains("LowQual"))
         logger.info(f'Count after filtering out low QUAL variants {mt.count()}')
