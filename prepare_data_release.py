@@ -137,7 +137,7 @@ def prepare_annotations(
     mt = flag_problematic_regions(mt)
     #logger.info(f'mt count after filtering out freq: {mt.count()}')
 
-    mt = mt.annotate_rows(**hist_ht[mt.row_key], vep=vep_ht[mt.row_key].vep,
+    mt = mt.annotate_rows(adj_qual_hists=hist_ht[mt.row_key], vep=vep_ht[mt.row_key].vep,
                      allele_info=allele_ht[mt.row_key].allele_data, vqsr=vqsr_ht[mt.row_key].info, rsid=dbsnp_ht[mt.row_key].rsid)
     mt = mt.annotate_globals(rf=rf_ht.index_globals())
     logger.info(f'mt count: {mt.count()}')
