@@ -616,7 +616,7 @@ def release_mt_path(data_source: str, freeze: int, temp=False) -> str:
     :return: Filepath for release MatrixTable
     :rtype: str
     '''
-    tag = '.temp' if temp else tag ''
+    tag = '.temp' if temp else ''
     return f'{release_prefix(data_source, freeze)}/mt/nested{tag}.mt'
 
 
