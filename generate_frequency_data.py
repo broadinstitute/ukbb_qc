@@ -62,23 +62,21 @@ def join_gnomad(ht: hl.Table, data_type: str) -> hl.Table:
     if data_type == 'exomes':
         gnomad_ht = hl.read_table(get_gnomad_liftover_data_path(f'{data_type}', '2.1.1')).select(
             'freq', 'popmax', 'faf').select_globals(
-            'freq_meta', 'freq_index_dict', 'popmax_index_dict', 'faf_index_dict')
+            'freq_meta', 'popmax_index_dict', 'faf_index_dict')
         ht = ht.join(gnomad_ht, how='left')
         ht = ht.rename({'freq_1': f'gnomad_{data_type}_freq', 'popmax_1': f'gnomad_{data_type}_popmax',
                    'faf_1': f'gnomad_{data_type}_faf', 'freq_meta_1': f'gnomad_{data_type}_freq_meta',
-                   'freq_index_dict': f'gnomad_{data_type}_freq_index_dict',
                    'popmax_index_dict': f'gnomad_{data_type}_popmax_index_dict',
                    'faf_index_dict': f'gnomad_{data_type}_faf_index_dict'})
 
     else:
         gnomad_ht = hl.read_table('gs://gnomad-public/release/3.0/ht/genomes/gnomad.genomes.r3.0.sites.ht').select(
             'freq', 'popmax', 'faf').select_globals(
-            'freq_meta', 'freq_index_dict', 'faf_index_dict')
+            'freq_meta', 'faf_index_dict')
 
         ht = ht.join(gnomad_ht, how='left')
         ht = ht.rename({'freq_1': f'gnomad_{data_type}_freq', 'popmax_1': f'gnomad_{data_type}_popmax',
                    'faf_1': f'gnomad_{data_type}_faf', 'freq_meta_1': f'gnomad_{data_type}_freq_meta',
-                   'freq_index_dict': f'gnomad_{data_type}_freq_index_dict',
                    'faf_index_dict': f'gnomad_{data_type}_faf_index_dict'})
     return ht
 
