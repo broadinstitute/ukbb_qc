@@ -92,8 +92,8 @@ def main(args):
     logger.info(f'Excluding {POPS_TO_REMOVE_FOR_POPMAX} from popmax and faf calculations')
 
     mt = get_ukbb_data(data_source, freeze, meta_root='meta')
-    logger.info(f'mt count before filtering out non-releasable samples: {mt.count()}')
-    mt = mt.filter_cols(mt.meta.releasable)
+    logger.info(f'mt count before filtering out low quality and non-releasable samples: {mt.count()}')
+    mt = mt.filter_cols(mt.meta.releasable & mt.meta.high_quality)
 
     # NOTE: adapted from gnomAD v3, not sure this works yet on WES data
     # will need to finish adapting code after completing tranche 2 for sparse data
