@@ -137,7 +137,7 @@ def prepare_annotations(
     mt = flag_problematic_regions(mt)
     #logger.info(f'mt count after filtering out freq: {mt.count()}')
 
-    mt = mt.annotate_rows(**rf_ht[mt.row_key], **hist_ht[mt.row_key], vep=vep_ht[mt.row_key].vep,
+    mt = mt.annotate_rows(**hist_ht[mt.row_key], vep=vep_ht[mt.row_key].vep,
                      allele_info=allele_ht[mt.row_key].allele_data, vqsr=vqsr_ht[mt.row_key].info, rsid=dbsnp_ht[mt.row_key].rsid)
     mt = mt.annotate_globals(rf=rf_ht.index_globals())
     logger.info(f'mt count: {mt.count()}')
@@ -813,6 +813,9 @@ def main(args):
         mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
         logger.info(f'mt count after filtering out low quality samples and their variants: {mt.count()}')
         mt = mt.select_cols()
+
+        logger.info('Creating qual hists on raw (non-adj) data')
+        mt = mt.annotate_rows(raw_qual_hists=qual_hist_expr(mt.GT, mt.GQ, mt.DP, mt.AD))
 
         logger.info('Reading in all variant annotation tables')
         freq_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'join_freq'))
