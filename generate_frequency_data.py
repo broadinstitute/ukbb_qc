@@ -43,9 +43,9 @@ def generate_frequency_data(mt: hl.MatrixTable, POPS_TO_REMOVE_FOR_POPMAX: List[
 
     # Annotate quality metrics histograms, as these also require densifying
     # NOTE skipping for tranche 2, as these were already generated
-    #mt = mt.annotate_rows(
-    #    **qual_hist_expr(mt.GT, mt.GQ, mt.DP, mt.AD)
-    #)
+    mt = mt.annotate_rows(
+        **qual_hist_expr(mt.GT, mt.GQ, mt.DP, mt.AD)
+    )
 
     return mt.rows()
 
@@ -89,7 +89,7 @@ def main(args):
     POPS_TO_REMOVE_FOR_POPMAX = set(args.pops.split(','))
     logger.info(f'Excluding {POPS_TO_REMOVE_FOR_POPMAX} from popmax and faf calculations')
 
-    mt = get_ukbb_data(data_source, freeze, meta_root='meta')
+    mt = get_ukbb_data(data_source, freeze, adj=True, meta_root='meta')
     logger.info(f'mt count before filtering out low quality and non-releasable samples: {mt.count()}')
     mt = mt.filter_cols(mt.meta.releasable & mt.meta.high_quality)
 
