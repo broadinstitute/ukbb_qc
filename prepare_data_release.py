@@ -114,6 +114,21 @@ INFO_DICT = {
 }
 
 
+FORMAT_DICT = {
+        'GT': {'Description': 'Genotype', 'Number': '1', 'Type': 'String'},
+        'AD': {'Description': 'Allelic depths for the ref and alt alleles in the order listed', 'Number': 'R', 'Type': 'Integer'},
+        'DP': {'Description': 'Approximate read depth (reads with MQ=255 or with bad mates are filtered)', 'Number': '1', 'Type': 'Integer'},
+        'GQ': {'Description': 'Genotype Quality', 'Number': '1', 'Type': 'Integer'},
+        'MIN_DP': {'Description': 'Minimum DP observed within the GVCF block', 'Number': '1', 'Type': 'Integer'},
+        'PGT': {'Description': 'Physical phasing haplotype information, describing how the alternate alleles are phased in relation to one another', 'Number': '1',
+                'Type': 'String'},
+        'PID': {'Description': 'Physical phasing ID information, where each unique ID within a given sample (but not across samples) connects records within a phasing group',
+                'Number': '1', 'Type': 'String'},
+        'PL': {'Description': 'Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification', 'Number': 'G', 'Type': 'Integer'},
+        'SB': {'Description': 'Per-sample component statistics which comprise the Fisher\'s Exact Test to detect strand bias.', 'Number': '4', 'Type': 'Integer'}
+    }
+
+
 def flag_problematic_regions(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTable, hl.Table]:
     '''
     Annotate HT/MT with `region_flag` struct. Struct contains flags for problematic regions.
@@ -143,7 +158,7 @@ def flag_problematic_regions(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.Mat
 def prepare_annotations(
                         mt: hl.MatrixTable, freq_ht: hl.Table, unrelated_freq_ht: hl.Table, 
                         rf_ht: hl.Table, vep_ht: hl.Table, dbsnp_ht: hl.Table, hist_ht: hl.Table, 
-                        hist_ht: hl.Table, index_dict: Dict, allele_ht: hl.Table, vqsr_ht: hl.Table
+                        index_dict: Dict, allele_ht: hl.Table, vqsr_ht: hl.Table
                         ) -> hl.MatrixTable:
     '''
     Join all Tables with variant annotations, keeping only variants with nonzero AC
@@ -155,7 +170,6 @@ def prepare_annotations(
     :param Table vep_ht: Table with VEP variant annotations
     :param Table dbsnp_ht: Table with updated dbSNP rsid annotations
     :param Table hist_ht: Table with quality histogram annotations
-    :param Table adj_hist_ht: Table with quality histogram annotations calculated on adj samples
     :param dict index_dict: Dictionary containing index values for each entry in the frequency HT array, keyed by metadata label
     :param Table allele_ht: Table containing allele annotations
     :param Table vqsr_ht: Table containing vqsr annotations
@@ -322,16 +336,16 @@ def make_info_dict(prefix, label_groups=None, bin_edges=None, faf=False, popmax=
             info_dict.update(age_hist_dict)
 
         popmax_dict = {
-        f'{prefix}popmax': {"Number": "A",
-                             "Description": "Population with maximum AF{}".format(popmax_text)},
-        f'{prefix}AC_popmax': {"Number": "A",
-                                "Description": "Allele count in the population with the maximum AF{}".format(popmax_text)},
-        f'{prefix}AN_popmax': {"Number": "A",
-                                "Description": "Total number of alleles in the population with the maximum AF{}".format(popmax_text)},
-        f'{prefix}AF_popmax': {"Number": "A",
-                                "Description": "Maximum allele frequency across populations (excluding samples of Ashkenazi, Finnish, and indeterminate ancestry){}".format(popmax_text)},
-        f'{prefix}nhomalt_popmax': {"Number": "A",
-                                     "Description": "Count of homozygous individuals in the population with the maximum allele frequency{}".format(popmax_text)}
+            f'{prefix}popmax': {"Number": "A",
+                                 "Description": "Population with maximum AF{}".format(popmax_text)},
+            f'{prefix}AC_popmax': {"Number": "A",
+                                    "Description": "Allele count in the population with the maximum AF{}".format(popmax_text)},
+            f'{prefix}AN_popmax': {"Number": "A",
+                                    "Description": "Total number of alleles in the population with the maximum AF{}".format(popmax_text)},
+            f'{prefix}AF_popmax': {"Number": "A",
+                                    "Description": "Maximum allele frequency across populations (excluding samples of Ashkenazi, Finnish, and indeterminate ancestry){}".format(popmax_text)},
+            f'{prefix}nhomalt_popmax': {"Number": "A",
+                                         "Description": "Count of homozygous individuals in the population with the maximum allele frequency{}".format(popmax_text)}
         }
         info_dict.update(popmax_dict)
 
@@ -602,49 +616,6 @@ def get_age_distributions(data_source, freeze):
     return age_hist_data.bin_freq
 
 
-def make_format_dict() -> dict:
-    """
-    Makes dictionary for entries (hail has empty descriptions by default)
-
-    :return: Dictionary of strings (entry: description)
-    :rtype: dict
-    """
-    ##FORMAT=<ID=AD,Number=.,Type=Integer,Description=""> #
-    ##FORMAT=<ID=DP,Number=1,Type=Integer,Description=""> #
-    ##FORMAT=<ID=GQ,Number=1,Type=Integer,Description=""> #
-    ##FORMAT=<ID=GT,Number=1,Type=String,Description=""> #
-    ##FORMAT=<ID=MIN_DP,Number=1,Type=Integer,Description="">
-    ##FORMAT=<ID=PGT,Number=1,Type=String,Description="">
-    ##FORMAT=<ID=PID,Number=1,Type=String,Description="">
-    ##FORMAT=<ID=PL,Number=.,Type=Integer,Description="">
-    ##FORMAT=<ID=SB,Number=.,Type=Integer,Description="">
-
-    ##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">
-    ##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Approximate read depth (reads with MQ=255 or with bad mates are filtered)">
-    ##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype Quality">
-    ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
-    ##FORMAT=<ID=MIN_DP,Number=1,Type=Integer,Description="Minimum DP observed within the GVCF block">
-    ##FORMAT=<ID=PGT,Number=1,Type=String,Description="Physical phasing haplotype information, describing how the alternate alleles are phased in relation to one another">
-    ##FORMAT=<ID=PID,Number=1,Type=String,Description="Physical phasing ID information, where each unique ID within a given sample (but not across samples) connects records within a phasing group">
-    ##FORMAT=<ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification">
-    ##FORMAT=<ID=RGQ,Number=1,Type=Integer,Description="Unconditional reference genotype confidence, encoded as a phred quality -10*log10 p(genotype call is wrong)">
-    ##FORMAT=<ID=SB,Number=4,Type=Integer,Description="Per-sample component statistics which comprise the Fisher's Exact Test to detect strand bias.">
-    format_dict = {
-        'GT': {'Description': 'Genotype', 'Number': '1', 'Type': 'String'},
-        'AD': {'Description': 'Allelic depths for the ref and alt alleles in the order listed', 'Number': 'R', 'Type': 'Integer'},
-        'DP': {'Description': 'Approximate read depth (reads with MQ=255 or with bad mates are filtered)', 'Number': '1', 'Type': 'Integer'},
-        'GQ': {'Description': 'Genotype Quality', 'Number': '1', 'Type': 'Integer'},
-        'MIN_DP': {'Description': 'Minimum DP observed within the GVCF block', 'Number': '1', 'Type': 'Integer'},
-        'PGT': {'Description': 'Physical phasing haplotype information, describing how the alternate alleles are phased in relation to one another', 'Number': '1',
-                'Type': 'String'},
-        'PID': {'Description': 'Physical phasing ID information, where each unique ID within a given sample (but not across samples) connects records within a phasing group',
-                'Number': '1', 'Type': 'String'},
-        'PL': {'Description': 'Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification', 'Number': 'G', 'Type': 'Integer'},
-        'SB': {'Description': 'Per-sample component statistics which comprise the Fisher\'s Exact Test to detect strand bias.', 'Number': '4', 'Type': 'Integer'}
-    }
-    return format_dict
-
-
 def sample_sum_check(ht: hl.Table, prefix: str, label_groups: Dict[str, List[str]], verbose: bool, subpop=None):
     '''
     Compute afresh the sum of annotations for a specified group of annotations, and compare to the annotated version;
@@ -883,11 +854,9 @@ def main(args):
         logger.info(f'mt count after filtering out low quality samples and their variants: {mt.count()}')
         mt = mt.select_cols()
 
-        logger.info('Creating qual hists on raw (non-adj) data')
-        mt = mt.annotate_rows(raw_qual_hists=qual_hist_expr(mt.GT, mt.GQ, mt.DP, mt.AD))
-
         logger.info('Reading in all variant annotation tables')
         freq_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'join_freq'))
+        unrelated_freq_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'join_freq_hybrid_unrelated'))
         rf_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'rf'))
         vep_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vep'))
         dbsnp_ht = hl.read_table(dbsnp_ht_path()).drop('qual', 'filters', 'info')
@@ -896,7 +865,7 @@ def main(args):
         vqsr_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vqsr'))
         
         logger.info('Adding annotations...')
-        mt = prepare_annotations(mt, freq_ht, rf_ht, vep_ht, dbsnp_ht, hist_ht, make_index_dict(freq_ht), allele_ht, vqsr_ht)
+        mt = prepare_annotations(mt, freq_ht, unrelated_freq_ht, rf_ht, vep_ht, dbsnp_ht, hist_ht, make_index_dict(freq_ht), allele_ht, vqsr_ht)
         mt.describe()
         mt = mt.annotate_globals(age_distribution=age_hist_data)
         mt = mt.naive_coalesce(20000)
@@ -949,10 +918,10 @@ def main(args):
         
         # Select relevant fields for VCF export
         mt = mt.select_rows('info', 'filters', 'rsid', 'qual', 'vep')
-        mt.write(release_mt_path(data_source, freeze, temp=True), args.overwrite)
+        mt.checkpoint(release_mt_path(data_source, freeze, temp=True), args.overwrite)
 
         # Remove gnomad_ prefix for VCF export
-        mt = hl.read_matrix_table(release_mt_path(data_source, freeze, temp=True))
+        #mt = hl.read_matrix_table(release_mt_path(data_source, freeze, temp=True))
         mt.describe()
         rg = hl.get_reference('GRCh38')
         contigs = rg.contigs[:24] # autosomes + X/Y
@@ -973,7 +942,7 @@ def main(args):
         new_info_dict.update({'vep': {'Description': hl.eval(vep_csq_ht.globals.vep_csq_header)}})
         header_dict = {'info': new_info_dict,
                        'filter': make_filter_dict(mt.rows()),
-                        'format': make_format_dict()}
+                        'format': FORMAT_DICT}
         mt = mt.annotate_rows(info=mt.info.annotate(vep=vep_csq_ht[mt.row_key].vep))
 
         # Export VCFs by chromosome
