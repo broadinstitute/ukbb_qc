@@ -578,22 +578,21 @@ def make_index_dict(ht):
     return index_dict
 
 
-def set_female_y_metrics_to_na(mt):
+def set_female_y_metrics_to_na(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTable, hl.Table]:
     '''
     Set AC, AN, and nhomalt Y variant annotations for females to NA (instead of 0)
-    :param Table mt: Hail MatrixTable containing female variant annotations
-    :return: Table with reset annotations
-    :rtype: Table
+    :param Table/MatrixTable t: Table/MatrixTable containing female variant annotations
+    :return: Table/MatrixTable with reset annotations
+    :rtype: Table/MatrixTable
     '''
-    metrics = list(mt.row.info)
+    metrics = list(t.row.info)
     female_metrics = [x for x in metrics if '_female' in x]
     female_metrics = [x for x in female_metrics if ('nhomalt' in x) or ('AC' in x) or ('AN' in x)]
 
     female_metrics_dict = {}
     for metric in female_metrics:
-        female_metrics_dict.update({f'{metric}': hl.cond(mt.locus.contig == 'Y', hl.null(hl.tint32), mt.info[f'{metric}'])})
-    mt = mt.annotate_rows(info=mt.info.annotate(**female_metrics_dict))
-    return mt
+        female_metrics_dict.update({f'{metric}': hl.cond(t.locus.contig == 'Y', hl.null(hl.tint32), t.info[f'{metric}'])})
+    return t.annotate(info=t.info.annotate(**female_metrics_dict) if isinstance(t, hl.Table) else t.annotate_rows(info=t.info.annotate(**female_metrics_dict))
 
 
 def get_age_distributions(data_source, freeze):
