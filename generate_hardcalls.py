@@ -52,7 +52,7 @@ def main(args):
         mt = get_ukbb_data(data_source, freeze, split=False, raw=True)
 
         # Add allele data to mt
-        allele_data = hl.struct(nonsplit_alleles=mt.alleles,
+        allele_data = hl.struct(original_alleles=mt.alleles,
                             has_star=hl.any(lambda a: a == '*', mt.alleles))
         mt = mt.annotate_rows(allele_data=allele_data.annotate(**add_variant_type(mt.alleles)))
 
