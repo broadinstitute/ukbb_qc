@@ -89,7 +89,7 @@ def main(args):
     POPS_TO_REMOVE_FOR_POPMAX = set(args.pops.split(','))
     logger.info(f'Excluding {POPS_TO_REMOVE_FOR_POPMAX} from popmax and faf calculations')
 
-    mt = get_ukbb_data(data_source, freeze, adj=True, meta_root='meta')
+    mt = get_ukbb_data(data_source, freeze, meta_root='meta')
     logger.info(f'mt count before filtering out low quality and non-releasable samples: {mt.count()}')
     mt = mt.filter_cols(mt.meta.releasable & mt.meta.high_quality)
 
