@@ -2,6 +2,7 @@ from gnomad_hail import *
 from gnomad_hail.resources.variant_qc import *
 from gnomad_qc.variant_qc.prepare_data_release import *
 from gnomad_hail.utils.sample_qc import add_filters_expr 
+from gnomad_hail.utils import filter_to_adj
 from ukbb_qc.resources import *
 import copy
 import itertools
@@ -222,6 +223,11 @@ def prepare_annotations(
     logger.info('Annotating unrelated frequencies')
     mt = mt.annotate_rows(**unrelated_freq_ht[mt.row_key])
     mt = mt.annotate_globals(**unrelated_freq_ht.index_globals())
+
+    logger.info('Creating adj quality hists')
+    mt_filt = mt.filter_to_adj(mt)
+    mt_filt = mt_filt.annotate_rows(qual_hists=*qual_hist_expr(mt_filt.GT, mt_filt.GQ, mt_filt.DP, mt_filt.AD))
+    mt = mt.annotate_rows(**mt_filt[mt.row_key].qual_hists)
 
     mt = mt.annotate_rows(adj_qual_hists=hist_ht[mt.row_key], vep=vep_ht[mt.row_key].vep,
                      allele_info=allele_ht[mt.row_key].allele_data, vqsr=vqsr_ht[mt.row_key].info, rsid=dbsnp_ht[mt.row_key].rsid)
