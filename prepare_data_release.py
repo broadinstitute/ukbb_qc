@@ -955,7 +955,7 @@ def main(args):
             hl.export_vcf(contig_mt, release_vcf_path(data_source, freeze, contig=contig), metadata=header_dict)
 
     if args.prepare_browser_ht:
-        mt = hl.read_matrix_table(release_mt_path(data_source, freeze, temp=True))
+        mt = hl.read_matrix_table(release_mt_path(data_source, freeze))
         mt.rows().write(release_ht_path(data_source, freeze), args.overwrite)
 
     if args.sanity_check_sites:
