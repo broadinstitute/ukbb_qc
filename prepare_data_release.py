@@ -844,22 +844,16 @@ def main(args):
         age_hist_data = get_age_distributions(data_source, freeze)
 
         logger.info('Getting raw mt with metadata information')
+        # NOTE reading in raw to return all samples/variants with fields for adj 
         mt = get_ukbb_data(data_source, freeze, split=False, raw=True, meta_root='meta')
 
         logger.info('Dropping gVCF info (selecting all other entries) and keying by locus/alleles')
         mt = mt.select_entries('DP', 'GQ', 'LA', 'LAD', 'LGT', 'LPGT', 'LPL', 'MIN_DP', 'PID', 'RGQ', 'SB')
         mt = mt.key_rows_by('locus', 'alleles')
-        logger.info(f'raw mt count: {mt.count()}')
 
         logger.info('Splitting raw mt')
         mt = hl.experimental.sparse_split_multi(mt)
         mt = mt.select_entries('GT', 'GQ', 'DP', 'AD', 'MIN_DP', 'PGT', 'PID', 'PL', 'SB')
-
-        logger.info(f'mt count before filtering out low quality and non-releasable samples: {mt.count()}')
-        mt = mt.filter_cols(mt.meta.high_quality & mt.releasable)
-        mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
-        logger.info(f'mt count after filtering out low quality samples and their variants: {mt.count()}')
-        mt = mt.select_cols()
 
         logger.info('Reading in all variant annotation tables')
         freq_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'join_freq'))
@@ -896,17 +890,17 @@ def main(args):
             INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], sex=SEXES)))
 
             if 'gnomad' in subset:
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=GNOMAD_POPS)))
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=GNOMAD_POPS, sex=SEXES)))
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=['nfe'], subpop=GNOMAD_NFE_SUBPOPS)))
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=['eas'], subpop=GNOMAD_EAS_SUBPOPS)))
-                INFO_DICT.update(make_info_dict(subset, dict(group=['adj']), faf=True))
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=GNOMAD_FAF_POPS), faf=True))
 
             else:
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=POPS)))
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=POPS, sex=SEXES)))
-                INFO_DICT.update(make_info_dict(subset, dict(group=['adj']), faf=True))
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=FAF_POPS), faf=True))
+        INFO_DICT.update(make_info_dict(subset, dict(group=['adj']), faf=True))
         INFO_DICT.update(make_hist_dict(bin_edges))
 
         # Adjust keys to remove adj tags before exporting to VCF
