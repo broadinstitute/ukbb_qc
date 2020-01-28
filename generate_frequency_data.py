@@ -43,9 +43,9 @@ def generate_frequency_data(mt: hl.MatrixTable, POPS_TO_REMOVE_FOR_POPMAX: List[
 
     # Annotate quality metrics histograms, as these also require densifying
     # NOTE skipping for tranche 2, as these were already generated
-    mt = mt.annotate_rows(
-        **qual_hist_expr(mt.GT, mt.GQ, mt.DP, mt.AD)
-    )
+    #mt = mt.annotate_rows(
+    #    **qual_hist_expr(mt.GT, mt.GQ, mt.DP, mt.AD)
+    #)
 
     return mt.rows()
 
