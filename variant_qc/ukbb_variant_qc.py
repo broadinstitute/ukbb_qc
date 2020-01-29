@@ -1,9 +1,7 @@
-from gnomad_hail import *
 from gnomad_hail.utils import rf
 from gnomad_qc.variant_qc.variantqc import sample_rf_training_examples
-from ukbb_qc.resources import *
 from ukbb_qc.utils import annotate_interval_qc_filter
-from ukbb_qc.variant_qc_functions import *
+from variant_qc.variant_qc_functions import *
 import json
 import uuid
 
