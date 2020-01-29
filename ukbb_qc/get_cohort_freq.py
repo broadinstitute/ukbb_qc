@@ -59,7 +59,7 @@ def main(args):
 
     if args.calculate_frequencies:
         logger.info('Calculating frequencies')
-        ht = generate_frequency_data(mt, pops, args.by_platform)
+        ht = generate_frequency_data(mt, args.by_platform)
         write_temp_gcs(ht, var_annotations_ht_path(data_source, freeze, 'cohort_freq', args.overwrite))
 
 
