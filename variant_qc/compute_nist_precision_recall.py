@@ -1,9 +1,4 @@
-from gnomad_hail import *
-from gnomad_hail.utils import rf
-from ukbb_qc.resources import *
-from ukbb_qc.variant_qc_functions import *
-from pprint import pformat
-import json
+from variant_qc.variant_qc_functions import *
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("make_fake_pr_curves.log")
