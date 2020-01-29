@@ -59,8 +59,8 @@ def main(args):
 
     if args.calculate_frequencies:
         logger.info('Calculating frequencies')
-        ht = generate_frequency_data(mt, POPS_TO_REMOVE_FOR_POPMAX, args.by_platform)
-        write_temp_gcs(ht, var_annotations_ht_path(data_source, freeze, 'cohort_freq', args.overwrite)
+        ht = generate_frequency_data(mt, pops, args.by_platform)
+        write_temp_gcs(ht, var_annotations_ht_path(data_source, freeze, 'cohort_freq', args.overwrite))
 
 
 if __name__ == '__main__':
