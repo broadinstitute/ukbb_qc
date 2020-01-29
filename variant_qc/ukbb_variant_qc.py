@@ -50,13 +50,11 @@ INBREEDING_COEFF_HARD_CUTOFF = -0.3
 
 def get_rf_runs(data_source: str, freeze: int = CURRENT_FREEZE) -> Dict:
     """
-
     Loads RF run data from JSON file.
 
-    :param str data_source: 'regeneron' or 'broad'
-    :param int freeze: One of the data freezes
+    :param data_source: 'regeneron' or 'broad'
+    :param freeze: One of the data freezes
     :return: Dictionary containing the content of the JSON file, or an empty dictionary if the file wasn't found.
-    :rtype: dict
     """
 
     from ukbb_qc.resources import rf_run_hash_path
@@ -69,7 +67,7 @@ def get_rf_runs(data_source: str, freeze: int = CURRENT_FREEZE) -> Dict:
         logger.warning(f"File {json_file} could not be found. Returning empty RF run hash dict.")
         return {}
 
-
+# TODO: I think we should try to use the one in gnomad_hail utils, if the 0 valies is a problem, should we change the utils code?
 def bi_allelic_site_inbreeding_expr(call: hl.expr.CallExpression) -> hl.expr.Float32Expression:
     """
     Return the site inbreeding coefficient as an expression to be computed on a MatrixTable.
@@ -86,7 +84,7 @@ def bi_allelic_site_inbreeding_expr(call: hl.expr.CallExpression) -> hl.expr.Flo
     def inbreeding_coeff(gt_counts: hl.expr.DictExpression) -> hl.expr.Float32Expression:
         n = gt_counts.get(0, 0) + gt_counts.get(1, 0) + gt_counts.get(2, 0)
         pre_p = (2 * gt_counts.get(0, 0) + gt_counts.get(1, 0)) / (2 * n)
-        p = hl.cond(pre_p > 0, pre_p, 1e-9)  # NOTE: this is to avoid NaNs in some inbreeding_coeff values
+        p = hl.cond(pre_p > 0, pre_p, 1e-9)  # NOTE: this is to avoid NaNs in some inbreeding_coeff valuesi
         q = (2 * gt_counts.get(2, 0) + gt_counts.get(1, 0)) / (2 * n)
         return 1 - (gt_counts.get(1, 0) / (2 * p * q * n))
 
