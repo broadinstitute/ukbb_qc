@@ -29,37 +29,32 @@ def generate_call_stats(mt: hl.MatrixTable) -> hl.Table:
 
     return mt.annotate_rows(qc_callstats=call_stats_expression).rows()
 
+
 # NOTE: altered from gnomAD version to create HTs for annotation
-def annotate_truth_data(mt: hl.MatrixTable, data_source: str, freeze: int) -> hl.Table:
+def annotate_truth_data(ht: hl.Table, truth_tables: Dict[str, hl.Table]) -> hl.Table:
     """
-    Writes bi-allelic sites MT with the following annotations:
-     - truth_data (presence in Omni, HapMap, 1KG high conf SNVs, Mills)
+    Writes bi-allelic sites MT with the following annotations by default:
+     - Omni
+     - HapMap
+     - 1KG high conf SNVs
+     - Mills
 
-    :param MatrixTable mt: Full MT
-    :param str data_source: 'regeneron' or 'broad'
-    :param int freeze: One of the data freezes
+    Additional truthset tables can be passed with `truth_tables`
+
+    :param ht: Table to annotate
+    :param truth_tables: A dictionary containing additional truth set hail tables keyed by the annotation to use in HT
     :return: Table with qc annotations
-    :rtype: Table
     """
-    mt = mt.select_rows()
+    truth_ht =  hl.read_table(truth_ht_path)
+    ht = ht.join(truth_ht, how="left")
 
-    truth_mtes = {
-        # 'hapmap': hapmap_mt_path(),
-        'omni': omni_mt_path(),
-        'mills': mills_mt_path(),
-        'kgp_high_conf_snvs': kgp_high_conf_snvs_mt_path()
-    }
+    ht = ht.annotate(
+        **{
+            root: hl.is_defined(truth[ht.key]) for root, truth in truth_tables.items()
+        }
+    )
 
-    truth_htes = {key: hl.split_multi_hts(hl.read_matrix_table(path).repartition(1000).rows(), left_aligned=False)
-                  for key, path in truth_mtes.items()}
-    # TODO: formalize code to create this resource
-    truth_htes.update({'hapmap': hl.read_table(hapmap_ht_path()),
-                       'sib_singletons': hl.read_table(var_annotations_ht_path(data_source, freeze, 'sib_singletons.train')),
-                       #'ukbb_array_con':hl.read_table(f'{variant_qc_prefix(data_source, freeze)}/array_variant_concordance_callrate_0.95_non_ref_con_0.9.ht'),
-                       'ukbb_array_con_common':hl.read_table(f'{variant_qc_prefix(data_source, freeze)}/array_variant_concordance_callrate_0.95_non_ref_con_0.9_AF_0.001.ht')})
-
-    return mt.annotate_rows(truth_data=hl.struct(**{root: hl.is_defined(truth_ht[mt.row_key])
-                                                    for root, truth_ht in truth_htes.items()})).rows()
+    return ht
 
 
 def generate_sibling_singletons(mt, relatedness_ht, num_var_per_sibs_cutoff=None):
@@ -234,10 +229,28 @@ def main(args):
                            overwrite=args.overwrite)
 
     if args.annotate_truth_data:
-        mt = get_ukbb_data(data_source, freeze, meta_root=None)
-        mt = annotate_truth_data(mt, data_source, freeze).checkpoint(
-            var_annotations_ht_path(data_source, freeze, 'truth_data'), overwrite=args.overwrite)
-        mt.summarize()
+        ht = get_ukbb_data(data_source, freeze, meta_root=None).select_rows()
+        truth_ht = annotate_truth_data(
+            ht,
+            {
+                'sib_singletons': hl.read_table(
+                    var_annotations_ht_path(data_source, freeze, 'sib_singletons.train')
+                ),
+                'ukbb_array_con_common': hl.read_table(
+                    var_annotations_ht_path(
+                        data_source,
+                        freeze,
+                        'array_variant_concordance_callrate_0.95_non_ref_con_0.9_AF_0.001'
+                    )
+                )
+            }
+        )
+
+        truth_ht = truth_ht.checkpoint(
+            var_annotations_ht_path(data_source, freeze, 'truth_data'),
+            overwrite=args.overwrite
+        )
+        truth_ht.summarize()
 
 
 # TODO: add groupings
@@ -260,9 +273,7 @@ if __name__ == '__main__':
     # parser.add_argument('--generate_de_novos', help='Calculates de novo data', action='store_true')
     parser.add_argument('--create_truth_data', help='Create additional UKBB truth data by selecting sibling singletons and array-concordant variants', action='store_true')
     parser.add_argument('--test_train_split', help='Percentage of truth data to hold back for testing', default=0.2)
-
-    parser.add_argument('--annotate_truth_data', help='Annotates MT with truth data', action='store_true')
-
+    parser.add_argument('--annotate_truth_data', help='Creates a HT of UKBB variants annotated with truth sites', action='store_true')
     parser.add_argument('--calculate_medians', help='Calculate metric medians (warning: slow)', action='store_true')
     parser.add_argument('--calculate_all_annotations', help='Calculation many more annotations (warning: slow)', action='store_true')
     args = parser.parse_args()
