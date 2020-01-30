@@ -123,22 +123,6 @@ def generate_sibling_singletons(mt, relatedness_ht, num_var_per_sibs_cutoff=None
     return dataset_result
 
 
-# def generate_de_novos(mt: hl.MatrixTable, fam_file: str, freq_data: hl.Table) -> hl.Table:
-#     mt = mt.select_cols()
-#     fam_ht = read_fam(fam_file).key_by()
-#     fam_ht = fam_ht.select(s=[fam_ht.s, fam_ht.pat_id, fam_ht.mat_id]).explode('s').key_by('s')
-#     mt = mt.filter_cols(hl.is_defined(fam_ht[mt.s]))
-#     mt = mt.select_rows()
-#     mt = hl.split_multi_hts(mt)
-#     mt = mt.annotate_rows(family_stats=freq_data[mt.row_key].family_stats)
-#     ped = hl.Pedigree.read(fam_file, delimiter='\\t')
-#
-#     de_novo_table = hl.de_novo(mt, ped, mt.family_stats[0].unrelated_qc_callstats.AF[1])
-#     de_novo_table = de_novo_table.key_by('locus', 'alleles').collect_by_key('de_novo_data')
-#
-#     return de_novo_table
-
-
 def generate_qual_hists(mt: hl.MatrixTable) -> hl.Table:
     #mt = hl.split_multi_hts(mt)
     return mt.annotate_rows(
@@ -210,16 +194,7 @@ def main(args):
         sib_mt = sib_mt.checkpoint(get_mt_checkpoint_path(data_source, freeze, 'sib_singletons'), overwrite=args.overwrite)
         sib_mt.rows().naive_coalesce(500).write(var_annotations_ht_path(data_source, freeze, 'sib_singletons'), overwrite=args.overwrite)
 
-    # if args.generate_de_novos:  # (2.2 min/part @ 100K = 3K CPU-hours) + (7.4 m/p = 12K) + (34 m/p = ~44K) = 59K
-    #     # Turn on spark speculation?
-    #     mt = get_gnomad_data(data_type, raw=True, split=False)
-    #     freq_data = hl.read_table(annotations_ht_path(data_type, 'family_stats'))
-    #     mt = generate_de_novos(mt, fam_path(data_type), freq_data)
-    #     mt.write(annotations_ht_path(data_type, 'de_novos'), args.overwrite)
-
-    # TODO: fix resources and hardcoded paths
-    if args.create_truth_data:
-        # Split truth data set randomly
+        # Split sibling singleton data set randomly
         sib_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'sib_singletons'))
         sib_ht_test = sib_ht.sample(p=args.test_train_split)
         sib_ht_train = sib_ht.anti_join(sib_ht_test)
