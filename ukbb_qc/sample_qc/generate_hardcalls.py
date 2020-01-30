@@ -1,9 +1,7 @@
-from gnomad_hail import *
-import hail as hl
-from ukbb_qc.resources import *
-from ukbb_qc.call_sex import *
-from gnomad_qc.annotations.generate_qc_annotations import *
-from ukbb_qc.utils import *
+from gnomad_hail.utils.gnomad_functions import adjust_sex_ploidy,annotate_adj
+from ukbb_qc.resources.resources import *
+from ukbb_qc.sample_qc.call_sex import run_impute_sex
+
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("hardcalls")

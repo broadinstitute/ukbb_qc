@@ -1,5 +1,8 @@
-from gnomad_hail.utils.annotations import * 
-from ukbb_qc.resources import * 
+import argparse
+import logging
+import hail
+from gnomad_hail.utils.annotations import annotate_freq 
+from ukbb_qc.resources.resources import * 
 
 
 logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
@@ -60,7 +63,7 @@ def main(args):
     if args.calculate_frequencies:
         logger.info('Calculating frequencies')
         ht = generate_frequency_data(mt, args.by_platform)
-        write_temp_gcs(ht, var_annotations_ht_path(data_source, freeze, 'cohort_freq', args.overwrite))
+        ht.write(var_annotations_ht_path(data_source, freeze, 'cohort_freq'), args.overwrite)
 
 
 if __name__ == '__main__':
