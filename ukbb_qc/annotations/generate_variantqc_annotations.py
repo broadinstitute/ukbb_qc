@@ -203,6 +203,34 @@ def main(args):
         sib_ht_train.write(var_annotations_ht_path(data_source, freeze, 'sib_singletons.train'),
                            overwrite=args.overwrite)
 
+    if args.generate_array_concordant_ht:
+        variants = hl.read_table(array_variant_concordance_path(data_source, freeze))
+        callrate_cutoff = variants.callrate_cutoff.take(1)[0]
+        af_cutoff = variants.af_cutoff.take(1)[0]
+
+        exome_mt = hl.read_matrix_table(
+            get_mt_checkpoint_path(
+                data_source,
+                freeze,
+                name=f"exome_subset_concordance_callrate_{callrate_cutoff}_af_{af_cutoff}"
+            )
+        )
+
+        variants = variants.annotate(AF=exome_mt.rows()[variants.key].variant_qc.AF[1])
+        variants = variants.filter(
+            (variants.prop_gt_con_non_ref > args.concordance_cutoff)
+            & (variants.AF > args.variant_qc_af_cutoff)
+        )
+        variants = variants.repartition(1000)
+        variants.write(
+            var_annotations_ht_path(
+                data_source,
+                freeze,
+                f'array_con_con_{args.concordance_cutoff}_AF_{args.variant_qc_af_cutoff}'
+            ),
+            overwrite=args.overwrite
+        )
+
     if args.annotate_truth_data:
         ht = get_ukbb_data(data_source, freeze, meta_root=None).select_rows()
         truth_ht = annotate_truth_data(
@@ -243,10 +271,21 @@ if __name__ == '__main__':
     parser.add_argument('--generate_call_stats', help='Calculates call stats', action='store_true')
     parser.add_argument('--generate_family_stats', help='Calculates family stats', action='store_true')
     parser.add_argument('--generate_sibling_singletons', help='Creates a hail Table of variants that are sibling singletons', action='store_true')
+    parser.add_argument('--generate_array_concordant_ht', help='Creates a hail Table of array concordant variants', action='store_true')
+    parser.add_argument(
+        "--concordance_cutoff",
+        help="Array exome concordance cutoff for variant QC HT.",
+        type=float,
+        default=0.9
+    )
+    parser.add_argument(
+        "--variant_qc_af_cutoff",
+        help="Allele frequency cutoff used for variant QC HT creation, must be equal to or greater than af_cutoff.",
+        type=float,
+        default=0.001
+    )
     parser.add_argument('--num_var_per_sibs_cutoff', help='Max number of sibling singletons in a pair for the pair to be included in truth set', default=40)
     parser.add_argument('--include_adj_family_stats', help='Also calculate family stats for adj genotypes', action='store_true')
-    # parser.add_argument('--generate_de_novos', help='Calculates de novo data', action='store_true')
-    parser.add_argument('--create_truth_data', help='Create additional UKBB truth data by selecting sibling singletons and array-concordant variants', action='store_true')
     parser.add_argument('--test_train_split', help='Percentage of truth data to hold back for testing', default=0.2)
     parser.add_argument('--annotate_truth_data', help='Creates a HT of UKBB variants annotated with truth sites', action='store_true')
     parser.add_argument('--calculate_medians', help='Calculate metric medians (warning: slow)', action='store_true')
