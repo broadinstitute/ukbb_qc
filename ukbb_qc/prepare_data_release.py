@@ -1,9 +1,9 @@
-from gnomad_hail import *
-from gnomad_hail.resources.variant_qc import *
-from gnomad_qc.variant_qc.prepare_data_release import *
+#from gnomad_hail import *
+from gnomad_hail.utils.variant_qc import *
+from gnomad_qc.v2.variant_qc.prepare_data_release import *
 from gnomad_hail.utils.sample_qc import add_filters_expr 
-from gnomad_hail.utils import filter_to_adj
-from ukbb_qc.resources import *
+from gnomad_hail.utils.gnomad_functions import filter_to_adj
+from ukbb_qc.resources.resources import *
 import copy
 import itertools
 
@@ -145,7 +145,7 @@ def flag_problematic_regions(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.Mat
     lcr_intervals = get_lcr_intervals()
     region_filters = {
         'lcr': hl.is_defined(lcr_intervals[t.locus]),
-        'fail_interval_qc': ~(t.rf.interval_qc_pass)
+        'fail_interval_qc': ~(t.interval_qc_pass)
     }
 
     if isinstance(t, hl.Table):
@@ -180,20 +180,18 @@ def prepare_annotations(
     :rtype: Table
     '''
     logger.info('Removing unnecessary annotations from annotation tables') 
-    freq_ht = freq_ht.drop('gnomad_exomes_freq_index_dict','gnomad_genomes_freq_index_dict')
     rf_ht = rf_ht.select('info_FS', 'inbreeding_coeff', 'info_MQ', 'info_MQRankSum', 'info_QD', 'info_ReadPosRankSum', 
                  'info_SOR', 'tp', 'fail_hard_filters', 'rf_label', 'rf_train', 'rf_probability',
                  'transmitted_singleton', 'pab_max', 'info_VarDP', 'interval_qc_pass')
-    vep_ht = vep_ht.transmute(vep=vep_ht.vep.drop('colocated_variants')
+    vep_ht = vep_ht.transmute(vep=vep_ht.vep.drop('colocated_variants'))
     hist_ht = hist_ht.select('gq_hist_alt', 'gq_hist_all', 'dp_hist_alt', 'dp_hist_all', 'ab_hist_alt')
-    allele_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'allele_data'))
     # rename nonsplit_alleles to original_alleles -- only necessary in tranche 2, this will be renamed moving forwards
     allele_ht = allele_ht.transmute(allele_data=allele_ht.allele_data.annotate(
                         original_alleles=allele_ht.allele_data.nonsplit_alleles).drop('nonsplit_alleles')
                 )
     logger.info('Removing unnecessary fields from vqsr ht and splitting AS annotations')
     vqsr_ht = vqsr_ht.transmute(info=vqsr_ht.info.select('NEGATIVE_TRAIN_SITE', 'POSITIVE_TRAIN_SITE', 'AS_VQSLOD',
-                                                'AS_culprit', 'AS_BaseQRankSum', 'AS_VarDP')).drop('rsid', 'a_index', 'was_split')
+                                                'AS_culprit', 'AS_BaseQRankSum', 'AS_VarDP')).drop('rsid', 'was_split')
     vqsr_ht = vqsr_ht.annotate(
         info=vqsr_ht.info.annotate(
         **{f: [vqsr_ht.info[f][vqsr_ht.a_index - 1]] for f in vqsr_ht.info if f.startswith("AC") or 
@@ -213,6 +211,7 @@ def prepare_annotations(
 
     logger.info('Annotating mt with rf ht and flagging problematic regions')
     mt = mt.annotate_rows(rf=rf_ht[mt.row_key])
+    mt = mt.transmute(interval_qc_pass=t.rf.interval_qc_pass)
     mt = flag_problematic_regions(mt)
     
     logger.info('Annotating cohort frequencies')
@@ -226,10 +225,10 @@ def prepare_annotations(
 
     logger.info('Creating adj quality hists')
     mt_filt = mt.filter_to_adj(mt)
-    mt_filt = mt_filt.annotate_rows(qual_hists=*qual_hist_expr(mt_filt.GT, mt_filt.GQ, mt_filt.DP, mt_filt.AD))
-    mt = mt.annotate_rows(**mt_filt[mt.row_key].qual_hists)
+    mt_filt = mt_filt.annotate_rows(qual_hists=qual_hist_expr(mt_filt.GT, mt_filt.GQ, mt_filt.DP, mt_filt.AD))
+    mt = mt.annotate_rows(adj_qual_hists=mt_filt[mt.row_key].qual_hists)
 
-    mt = mt.annotate_rows(adj_qual_hists=hist_ht[mt.row_key], vep=vep_ht[mt.row_key].vep,
+    mt = mt.annotate_rows(qual_hists=hist_ht[mt.row_key], vep=vep_ht[mt.row_key].vep,
                      allele_info=allele_ht[mt.row_key].allele_data, vqsr=vqsr_ht[mt.row_key].info, rsid=dbsnp_ht[mt.row_key].rsid)
     mt = mt.annotate_globals(rf=rf_ht.index_globals())
     logger.info(f'mt count: {mt.count()}')
@@ -301,8 +300,6 @@ def make_freq_meta_index_dict(freq_meta):
     index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=POPS, sex=SEXES)))
     index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=['nfe'], subpop=NFE_SUBPOPS)))
     index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=['eas'], subpop=EAS_SUBPOPS)))
-    index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=['afr'], subpop=AFR_SUBPOPS)))
-    index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=['sas'], subpop=SAS_SUBPOPS)))
     return index_dict
 
 
@@ -598,7 +595,7 @@ def set_female_y_metrics_to_na(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.M
     female_metrics_dict = {}
     for metric in female_metrics:
         female_metrics_dict.update({f'{metric}': hl.cond(t.locus.contig == 'Y', hl.null(hl.tint32), t.info[f'{metric}'])})
-    return t.annotate(info=t.info.annotate(**female_metrics_dict) if isinstance(t, hl.Table) else t.annotate_rows(info=t.info.annotate(**female_metrics_dict))
+    return t.annotate(info=t.info.annotate(**female_metrics_dict)) if isinstance(t, hl.Table) else t.annotate_rows(info=t.info.annotate(**female_metrics_dict))
 
 
 def get_age_distributions(data_source, freeze):
@@ -856,7 +853,7 @@ def main(args):
         mt = mt.select_entries('GT', 'GQ', 'DP', 'AD', 'MIN_DP', 'PGT', 'PID', 'PL', 'SB')
 
         logger.info('Reading in all variant annotation tables')
-        freq_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'join_freq'))
+        freq_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'cohort_freq'))
         unrelated_freq_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'join_freq_hybrid_unrelated'))
         rf_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'rf'))
         vep_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vep'))
