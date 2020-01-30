@@ -29,37 +29,32 @@ def generate_call_stats(mt: hl.MatrixTable) -> hl.Table:
 
     return mt.annotate_rows(qc_callstats=call_stats_expression).rows()
 
+
 # NOTE: altered from gnomAD version to create HTs for annotation
-def annotate_truth_data(mt: hl.MatrixTable, data_source: str, freeze: int) -> hl.Table:
+def annotate_truth_data(ht: hl.Table, truth_tables: Dict[str, hl.Table]) -> hl.Table:
     """
-    Writes bi-allelic sites MT with the following annotations:
-     - truth_data (presence in Omni, HapMap, 1KG high conf SNVs, Mills)
+    Writes bi-allelic sites MT with the following annotations by default:
+     - Omni
+     - HapMap
+     - 1KG high conf SNVs
+     - Mills
 
-    :param MatrixTable mt: Full MT
-    :param str data_source: 'regeneron' or 'broad'
-    :param int freeze: One of the data freezes
+    Additional truthset tables can be passed with `truth_tables`
+
+    :param ht: Table to annotate
+    :param truth_tables: A dictionary containing additional truth set hail tables keyed by the annotation to use in HT
     :return: Table with qc annotations
-    :rtype: Table
     """
-    mt = mt.select_rows()
+    truth_ht =  hl.read_table(truth_ht_path)
+    ht = ht.join(truth_ht, how="left")
 
-    truth_mtes = {
-        # 'hapmap': hapmap_mt_path(),
-        'omni': omni_mt_path(),
-        'mills': mills_mt_path(),
-        'kgp_high_conf_snvs': kgp_high_conf_snvs_mt_path()
-    }
+    ht = ht.annotate(
+        **{
+            root: hl.is_defined(truth[ht.key]) for root, truth in truth_tables.items()
+        }
+    )
 
-    truth_htes = {key: hl.split_multi_hts(hl.read_matrix_table(path).repartition(1000).rows(), left_aligned=False)
-                  for key, path in truth_mtes.items()}
-    # TODO: formalize code to create this resource
-    truth_htes.update({'hapmap': hl.read_table(hapmap_ht_path()),
-                       'sib_singletons': hl.read_table(var_annotations_ht_path(data_source, freeze, 'sib_singletons.train')),
-                       #'ukbb_array_con':hl.read_table(f'{variant_qc_prefix(data_source, freeze)}/array_variant_concordance_callrate_0.95_non_ref_con_0.9.ht'),
-                       'ukbb_array_con_common':hl.read_table(f'{variant_qc_prefix(data_source, freeze)}/array_variant_concordance_callrate_0.95_non_ref_con_0.9_AF_0.001.ht')})
-
-    return mt.annotate_rows(truth_data=hl.struct(**{root: hl.is_defined(truth_ht[mt.row_key])
-                                                    for root, truth_ht in truth_htes.items()})).rows()
+    return ht
 
 
 def generate_sibling_singletons(mt, relatedness_ht, num_var_per_sibs_cutoff=None):
@@ -126,22 +121,6 @@ def generate_sibling_singletons(mt, relatedness_ht, num_var_per_sibs_cutoff=None
         dataset_result = dataset_result.filter_rows(dataset_result.sibling_singleton == 1)
 
     return dataset_result
-
-
-# def generate_de_novos(mt: hl.MatrixTable, fam_file: str, freq_data: hl.Table) -> hl.Table:
-#     mt = mt.select_cols()
-#     fam_ht = read_fam(fam_file).key_by()
-#     fam_ht = fam_ht.select(s=[fam_ht.s, fam_ht.pat_id, fam_ht.mat_id]).explode('s').key_by('s')
-#     mt = mt.filter_cols(hl.is_defined(fam_ht[mt.s]))
-#     mt = mt.select_rows()
-#     mt = hl.split_multi_hts(mt)
-#     mt = mt.annotate_rows(family_stats=freq_data[mt.row_key].family_stats)
-#     ped = hl.Pedigree.read(fam_file, delimiter='\\t')
-#
-#     de_novo_table = hl.de_novo(mt, ped, mt.family_stats[0].unrelated_qc_callstats.AF[1])
-#     de_novo_table = de_novo_table.key_by('locus', 'alleles').collect_by_key('de_novo_data')
-#
-#     return de_novo_table
 
 
 def generate_qual_hists(mt: hl.MatrixTable) -> hl.Table:
@@ -215,16 +194,7 @@ def main(args):
         sib_mt = sib_mt.checkpoint(get_mt_checkpoint_path(data_source, freeze, 'sib_singletons'), overwrite=args.overwrite)
         sib_mt.rows().naive_coalesce(500).write(var_annotations_ht_path(data_source, freeze, 'sib_singletons'), overwrite=args.overwrite)
 
-    # if args.generate_de_novos:  # (2.2 min/part @ 100K = 3K CPU-hours) + (7.4 m/p = 12K) + (34 m/p = ~44K) = 59K
-    #     # Turn on spark speculation?
-    #     mt = get_gnomad_data(data_type, raw=True, split=False)
-    #     freq_data = hl.read_table(annotations_ht_path(data_type, 'family_stats'))
-    #     mt = generate_de_novos(mt, fam_path(data_type), freq_data)
-    #     mt.write(annotations_ht_path(data_type, 'de_novos'), args.overwrite)
-
-    # TODO: fix resources and hardcoded paths
-    if args.create_truth_data:
-        # Split truth data set randomly
+        # Split sibling singleton data set randomly
         sib_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'sib_singletons'))
         sib_ht_test = sib_ht.sample(p=args.test_train_split)
         sib_ht_train = sib_ht.anti_join(sib_ht_test)
@@ -233,11 +203,57 @@ def main(args):
         sib_ht_train.write(var_annotations_ht_path(data_source, freeze, 'sib_singletons.train'),
                            overwrite=args.overwrite)
 
+    if args.generate_array_concordant_ht:
+        variants = hl.read_table(array_variant_concordance_path(data_source, freeze))
+        callrate_cutoff = variants.callrate_cutoff.take(1)[0]
+        af_cutoff = variants.af_cutoff.take(1)[0]
+
+        exome_mt = hl.read_matrix_table(
+            get_mt_checkpoint_path(
+                data_source,
+                freeze,
+                name=f"exome_subset_concordance_callrate_{callrate_cutoff}_af_{af_cutoff}"
+            )
+        )
+
+        variants = variants.annotate(AF=exome_mt.rows()[variants.key].variant_qc.AF[1])
+        variants = variants.filter(
+            (variants.prop_gt_con_non_ref > args.concordance_cutoff)
+            & (variants.AF > args.variant_qc_af_cutoff)
+        )
+        variants = variants.repartition(1000)
+        variants.write(
+            var_annotations_ht_path(
+                data_source,
+                freeze,
+                f'array_con_con_{args.concordance_cutoff}_AF_{args.variant_qc_af_cutoff}'
+            ),
+            overwrite=args.overwrite
+        )
+
     if args.annotate_truth_data:
-        mt = get_ukbb_data(data_source, freeze, meta_root=None)
-        mt = annotate_truth_data(mt, data_source, freeze).checkpoint(
-            var_annotations_ht_path(data_source, freeze, 'truth_data'), overwrite=args.overwrite)
-        mt.summarize()
+        ht = get_ukbb_data(data_source, freeze, meta_root=None).select_rows()
+        truth_ht = annotate_truth_data(
+            ht,
+            {
+                'sib_singletons': hl.read_table(
+                    var_annotations_ht_path(data_source, freeze, 'sib_singletons.train')
+                ),
+                'ukbb_array_con_common': hl.read_table(
+                    var_annotations_ht_path(
+                        data_source,
+                        freeze,
+                        'array_variant_concordance_callrate_0.95_non_ref_con_0.9_AF_0.001'
+                    )
+                )
+            }
+        )
+
+        truth_ht = truth_ht.checkpoint(
+            var_annotations_ht_path(data_source, freeze, 'truth_data'),
+            overwrite=args.overwrite
+        )
+        truth_ht.summarize()
 
 
 # TODO: add groupings
@@ -255,14 +271,23 @@ if __name__ == '__main__':
     parser.add_argument('--generate_call_stats', help='Calculates call stats', action='store_true')
     parser.add_argument('--generate_family_stats', help='Calculates family stats', action='store_true')
     parser.add_argument('--generate_sibling_singletons', help='Creates a hail Table of variants that are sibling singletons', action='store_true')
+    parser.add_argument('--generate_array_concordant_ht', help='Creates a hail Table of array concordant variants', action='store_true')
+    parser.add_argument(
+        "--concordance_cutoff",
+        help="Array exome concordance cutoff for variant QC HT.",
+        type=float,
+        default=0.9
+    )
+    parser.add_argument(
+        "--variant_qc_af_cutoff",
+        help="Allele frequency cutoff used for variant QC HT creation, must be equal to or greater than af_cutoff.",
+        type=float,
+        default=0.001
+    )
     parser.add_argument('--num_var_per_sibs_cutoff', help='Max number of sibling singletons in a pair for the pair to be included in truth set', default=40)
     parser.add_argument('--include_adj_family_stats', help='Also calculate family stats for adj genotypes', action='store_true')
-    # parser.add_argument('--generate_de_novos', help='Calculates de novo data', action='store_true')
-    parser.add_argument('--create_truth_data', help='Create additional UKBB truth data by selecting sibling singletons and array-concordant variants', action='store_true')
     parser.add_argument('--test_train_split', help='Percentage of truth data to hold back for testing', default=0.2)
-
-    parser.add_argument('--annotate_truth_data', help='Annotates MT with truth data', action='store_true')
-
+    parser.add_argument('--annotate_truth_data', help='Creates a HT of UKBB variants annotated with truth sites', action='store_true')
     parser.add_argument('--calculate_medians', help='Calculate metric medians (warning: slow)', action='store_true')
     parser.add_argument('--calculate_all_annotations', help='Calculation many more annotations (warning: slow)', action='store_true')
     args = parser.parse_args()
