@@ -135,7 +135,7 @@ broad_calling_intervals_path = 'gs://broad-ukbb/resources/broad_exome_calling.in
 lcr_intervals_path = 'gs://broad-ukbb/resources/LCRFromHengH38_chr1-22_XY.txt'
 hg38_selfchain_path = 'gs://broad-ukbb/resources/hg38_self_chain_nosamepos_withalts_gt10k.bed.gz'
 hg38_segdup_path = 'gs://broad-ukbb/resources/hg38.segdups_sorted_merged_gt10kb.bed.gz'
-
+truth_ht_path = 'gs://gnomad-public/resources/grch38/truth_sites.ht'
 
 ukbb_calling_intervals_summary = 'gs://broad-ukbb/resources/ukbb_exome_calling_intervals.summary.txt'
 
