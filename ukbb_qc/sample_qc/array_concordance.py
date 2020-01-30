@@ -225,30 +225,6 @@ def main(args):
             urc.array_sample_concordance_path(data_source, freeze), overwrite=overwrite
         )
 
-    if args.make_variant_qc_ht:
-        variants = hl.read_table(urc.array_variant_concordance_path(data_source, freeze))
-        callrate_cutoff = variants.callrate_cutoff.take(1)[0]
-        af_cutoff = variants.af_cutoff.take(1)[0]
-
-        exome_mt = hl.read_matrix_table(
-            urc.get_mt_checkpoint_path(
-                data_source,
-                freeze,
-                name=f"exome_subset_concordance_callrate_{callrate_cutoff}_af_{af_cutoff}"
-            )
-        )
-
-        variants = variants.annotate(AF=exome_mt.rows()[variants.key].variant_qc.AF[1])
-        variants = variants.filter(
-            (variants.prop_gt_con_non_ref > args.concordance_cutoff)
-            & (variants.AF > args.variant_qc_af_cutoff)
-        )
-        variants = variants.repartition(1000)
-        variants.write(
-            f"{urc.variant_qc_prefix(data_source, freeze)}/array_variant_concordance_callrate_{callrate_cutoff}_non_ref_con_{args.concordance_cutoff}_AF_{args.variant_qc_af_cutoff}.ht",
-            overwrite=overwrite
-        )
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -311,23 +287,6 @@ if __name__ == "__main__":
         help="Percent samples at 20X to filter intervals",
         default=0.85,
         type=float
-    )
-    concordance.add_argument(
-        "--make_variant_qc_ht",
-        help="Make HT for concordance HT for variant QC",
-        action="store_true"
-    )
-    concordance.add_argument(
-        "--concordance_cutoff",
-        help="Array exome concordance cutoff for variant QC HT.",
-        type=float,
-        default=0.9
-    )
-    concordance.add_argument(
-        "--variant_qc_af_cutoff",
-        help="Allele frequency cutoff used for variant QC HT creation, must be equal to or greater than af_cutoff.",
-        type=float,
-        default=0.001
     )
 
     args = parser.parse_args()
