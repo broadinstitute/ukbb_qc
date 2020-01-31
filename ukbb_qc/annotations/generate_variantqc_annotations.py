@@ -45,7 +45,7 @@ def annotate_truth_data(ht: hl.Table, truth_tables: Dict[str, hl.Table]) -> hl.T
     :param truth_tables: A dictionary containing additional truth set hail tables keyed by the annotation to use in HT
     :return: Table with qc annotations
     """
-    truth_ht =  hl.read_table(truth_ht_path)
+    truth_ht = hl.read_table(truth_ht_path)
     ht = ht.join(truth_ht, how="left")
 
     ht = ht.annotate(
@@ -123,17 +123,6 @@ def generate_sibling_singletons(mt, relatedness_ht, num_var_per_sibs_cutoff=None
     return dataset_result
 
 
-def generate_qual_hists(mt: hl.MatrixTable) -> hl.Table:
-    #mt = hl.split_multi_hts(mt)
-    return mt.annotate_rows(
-        gq_hist_alt=hl.agg.filter(mt.GT.is_non_ref(), hl.agg.hist(mt.GQ, 0, 100, 20)),
-        gq_hist_all=hl.agg.hist(mt.GQ, 0, 100, 20),
-        dp_hist_alt=hl.agg.filter(mt.GT.is_non_ref(), hl.agg.hist(mt.DP, 0, 100, 20)),
-        dp_hist_all=hl.agg.hist(mt.DP, 0, 100, 20),
-        ab_hist_alt=hl.agg.filter(mt.GT.is_het(), hl.agg.hist(mt.AD[1] / hl.sum(mt.AD), 0, 1, 20))
-    ).rows()
-
-
 def main(args):
     hl.init(log='/generate_variantqc_annotations.log')
     data_source = args.data_source
@@ -155,14 +144,6 @@ def main(args):
         mt = get_ukbb_data(data_source, freeze, non_refs_only=True, meta_root='meta')
         mt = generate_qc_annotations(mt, all_annotations=args.calculate_all_annotations, medians=args.calculate_medians)
         mt.write(var_annotations_ht_path(data_source, freeze, 'qc_stats'), stage_locally=True, overwrite=args.overwrite)
-
-    if args.generate_qual_hists:  # CPU-hours: 4000 (E), 8000 (G)
-        mt = get_ukbb_data(data_source, freeze, raw=True, split=False)
-        mt = mt.drop('gvcf_info')
-        mt = mt.key_rows_by('locus', 'alleles')
-        mt = hl.experimental.sparse_split_multi(mt)
-        ht = generate_qual_hists(mt)
-        write_temp_gcs(ht, var_annotations_ht_path(data_source, freeze, 'qual_hists'), args.overwrite)
 
     if args.generate_call_stats:
         if data_source == "regeneron":
