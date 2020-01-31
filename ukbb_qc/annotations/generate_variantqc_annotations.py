@@ -128,7 +128,7 @@ def main(args):
     data_source = args.data_source
     freeze = args.freeze
 
-    if args.vep:  # CPU-hours: 250 (E), 600 (G)
+    if args.vep:
         logger.info(f'Running VEP on the MT...')
         ht = get_ukbb_data(data_source, freeze).select_rows()
         ht = vep_or_lookup_vep(ht, reference='GRCh38').write(var_annotations_ht_path(data_source, freeze, 'vep'), args.overwrite)
@@ -146,23 +146,11 @@ def main(args):
         mt.write(var_annotations_ht_path(data_source, freeze, 'qc_stats'), stage_locally=True, overwrite=args.overwrite)
 
     if args.generate_call_stats:
-        if data_source == "regeneron":
-            mt = get_ukbb_data(data_source, freeze)
-            meta_ht = hl.read_table(meta_ht_path(data_source, freeze))
-            meta_ht = meta_ht.annotate(high_quality=~meta_ht.is_filtered)
-            mt = mt.annotate_cols(**{'meta': meta_ht[mt.s]})
-        else:
-            mt = get_ukbb_data(data_source, freeze, meta_root='meta')
+        mt = get_ukbb_data(data_source, freeze, meta_root='meta')
         generate_call_stats(mt).write(var_annotations_ht_path(data_source, freeze, 'call_stats'), overwrite=args.overwrite)
 
-    if args.generate_family_stats:  # CPU-hours: 8K (E), 13K (G)
-        if data_source == "regeneron":
-            mt = get_ukbb_data(data_source, freeze)
-            meta_ht = hl.read_table(meta_ht_path(data_source, freeze))
-            meta_ht = meta_ht.annotate(high_quality=~meta_ht.is_filtered)
-            mt = mt.annotate_cols(**{'meta': meta_ht[mt.s]})
-        else:
-            mt = get_ukbb_data(data_source, freeze, meta_root='meta')
+    if args.generate_family_stats:
+        mt = get_ukbb_data(data_source, freeze, meta_root='meta')
         ht, sample_table = generate_family_stats(mt, inferred_ped_path(data_source, freeze), args.include_adj_family_stats)
         ht.write(var_annotations_ht_path(data_source, freeze, 'family_stats'), stage_locally=True, overwrite=args.overwrite)
         sample_table.write(sample_annotations_table_path(data_source, freeze, 'family_stats'), stage_locally=True, overwrite=args.overwrite)
