@@ -1,5 +1,7 @@
-from gnomad_hail.utils.annotations import * 
-from ukbb_qc.resources import * 
+import argparse
+from gnomad_hail.utils.annotations import *
+import gnomad_hail.resources.grch37 as grch37_resources
+from ukbb_qc.resources.resources import * 
 
 
 logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
@@ -60,7 +62,7 @@ def join_gnomad(ht: hl.Table, data_type: str) -> hl.Table:
     :rtype: Table
     """
     if data_type == 'exomes':
-        gnomad_ht = hl.read_table(get_gnomad_liftover_data_path(f'{data_type}', '2.1.1')).select(
+        gnomad_ht = hl.read_table(grch37_resources.gnomad.liftover(f'{data_type}').path).select(
             'freq', 'popmax', 'faf').select_globals(
             'freq_meta', 'popmax_index_dict', 'faf_index_dict')
         ht = ht.join(gnomad_ht, how='left')
@@ -133,7 +135,7 @@ def main(args):
         write_temp_gcs(ht, var_annotations_ht_path(data_source, freeze, f'ukb_freq_hybrid{"_unrelated" if args.filter_related else ""}'), args.overwrite)
 
     if args.join_gnomad:
-        ht = hl.read_table(var_annotations_ht_path(data_source, freeze, f'ukb_freq{"_unrelated" if args.filter_related else ""}'))
+        ht = hl.read_table(var_annotations_ht_path(data_source, freeze, f'ukb_freq_hybrid{"_unrelated" if args.filter_related else ""}'))
 
         logger.info('Joining UKBB ht to gnomAD exomes and genomes liftover hts')
         ht = join_gnomad(ht, 'exomes')
