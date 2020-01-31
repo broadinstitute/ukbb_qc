@@ -941,6 +941,7 @@ def main(args):
                                              *mt.info.drop('AC', 'AN', 'AF', 'rf_tp_probability', *drop_hists)))
 
         # Add VEP annotations
+        # TODO: After 200K release change this to use vep_csq annotation on the vep HT
         vep_csq_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vep_csq'))
         new_info_dict.update({'vep': {'Description': hl.eval(vep_csq_ht.globals.vep_csq_header)}})
         header_dict = {'info': new_info_dict,
