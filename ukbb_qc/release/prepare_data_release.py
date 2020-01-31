@@ -227,13 +227,14 @@ def prepare_annotations(
 
     logger.info('Creating adj quality hists')
     mt_filt = filter_to_adj(mt)
-    mt_filt = mt_filt.annotate_rows(qual_hists=qual_hist_expr(mt_filt.GT, mt_filt.GQ, mt_filt.DP, mt_filt.AD))
-    ht = mt.rows().select('qual_hists')
-    mt = mt.annotate_rows(adj_qual_hists=ht[mt.row_key].qual_hists)
+    mt_filt = mt_filt.select_rows()
+    mt_filt = mt_filt.annotate_rows(**qual_hist_expr(mt_filt.GT, mt_filt.GQ, mt_filt.DP, mt_filt.AD))
+    ht = mt_filt.rows()
+    mt = mt.annotate_rows(adj_qual_hists=ht[mt.row_key])
 
     mt = mt.annotate_rows(qual_hists=hist_ht[mt.row_key], vep=vep_ht[mt.row_key].vep,
                      allele_info=allele_ht[mt.row_key].allele_data, vqsr=vqsr_ht[mt.row_key].info, rsid=dbsnp_ht[mt.row_key].rsid)
-    mt = mt.annotate_globals(rf=rf_ht.index_globals())
+    mt = mt.annotate_globals(rf_globals=rf_ht.index_globals())
     logger.info(f'mt count: {mt.count()}')
     return mt
 
