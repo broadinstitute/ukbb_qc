@@ -1,5 +1,6 @@
 from gnomad_hail.utils import rf
-from gnomad_qc.variant_qc.variantqc import sample_rf_training_examples
+from gnomad_hail.utils.generic import bi_allelic_site_inbreeding_expr
+from gnomad_qc.anno import sample_rf_training_examples
 from ukbb_qc.utils import annotate_interval_qc_filter
 from variant_qc.variant_qc_functions import *
 import json
@@ -8,44 +9,6 @@ import uuid
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("run_ukbb_variant_qc")
 logger.setLevel(logging.INFO)
-
-
-LABEL_COL = 'rf_label'
-TRAIN_COL = 'rf_train'
-prediction_col_name = 'rf_prediction'
-
-SITES_FEATURES = [
-    'info_MQRankSum',
-    'info_SOR',
-    'inbreeding_coeff',
-    'info_ReadPosRankSum'
-]
-
-VQSR_FEATURES = [
-    'info_FS',
-    'info_QD',
-    'info_MQ',
-    'info_VarDP'
-]
-
-ALLELE_FEATURES = [
-    'variant_type',
-    'allele_type',
-    'n_alt_alleles',
-    'was_mixed',
-    'has_star',
-    'qd',
-    'pab_max'
-]
-
-MEDIAN_FEATURES = [
-    'gq_median',
-    'dp_median',
-    'nrq_median',
-    'ab_median'
-]
-
-INBREEDING_COEFF_HARD_CUTOFF = -0.3
 
 
 def get_rf_runs(data_source: str, freeze: int = CURRENT_FREEZE) -> Dict:
@@ -66,33 +29,6 @@ def get_rf_runs(data_source: str, freeze: int = CURRENT_FREEZE) -> Dict:
     else:
         logger.warning(f"File {json_file} could not be found. Returning empty RF run hash dict.")
         return {}
-
-# TODO: I think we should try to use the one in gnomad_hail utils, if the 0 valies is a problem, should we change the utils code?
-def bi_allelic_site_inbreeding_expr(call: hl.expr.CallExpression) -> hl.expr.Float32Expression:
-    """
-    Return the site inbreeding coefficient as an expression to be computed on a MatrixTable.
-    This is implemented based on the GATK InbreedingCoeff metric:
-    https://software.broadinstitute.org/gatk/documentation/article.php?id=8032
-    Note
-    ----
-    The computation is run based on the counts of alternate alleles and thus should only be run on bi-allelic sites.
-    :param CallExpression call: Expression giving the calls in the MT
-    :return: Site inbreeding coefficient expression
-    :rtype: Float32Expression
-    """
-
-    def inbreeding_coeff(gt_counts: hl.expr.DictExpression) -> hl.expr.Float32Expression:
-        n = gt_counts.get(0, 0) + gt_counts.get(1, 0) + gt_counts.get(2, 0)
-        pre_p = (2 * gt_counts.get(0, 0) + gt_counts.get(1, 0)) / (2 * n)
-        p = hl.cond(pre_p > 0, pre_p, 1e-9)  # NOTE: this is to avoid NaNs in some inbreeding_coeff valuesi
-        q = (2 * gt_counts.get(2, 0) + gt_counts.get(1, 0)) / (2 * n)
-        return 1 - (gt_counts.get(1, 0) / (2 * p * q * n))
-
-    return hl.bind(
-        inbreeding_coeff,
-        hl.agg.counter(call.n_alt_alleles())
-    )
-
 
 def get_features_list(sites_features: bool, allele_features: bool, vqsr_features: bool = False, median_features: bool = False) -> List[str]:
     """
@@ -140,89 +76,6 @@ def create_rf_ht(
     :return: Hail Table ready for RF
     :rtype: Table
     """
-
-    def get_site_features_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression]:
-        """
-        Returns expressions to annotate site-level features used by both VQSR and RF.
-
-        :param Table ht: Table to create annotation expression for.
-        :return: Dict with keys containing column names and values expressions
-        :rtype: Dict of str: Expression
-        """
-        return dict(zip(SITES_FEATURES, [
-            ht.info.MQRankSum,
-            ht.info.SOR,
-            ht.inbreeding_coeff,
-            ht.info.ReadPosRankSum
-        ]))
-
-    def get_vqsr_features_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression]:
-        """
-        Returns expressions to annotate site-level features only used by VQSRs
-
-        :param Table ht: Table to create annotation expression for.
-        :return: Dict with keys containing column names and values expressions
-        :rtype: Dict of str: Expression
-        """
-        return dict(zip(VQSR_FEATURES, [
-            ht.info.FS,
-            ht.info.QD,
-            ht.info.MQ,
-            ht.info.VarDP
-        ]))
-
-    def get_allele_features_expr(ht: hl.Table, qc_stats_group_index: int) -> Dict[str, hl.expr.Expression]:
-        """
-        Returns expressions to annotate allele-level features (RF only)
-
-        :param Table ht: Table to create annotation expression for.
-        :param int qc_stats_group_index: Index of group to get stats for
-        :return: Dict with keys containing column names and values expressions
-        :rtype: Dict of str: Expression
-        """
-        return dict(zip(ALLELE_FEATURES, [
-            ht.allele_data.variant_type,
-            ht.allele_data.allele_type,
-            ht.allele_data.n_alt_alleles,
-            ht.allele_data.was_mixed,
-            ht.allele_data.has_star,
-            ht.qc_stats[qc_stats_group_index].qd,
-            ht.qc_stats[qc_stats_group_index].pab.max
-        ]))
-
-    def get_median_features_expr(ht: hl.Table, qc_stats_group_index: int) -> Dict[str, hl.expr.Expression]:
-        """
-        Returns expressions to annotate 2.0.2 allele-specific features (RF only)
-
-        :param Table ht: Table to create annotation expression for.
-        :param int qc_stats_group_index: Index of group to get stats for
-        :return: Dict with keys containing column names and values expressions
-        :rtype: Dict of str: Expression
-        """
-        return dict(zip(MEDIAN_FEATURES, [
-            ht.qc_stats[qc_stats_group_index].gq_median,
-            ht.qc_stats[qc_stats_group_index].dp_median,
-            ht.qc_stats[qc_stats_group_index].nrq_median,
-            ht.qc_stats[qc_stats_group_index].ab_median
-        ]))
-
-    def get_training_sites_expr(ht: hl.Table, family_stats_group_index: int) -> Dict[str, hl.expr.Expression]:
-        """
-        Returns expressions to columns to select training examples
-
-        :param Table ht: Table to create annotation expression for.
-        :param int family_stats_group_index: Index of group to get stats for
-        :return: Dict with keys containing column names and values expressions
-        :rtype: Dict of str: Expression
-        """
-        return {
-            'transmitted_singleton': (ht.family_stats[family_stats_group_index].tdt.t == 1) &
-                                     (ht.family_stats[family_stats_group_index].unrelated_qc_callstats.AC[1] == 1),
-            'fail_hard_filters': (ht.info.QD < 2) | (ht.info.FS > 60) | (ht.info.MQ < 30)
-            # 'info_POSITIVE_TRAIN_SITE': ht.info.POSITIVE_TRAIN_SITE,
-            # 'info_NEGATIVE_TRAIN_SITE': ht.info.NEGATIVE_TRAIN_SITE
-        }
-
     mt = get_ukbb_data(data_source, freeze, meta_root='meta')
     ht_family_stats = hl.read_table(var_annotations_ht_path(data_source, freeze, 'family_stats'))
     ht_qc_stats = hl.read_table(var_annotations_ht_path(data_source, freeze, 'qc_stats'))
