@@ -1,4 +1,5 @@
 #from gnomad_hail import *
+from gnomad_hail.utils.generic import rep_on_read
 from gnomad_hail.utils.variant_qc import *
 from gnomad_qc.v2.variant_qc.prepare_data_release import *
 from gnomad_hail.utils.sample_qc import add_filters_expr 
@@ -844,9 +845,10 @@ def main(args):
         logger.info('Getting age hist data')
         age_hist_data = get_age_distributions(data_source, freeze)
 
-        logger.info('Getting raw mt with metadata information')
+        logger.info('Getting raw mt')
         # NOTE reading in raw to return all samples/variants with fields for adj 
-        mt = get_ukbb_data(data_source, freeze, split=False, raw=True, meta_root='meta')
+        #mt = get_ukbb_data(data_source, freeze, split=False, raw=True, meta_root='meta')
+        mt = rep_on_read(get_ukbb_data_path(data_source, freeze, hardcalls=False, split=False), 30000)
 
         logger.info('Dropping gVCF info (selecting all other entries) and keying by locus/alleles')
         mt = mt.select_entries('DP', 'GQ', 'LA', 'LAD', 'LGT', 'LPGT', 'LPL', 'MIN_DP', 'PID', 'RGQ', 'SB')
@@ -871,7 +873,6 @@ def main(args):
                                 make_index_dict(freq_ht), allele_ht, vqsr_ht)
         mt.describe()
         mt = mt.annotate_globals(age_distribution=age_hist_data)
-        mt = mt.naive_coalesce(20000)
         mt.write(release_mt_path(data_source, freeze), args.overwrite)
 
 
