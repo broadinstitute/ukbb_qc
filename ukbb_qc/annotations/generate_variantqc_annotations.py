@@ -1,7 +1,7 @@
 from gnomad_hail import *
 from gnomad_qc.annotations.generate_qc_annotations import *
 import gnomad_hail.resources.basics as gres
-from gnomad_hail.utils.generic import vep_or_lookup_vep
+from gnomad_hail.utils.generic import vep_or_lookup_vep, vep_struct_to_csq
 from ukbb_qc.resources.resources import *
 from ukbb_qc.utils.utils import *
 import argparse
@@ -141,12 +141,10 @@ def main(args):
 
     if args.vep:  # CPU-hours: 250 (E), 600 (G)
         logger.info(f'Running VEP on the MT...')
-        ht = get_ukbb_data(data_source, freeze).rows().select()
-        vep_or_lookup_vep(ht, reference='GRCh38').write(var_annotations_ht_path(data_source, freeze, 'vep'), args.overwrite)
-
-        # TODO: Check to see if csq can be created from HT vep
-        ht = get_ukbb_data(data_source, freeze).rows().select()
-        hl.vep(ht, gres.vep_config_path('GRCh38'), csq=True).write(var_annotations_ht_path(data_source, freeze, 'vep_csq'), args.overwrite)
+        ht = get_ukbb_data(data_source, freeze).select_rows()
+        ht = vep_or_lookup_vep(ht, reference='GRCh38').write(var_annotations_ht_path(data_source, freeze, 'vep'), args.overwrite)
+        ht = ht.annotate(vep_csq=vep_struct_to_csq(ht.vep))
+        ht.write(var_annotations_ht_path(data_source, freeze, 'vep'), args.overwrite)
 
     if args.generate_allele_data:
         mt = get_ukbb_data(data_source, freeze, split=False)
