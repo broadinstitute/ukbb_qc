@@ -3,7 +3,9 @@ from gnomad_hail.utils.variant_qc import *
 from gnomad_qc.v2.variant_qc.prepare_data_release import *
 from gnomad_hail.utils.sample_qc import add_filters_expr 
 from gnomad_hail.utils.gnomad_functions import filter_to_adj
+from gnomad_hail.utils.annotations import qual_hist_expr
 from ukbb_qc.resources.resources import *
+from ukbb_qc.utils.utils import annotate_interval_qc_filter
 import copy
 import itertools
 
@@ -145,14 +147,12 @@ def flag_problematic_regions(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.Mat
     lcr_intervals = get_lcr_intervals()
     region_filters = {
         'lcr': hl.is_defined(lcr_intervals[t.locus]),
-        'fail_interval_qc': ~(t.interval_qc_pass)
+        'fail_interval_qc': ~(t.rf.interval_qc_pass)
     }
-
+    
     if isinstance(t, hl.Table):
-        t = t.annotate(nonpar=(t.locus.in_x_nonpar() | t.locus.in_y_nonpar()))
         t = t.annotate(region_flag=add_filters_expr(region_filters, None))
     else:
-        t = t.annotate_rows(nonpar=(t.locus.in_x_nonpar() | t.locus.in_y_nonpar()))
         t = t.annotate_rows(region_flag=add_filters_expr(region_filters, None))
 
     return t
@@ -203,30 +203,33 @@ def prepare_annotations(
     mt = mt.filter_rows(~vqsr_ht[mt.row_key].filters.contains("LowQual"))
     logger.info(f'Count after filtering out low QUAL variants {mt.count()}')
 
-    logger.info(f'freq_ht count before filtering out chrM: {freq_ht.count()}')
-    freq_ht = hl.filter_intervals(freq_ht, [hl.parse_locus_interval('chrM')], keep=False)
+    logger.info(f'unrelated freq_ht count before filtering out chrM: {unrelated_freq_ht.count()}')
+    unrelated_freq_ht = hl.filter_intervals(unrelated_freq_ht, [hl.parse_locus_interval('chrM')], keep=False)
     raw_idx = index_dict['raw']
-    freq_ht = freq_ht.filter(freq_ht.freq[raw_idx].AC <= 0, keep=False)
-    logger.info(f'freq_ht count after filtering out chrM and AC <= 1: {freq_ht.count()}')
+    unrelated_freq_ht = unrelated_freq_ht.filter(unrelated_freq_ht.freq[raw_idx].AC <= 0, keep=False)
+    logger.info(f'unlreated freq_ht count after filtering out chrM and AC <= 1: {unrelated_freq_ht.count()}')
 
     logger.info('Annotating mt with rf ht and flagging problematic regions')
     mt = mt.annotate_rows(rf=rf_ht[mt.row_key])
-    mt = mt.transmute(interval_qc_pass=t.rf.interval_qc_pass)
     mt = flag_problematic_regions(mt)
-    
+    mt = mt.transmute_rows(rf=mt.rf.drop('interval_qc_pass'))
+    mt.describe()
+ 
     logger.info('Annotating cohort frequencies')
     mt = mt.annotate_rows(**freq_ht[mt.row_key])
     mt = mt.transmute_rows(cohort_freq=mt.freq)
-    mt = mt.annotate_globals(cohort_freq_globals=freq_ht.index_globals())
+    mt = mt.annotate_globals(**freq_ht.index_globals())
+    mt = mt.transmute_globals(cohort_freq_meta=mt.freq_meta)
 
     logger.info('Annotating unrelated frequencies')
     mt = mt.annotate_rows(**unrelated_freq_ht[mt.row_key])
     mt = mt.annotate_globals(**unrelated_freq_ht.index_globals())
 
     logger.info('Creating adj quality hists')
-    mt_filt = mt.filter_to_adj(mt)
+    mt_filt = filter_to_adj(mt)
     mt_filt = mt_filt.annotate_rows(qual_hists=qual_hist_expr(mt_filt.GT, mt_filt.GQ, mt_filt.DP, mt_filt.AD))
-    mt = mt.annotate_rows(adj_qual_hists=mt_filt[mt.row_key].qual_hists)
+    ht = mt.rows().select('qual_hists')
+    mt = mt.annotate_rows(adj_qual_hists=ht[mt.row_key].qual_hists)
 
     mt = mt.annotate_rows(qual_hists=hist_ht[mt.row_key], vep=vep_ht[mt.row_key].vep,
                      allele_info=allele_ht[mt.row_key].allele_data, vqsr=vqsr_ht[mt.row_key].info, rsid=dbsnp_ht[mt.row_key].rsid)
@@ -863,7 +866,8 @@ def main(args):
         vqsr_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vqsr'))
         
         logger.info('Adding annotations...')
-        mt = prepare_annotations(mt, freq_ht, unrelated_freq_ht, rf_ht, vep_ht, dbsnp_ht, hist_ht, make_index_dict(freq_ht), allele_ht, vqsr_ht)
+        mt = prepare_annotations(mt, freq_ht, unrelated_freq_ht, rf_ht, vep_ht, dbsnp_ht, hist_ht, 
+                                make_index_dict(freq_ht), allele_ht, vqsr_ht)
         mt.describe()
         mt = mt.annotate_globals(age_distribution=age_hist_data)
         mt = mt.naive_coalesce(20000)
@@ -905,6 +909,9 @@ def main(args):
 
         # Construct INFO field
         mt = mt.transmute_rows(info_InbreedingCoeff=mt.inbreeding_coeff)
+         # add non par annotation back
+        mt = mt.annotate_rows(nonpar=(mt.locus.in_x_nonpar() | mt.locus.in_y_nonpar()))
+
         mt = mt.annotate_rows(info=hl.struct(**make_info_expr(mt)))
         mt = mt.annotate_rows(info=mt.info.annotate(**call_unfurl_nested_annotations(mt, gnomad=False, genome=False)))
         mt = mt.annotate_rows(info=mt.info.annotate(**call_unfurl_nested_annotations(mt, gnomad=True, genome=True)))
@@ -913,6 +920,7 @@ def main(args):
         
         # Select relevant fields for VCF export
         mt = mt.select_rows('info', 'filters', 'rsid', 'qual', 'vep')
+        mt = mt.drop('nonpar')
         mt.checkpoint(release_mt_path(data_source, freeze, temp=True), args.overwrite)
 
         # Remove gnomad_ prefix for VCF export
@@ -943,7 +951,9 @@ def main(args):
         # Export VCFs by chromosome
         mt = mt.key_rows_by(locus=hl.locus(mt.locus.contig, mt.locus.position),
                        alleles=mt.alleles)
-
+        
+        # add non par annotation back
+        mt = mt.annotate_rows(nonpar=(mt.locus.in_x_nonpar() | mt.locus.in_y_nonpar()))
         logger.info(f'full mt count: {mt.count()}')
         # NOTE: need to run this on all workers
         for contig in contigs:
