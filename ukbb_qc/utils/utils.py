@@ -1,6 +1,5 @@
 import logging
-from ukbb_qc.resources import *
-import hail as hl
+from ukbb_qc.resources.resources import *
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
