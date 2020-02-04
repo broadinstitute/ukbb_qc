@@ -9,6 +9,39 @@ logger = logging.getLogger("generate_frequency_data")
 logger.setLevel(logging.INFO)
 
 
+def get_hists(mt: hl.MatrixTable) -> hl.MatrixTable:
+    '''
+    Gets age (at recruitment; field 21022) and qual hists for UKBB
+
+    :param MatrixTable mt: Input MatrixTable
+    :return: MatrixTable with age and qual hists
+    :rtype: MatrixTable
+    '''
+    logger.info('Importing UKBB phenotypes table')
+    ukbb_phenotypes = hl.import_table(ukbb_phenotype_path, impute=True)
+    ukbb_phenotypes = ukbb_phenotypes.key_by(s_old=hl.str(ukbb_phenotypes['f.eid']))
+    ukbb_age = ukbb_phenotypes.select('f.21022.0.0')
+    ukbb_age = ukbb_age.transmute(age=ukbb_age['f.21022.0.0'])
+    mt = mt.annotate_cols(**ukbb_age[mt.meta.ukbb_app_26041_id])
+    mt = mt.annotate_rows(**age_hists_expr(mt.adj, mt.GT, mt.age))
+
+    logger.info('Annotating with qual hists (on raw data)')
+    mt = mt.annotate_rows(
+        **qual_hist_expr(mt.GT, mt.GQ, mt.DP, mt.AD)
+    )
+
+    logger.info('Annotating with qual hists (adj)')
+    mt_filt = filter_to_adj(mt)
+    mt_filt = mt_filt.select_rows()
+    mt_filt = mt_filt.annotate_rows(
+        **qual_hist_expr(mt_filt.GT, mt_filt.GQ, mt_filt.DP, mt_filt.AD)
+    )
+    ht = mt_filt.rows()
+    mt = mt.annotate_rows(adj_qual_hists=ht[mt.row_key])
+
+    return mt
+
+
 def generate_frequency_data(mt: hl.MatrixTable, POPS_TO_REMOVE_FOR_POPMAX: List[str],
                             calculate_by_platform: bool = False,
                             ) -> hl.Table:
@@ -43,11 +76,8 @@ def generate_frequency_data(mt: hl.MatrixTable, POPS_TO_REMOVE_FOR_POPMAX: List[
     )
     mt = mt.annotate_globals(faf_meta=faf_meta)
 
-    # Annotate quality metrics histograms, as these also require densifying
-    # NOTE skipping for tranche 2, as these were already generated
-    #mt = mt.annotate_rows(
-    #    **qual_hist_expr(mt.GT, mt.GQ, mt.DP, mt.AD)
-    #)
+    logger.info('Getting hists')
+    mt = get_hists(mt)
 
     return mt.rows()
 
