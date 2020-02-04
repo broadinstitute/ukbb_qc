@@ -1,5 +1,5 @@
 import argparse
-from gnomad_hail.utils.annotations import *
+from gnomad_hail.utils.annotations import age_hists_expr,annotate_freq,qual_hist_expr
 import gnomad_hail.resources.grch37 as grch37_resources
 from ukbb_qc.resources.resources import * 
 
