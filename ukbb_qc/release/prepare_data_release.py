@@ -1,14 +1,13 @@
-#from gnomad_hail import *
 from gnomad_hail.utils.generic import rep_on_read
-from gnomad_hail.utils.variant_qc import *
-from gnomad_qc.v2.variant_qc.prepare_data_release import *
+#from gnomad_hail.utils.variant_qc import *
+from gnomad_qc.v2.variant_qc.prepare_data_release import generic_field_check,index_globals,make_filter_dict,make_filters_sanity_check_expr,make_index_dict,make_label_combos
 from gnomad_hail.utils.sample_qc import add_filters_expr 
 from gnomad_hail.utils.gnomad_functions import filter_to_adj
 from gnomad_hail.utils.annotations import qual_hist_expr,age_hists_expr
 from ukbb_qc.resources.resources import *
 from ukbb_qc.utils.utils import annotate_interval_qc_filter
 import copy
-import itertools
+#import itertools
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -250,19 +249,19 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
     '''
     info_dict = {
         'FS': t.rf.info_FS, 
-        'AS_InbreedingCoeff': t.rf.inbreeding_coeff, 
+        'InbreedingCoeff': t.rf.inbreeding_coeff, 
         'MQ': t.rf.info_MQ, 
         'MQRankSum': t.rf.info_MQRankSum, 
         'QD': t.rf.info_QD,
         'ReadPosRankSum': t.rf.info_ReadPosRankSum,
         'SOR': t.rf.info_SOR,
-        'VQSR_POSITIVE_TRAIN_SITE': t.vqsr.info.POSITIVE_TRAIN_SITE,
-        'VQSR_NEGATIVE_TRAIN_SITE': t.vqsr.info.NEGATIVE_TRAIN_SITE,
-        'AS_BaseQRankSum': t.vqsr.info.AS_BaseQRankSum,
+        'VQSR_POSITIVE_TRAIN_SITE': t.vqsr.POSITIVE_TRAIN_SITE,
+        'VQSR_NEGATIVE_TRAIN_SITE': t.vqsr.NEGATIVE_TRAIN_SITE,
+        'AS_BaseQRankSum': t.vqsr.AS_BaseQRankSum,
         'VarDP': t.rf.info_VarDP,
-        'AS_VarDP': t.vqsr.info.AS_VarDP,
-        'AS_VQSLOD': t.vqsr.info.AS_VQSLOD,
-        'AS_VQSR_culprit': t.vqsr.info.AS_culprit,
+        'AS_VarDP': t.vqsr.AS_VarDP,
+        'AS_VQSLOD': t.vqsr.AS_VQSLOD,
+        'AS_VQSR_culprit': t.vqsr.AS_culprit,
         'lcr': t.region_flag.contains('lcr'),
         'nonpar': t.nonpar,
         'rf_positive_label': t.rf.tp,
@@ -276,19 +275,20 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
         'allele_type': t.allele_info.allele_type,
         'n_alt_alleles': t.allele_info.n_alt_alleles,
         'was_mixed': t.allele_info.was_mixed,
-        'has_star': t.allel_info.has_star,
+        'has_star': t.allele_info.has_star,
         'pab_max': t.rf.pab_max,
     }
     for hist in HISTS:
         for prefix in ['adj_qual_hists', 'qual_hists']:
+            hist_name = hist
             if 'adj' in prefix:
-                hist = f'{hist}_adj'
+                hist_name = f'{hist}_adj'
 
             hist_dict = {
-                f'{hist}_bin_freq': hl.delimit(t[hist].bin_freq, delimiter="|"),
-                f'{hist}_bin_edges': hl.delimit(t[hist].bin_edges, delimiter="|"),
-                f'{hist}_n_smaller': t[hist_field].n_smaller,
-                f'{hist}_n_larger': t[hist_field].n_larger
+                f'{hist_name}_bin_freq': hl.delimit(t[prefix][hist].bin_freq, delimiter="|"),
+                f'{hist_name}_bin_edges': hl.delimit(t[prefix][hist].bin_edges, delimiter="|"),
+                f'{hist_name}_n_smaller': t[prefix][hist].n_smaller,
+                f'{hist_name}_n_larger': t[prefix][hist].n_larger
             }
             info_dict.update(hist_dict)
     return info_dict
@@ -619,19 +619,6 @@ def make_combo_header_text(preposition, group_types, combo_fields, prefix, faf=F
     return header_text
 
 
-def make_index_dict(ht):
-    '''
-    Create a look-up Dictionary for entries contained in the frequency annotation array
-    :param MatrixTable/Table t: Table or MatrixTable containing freq_meta global annotation to be indexed
-    :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
-        of each grouping entry in the frequency array
-    :rtype: Dict of str: int
-    '''
-    freq_meta = hl.eval(ht.globals.freq_meta)
-    index_dict = make_freq_meta_index_dict(freq_meta)
-    return index_dict
-
-
 def set_female_y_metrics_to_na(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTable, hl.Table]:
     '''
     Set AC, AN, and nhomalt Y variant annotations for females to NA (instead of 0)
@@ -645,7 +632,7 @@ def set_female_y_metrics_to_na(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.M
 
     female_metrics_dict = {}
     for metric in female_metrics:
-        female_metrics_dict.update({f'{metric}': hl.cond(t.locus.contig == 'Y', hl.null(hl.tint32), t.info[f'{metric}'])})
+        female_metrics_dict.update({f'{metric}': hl.cond(t.locus.contig == 'chrY', hl.null(hl.tint32), t.info[f'{metric}'])})
     return t.annotate(info=t.info.annotate(**female_metrics_dict)) if isinstance(t, hl.Table) else t.annotate_rows(info=t.info.annotate(**female_metrics_dict))
 
 
@@ -990,13 +977,15 @@ def main(args):
         new_info_dict = {i.replace('_adj', '').replace('_adj_', ''): j for i,j in INFO_DICT.items()}
         new_info_dict.update(make_hist_dict(bin_edges, adj=True))
         logger.info(new_info_dict['dp_hist_alt_adj_bin_freq'])
+        logger.info(new_info_dict['dp_hist_alt_bin_freq'])
 
         # Construct INFO field
         mt = mt.annotate_rows(info_InbreedingCoeff=mt.rf.inbreeding_coeff)
-        mt = mt.transmute_rows(rf=mt.rf.drop('inbreeding_coeff'))
+        mt.describe()
+        #mt = mt.transmute_rows(rf=mt.rf.drop('inbreeding_coeff'))
 
          # add non par annotation back
-        #mt = mt.annotate_rows(nonpar=(mt.locus.in_x_nonpar() | mt.locus.in_y_nonpar()))
+        mt = mt.annotate_rows(nonpar=(mt.locus.in_x_nonpar() | mt.locus.in_y_nonpar()))
 
         mt = mt.annotate_rows(info=hl.struct(**make_info_expr(mt)))
         mt = mt.annotate_rows(info=mt.info.annotate(**call_unfurl_nested_annotations(mt, gnomad=False, genome=False)))
@@ -1017,9 +1006,10 @@ def main(args):
 
         mt = mt.drop('vep')
         row_annots = list(mt.row.info)
-        print(row_annots)
+        new_row_annots = row_annots
+        print(new_row_annots)
         #new_row_annots = [x.replace('adj_', '').replace('_adj', '').replace('_adj_', '').replace('raw_', '') for x in row_annots]
-        new_row_annots = [x.replace('_adj', '').replace('_adj_', '')for x in row_annots]
+        #new_row_annots = [x.replace('_adj', '').replace('_adj_', '')for x in row_annots]
 
         info_annot_mapping = dict(zip(new_row_annots, [mt.info[f'{x}'] for x in row_annots]))
         mt = mt.transmute_rows(info=hl.struct(**info_annot_mapping))
@@ -1043,7 +1033,7 @@ def main(args):
                        alleles=mt.alleles)
 
         # add non par annotation back
-        mt = mt.annotate_rows(nonpar=(mt.locus.in_x_nonpar() | mt.locus.in_y_nonpar()))
+        #mt = mt.annotate_rows(nonpar=(mt.locus.in_x_nonpar() | mt.locus.in_y_nonpar()))
         mt.describe()
 
         logger.info(f'full mt count: {mt.count()}')
@@ -1052,6 +1042,7 @@ def main(args):
             contig_mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
             logger.info(f'{contig} mt count: {contig_mt.count()}')
             hl.export_vcf(contig_mt, release_vcf_path(data_source, freeze, contig=contig), metadata=header_dict)
+
 
     if args.prepare_browser_ht:
         mt = hl.read_matrix_table(release_mt_path(data_source, freeze))
