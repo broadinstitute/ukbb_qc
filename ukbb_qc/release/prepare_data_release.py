@@ -1,13 +1,10 @@
 from gnomad_hail.utils.generic import rep_on_read
-#from gnomad_hail.utils.variant_qc import *
 from gnomad_qc.v2.variant_qc.prepare_data_release import (generic_field_check, index_globals, make_filter_dict, 
                                                         make_filters_sanity_check_expr, make_label_combos)
 from gnomad_hail.utils.sample_qc import add_filters_expr 
 from gnomad_hail.utils.gnomad_functions import filter_to_adj
 from gnomad_hail.utils.annotations import qual_hist_expr,age_hists_expr
 from ukbb_qc.resources.resources import *
-#import copy
-#import itertools
 
 
 logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
@@ -21,13 +18,13 @@ SEXES = ['male', 'female']
 POPS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', 'afr', 'amr', 'asj', 'eas', 'fin', 'nfe', 'oth', 'sas']
 FAF_POPS = ['0', '5', '6', '13', 'nfe']
 
-# gnomad globals
+# gnomAD globals
 GNOMAD_POPS = ['afr', 'amr', 'asj', 'eas', 'fin', 'nfe', 'oth', 'sas']
 GNOMAD_FAF_POPS = ['afr', 'amr', 'eas', 'nfe', 'sas']
 GNOMAD_NFE_SUBPOPS = ['onf', 'bgr', 'swe', 'nwe', 'seu', 'est']
 GNOMAD_EAS_SUBPOPS = ['kor', 'oea', 'jpn']
 
-# globals for both UKB and gnomad
+# globals for both UKB and gnomAD
 HISTS = ['gq_hist_alt', 'gq_hist_all', 'dp_hist_alt', 'dp_hist_all', 'ab_hist_alt']
 SORT_ORDER = ['popmax', 'group', 'pop', 'subpop', 'sex']
 
@@ -82,7 +79,6 @@ pop_names = {
     'unk': 'Unknown'
 }
 
-
 # NOTE moved this here from common code to update a few fields, also removed segdup, decoy descriptions
 INFO_DICT = {
     'FS': {"Description": "Phred-scaled p-value of Fisher's exact test for strand bias"},
@@ -121,7 +117,6 @@ INFO_DICT = {
     'has_star': {"Description": "Variant locus coincides with a spanning deletion (represented by a star) observed elsewhere in the callset"},
     'pab_max': {"Number": "A", "Description": "Maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of AB=0.5"},
 }
-
 
 FORMAT_DICT = {
         'GT': {'Description': 'Genotype', 'Number': '1', 'Type': 'String'},
@@ -198,20 +193,20 @@ def prepare_annotations(
                                                 'AS_culprit', 'AS_BaseQRankSum', 'AS_VarDP')).drop('rsid', 'was_split')
     vqsr_ht = vqsr_ht.annotate(
         info=vqsr_ht.info.annotate(
-        **{f: [vqsr_ht.info[f][vqsr_ht.a_index - 1]] for f in vqsr_ht.info if f.startswith("AC") or 
-        (f.startswith("AS_") and not f == 'AS_SB_TABLE')}
+        **{f: [vqsr_ht.info[f][vqsr_ht.a_index - 1]] for f in vqsr_ht.info if f.startswith('AC') or 
+        (f.startswith('AS_') and not f == 'AS_SB_TABLE')}
         )
     )
         
     logger.info('Filtering out low QUAL variants')
-    mt = mt.filter_rows(~vqsr_ht[mt.row_key].filters.contains("LowQual"))
+    mt = mt.filter_rows(~vqsr_ht[mt.row_key].filters.contains('LowQual'))
     logger.info(f'Count after filtering out low QUAL variants {mt.count()}')
 
-    logger.info(f'unrelated freq_ht count before filtering out chrM: {unrelated_freq_ht.count()}')
+    logger.info(f'Unrelated freq_ht count before filtering out chrM: {unrelated_freq_ht.count()}')
     unrelated_freq_ht = hl.filter_intervals(unrelated_freq_ht, [hl.parse_locus_interval('chrM')], keep=False)
     raw_idx = index_dict['raw']
     unrelated_freq_ht = unrelated_freq_ht.filter(unrelated_freq_ht.freq[raw_idx].AC <= 0, keep=False)
-    logger.info(f'unrelated freq_ht count after filtering out chrM and AC <= 1: {unrelated_freq_ht.count()}')
+    logger.info(f'Unrelated freq_ht count after filtering out chrM and AC <= 1: {unrelated_freq_ht.count()}')
 
     logger.info('Annotating mt with rf ht and flagging problematic regions')
     mt = mt.annotate_rows(rf=rf_ht[mt.row_key])
@@ -246,7 +241,8 @@ def prepare_annotations(
 def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expression]:
     '''
     Make Hail expression for variant annotations to be included in VCF INFO
-    :param Table ht: Table containing variant annotations to be reformatted for VCF export
+
+    :param Table/MatrixTable t: Table/MatrixTable containing variant annotations to be reformatted for VCF export
     :return: Dictionary containing Hail expressions for relevant INFO annotations
     :rtype: Dict of str: Expression
     '''
@@ -297,14 +293,14 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
     return info_dict
 
 
-def make_freq_meta_index_dict(freq_meta: List, gnomad: bool) -> Dict:
+def make_freq_meta_index_dict(freq_meta: List[str], gnomad: bool) -> Dict[str, int]:
     '''
     Make dictionary of the entries in the frequency array annotation, where keys are the grouping combinations and the values
     are the 0-based integer indices
 
     :param list of str freq_meta: Ordered list containing string entries describing all the grouping combinations contained in the
         frequency array annotation
-    :param bool gnomad: Whether to index a gnomad freq meta
+    :param bool gnomad: Whether to index a list from gnomAD
     :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
         of each grouping entry in the frequency array
     :rtype: Dict of str: int
@@ -321,11 +317,11 @@ def make_freq_meta_index_dict(freq_meta: List, gnomad: bool) -> Dict:
     return index_dict
 
 
-def make_info_dict(prefix, label_groups=None, bin_edges=None, faf=False, popmax=False, age_hist_data=None):
+def make_info_dict(prefix, label_groups=None, bin_edges=None, faf=False, popmax=False, age_hist_data=None) -> Dict[str, str]:
     '''
     Generate dictionary of Number and Description attributes to be used in the VCF header
     
-    :param str prefix: gnomAD or empty
+    :param str prefix: gnomAD or empty (empty is for UKB)
     :param dict label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
         e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"])
     :param dict bin_edges: Dictionary keyed by annotation type, with values that reflect the bin edges corresponding to the annotation
@@ -342,6 +338,8 @@ def make_info_dict(prefix, label_groups=None, bin_edges=None, faf=False, popmax=
             popmax_text = ' in gnomAD'
         else:
             popmax_text = '' 
+
+            # only create age hist dict for UKB
             age_hist_dict = {
                 "age_hist_het_bin_freq": {"Number": "A",
                                                     "Description": f"Histogram of ages of heterozygous individuals; bin edges are: {bin_edges['het']}; total number of individuals of any genotype bin: {age_hist_data}"},
@@ -401,7 +399,7 @@ def make_info_dict(prefix, label_groups=None, bin_edges=None, faf=False, popmax=
     return info_dict
 
 
-def make_hist_bin_edges_expr(ht):
+def make_hist_bin_edges_expr(ht) -> Dict[str, str]:
     '''
     Create dictionary containing variant histogram annotations and their associated bin edges, formatted into a string
     separated by pipe delimiters
@@ -413,6 +411,8 @@ def make_hist_bin_edges_expr(ht):
     edges_dict = {'het': '|'.join(map(lambda x: f'{x:.1f}', ht.head(1).age_hist_het.collect()[0].bin_edges)),
                   'hom': '|'.join(map(lambda x: f'{x:.1f}', ht.head(1).age_hist_hom.collect()[0].bin_edges))}
     for hist in HISTS:
+
+        # parse both hists calculated on raw and adj data
         for prefix in ['adj_qual_hists', 'qual_hists']:
             hist_field = f'{prefix}.{hist}'
             hist_name = hist
@@ -424,7 +424,7 @@ def make_hist_bin_edges_expr(ht):
     return edges_dict
 
 
-def make_index_dict(t: Union[hl.MatrixTable, hl.Table], freq_meta_str: str) -> Dict:
+def make_index_dict(t: Union[hl.MatrixTable, hl.Table], freq_meta_str: str) -> Dict[str, int]:
     '''
     Create a look-up Dictionary for entries contained in the frequency annotation array
 
@@ -435,6 +435,7 @@ def make_index_dict(t: Union[hl.MatrixTable, hl.Table], freq_meta_str: str) -> D
     :rtype: Dict of str: int
     '''
     freq_meta = hl.eval(t.globals[freq_meta_str])
+    # check if indexing gnomAD data
     if 'gnomad' in freq_meta_str:
         index_dict = make_freq_meta_index_dict(freq_meta, gnomad=True)
     else:
@@ -442,7 +443,7 @@ def make_index_dict(t: Union[hl.MatrixTable, hl.Table], freq_meta_str: str) -> D
     return index_dict
 
 
-def make_hist_dict(bin_edges: Dict, adj: bool) -> Dict:
+def make_hist_dict(bin_edges: Dict, adj: bool) -> Dict[str, str]:
     '''
     Generate dictionary of Number and Description attributes to be used in the VCF header, specifically for histogram annotations
 
@@ -454,15 +455,19 @@ def make_hist_dict(bin_edges: Dict, adj: bool) -> Dict:
     header_hist_dict = {}
     for hist in HISTS:
 
+        # get hists for raw and adj data
         if adj:
             hist = f'{hist}_adj'
+
         edges = bin_edges[hist]
         hist_fields = hist.split("_")
         hist_text = hist_fields[0].upper()
+
         if hist_fields[2] == "alt":
             hist_text = hist_text + " in heterozygous individuals"
         if adj:
             hist_text = hist_text + " calculated on high quality genotypes"
+
         hist_dict = {
             f'{hist}_bin_freq': {"Number": "A",
                                  "Description": f"Histogram for {hist_text}; bin edges are: {edges}"},
@@ -476,7 +481,7 @@ def make_hist_dict(bin_edges: Dict, adj: bool) -> Dict:
     return header_hist_dict
 
 
-def make_faf_index_dict(t: Union[hl.MatrixTable, hl.Table], subset=None) -> Dict:  # NOTE: label groups: assumes 'adj', plus all pops
+def make_faf_index_dict(t: Union[hl.MatrixTable, hl.Table], subset=None) -> Dict[str, int]:  # NOTE: label groups: assumes 'adj', plus all pops
     '''
     Create a look-up Dictionary for entries contained in the filter allele frequency annotation array
 
@@ -490,9 +495,9 @@ def make_faf_index_dict(t: Union[hl.MatrixTable, hl.Table], subset=None) -> Dict
     combos = combos + ['adj']
     index_dict = {}
     if subset:
-        faf_meta = hl.eval(hl.map(lambda f: f.meta, ht.take(1)[0][subset].faf))
+        faf_meta = hl.eval(hl.map(lambda f: f.meta, t.take(1)[0][subset].faf))
     else:
-        faf_meta = hl.eval(hl.map(lambda f: f.meta, ht.take(1)[0].faf))
+        faf_meta = hl.eval(hl.map(lambda f: f.meta, t.take(1)[0].faf))
 
     for combo in combos:
         combo_fields = combo.split("_")
@@ -502,15 +507,14 @@ def make_faf_index_dict(t: Union[hl.MatrixTable, hl.Table], subset=None) -> Dict
     return index_dict
 
 
-def call_unfurl_nested_annotations(ht, gnomad, genome):
-    return unfurl_nested_annotations(ht, gnomad, genome)
-   
- 
-def unfurl_nested_annotations(ht, gnomad, genome):
+def unfurl_nested_annotations(ht: hl.Table, gnomad: bool, genome: bool) -> Dict[str, hl.expr.Expression]:
     '''
     Create dictionary keyed by the variant annotation labels to be extracted from variant annotation arrays, where the values
     of the dictionary are Hail Expressions describing how to access the corresponding values
+
     :param Table ht: Hail Table containing the nested variant annotation arrays to be unfurled
+    :param bool gnomad: Whether the annotations are from gnomAD
+    :param bool genome: Whether the annotations are from genome data (relevant only to gnomAD data)
     :return: Dictionary containing variant annotations and their corresponding values
     :rtype: Dict of str: Expression
     '''
@@ -632,9 +636,10 @@ def unfurl_nested_annotations(ht, gnomad, genome):
     return expr_dict
 
 
-def make_combo_header_text(preposition, group_types, combo_fields, prefix, faf=False):
+def make_combo_header_text(preposition, group_types, combo_fields, prefix, faf=False) -> str:
     '''
     Programmatically generate text to populate the VCF header description for a given variant annotation with specific groupings and subset
+
     :param str preposition: Relevant preposition to precede automatically generated text
     :param list of str group_types: List of grouping types, e.g. "sex" or "pop"
     :param list of str combo_fields: List of the specific values for each grouping type, for which the text is being generated
@@ -676,6 +681,7 @@ def make_combo_header_text(preposition, group_types, combo_fields, prefix, faf=F
 def set_female_y_metrics_to_na(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTable, hl.Table]:
     '''
     Set AC, AN, and nhomalt Y variant annotations for females to NA (instead of 0)
+
     :param Table/MatrixTable t: Table/MatrixTable containing female variant annotations
     :return: Table/MatrixTable with reset annotations
     :rtype: Table/MatrixTable
@@ -690,7 +696,7 @@ def set_female_y_metrics_to_na(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.M
     return t.annotate(info=t.info.annotate(**female_metrics_dict)) if isinstance(t, hl.Table) else t.annotate_rows(info=t.info.annotate(**female_metrics_dict))
 
 
-def get_age_distributions(data_source, freeze):
+def get_age_distributions(data_source, freeze) -> str:
     """
     Get background distribution of age (field 21022 is age at recruitment)
 
@@ -731,10 +737,11 @@ def get_age_hists(data_source, freeze) -> hl.Table:
     return mt.rows()
 
 
-def sample_sum_check(ht: hl.Table, prefix: str, label_groups: Dict[str, List[str]], verbose: bool, subpop=None):
+def sample_sum_check(ht: hl.Table, prefix: str, label_groups: Dict[str, List[str]], verbose: bool, subpop=None) -> None:
     '''
     Compute afresh the sum of annotations for a specified group of annotations, and compare to the annotated version;
     display results from checking the sum of the specified annotations in the terminal
+
     :param Table ht: Hail Table containing annotations to be summed
     :param str prefix: Subset of gnomAD
     :param dict label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
@@ -768,12 +775,13 @@ def sample_sum_check(ht: hl.Table, prefix: str, label_groups: Dict[str, List[str
                                 [f'info.{prefix}{subfield}_{group}_{subpop}', f'sum_{subfield}_{group}_{alt_groups}'], verbose)
 
 
-def sanity_check_ht(ht: hl.Table, subsets, missingness_threshold=0.5, verbose=False):
+def sanity_check_ht(ht: hl.Table, subsets, missingness_threshold=0.5, verbose=False) -> None:
     '''
     Perform a battery of sanity checks on a specified group of subsets in a Hail Table containing variant annotations;
     includes summaries of % filter status for different partitions of variants; histogram outlier bin checks; checks on
     AC, AN, and AF annotations; checks that subgroup annotation values add up to the supergroup annotation values;
     checks on sex-chromosome annotations; and summaries of % missingness in variant annotations
+
     :param Table ht: Table containing variant annotations to check
     :param list of str subsets: List of subsets to be checked
     :param bool verbose: If True, display top values of relevant annotations being checked, regardless of whether check
@@ -1028,9 +1036,9 @@ def main(args):
         mt = mt.annotate_rows(nonpar=(mt.locus.in_x_nonpar() | mt.locus.in_y_nonpar()))
 
         mt = mt.annotate_rows(info=hl.struct(**make_info_expr(mt)))
-        mt = mt.annotate_rows(info=mt.info.annotate(**call_unfurl_nested_annotations(mt, gnomad=False, genome=False)))
-        mt = mt.annotate_rows(info=mt.info.annotate(**call_unfurl_nested_annotations(mt, gnomad=True, genome=True)))
-        mt = mt.annotate_rows(info=mt.info.annotate(**call_unfurl_nested_annotations(mt, gnomad=True, genome=False)))
+        mt = mt.annotate_rows(info=mt.info.annotate(**unfurl_nested_annotations(mt, gnomad=False, genome=False)))
+        mt = mt.annotate_rows(info=mt.info.annotate(**unfurl_nested_annotations(mt, gnomad=True, genome=True)))
+        mt = mt.annotate_rows(info=mt.info.annotate(**unfurl_nested_annotations(mt, gnomad=True, genome=False)))
         mt = set_female_y_metrics_to_na(mt)
         
         # Select relevant fields for VCF export
