@@ -1,4 +1,6 @@
+import argparse
 import hail as hl
+import logging
 from typing import *
 
 CURRENT_FREEZE = 5
