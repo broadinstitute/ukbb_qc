@@ -1,7 +1,7 @@
 from gnomad_hail.utils.generic import rep_on_read
 #from gnomad_hail.utils.variant_qc import *
 from gnomad_qc.v2.variant_qc.prepare_data_release import (generic_field_check, index_globals, make_filter_dict, 
-                                                        make_filters_sanity_check_expr, make_index_dict, make_label_combos)
+                                                        make_filters_sanity_check_expr, make_label_combos)
 from gnomad_hail.utils.sample_qc import add_filters_expr 
 from gnomad_hail.utils.gnomad_functions import filter_to_adj
 from gnomad_hail.utils.annotations import qual_hist_expr,age_hists_expr
@@ -10,16 +10,18 @@ from ukbb_qc.resources.resources import *
 #import itertools
 
 
-logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
+logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
 logger = logging.getLogger("data_release")
 logger.setLevel(logging.INFO)
 
 
+# UKB globals
 GROUPS = ['adj', 'raw']
 SEXES = ['male', 'female']
 POPS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', 'afr', 'amr', 'asj', 'eas', 'fin', 'nfe', 'oth', 'sas']
 FAF_POPS = ['0', '5', '6', '13', 'nfe']
 
+# gnomad globals
 GNOMAD_POPS = ['afr', 'amr', 'asj', 'eas', 'fin', 'nfe', 'oth', 'sas']
 GNOMAD_FAF_POPS = ['afr', 'amr', 'eas', 'nfe', 'sas']
 GNOMAD_NFE_SUBPOPS = ['onf', 'bgr', 'swe', 'nwe', 'seu', 'est']
@@ -208,7 +210,7 @@ def prepare_annotations(
     unrelated_freq_ht = hl.filter_intervals(unrelated_freq_ht, [hl.parse_locus_interval('chrM')], keep=False)
     raw_idx = index_dict['raw']
     unrelated_freq_ht = unrelated_freq_ht.filter(unrelated_freq_ht.freq[raw_idx].AC <= 0, keep=False)
-    logger.info(f'unlreated freq_ht count after filtering out chrM and AC <= 1: {unrelated_freq_ht.count()}')
+    logger.info(f'unrelated freq_ht count after filtering out chrM and AC <= 1: {unrelated_freq_ht.count()}')
 
     logger.info('Annotating mt with rf ht and flagging problematic regions')
     mt = mt.annotate_rows(rf=rf_ht[mt.row_key])
@@ -294,22 +296,27 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
     return info_dict
 
 
-def make_freq_meta_index_dict(freq_meta):
+def make_freq_meta_index_dict(freq_meta: List, gnomad: bool) -> Dict:
     '''
     Make dictionary of the entries in the frequency array annotation, where keys are the grouping combinations and the values
     are the 0-based integer indices
+
     :param list of str freq_meta: Ordered list containing string entries describing all the grouping combinations contained in the
         frequency array annotation
+    :param bool gnomad: Whether to index a gnomad freq meta
     :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
         of each grouping entry in the frequency array
     :rtype: Dict of str: int
     '''
     index_dict = index_globals(freq_meta, dict(group=GROUPS))
-    index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=POPS)))
     index_dict.update(index_globals(freq_meta, dict(group=GROUPS, sex=SEXES)))
-    index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=POPS, sex=SEXES)))
-    index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=['nfe'], subpop=NFE_SUBPOPS)))
-    index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=['eas'], subpop=EAS_SUBPOPS)))
+    if gnomad:
+        index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=GNOMAD_POPS)))
+        index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=['nfe'], subpop=GNOMAD_NFE_SUBPOPS)))
+        index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=['eas'], subpop=GNOMAD_EAS_SUBPOPS)))
+    else:
+        index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=POPS)))
+        index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=POPS, sex=SEXES)))
     return index_dict
 
 
@@ -416,6 +423,24 @@ def make_hist_bin_edges_expr(ht):
     return edges_dict
 
 
+def make_index_dict(t: Union[hl.MatrixTable, hl.Table], freq_meta_str: str) -> Dict:
+    '''
+    Create a look-up Dictionary for entries contained in the frequency annotation array
+
+    :param Table ht: Table or MatrixTable containing freq_meta global annotation to be indexed
+    :param str freq_meta: freq_meta global annotation to be indexed (freq_meta, gnomad_exomes_freq_meta, or gnomad_genomes_freq_meta)
+    :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
+        of each grouping entry in the frequency array
+    :rtype: Dict of str: int
+    '''
+    freq_meta = hl.eval(t.globals[freq_meta_str])
+    if 'gnomad' in freq_meta_str:
+        index_dict = make_freq_meta_index_dict(freq_meta, gnomad=True)
+    else:
+        index_dict = make_freq_meta_index_dict(freq_meta, gnomad=False)
+    return index_dict
+
+
 def make_hist_dict(bin_edges: Dict, adj: bool) -> Dict:
     '''
     Generate dictionary of Number and Description attributes to be used in the VCF header, specifically for histogram annotations
@@ -447,7 +472,6 @@ def make_hist_dict(bin_edges: Dict, adj: bool) -> Dict:
         }
 
         header_hist_dict.update(hist_dict)
-    print(header_hist_dict)
     return header_hist_dict
 
 
@@ -469,10 +493,11 @@ def unfurl_nested_annotations(ht, gnomad, genome):
         if genome:
             faf = 'gnomad_genomes_faf'
             freq = 'gnomad_genomes_freq'
-            freq_idx = 'gnomad_genomes_freq_index_dict'
             faf_idx = 'gnomad_genomes_faf_index_dict'
             gnomad_prefix = 'gnomad_genomes'
             popmax = 'gnomad_genomes_popmax'
+            freq_idx = make_index_dict(ht, 'gnomad_genomes_freq_meta') 
+
         else:
             faf = 'gnomad_exomes_faf'
             freq = 'gnomad_exomes_freq'
@@ -480,15 +505,17 @@ def unfurl_nested_annotations(ht, gnomad, genome):
             faf_idx = 'gnomad_exomes_faf_index_dict'
             gnomad_prefix = 'gnomad_exomes'
             popmax = 'gnomad_exomes_popmax'
+            freq_idx = make_index_dict(ht, 'gnomad_exomes_freq_meta') 
+
     else:
         faf = 'faf'
         freq = 'freq'
-        freq_idx = 'freq_index_dict'
         faf_idx = 'faf_index_dict'
         popmax = 'popmax'
+        freq_idx = make_index_dict(ht, 'freq_meta') 
 
     ## Unfurl freq index dict
-    for k, i in hl.eval(ht.globals[freq_idx]).items():
+    for k, i in freq_idx.items():
         entry = k.split("_")
 
         # skip gnomad subsets
@@ -813,20 +840,6 @@ def sanity_check_ht(ht: hl.Table, subsets, missingness_threshold=0.5, verbose=Fa
             sample_sum_check(ht, subset, dict(group=['adj'], sex=SEXES), verbose)
             sample_sum_check(ht, subset, dict(group=['adj'], pop=POPS, sex=SEXES), verbose)
 
-            # Adjust subpops to those found in subset
-            nfe_subpop_adjusted = list(set([x for x in pop_adjusted if 'nfe_' in x and 'male' not in x]))
-            if nfe_subpop_adjusted != []:
-                sample_sum_check(ht, subset, dict(group=['adj'], pop=['nfe'], subpop=NFE_SUBPOPS), verbose, subpop='nfe')
-            eas_subpop_adjusted = list(set([x for x in pop_adjusted if subset in x and 'eas_' in x and 'male' not in x]))
-            if eas_subpop_adjusted != []:
-                sample_sum_check(ht, subset, dict(group=['adj'], pop=['eas'], subpop=EAS_SUBPOPS), verbose, subpop='eas')
-            afr_subpop_adjusted = list(set([x for x in pop_adjusted if 'afr_' in x and 'male' not in x]))
-            if afr_subpop_adjusted != []:
-                sample_sum_check(ht, subset, dict(group=['adj'], pop=['afr'], subpop=AFR_SUBPOPS), verbose, subpop='afr')
-            sas_subpop_adjusted = list(set([x for x in pop_adjusted if 'sas_' in x and 'male' not in x]))
-            if sas_subpop_adjusted != []:
-                sample_sum_check(ht, subset, dict(group=['adj'], pop=['sas'], subpop=SAS_SUBPOPS), verbose, subpop='sas')
-
     logger.info('SEX CHROMOSOME ANNOTATION CHECKS:')
     female_metrics = [x for x in info_metrics if '_female' in x]
     male_metrics = [x for x in info_metrics if '_male' in x]
@@ -922,7 +935,7 @@ def main(args):
         
         logger.info('Adding annotations...')
         mt = prepare_annotations(mt, freq_ht, unrelated_freq_ht, rf_ht, vep_ht, dbsnp_ht, hist_ht, 
-                                make_index_dict(freq_ht), allele_ht, vqsr_ht)
+                                make_index_dict(freq_ht, freq_meta), allele_ht, vqsr_ht)
         mt.describe()
         mt = mt.annotate_globals(age_distribution=age_hist_data)
         mt.write(release_mt_path(data_source, freeze), args.overwrite)
