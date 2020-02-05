@@ -27,8 +27,9 @@ GNOMAD_FAF_POPS = ['afr', 'amr', 'eas', 'nfe', 'sas']
 GNOMAD_NFE_SUBPOPS = ['onf', 'bgr', 'swe', 'nwe', 'seu', 'est']
 GNOMAD_EAS_SUBPOPS = ['kor', 'oea', 'jpn']
 
+# globals for both UKB and gnomad
+HISTS = ['gq_hist_alt', 'gq_hist_all', 'dp_hist_alt', 'dp_hist_all', 'ab_hist_alt']
 SORT_ORDER = ['popmax', 'group', 'pop', 'subpop', 'sex']
-
 
 pop_names = {
     '0': 'hybrid population inference cluster 0',
@@ -475,6 +476,32 @@ def make_hist_dict(bin_edges: Dict, adj: bool) -> Dict:
     return header_hist_dict
 
 
+def make_faf_index_dict(t: Union[hl.MatrixTable, hl.Table], subset=None) -> Dict:  # NOTE: label groups: assumes 'adj', plus all pops
+    '''
+    Create a look-up Dictionary for entries contained in the filter allele frequency annotation array
+
+    :param Table/MatrixTable t: Table/MatrixTable containing filter allele frequency annotations to be indexed
+    :param bool subset: If True, use alternate logic to access the correct faf annotation
+    :return: Dictionary of faf annotation population groupings, where values are the corresponding 0-based indices for the
+        groupings in the faf array
+    :rtype: Dict of str: int
+    '''
+    combos = make_label_combos(dict(group=['adj'], pop=POPS))
+    combos = combos + ['adj']
+    index_dict = {}
+    if subset:
+        faf_meta = hl.eval(hl.map(lambda f: f.meta, ht.take(1)[0][subset].faf))
+    else:
+        faf_meta = hl.eval(hl.map(lambda f: f.meta, ht.take(1)[0].faf))
+
+    for combo in combos:
+        combo_fields = combo.split("_")
+        for i, v in enumerate(faf_meta):
+            if set(v.values()) == set(combo_fields):
+                index_dict.update({f"{combo}": i})
+    return index_dict
+
+
 def call_unfurl_nested_annotations(ht, gnomad, genome):
     return unfurl_nested_annotations(ht, gnomad, genome)
    
@@ -493,7 +520,7 @@ def unfurl_nested_annotations(ht, gnomad, genome):
         if genome:
             faf = 'gnomad_genomes_faf'
             freq = 'gnomad_genomes_freq'
-            faf_idx = 'gnomad_genomes_faf_index_dict'
+            faf_idx = hl.eval(ht.gnomad_genomes_faf_index_dict)
             gnomad_prefix = 'gnomad_genomes'
             popmax = 'gnomad_genomes_popmax'
             freq_idx = make_index_dict(ht, 'gnomad_genomes_freq_meta') 
@@ -502,7 +529,7 @@ def unfurl_nested_annotations(ht, gnomad, genome):
             faf = 'gnomad_exomes_faf'
             freq = 'gnomad_exomes_freq'
             freq_idx = 'gnomad_exomes_freq_index_dict'
-            faf_idx = 'gnomad_exomes_faf_index_dict'
+            faf_idx = hl.eval(ht.gnomad_exomes_faf_index_dict)
             gnomad_prefix = 'gnomad_exomes'
             popmax = 'gnomad_exomes_popmax'
             freq_idx = make_index_dict(ht, 'gnomad_exomes_freq_meta') 
@@ -510,7 +537,7 @@ def unfurl_nested_annotations(ht, gnomad, genome):
     else:
         faf = 'faf'
         freq = 'freq'
-        faf_idx = 'faf_index_dict'
+        faf_idx = make_faf_index_dict(ht)
         popmax = 'popmax'
         freq_idx = make_index_dict(ht, 'freq_meta') 
 
@@ -542,7 +569,7 @@ def unfurl_nested_annotations(ht, gnomad, genome):
         expr_dict.update(combo_dict)
 
     ## Unfurl FAF index dict
-    for k, i in hl.eval(ht.globals[faf_idx]).items():  # NOTE: faf annotations are all done on adj-only groupings
+    for k, i in faf_idx.items():  # NOTE: faf annotations are all done on adj-only groupings
         entry = k.split("_")
 
         # skip gnomad subsets
