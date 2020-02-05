@@ -1,12 +1,12 @@
 from gnomad_hail.utils.generic import rep_on_read
 #from gnomad_hail.utils.variant_qc import *
-from gnomad_qc.v2.variant_qc.prepare_data_release import generic_field_check,index_globals,make_filter_dict,make_filters_sanity_check_expr,make_index_dict,make_label_combos
+from gnomad_qc.v2.variant_qc.prepare_data_release import (generic_field_check, index_globals, make_filter_dict, 
+                                                        make_filters_sanity_check_expr, make_index_dict, make_label_combos)
 from gnomad_hail.utils.sample_qc import add_filters_expr 
 from gnomad_hail.utils.gnomad_functions import filter_to_adj
 from gnomad_hail.utils.annotations import qual_hist_expr,age_hists_expr
 from ukbb_qc.resources.resources import *
-from ukbb_qc.utils.utils import annotate_interval_qc_filter
-import copy
+#import copy
 #import itertools
 
 
