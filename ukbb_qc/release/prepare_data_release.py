@@ -481,11 +481,11 @@ def make_hist_dict(bin_edges: Dict, adj: bool) -> Dict[str, str]:
     return header_hist_dict
 
 
-def make_faf_index_dict(t: Union[hl.MatrixTable, hl.Table], subset=None) -> Dict[str, int]:  # NOTE: label groups: assumes 'adj', plus all pops
+def make_faf_index_dict(ht: hl.Table, subset=None) -> Dict[str, int]:  # NOTE: label groups: assumes 'adj', plus all pops
     '''
     Create a look-up Dictionary for entries contained in the filter allele frequency annotation array
 
-    :param Table/MatrixTable t: Table/MatrixTable containing filter allele frequency annotations to be indexed
+    :param Table ht: Tablecontaining filter allele frequency annotations to be indexed
     :param bool subset: If True, use alternate logic to access the correct faf annotation
     :return: Dictionary of faf annotation population groupings, where values are the corresponding 0-based indices for the
         groupings in the faf array
@@ -495,9 +495,9 @@ def make_faf_index_dict(t: Union[hl.MatrixTable, hl.Table], subset=None) -> Dict
     combos = combos + ['adj']
     index_dict = {}
     if subset:
-        faf_meta = hl.eval(hl.map(lambda f: f.meta, t.take(1)[0][subset].faf))
+        faf_meta = hl.eval(hl.map(lambda f: f.meta, ht.take(1)[0][subset].faf))
     else:
-        faf_meta = hl.eval(hl.map(lambda f: f.meta, t.take(1)[0].faf))
+        faf_meta = hl.eval(hl.map(lambda f: f.meta, ht.take(1)[0].faf))
 
     for combo in combos:
         combo_fields = combo.split("_")
@@ -1036,9 +1036,9 @@ def main(args):
         mt = mt.annotate_rows(nonpar=(mt.locus.in_x_nonpar() | mt.locus.in_y_nonpar()))
 
         mt = mt.annotate_rows(info=hl.struct(**make_info_expr(mt)))
-        mt = mt.annotate_rows(info=mt.info.annotate(**unfurl_nested_annotations(mt, gnomad=False, genome=False)))
-        mt = mt.annotate_rows(info=mt.info.annotate(**unfurl_nested_annotations(mt, gnomad=True, genome=True)))
-        mt = mt.annotate_rows(info=mt.info.annotate(**unfurl_nested_annotations(mt, gnomad=True, genome=False)))
+        mt = mt.annotate_rows(info=mt.info.annotate(**unfurl_nested_annotations(mt.rows(), gnomad=False, genome=False)))
+        mt = mt.annotate_rows(info=mt.info.annotate(**unfurl_nested_annotations(mt.rows(), gnomad=True, genome=True)))
+        mt = mt.annotate_rows(info=mt.info.annotate(**unfurl_nested_annotations(mt.rows(), gnomad=True, genome=False)))
         mt = set_female_y_metrics_to_na(mt)
         
         # Select relevant fields for VCF export
