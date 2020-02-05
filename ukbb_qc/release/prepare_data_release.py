@@ -1132,13 +1132,6 @@ def main(args):
 
     if args.prepare_browser_ht:
         mt = hl.read_matrix_table(release_mt_path(data_source, freeze))
-        hists_ht = get_age_hists(data_source, freeze)
-        ht = mt.rows()
-        ht = ht.annotate(**hists_ht[ht.key])
-        rf_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'rf'))
-        rf_ht = rf_ht.select('filters')
-        ht = ht.annotate(**rf_ht[ht.key])
-        ht.describe()
         ht = ht.naive_coalesce(20000)
         ht.write(release_ht_path(data_source, freeze), args.overwrite)
 
