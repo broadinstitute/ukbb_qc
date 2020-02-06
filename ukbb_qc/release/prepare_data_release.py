@@ -1117,7 +1117,7 @@ def main(args):
         logger.info(new_info_dict['AC'])
         logger.info(new_info_dict['AC_raw'])
         logger.info(new_info_dict['gnomad_exomes_AC'])
-        '''mt.describe()
+        mt.describe()
 
         # add non par annotation back
         mt = mt.annotate_rows(nonpar=(mt.locus.in_x_nonpar() | mt.locus.in_y_nonpar()))
@@ -1130,7 +1130,7 @@ def main(args):
         mt = set_female_y_metrics_to_na(mt)
         
         # Select relevant fields for VCF export
-        mt = mt.select_rows('info', 'filters', 'rsid', 'qual')'''
+        mt = mt.select_rows('info', 'filters', 'rsid', 'qual')
 
         # Add VEP annotations
         # TODO: After 200K release change this to use vep_csq annotation on the vep HT
@@ -1144,9 +1144,8 @@ def main(args):
         pickle_file = f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/header_dict.pickle'
         with hl.hadoop_open(pickle_file, 'wb') as p:
             pickle.dump(header_dict, p,  protocol=pickle.HIGHEST_PROTOCOL)
-        #mt = mt.annotate_rows(info=mt.info.annotate(vep=vep_csq_ht[mt.row_key].vep))
-        
-        #mt.write(release_mt_path(data_source, freeze, temp=True), args.overwrite)
+        mt = mt.annotate_rows(info=mt.info.annotate(vep=vep_csq_ht[mt.row_key].vep))
+        mt.write(release_mt_path(data_source, freeze, temp=True), args.overwrite)
 
 
     if args.sanity_check_sites:
