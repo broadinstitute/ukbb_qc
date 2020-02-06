@@ -1,3 +1,4 @@
+from gnomad_hail.resources.grch38.reference_data import dbsnp
 from gnomad_hail.utils.generic import rep_on_read
 from gnomad_qc.v2.variant_qc.prepare_data_release import (generic_field_check, index_globals, 
                                                         make_filters_sanity_check_expr, make_label_combos)
@@ -160,7 +161,7 @@ def flag_problematic_regions(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.Mat
 
 def prepare_annotations(
                         mt: hl.MatrixTable, freq_ht: hl.Table, unrelated_freq_ht: hl.Table, 
-                        rf_ht: hl.Table, vep_ht: hl.Table, dbsnp_ht: hl.Table, hist_ht: hl.Table, 
+                        rf_ht: hl.Table, vep_ht: hl.Table, hist_ht: hl.Table, 
                         index_dict: Dict, allele_ht: hl.Table, vqsr_ht: hl.Table
                         ) -> hl.MatrixTable:
     '''
@@ -171,7 +172,6 @@ def prepare_annotations(
     :param Table unrelated_freq_ht: Table with frequency annotations calculated only on unrelated samples
     :param Table rf_ht: Table with random forest variant annotations
     :param Table vep_ht: Table with VEP variant annotations
-    :param Table dbsnp_ht: Table with updated dbSNP rsid annotations
     :param Table hist_ht: Table with quality histogram annotations
     :param dict index_dict: Dictionary containing index values for each entry in the frequency HT array, keyed by metadata label
     :param Table allele_ht: Table containing allele annotations
@@ -233,8 +233,9 @@ def prepare_annotations(
     ht = mt_filt.rows()
     mt = mt.annotate_rows(adj_qual_hists=ht[mt.row_key])
 
+    dbsnp_ht = dbsnp.ht().select('rsid')
     mt = mt.annotate_rows(qual_hists=hist_ht[mt.row_key], vep=vep_ht[mt.row_key].vep,
-                     allele_info=allele_ht[mt.row_key].allele_data, vqsr=vqsr_ht[mt.row_key].info, rsid=dbsnp_ht[mt.row_key].rsid)
+                     allele_info=allele_ht[mt.row_key].allele_data, vqsr=vqsr_ht[mt.row_key].info, rsid=dbsnp_ht[mt.row_key])
     mt = mt.annotate_globals(rf_globals=rf_ht.index_globals())
     logger.info(f'mt count: {mt.count()}')
     return mt
@@ -786,28 +787,32 @@ def sample_sum_check(ht: hl.Table, prefix: str, label_groups: Dict[str, List[str
                                 [f'info.{prefix}{subfield}_{group}_{subpop}', f'sum_{subfield}_{group}_{alt_groups}'], verbose)
 
 
-def sanity_check_ht(ht: hl.Table, subsets, missingness_threshold=0.5, verbose=False) -> None:
+def sanity_check_mt(mt: hl.MatrixTable, subsets, missingness_threshold=0.5, verbose=False) -> None:
     '''
     Perform a battery of sanity checks on a specified group of subsets in a Hail Table containing variant annotations;
     includes summaries of % filter status for different partitions of variants; histogram outlier bin checks; checks on
     AC, AN, and AF annotations; checks that subgroup annotation values add up to the supergroup annotation values;
     checks on sex-chromosome annotations; and summaries of % missingness in variant annotations
 
-    :param Table ht: Table containing variant annotations to check
+    :param MatrixTable mt: MatrixTable containing variant annotations to check
     :param list of str subsets: List of subsets to be checked
     :param bool verbose: If True, display top values of relevant annotations being checked, regardless of whether check
         conditions are violated; if False, display only top values of relevant annotations if check conditions are violated
     :return: Terminal display of results from the battery of sanity checks
     :rtype: None
     '''
+    n_samples = mt.count_cols()
+    ht = mt.rows()
     n_sites = ht.count()
     contigs = ht.aggregate(hl.agg.collect_as_set(ht.locus.contig))
-    logger.info(f'Found {n_sites} sites in for contigs {contigs}')
+    logger.info(f'Found {n_sites} sites in contigs {contigs} in {n_samples} samples')
     info_metrics = list(ht.row.info)
     non_info_metrics = list(ht.row)
     non_info_metrics.remove('info')
 
     logger.info('VARIANT FILTER SUMMARIES:')
+    ht_explode = ht.explode(ht.filters)
+    logger.info(f'hl.agg.counter filters: {ht_explode.aggregate(hl.agg.counter(ht_explode.filters))}')
     ht = ht.annotate(is_filtered=ht.filters.length() > 0,
                      in_problematic_region=hl.any(lambda x: x, [ht.info.lcr, ht.info.fail_interval_qc]))
 
@@ -816,8 +821,6 @@ def sanity_check_ht(ht: hl.Table, subsets, missingness_threshold=0.5, verbose=Fa
     ht_filter_check1.show()
 
     ht_filter_check2 = ht.group_by(ht.info.allele_type).aggregate(**make_filters_sanity_check_expr(ht)).order_by(hl.desc('n'))
-    ht_filte
-            # NOTE need to check if still need this hacky fixr_check2.show()
 
     ht_filter_check3 = (ht.group_by(ht.info.allele_type, ht.in_problematic_region)
                         .aggregate(**make_filters_sanity_check_expr(ht)).order_by(hl.desc('n')))
@@ -837,7 +840,7 @@ def sanity_check_ht(ht: hl.Table, subsets, missingness_threshold=0.5, verbose=Fa
         for suffix in ['', 'adj']:
             if suffix == 'adj':
                 logger.info('Checking adj qual hists')
-                hist = f'hist_{suffix}'
+                hist = f'{hist}_{suffix}'
             else:
                 logger.info('Checking raw qual hists')
 
@@ -857,11 +860,49 @@ def sanity_check_ht(ht: hl.Table, subsets, missingness_threshold=0.5, verbose=Fa
                             [f'info.adj_{subfield}_adj', 'filters'], verbose)
 
     for subset in subsets:
-        for subfield in ['AC', 'AN', 'nhomalt']:
-            # Check AC_raw >= AC adj
-            generic_field_check(ht, (ht.info[f'{subset}{subfield}_raw'] < ht.info[f'{subset}{subfield}_adj']),
-                                f'{subset} {subfield}_raw >= {subfield}_adj',
-                                [f'info.{subset}{subfield}_raw', f'info.{subset}{subfield}_adj'], verbose)
+        if subset == '':
+            for subfield in ['AC', 'AN', 'nhomalt']:
+                # Check AC_raw >= AC adj
+                generic_field_check(ht, (ht.info[f'raw_{subfield}_raw'] < ht.info[f'adj_{subfield}_adj']),
+                                    f'raw_{subfield}_raw >= adj_{subfield}_adj',
+                                    [f'info.raw_{subfield}_raw', f'info.adj_{subfield}_adj'], verbose)
+        else:
+            for subfield in ['AC', 'AN', 'nhomalt']:
+                # Check AC_raw >= AC adj
+                generic_field_check(ht, (ht.info[f'{subset}{subfield}_raw'] < ht.info[f'{subset}{subfield}_adj']),
+                                    f'{subset}{subfield}_raw >= {subfield}_adj',
+                                    [f'info.{subset}{subfield}_raw', f'info.{subset}{subfield}_adj'], verbose)
+
+    logger.info('FREQUENCY CHECKS:')
+    freq_checks = ht.aggregate(
+                    hl.struct(
+                        ac_total_defined_gnomad_wes=hl.agg.count_where(hl.is_defined(ht.info.gnomad_exomes_AC_adj)),
+                        raw_ac_total_defined_gnomad_wes=hl.agg.count_where(hl.is_defined(ht.info.gnomad_exomes_AC_raw)),
+                        an_total_defined_gnomad_wes=hl.agg.count_where(hl.is_defined(ht.info.gnomad_exomes_AN_adj)),
+                        raw_an_total_defined_gnomad_wes=hl.agg.count_where(hl.is_defined(ht.info.gnomad_exomes_AN_raw)),
+                        ac_total_defined_gnomad_wgs=hl.agg.count_where(hl.is_defined(ht.info.gnomad_genomes_AC_adj)),
+                        raw_ac_total_defined_gnomad_wgs=hl.agg.count_where(hl.is_defined(ht.info.gnomad_genomes_AC_raw)),
+                        an_total_defined_gnomad_wgs=hl.agg.count_where(hl.is_defined(ht.info.gnomad_genomes_AN_adj)),
+                        raw_an_total_defined_gnomad_wgs=hl.agg.count_where(hl.is_defined(ht.info.gnomad_genomes_AN_raw)),
+                        ac_total_defined_ukb=hl.agg.count_where(hl.is_defined(ht.info.adj_AC_adj)),
+                        raw_ac_total_defined_ukb=hl.agg.count_where(hl.is_defined(ht.info.raw_AC_raw)),
+                        an_total_defined_ukb=hl.agg.count_where(hl.is_defined(ht.info.adj_AN_adj)),
+                        raw_an_total_defined_ukb=hl.agg.count_where(hl.is_defined(ht.info.raw_AN_raw)),
+                        ac_gnomad_wes_equals_wgs=hl.agg.count_where(ht.info.gnomad_exomes_AC_adj == ht.info.gnomad_genomes_AC_adj),
+                        ac_gnomad_wes_equals_ukb=hl.agg.count_where(ht.info.gnomad_exomes_AC_adj == ht.info.adj_AC_adj),
+                        ac_gnomad_wgs_equals_ukb=hl.agg.count_where(ht.info.gnomad_genomes_AC_adj == ht.info.adj_AC_adj),
+                        ac_raw_gnomad_wes_equals_wgs=hl.agg.count_where(ht.info.gnomad_exomes_AC_raw == ht.info.gnomad_genomes_AC_raw),
+                        ac_raw_gnomad_wes_equals_ukb=hl.agg.count_where(ht.info.gnomad_exomes_AC_raw == ht.info.raw_AC_raw),
+                        ac_raw_gnomad_wgs_equals_ukb=hl.agg.count_where(ht.info.gnomad_genomes_AC_raw == ht.info.raw_AC_raw),
+                        an_gnomad_wes_equals_wgs=hl.agg.count_where(ht.info.gnomad_exomes_AN_adj == ht.info.gnomad_genomes_AN_adj),
+                        an_gnomad_wes_equals_ukb=hl.agg.count_where(ht.info.gnomad_exomes_AN_adj == ht.info.adj_AN_adj),
+                        an_gnomad_wgs_equals_ukb=hl.agg.count_where(ht.info.gnomad_genomes_AN_adj == ht.info.adj_AN_adj),
+                        an_raw_gnomad_wes_equals_wgs=hl.agg.count_where(ht.info.gnomad_exomes_AN_raw == ht.info.gnomad_genomes_AN_raw),
+                        an_raw_gnomad_wes_equals_ukb=hl.agg.count_where(ht.info.gnomad_exomes_AN_raw == ht.info.raw_AN_raw),
+                        an_rawgnomad_wgs_equals_ukb=hl.agg.count_where(ht.info.gnomad_genomes_AN_raw == ht.info.raw_AN_raw)
+                    )
+                )
+    logger.info(freq_checks)
 
     logger.info('SAMPLE SUM CHECKS:')
     for subset in subsets:
@@ -947,6 +988,12 @@ def sanity_check_ht(ht: hl.Table, subsets, missingness_threshold=0.5, verbose=Fa
                             f'{metric} == {standard_field}', [f'info.{metric}', f'info.{standard_field}'], verbose)
 
     logger.info('MISSINGNESS CHECKS:')
+
+    # tranche 2 dbsnp fix
+    dbsnp_ht = dbsnp.ht().select('rsid')
+    ht = ht.drop('rsid')
+    ht = ht.annotate(**dbsnp_ht[ht.key])
+
     metrics_frac_missing = {}
     for x in info_metrics:
         metrics_frac_missing[x] = hl.agg.sum(hl.is_missing(ht.info[x])) / n_sites
@@ -993,20 +1040,19 @@ def main(args):
         unrelated_freq_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'join_freq_hybrid_unrelated'))
         rf_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'rf'))
         vep_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vep'))
-        dbsnp_ht = hl.read_table(dbsnp_ht_path()).drop('qual', 'filters', 'info')
         hist_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'qual_hists'))
         allele_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'allele_data'))
         vqsr_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vqsr'))
         
         logger.info('Adding annotations...')
-        mt = prepare_annotations(mt, freq_ht, unrelated_freq_ht, rf_ht, vep_ht, dbsnp_ht, hist_ht, 
+        mt = prepare_annotations(mt, freq_ht, unrelated_freq_ht, rf_ht, vep_ht, hist_ht, 
                                 make_index_dict(freq_ht, freq_meta), allele_ht, vqsr_ht)
         mt.describe()
         mt = mt.annotate_globals(age_distribution=age_hist_data)
         mt.write(release_mt_path(data_source, freeze), args.overwrite)
 
 
-    if args.prepare_release_vcf:
+    if args.prepare_vcf_mt:
         logger.info('Starting VCF process')
         mt = hl.read_matrix_table(release_mt_path(data_source, freeze))
 
@@ -1026,7 +1072,6 @@ def main(args):
         logger.info('Adding age hists (tranche 2 fix)')
         hists_ht = get_age_hists(data_source, freeze)
         mt = mt.annotate_rows(**hists_ht[mt.row_key])
-        #mt.write('gs://broad-ukbb/broad.freeze_5/release/mt/nested_fix.mt')
 
         bin_edges = make_hist_bin_edges_expr(mt.rows())
         
@@ -1088,14 +1133,53 @@ def main(args):
                         'format': FORMAT_DICT}
         mt = mt.annotate_rows(info=mt.info.annotate(vep=vep_csq_ht[mt.row_key].vep))
 
-        #mt = mt.drop('nonpar')
-        mt.checkpoint(release_mt_path(data_source, freeze, temp=True), args.overwrite)
-        mt.describe()
-        return
+        mt.write(release_mt_path(data_source, freeze, temp=True), args.overwrite)
 
-        # Remove gnomad_ prefix for VCF export
-        #mt = hl.read_matrix_table(release_mt_path(data_source, freeze, temp=True))
-        mt.describe()
+
+    if args.sanity_check_sites:
+        subset_list = ['', 'gnomad_exomes_', 'gnomad_genomes_'] 
+        mt = hl.read_matrix_table(release_mt_path(data_source, freeze, temp=True))
+        sanity_check_mt(mt, subset_list, missingness_threshold=0.5, verbose=args.verbose)
+
+
+    if args.prepare_browser_ht:
+        mt = hl.read_matrix_table(release_mt_path(data_source, freeze))
+        logger.info(f'mt count: {mt.count()}')
+
+        logger.info('Adding missing filters field (tranche 2 fix)')
+        rf_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'rf'))
+        rf_ht = rf_ht.select('filters')
+        mt = mt.annotate_rows(**rf_ht[mt.row_key])
+
+        logger.info('Adding missing qual field (tranche 2 fix)')
+        vqsr_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'vqsr'))
+        vqsr_ht = vqsr_ht.select('qual')
+        mt = mt.annotate_rows(**vqsr_ht[mt.row_key])
+
+        logger.info('Adding age hists (tranche 2 fix)')
+        hists_ht = get_age_hists(data_source, freeze)
+        mt = mt.annotate_rows(**hists_ht[mt.row_key])
+
+        logger.info('Adding rsids again (tranche 2 fix)')
+        dbsnp_ht = dbsnp.ht().select('rsid')
+        mt = mt.drop('rsid')
+        mt = mt.annotate_rows(**dbsnp_ht[mt.row_key])
+
+        ht = mt.rows()
+        logger.info(f'ht count: {ht.count()}')
+        ht.describe()
+        ht = ht.naive_coalesce(20000)
+        ht.write(release_ht_path(data_source, freeze), args.overwrite)
+
+
+    if args.prepare_release_vcf:
+
+        mt = mt.read(release_mt_path(data_source, freeze, temp=True))
+
+        # tranche 2 dbsnp fix
+        dbsnp_ht = dbsnp.ht().select('rsid')
+        mt = mt.drop('rsid')
+        mt = mt.annotate_rows(**dbsnp_ht[mt.row_key])
 
         row_annots = list(mt.row.info)
         new_row_annots = row_annots
@@ -1129,28 +1213,17 @@ def main(args):
             logger.info(f'{contig} mt count: {contig_mt.count()}')
             hl.export_vcf(contig_mt, release_vcf_path(data_source, freeze, contig=contig), metadata=header_dict)
 
-
-    if args.prepare_browser_ht:
-        mt = hl.read_matrix_table(release_mt_path(data_source, freeze))
-        ht = ht.naive_coalesce(20000)
-        ht.write(release_ht_path(data_source, freeze), args.overwrite)
-
-
-    if args.sanity_check_sites:
-        subset_list = ['', 'gnomad_exomes_', 'gnomad_genomes_'] 
-        ht = hl.read_matrix_table(release_mt_path(data_source, freeze, temp=True)).rows()
-        sanity_check_ht(ht, subset_list, missingness_threshold=0.5, verbose=args.verbose)
  
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
     parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE, type=int)
     parser.add_argument('--prepare_internal_mt', help='Prepare internal MatrixTable', action='store_true')
-    parser.add_argument('--prepare_release_vcf', help='Prepare release VCF', action='store_true')
-    parser.add_argument('--prepare_browser_ht', help='Prepare sites ht for browser', action='store_true')
+    parser.add_argument('--prepare_vcf_mt', help='Use release mt to create vcf mt', action='store_true')
     parser.add_argument('--sanity_check_sites', help='Run sanity checks function', action='store_true') 
+    parser.add_argument('--prepare_browser_ht', help='Prepare sites ht for browser', action='store_true')
     parser.add_argument('--verbose', help='Run sanity checks function with verbose output', action='store_true')
+    parser.add_argument('--prepare_release_vcf', help='Prepare release VCF', action='store_true')
     parser.add_argument('--slack_channel', help='Slack channel to post results and notifications to.')
     parser.add_argument('--overwrite', help='Overwrite data', action='store_true')
     args = parser.parse_args()
