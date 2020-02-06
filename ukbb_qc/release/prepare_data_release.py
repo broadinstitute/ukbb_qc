@@ -700,11 +700,14 @@ def set_female_y_metrics_to_na(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.M
     '''
     metrics = list(t.row.info)
     female_metrics = [x for x in metrics if '_female' in x]
+    faf_female_metrics = [x for x in female_metrics if ('faf' in x)]
     female_metrics = [x for x in female_metrics if ('nhomalt' in x) or ('AC' in x) or ('AN' in x)]
 
     female_metrics_dict = {}
     for metric in female_metrics:
         female_metrics_dict.update({f'{metric}': hl.cond(t.locus.contig == 'chrY', hl.null(hl.tint32), t.info[f'{metric}'])})
+    for metric in faf_female_metrics:
+        female_metrics_dict.update({f'{metric}': hl.cond(t.locus.contig == 'chrY', hl.null(hl.tfloat32), t.info[f'{metric}'])})
     return t.annotate(info=t.info.annotate(**female_metrics_dict)) if isinstance(t, hl.Table) else t.annotate_rows(info=t.info.annotate(**female_metrics_dict))
 
 
@@ -810,7 +813,7 @@ def sanity_check_mt(mt: hl.MatrixTable, subsets, missingness_threshold=0.5, verb
     non_info_metrics = list(ht.row)
     non_info_metrics.remove('info')
 
-    logger.info('VARIANT FILTER SUMMARIES:')
+    '''logger.info('VARIANT FILTER SUMMARIES:')
     ht_explode = ht.explode(ht.filters)
     logger.info(f'hl.agg.counter filters: {ht_explode.aggregate(hl.agg.counter(ht_explode.filters))}')
     ht = ht.annotate(is_filtered=ht.filters.length() > 0,
@@ -871,38 +874,42 @@ def sanity_check_mt(mt: hl.MatrixTable, subsets, missingness_threshold=0.5, verb
                 # Check AC_raw >= AC adj
                 generic_field_check(ht, (ht.info[f'{subset}{subfield}_raw'] < ht.info[f'{subset}{subfield}_adj']),
                                     f'{subset}{subfield}_raw >= {subfield}_adj',
-                                    [f'info.{subset}{subfield}_raw', f'info.{subset}{subfield}_adj'], verbose)
+                                    [f'info.{subset}{subfield}_raw', f'info.{subset}{subfield}_adj'], verbose)'''
 
     logger.info('FREQUENCY CHECKS:')
-    freq_checks = ht.aggregate(
+    for subset in subsets:
+        if subset == '':
+            logger.info('raw checks -- gnomad')
+            for subfield in ['AC', 'AN', 'nhomalt']:
+                generic_field_check(ht, (ht.info[f'gnomad_exomes_{subfield}_raw'] == ht.info[f'gnomad_genomes_{subfield}_raw']),
+                                    f'gnomad_exomes_{subfield}_raw == gnomad_genomes_{subfield}_raw',
+                                    [f'info.gnomad_exomes_{subfield}_raw', f'info.gnomad_genomes_{subfield}_raw'], verbose)
+                logger.info('adj checks -- gnomad')
+                generic_field_check(ht, (ht.info[f'gnomad_exomes_{subfield}_adj'] == ht.info[f'gnomad_genomes_{subfield}_adj']),
+                                    f'gnomad_exomes_{subfield}_adj == gnomad_genomes_{subfield}_adj',
+                                    [f'info.gnomad_exomes_{subfield}_adj', f'info.gnomad_genomes_{subfield}_adj'], verbose)
+        else:
+            for subfield in ['AC', 'AN', 'nhomalt']:
+                logger.info('raw checks -- gnomad/ukb')
+                generic_field_check(ht, (ht.info[f'raw_{subfield}_raw'] == ht.info[f'{subset}{subfield}_raw']),
+                                    f'raw_{subfield}_raw == {subset}{subfield}_raw',
+                                    [f'info.raw_{subfield}_raw', f'info.{subset}{subfield}_raw'], verbose)
+                logger.info('adj checks -- gnomad/ukb')
+                generic_field_check(ht, (ht.info[f'adj_{subfield}_adj'] == ht.info[f'{subset}{subfield}_adj']),
+                                    f'adj_{subfield}_adj == {subset}{subfield}_adj',
+                                    [f'info.adj_{subfield}_adj', f'info.{subset}{subfield}_adj'], verbose)
+
+    freq_counts = ht.aggregate(
                     hl.struct(
-                        ac_total_defined_gnomad_wes=hl.agg.count_where(hl.is_defined(ht.info.gnomad_exomes_AC_adj)),
-                        raw_ac_total_defined_gnomad_wes=hl.agg.count_where(hl.is_defined(ht.info.gnomad_exomes_AC_raw)),
-                        an_total_defined_gnomad_wes=hl.agg.count_where(hl.is_defined(ht.info.gnomad_exomes_AN_adj)),
-                        raw_an_total_defined_gnomad_wes=hl.agg.count_where(hl.is_defined(ht.info.gnomad_exomes_AN_raw)),
-                        ac_total_defined_gnomad_wgs=hl.agg.count_where(hl.is_defined(ht.info.gnomad_genomes_AC_adj)),
-                        raw_ac_total_defined_gnomad_wgs=hl.agg.count_where(hl.is_defined(ht.info.gnomad_genomes_AC_raw)),
-                        an_total_defined_gnomad_wgs=hl.agg.count_where(hl.is_defined(ht.info.gnomad_genomes_AN_adj)),
-                        raw_an_total_defined_gnomad_wgs=hl.agg.count_where(hl.is_defined(ht.info.gnomad_genomes_AN_raw)),
-                        ac_total_defined_ukb=hl.agg.count_where(hl.is_defined(ht.info.adj_AC_adj)),
-                        raw_ac_total_defined_ukb=hl.agg.count_where(hl.is_defined(ht.info.raw_AC_raw)),
-                        an_total_defined_ukb=hl.agg.count_where(hl.is_defined(ht.info.adj_AN_adj)),
-                        raw_an_total_defined_ukb=hl.agg.count_where(hl.is_defined(ht.info.raw_AN_raw)),
-                        ac_gnomad_wes_equals_wgs=hl.agg.count_where(ht.info.gnomad_exomes_AC_adj == ht.info.gnomad_genomes_AC_adj),
-                        ac_gnomad_wes_equals_ukb=hl.agg.count_where(ht.info.gnomad_exomes_AC_adj == ht.info.adj_AC_adj),
-                        ac_gnomad_wgs_equals_ukb=hl.agg.count_where(ht.info.gnomad_genomes_AC_adj == ht.info.adj_AC_adj),
-                        ac_raw_gnomad_wes_equals_wgs=hl.agg.count_where(ht.info.gnomad_exomes_AC_raw == ht.info.gnomad_genomes_AC_raw),
-                        ac_raw_gnomad_wes_equals_ukb=hl.agg.count_where(ht.info.gnomad_exomes_AC_raw == ht.info.raw_AC_raw),
-                        ac_raw_gnomad_wgs_equals_ukb=hl.agg.count_where(ht.info.gnomad_genomes_AC_raw == ht.info.raw_AC_raw),
-                        an_gnomad_wes_equals_wgs=hl.agg.count_where(ht.info.gnomad_exomes_AN_adj == ht.info.gnomad_genomes_AN_adj),
-                        an_gnomad_wes_equals_ukb=hl.agg.count_where(ht.info.gnomad_exomes_AN_adj == ht.info.adj_AN_adj),
-                        an_gnomad_wgs_equals_ukb=hl.agg.count_where(ht.info.gnomad_genomes_AN_adj == ht.info.adj_AN_adj),
-                        an_raw_gnomad_wes_equals_wgs=hl.agg.count_where(ht.info.gnomad_exomes_AN_raw == ht.info.gnomad_genomes_AN_raw),
-                        an_raw_gnomad_wes_equals_ukb=hl.agg.count_where(ht.info.gnomad_exomes_AN_raw == ht.info.raw_AN_raw),
-                        an_rawgnomad_wgs_equals_ukb=hl.agg.count_where(ht.info.gnomad_genomes_AN_raw == ht.info.raw_AN_raw)
-                    )
+                        total_defined_gnomad_wes_AC=hl.agg.count_where(hl.is_defined(ht.info.gnomad_exomes_AC_adj)),
+                        total_defined_gnomad_wes_AC_raw=hl.agg.count_where(hl.is_defined(ht.info.gnomad_exomes_AC_raw)),
+                        total_defined_gnomad_wgs_AC=hl.agg.count_where(hl.is_defined(ht.info.gnomad_genomes_AC_adj)),
+                        total_defined_gnomad_wgs_AC_raw=hl.agg.count_where(hl.is_defined(ht.info.gnomad_genomes_AC_raw)),
+                        total_defined_ukb_AC=hl.agg.count_where(hl.is_defined(ht.info.adj_AC_adj)),
+                        total_defined_ukb_AC_raw=hl.agg.count_where(hl.is_defined(ht.info.raw_AC_raw)),
+                   ) 
                 )
-    logger.info(freq_checks)
+    logger.info(freq_counts)
 
     logger.info('SAMPLE SUM CHECKS:')
     for subset in subsets:
@@ -940,7 +947,6 @@ def sanity_check_mt(mt: hl.MatrixTable, subsets, missingness_threshold=0.5, verb
             if eas_subpop_adjusted != []:
                 sample_sum_check(ht, subset, dict(group=['adj'], pop=['eas'], subpop=EAS_NFE_SUBPOPS), verbose, subpop='eas')
         else:
-            # NOTE need to check if still need this hacky fix
             subset = 'adj_' # hacky add; UKB fields are weirdly named adj_AC_adj
             sample_sum_check(ht, subset, dict(group=['adj'], pop=POPS), verbose)
             sample_sum_check(ht, subset, dict(group=['adj'], sex=SEXES), verbose)
@@ -1139,11 +1145,15 @@ def main(args):
     if args.sanity_check_sites:
         subset_list = ['', 'gnomad_exomes_', 'gnomad_genomes_'] 
         mt = hl.read_matrix_table(release_mt_path(data_source, freeze, temp=True))
+        mt = set_female_y_metrics_to_na(mt)
+
         sanity_check_mt(mt, subset_list, missingness_threshold=0.5, verbose=args.verbose)
 
 
     if args.prepare_browser_ht:
         mt = hl.read_matrix_table(release_mt_path(data_source, freeze))
+        mt = set_female_y_metrics_to_na(mt)
+
         logger.info(f'mt count: {mt.count()}')
 
         logger.info('Adding missing filters field (tranche 2 fix)')
