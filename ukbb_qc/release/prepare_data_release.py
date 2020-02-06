@@ -99,7 +99,7 @@ INFO_DICT = {
     'ClippingRankSum': {
         "Description": "Z-score from Wilcoxon rank sum test of alternate vs. reference number of hard clipped bases"},
     'VarDP': {"Description": "Depth over variant genotypes (does not include depth of reference samples)"},
-    'VarDP': {"Description": "Allele specific depth over variant genotypes (does not include depth of reference samples)"},
+    'AS_VarDP': {"Description": "Allele specific depth over variant genotypes (does not include depth of reference samples)"},
     'AS_VQSLOD': {
         "Description": "Allele specific log-odds ratio of being a true variant versus being a false positive under the trained VQSR Gaussian mixture model"},
     'AS_VQSR_culprit': {"Description": "Allele specific worst-performing annotation in the VQSR Gaussian mixture model"},
@@ -1078,6 +1078,7 @@ def main(args):
 
         logger.info('Adding age hists (tranche 2 fix)')
         hists_ht = get_age_hists(data_source, freeze)
+        hists_ht = hists_ht.select('age_hist_het', 'age_hist_hom')
         mt = mt.annotate_rows(**hists_ht[mt.row_key])
 
         bin_edges = make_hist_bin_edges_expr(mt.rows())
@@ -1140,8 +1141,9 @@ def main(args):
                         'format': FORMAT_DICT}
 
         logger.info('Saving header dict to pickle')
-        pickle_file = f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/header_dict.pickle', 'wb') as p:
-            pickle.dump(header_dict, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle_file = f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/header_dict.pickle'
+        with hl.hadoop_open(pickle_file, 'wb') as p:
+            pickle.dump(header_dict, p,  protocol=pickle.HIGHEST_PROTOCOL)
         #mt = mt.annotate_rows(info=mt.info.annotate(vep=vep_csq_ht[mt.row_key].vep))
         
         #mt.write(release_mt_path(data_source, freeze, temp=True), args.overwrite)
@@ -1158,7 +1160,6 @@ def main(args):
     if args.prepare_browser_ht:
         mt = hl.read_matrix_table(release_mt_path(data_source, freeze))
         logger.info(f'mt count: {mt.count()}')
-        mt.describe()
         
         logger.info('Adding missing filters field (tranche 2 fix)')
         rf_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'rf'))
@@ -1172,6 +1173,9 @@ def main(args):
 
         logger.info('Adding age hists (tranche 2 fix)')
         hists_ht = get_age_hists(data_source, freeze)
+        hists_ht.describe()
+        hists_ht = hists_ht.select('age_hist_het', 'age_hist_hom') 
+        hists_ht.describe()
         mt = mt.annotate_rows(**hists_ht[mt.row_key])
 
         logger.info('Adding rsids (tranche 2 fix)')
@@ -1188,9 +1192,10 @@ def main(args):
 
     if args.prepare_release_vcf:
 
-        mt = mt.read(release_mt_path(data_source, freeze, temp=True))
+        mt = hl.read_matrix_table(release_mt_path(data_source, freeze, temp=True))
         logger.info('Reading header dict from pickle')
-        pickle_file = f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/header_dict.pickle', 'rb') as p:
+        pickle_file = f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/header_dict.pickle'
+        with hl.hadoop_open(pickle_file, 'rb') as p:
             header_dict = pickle.load(p)
 
         # tranche 2 set female faf on chrY to NA fix
@@ -1202,19 +1207,21 @@ def main(args):
         mt = mt.annotate_rows(**dbsnp_ht[mt.row_key])
 
         row_annots = list(mt.row.info)
-        new_row_annots = row_annots
-        print(new_row_annots)
-        #new_row_annots = [x.replace('adj_', '').replace('_adj', '').replace('_adj_', '').replace('raw_', '') for x in row_annots]
-        #new_row_annots = [x.replace('_adj', '').replace('_adj_', '')for x in row_annots]
+        new_row_annots = []
+        for x in row_annots:
+            if 'hist' not in x:
+                x = x.replace('adj_', '',).replace('_adj', '').replace('_adj_', '').replace('raw_', '')
+            new_row_annots.append(x)
 
         info_annot_mapping = dict(zip(new_row_annots, [mt.info[f'{x}'] for x in row_annots]))
         mt = mt.transmute_rows(info=hl.struct(**info_annot_mapping))
 
         # Rearrange INFO field in desired ordering
-        drop_hists = [x + '_n_smaller' for x in HISTS] + [x + '_bin_edges' for x in HISTS] + [x + '_n_larger' for x in HISTS if 'dp_' not in x] + ['age_hist_hom_bin_edges', 'age_hist_het_bin_edges']
+        drop_hists = [x + '_n_smaller' for x in HISTS] + [x + '_bin_edges' for x in HISTS] + [x + '_n_larger' for x in HISTS if 'dp_' not in x]
+        drop_hists.extend([x + '_adj_n_smaller' for x in HISTS] + [x + '_adj_bin_edges' for x in HISTS] + [x + '_adj_n_larger' for x in HISTS if 'dp_' not in x] + ['age_hist_hom_bin_edges', 'age_hist_het_bin_edges'])
+
         mt = mt.annotate_rows(info=mt.info.select('AC', 'AN', 'AF', 'rf_tp_probability',
                                              *mt.info.drop('AC', 'AN', 'AF', 'rf_tp_probability', *drop_hists)))
-
         # Export VCFs by chromosome
         mt = mt.key_rows_by(locus=hl.locus(mt.locus.contig, mt.locus.position),
                        alleles=mt.alleles)
@@ -1224,6 +1231,7 @@ def main(args):
         # NOTE: need to run this on all workers
         rg = hl.get_reference('GRCh38')
         contigs = rg.contigs[:24] # autosomes + X/Y
+        logger.info(f'Contigs: {contigs}')
 
         for contig in contigs:
             contig_mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
