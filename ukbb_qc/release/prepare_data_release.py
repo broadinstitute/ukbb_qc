@@ -6,6 +6,7 @@ from gnomad_hail.utils.sample_qc import add_filters_expr
 from gnomad_hail.utils.gnomad_functions import filter_to_adj
 from gnomad_hail.utils.annotations import qual_hist_expr,age_hists_expr
 from ukbb_qc.resources.resources import *
+import pickle
 
 
 logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
@@ -813,7 +814,7 @@ def sanity_check_mt(mt: hl.MatrixTable, subsets, missingness_threshold=0.5, verb
     non_info_metrics = list(ht.row)
     non_info_metrics.remove('info')
 
-    '''logger.info('VARIANT FILTER SUMMARIES:')
+    logger.info('VARIANT FILTER SUMMARIES:')
     ht_explode = ht.explode(ht.filters)
     logger.info(f'hl.agg.counter filters: {ht_explode.aggregate(hl.agg.counter(ht_explode.filters))}')
     ht = ht.annotate(is_filtered=ht.filters.length() > 0,
@@ -874,7 +875,7 @@ def sanity_check_mt(mt: hl.MatrixTable, subsets, missingness_threshold=0.5, verb
                 # Check AC_raw >= AC adj
                 generic_field_check(ht, (ht.info[f'{subset}{subfield}_raw'] < ht.info[f'{subset}{subfield}_adj']),
                                     f'{subset}{subfield}_raw >= {subfield}_adj',
-                                    [f'info.{subset}{subfield}_raw', f'info.{subset}{subfield}_adj'], verbose)'''
+                                    [f'info.{subset}{subfield}_raw', f'info.{subset}{subfield}_adj'], verbose)
 
     logger.info('FREQUENCY CHECKS:')
     for subset in subsets:
@@ -1115,7 +1116,7 @@ def main(args):
         logger.info(new_info_dict['AC'])
         logger.info(new_info_dict['AC_raw'])
         logger.info(new_info_dict['gnomad_exomes_AC'])
-        mt.describe()
+        '''mt.describe()
 
         # add non par annotation back
         mt = mt.annotate_rows(nonpar=(mt.locus.in_x_nonpar() | mt.locus.in_y_nonpar()))
@@ -1128,7 +1129,7 @@ def main(args):
         mt = set_female_y_metrics_to_na(mt)
         
         # Select relevant fields for VCF export
-        mt = mt.select_rows('info', 'filters', 'rsid', 'qual')
+        mt = mt.select_rows('info', 'filters', 'rsid', 'qual')'''
 
         # Add VEP annotations
         # TODO: After 200K release change this to use vep_csq annotation on the vep HT
@@ -1137,9 +1138,13 @@ def main(args):
         header_dict = {'info': new_info_dict,
                        'filter': make_filter_dict(mt.rows()),
                         'format': FORMAT_DICT}
-        mt = mt.annotate_rows(info=mt.info.annotate(vep=vep_csq_ht[mt.row_key].vep))
 
-        mt.write(release_mt_path(data_source, freeze, temp=True), args.overwrite)
+        logger.info('Saving header dict to pickle')
+        pickle_file = f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/header_dict.pickle', 'wb') as p:
+            pickle.dump(header_dict, protocol=pickle.HIGHEST_PROTOCOL)
+        #mt = mt.annotate_rows(info=mt.info.annotate(vep=vep_csq_ht[mt.row_key].vep))
+        
+        #mt.write(release_mt_path(data_source, freeze, temp=True), args.overwrite)
 
 
     if args.sanity_check_sites:
@@ -1152,10 +1157,9 @@ def main(args):
 
     if args.prepare_browser_ht:
         mt = hl.read_matrix_table(release_mt_path(data_source, freeze))
-        mt = set_female_y_metrics_to_na(mt)
-
         logger.info(f'mt count: {mt.count()}')
-
+        mt.describe()
+        
         logger.info('Adding missing filters field (tranche 2 fix)')
         rf_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'rf'))
         rf_ht = rf_ht.select('filters')
@@ -1170,7 +1174,7 @@ def main(args):
         hists_ht = get_age_hists(data_source, freeze)
         mt = mt.annotate_rows(**hists_ht[mt.row_key])
 
-        logger.info('Adding rsids again (tranche 2 fix)')
+        logger.info('Adding rsids (tranche 2 fix)')
         dbsnp_ht = dbsnp.ht().select('rsid')
         mt = mt.drop('rsid')
         mt = mt.annotate_rows(**dbsnp_ht[mt.row_key])
@@ -1185,6 +1189,12 @@ def main(args):
     if args.prepare_release_vcf:
 
         mt = mt.read(release_mt_path(data_source, freeze, temp=True))
+        logger.info('Reading header dict from pickle')
+        pickle_file = f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/header_dict.pickle', 'rb') as p:
+            header_dict = pickle.load(p)
+
+        # tranche 2 set female faf on chrY to NA fix
+        mt = set_female_y_metrics_to_na(mt)
 
         # tranche 2 dbsnp fix
         dbsnp_ht = dbsnp.ht().select('rsid')
@@ -1208,9 +1218,6 @@ def main(args):
         # Export VCFs by chromosome
         mt = mt.key_rows_by(locus=hl.locus(mt.locus.contig, mt.locus.position),
                        alleles=mt.alleles)
-
-        # add non par annotation back
-        #mt = mt.annotate_rows(nonpar=(mt.locus.in_x_nonpar() | mt.locus.in_y_nonpar()))
         mt.describe()
 
         logger.info(f'full mt count: {mt.count()}')
