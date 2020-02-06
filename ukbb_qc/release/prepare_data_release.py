@@ -215,7 +215,6 @@ def prepare_annotations(
     mt = mt.annotate_rows(rf=rf_ht[mt.row_key])
     mt = flag_problematic_regions(mt)
     mt = mt.transmute_rows(rf=mt.rf.drop('interval_qc_pass'))
-    mt.describe()
  
     logger.info('Annotating cohort frequencies')
     mt = mt.annotate_rows(**freq_ht[mt.row_key])
@@ -1054,7 +1053,6 @@ def main(args):
         logger.info('Adding annotations...')
         mt = prepare_annotations(mt, freq_ht, unrelated_freq_ht, rf_ht, vep_ht, hist_ht, 
                                 make_index_dict(freq_ht, freq_meta), allele_ht, vqsr_ht)
-        mt.describe()
         mt = mt.annotate_globals(age_distribution=age_hist_data)
         mt.write(release_mt_path(data_source, freeze), args.overwrite)
 
@@ -1117,7 +1115,6 @@ def main(args):
         logger.info(new_info_dict['AC'])
         logger.info(new_info_dict['AC_raw'])
         logger.info(new_info_dict['gnomad_exomes_AC'])
-        mt.describe()
 
         # add non par annotation back
         mt = mt.annotate_rows(nonpar=(mt.locus.in_x_nonpar() | mt.locus.in_y_nonpar()))
@@ -1172,9 +1169,7 @@ def main(args):
 
         logger.info('Adding age hists (tranche 2 fix)')
         hists_ht = get_age_hists(data_source, freeze)
-        hists_ht.describe()
         hists_ht = hists_ht.select('age_hist_het', 'age_hist_hom') 
-        hists_ht.describe()
         mt = mt.annotate_rows(**hists_ht[mt.row_key])
 
         logger.info('Adding rsids (tranche 2 fix)')
@@ -1184,7 +1179,6 @@ def main(args):
 
         ht = mt.rows()
         logger.info(f'ht count: {ht.count()}')
-        ht.describe()
         ht = ht.naive_coalesce(20000)
         ht.write(release_ht_path(data_source, freeze), args.overwrite)
 
@@ -1205,6 +1199,7 @@ def main(args):
         mt = mt.drop('rsid')
         mt = mt.annotate_rows(**dbsnp_ht[mt.row_key])
 
+        # Reformat names to remove "adj_" (this is a carryover from code that labeled everything "gnomad")
         row_annots = list(mt.row.info)
         new_row_annots = []
         for x in row_annots:
