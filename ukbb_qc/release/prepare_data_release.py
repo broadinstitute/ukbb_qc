@@ -1190,7 +1190,10 @@ def main(args):
         pickle_file = f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/header_dict.pickle'
         with hl.hadoop_open(pickle_file, 'rb') as p:
             header_dict = pickle.load(p)
-
+        logger.info('Confirm info dict looks correct:')
+        for i in header_dict['info']:
+            logger.info(i, header_dict['info'][i])
+        
         # tranche 2 set female faf on chrY to NA fix
         mt = set_female_y_metrics_to_na(mt)
 
