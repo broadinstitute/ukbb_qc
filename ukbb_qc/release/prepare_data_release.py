@@ -1,5 +1,6 @@
-from gnomad_hail.resources.grch38.reference_data import dbsnp
 from gnomad_hail.utils.generic import rep_on_read
+from gnomad_hail.resources.grch38.intervals import lcr
+from gnomad_hail.resources.grch38.reference_data import dbsnp
 from gnomad_qc.v2.variant_qc.prepare_data_release import (generic_field_check, index_globals, 
                                                         make_filters_sanity_check_expr, make_label_combos)
 from gnomad_hail.utils.sample_qc import add_filters_expr 
@@ -146,7 +147,7 @@ def flag_problematic_regions(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.Mat
     :return: Table/MatrixTable with `region_flag` set and `non_par` row annotations.
     :rtype: Table/MatrixTable
     '''
-    lcr_intervals = get_lcr_intervals()
+    lcr_intervals = lcr.ht()
     region_filters = {
         'lcr': hl.is_defined(lcr_intervals[t.locus]),
         'fail_interval_qc': ~(t.rf.interval_qc_pass)
