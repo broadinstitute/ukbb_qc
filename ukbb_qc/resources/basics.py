@@ -1,4 +1,4 @@
-from .resource_utils import DataException
+from .resource_utils import *
 
 
 broad_calling_intervals_path = 'gs://broad-ukbb/resources/broad_exome_calling.interval_list'
