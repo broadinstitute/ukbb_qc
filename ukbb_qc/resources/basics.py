@@ -1,3 +1,6 @@
+from .resource_utils import DataException
+
+
 CURRENT_FREEZE = 5
 DATA_SOURCES = ['regeneron', 'broad']
 FREEZES = [4, 5]
@@ -283,7 +286,3 @@ def release_vcf_path(data_source: str, freeze: int, contig=None) -> str:
         return f'{get_release_path(data_source, freeze)}/vcf/{contig}.vcf.bgz'
     else:
         raise DataException("No VCF for all contigs. Must pick a contig")
-
-
-class DataException(Exception):
-    pass
