@@ -1,13 +1,6 @@
 from .resource_utils import DataException
 
 
-CURRENT_FREEZE = 5
-DATA_SOURCES = ['regeneron', 'broad']
-FREEZES = [4, 5]
-CURRENT_HAIL_VERSION = "0.2"
-
-
-ukbb_calling_intervals_path = 'gs://broad-ukbb/resources/ukbb_exome_calling.interval_list'
 broad_calling_intervals_path = 'gs://broad-ukbb/resources/broad_exome_calling.interval_list'
 ukbb_calling_intervals_summary = 'gs://broad-ukbb/resources/ukbb_exome_calling_intervals.summary.txt'
 ukbb_phenotype_path = "gs://broad-ukbb/resources/ukb24295.phenotypes.txt"
