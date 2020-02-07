@@ -103,47 +103,6 @@ def annotate_interval_qc_filter(
     return t
 
 
-def annotate_relationship(
-    relatedness_ht: hl.Table,
-    first_degree_threshold: List[float] = [0.1767767, 0.4],
-    second_degree_threshold: float = 0.08838835,
-    ibd2_parent_offspring_threshold: float = 0.14
-):
-    """
-    Annotates a kinship Table with second-degree, full-sibling, and parent-child relationships
-
-    :param Table relatedness_ht: kinship Table to be annotated
-    :param List of floats first_degree_threshold: lower and upper kinship thresholds for first degree relatedness
-    :param float second_degree_threshold: kinship threshold for second degree relatedness
-    :param float ibd2_parent_offspring_threshold: IBD2 threshold to differentiate parent-child from full-sibling
-    :return: None
-    :rtype: None
-    """
-    relatedness_ht = relatedness_ht.annotate(
-        relationship_classification=hl.case()
-        .when(
-            (relatedness_ht.kin > second_degree_threshold)
-            & (relatedness_ht.kin < first_degree_threshold[0]),
-            "Second-degree",
-        )
-        .when(
-            (relatedness_ht.kin > first_degree_threshold[0])
-            & (relatedness_ht.kin < first_degree_threshold[1])
-            & (relatedness_ht.ibd2 >= ibd2_parent_offspring_threshold),
-            "Full-sibling",
-        )
-        .when(
-            (relatedness_ht.kin > first_degree_threshold[0])
-            & (relatedness_ht.kin < first_degree_threshold[1])
-            & (relatedness_ht.ibd2 < ibd2_parent_offspring_threshold),
-            "Parent-child",
-        )
-        .default("None")
-    )
-
-    return relatedness_ht
-
-
 def import_capture_regions(interval_path: str, output_path: str, ow: bool) -> None:
     """
     Imports capture region text file into Table and writes Table at specified path
