@@ -69,8 +69,8 @@ pop_names = {
 # INFO dict used in VCF export for variant annotations
 INFO_DICT = {
     'FS': {"Description": "Phred-scaled p-value of Fisher's exact test for strand bias"},
-    'AS_InbreedingCoeff': {
-        "Description": "Allele spcific inbreeding coefficient as estimated from the genotype likelihoods per-sample when compared against the Hardy-Weinberg expectation"},
+    'InbreedingCoeff': {
+        "Description": "Inbreeding coefficient as estimated from the genotype likelihoods per-sample when compared against the Hardy-Weinberg expectation"},
     'MQ': {"Description": "Root mean square of the mapping quality of reads across all samples"},
     'MQRankSum': {
         "Description": "Z-score from Wilcoxon rank sum test of alternate vs. reference read mapping qualities"},
