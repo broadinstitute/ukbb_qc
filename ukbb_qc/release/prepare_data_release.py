@@ -281,9 +281,9 @@ def make_info_dict(prefix, label_groups=None, bin_edges=None, faf=False, popmax=
             else:
                 combo_dict = {
                     f"{prefix}faf95_{combo}": {"Number": "A",
-                                                "Description": "Filtering allele frequency (using Poisson 95% CI) for samples{}".format(make_combo_header_text(None, group_types, combo_fields, prefix, faf=True))},
+                                                "Description": "Filtering allele frequency (using Poisson 95% CI) {}".format(make_combo_header_text('for', group_types, combo_fields, prefix, faf=True))},
                     f"{prefix}faf99_{combo}": {"Number": "A",
-                                                "Description": "Filtering allele frequency (using Poisson 99% CI) for samples{}".format(make_combo_header_text(None, group_types, combo_fields, prefix, faf=True))}
+                                                "Description": "Filtering allele frequency (using Poisson 99% CI) {}".format(make_combo_header_text('for', group_types, combo_fields, prefix, faf=True))}
                 }
             info_dict.update(combo_dict)
     return info_dict
@@ -543,30 +543,28 @@ def make_combo_header_text(preposition, group_types, combo_fields, prefix, faf=F
     combo_dict = dict(zip(group_types, combo_fields))
     if not faf:
         header_text = " " + preposition
-        if 'sex' in combo_dict.keys():
-            header_text = header_text + " " + combo_dict['sex']
-
-        if 'gnomad' in prefix:
-            header_text = header_text + " gnomAD samples"
-        else:
-            header_text = header_text + " samples"
-
-        if 'subpop' in combo_dict.keys():
-            header_text = header_text + f" of {pop_names[combo_dict['subpop']]} ancestry"
-            combo_dict.pop('pop')
-        if 'pop' in combo_dict.keys():
-            header_text = header_text + f" of {pop_names[combo_dict['pop']]} ancestry"
-        if 'gnomad' not in prefix:
-            header_text = header_text
-        if 'group' in group_types:
-            if combo_dict['group'] == 'raw':
-                header_text = header_text + ", before removing low-confidence genotypes"
     else:
         header_text = ""
-        if 'pop' in combo_dict.keys():
-            header_text = f" of {pop_names[combo_dict['pop']]} ancestry"
-        if 'gnomad' not in prefix:
-            header_text = header_text
+
+    if 'sex' in combo_dict.keys():
+        header_text = header_text + " " + combo_dict['sex']
+
+    if 'subpop' in combo_dict.keys():
+        header_text = header_text + f" of {pop_names[combo_dict['subpop']]} ancestry"
+        combo_dict.pop('pop')
+    if 'pop' in combo_dict.keys():
+        header_text = header_text + f" of {pop_names[combo_dict['pop']]} ancestry"
+
+     if 'gnomad' not in prefix:
+        header_text = header_text
+
+    if 'gnomad' in prefix:
+        header_text = header_Text + " in gnomAD"
+
+    if 'group' in group_types:
+        if combo_dict['group'] == 'raw':
+            header_text = header_text + ", before removing low-confidence genotypes"
+
     return header_text
 
 
@@ -972,6 +970,7 @@ def main(args):
 
             if 'gnomad' in subset:
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=GNOMAD_POPS)))
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], popmax=True))
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=GNOMAD_POPS, sex=SEXES)))
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=['nfe'], subpop=GNOMAD_NFE_SUBPOPS)))
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=['eas'], subpop=GNOMAD_EAS_SUBPOPS)))
