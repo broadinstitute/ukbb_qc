@@ -1,4 +1,4 @@
-from .basics import DataException
+from .basics import CURRENT_FREEZE, FREEZES, DATA_SOURCES, DataException
 
 
 syndip_bed_path = 'gs://gnomad-public/truth-sets/hail-0.2/syndip.b38.bed'
