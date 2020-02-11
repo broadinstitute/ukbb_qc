@@ -1,4 +1,5 @@
-from .basics import CURRENT_FREEZE, FREEZES, DATA_SOURCES, DataException
+from .basics import CURRENT_FREEZE, CURRENT_HAIL_VERSION, DATA_SOURCES, FREEZES, DataException
+from typing import Dict
 
 
 syndip_bed_path = 'gs://gnomad-public/truth-sets/hail-0.2/syndip.b38.bed'
