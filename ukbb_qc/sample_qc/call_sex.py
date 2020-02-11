@@ -23,13 +23,12 @@ def impute_sex(mt: hl.MatrixTable, ploidy_ht: hl.Table, aaf_threshold = 0.001, m
     :return: Table with imputed sex annotations stashed in column annotation 'sex_karyotype'
     :rtype: Table
     """
-
-    logger.info('Filtering to common, high-callrate, biallelic SNPs on chrX and imputing sex...')
+    logger.info("Filtering to chrX...")
     mt = hl.filter_intervals(mt, 
                             [hl.parse_locus_interval(x_contig, reference_genome=get_reference_genome(mt.locus).name) 
                             for x_contig in get_reference_genome(mt.locus).x_contigs]) 
-    mt = mt.filter_rows((hl.agg.fraction(hl.is_defined(mt.GT)) > 0.99) & (mt.variant_qc.AF[1] > aaf_threshold))
 
+    # TODO update this for sparse
     sex_ht = hl.impute_sex(mt.GT, aaf_threshold=aaf_threshold, male_threshold=male_threshold, female_threshold=female_threshold)
     sex_ht = sex_ht.annotate(**ploidy_ht[sex_ht.s])
     x_ploidy_cutoffs, y_ploidy_cutoffs = get_ploidy_cutoffs(sex_ht, 0.5)
@@ -53,7 +52,7 @@ def run_impute_ploidy(mt: hl.MatrixTable, data_source: str, freeze: int) -> hl.T
     :return: Table with imputed sex chromosome ploidies
     :rtype: Table
     """
-    logger.info('Imputing sex ploidy...')
+    logger.info("Imputing sex ploidy...")
     ploidy_ht = impute_sex_ploidy(mt, included_intervals=capture_ht_path(data_source, freeze))
     ploidy_ht = ploidy_ht.checkpoint(ploidy_ht_path(data_source, freeze), overwrite=True)
     return ploidy_ht
@@ -69,12 +68,13 @@ def run_impute_sex(mt: hl.MatrixTable, data_source: str, freeze: int) -> hl.Tabl
     :return: Table with imputed sex karyotypes
     :rtype: Table
     """
-
-    if data_source == 'regeneron':
-        mt = mt.filter_rows(hl.is_missing(mt.filters))
     # NOTE: Broad callset does not have filter annotations
+    if data_source == "regeneron":
+        mt = mt.filter_rows(hl.is_missing(mt.filters))
+
+    logger.info("Filtering to biallelic SNPs...")
     mt = mt.filter_rows((hl.len(mt.alleles) == 2) & hl.is_snp(mt.alleles[0], mt.alleles[1]))
 
-    logger.info('Imputing sex...')
+    logger.info("Imputing sex...")
     sex_ht = impute_sex(mt, ploidy_ht)
     sex_ht = sex_ht.checkpoint(sex_ht_path(data_source, freeze), overwrite=True)
