@@ -36,6 +36,19 @@ def interval_qc_path(data_source: str, freeze: int = CURRENT_FREEZE, chrom: str 
     return f'{sample_qc_path(data_source, freeze)}/interval_qc/coverage_by_target{chrom}{".ht" if ht else ".txt"}'
 
 
+def f_stat_sites_path() -> str:
+    """
+    Returns path to Table with high callrate, common, pass interval QC, biallelic SNP positions on chromosome X used in sex imputation.
+    NOTE: The sites came from freeze 5 (the last dataset with AF).
+
+    :return: Path to Table with sites for sex imputation
+    :rtype: str
+    """
+    data_source = 'broad'
+    freeze = 5
+    return f'{qc_temp_data_prefix(data_source, freeze)}/f_stat_sites.ht'
+
+
 # QC resources (meta ht, qc mt, qc ht)
 def meta_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
