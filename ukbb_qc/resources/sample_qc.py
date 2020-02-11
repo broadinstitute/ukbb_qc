@@ -17,7 +17,7 @@ def sample_qc_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/sample_qc'
 
 
-# Interval QC
+# Interval resources
 def interval_qc_path(data_source: str, freeze: int = CURRENT_FREEZE, chrom: str = None, ht: bool = True) -> str:
     """
     Returns path to interval QC results (either as a Table or text file).
@@ -35,6 +35,30 @@ def interval_qc_path(data_source: str, freeze: int = CURRENT_FREEZE, chrom: str 
         chrom = f'.{chrom}'
     return f'{sample_qc_path(data_source, freeze)}/interval_qc/coverage_by_target{chrom}{".ht" if ht else ".txt"}'
 
+
+def calculate_fstat_sites() -> None:
+    """
+    Writes a Table with high callrate, common, biallelic SNPs in regions that pass interval QC on chromosome X. 
+    This Table is designed to be used as an interval filter in sex imputation.
+    NOTE: This function generates sites only for tranche 2/freeze 5, which is the last dataset that contains AF.
+
+    :return: None
+    :rtype: None
+    """
+    mt = hl.read_matrix_table('gs://broad-ukbb/broad.freeze_5/data/broad.freeze_5.mt')
+    mt = mt.key_rows_by('locus', 'alleles')
+    mt = hl.filter_intervals(mt,
+                            [hl.parse_locus_interval(x_contig, reference_genome=get_reference_genome(mt.locus).name)
+                            for x_contig in get_reference_genome(mt.locus).x_contigs])
+    mt = mt.filter_rows((hl.len(mt.alleles) == 2) & hl.is_snp(mt.alleles[0], mt.alleles[1]))
+    mt = annotate_interval_qc_filter('broad', 5, mt, autosomes_only=False)
+    mt = mt.filter_rows(mt.interval_qc_pass)
+    mt = mt.transmute_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
+    mt = hl.variant_qc(mt)
+    mt = mt.filter_rows((hl.agg.fraction(hl.is_defined(mt.GT)) > 0.99) & (mt.variant_qc.AF[1] > 0.001))
+    ht = mt.rows()
+    ht = ht.write('gs://broad-ukbb/broad.freeze_5/sample_qc/temp/f_stat_sites.ht')
+    
 
 # QC resources (meta ht, qc mt, qc ht)
 def meta_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
