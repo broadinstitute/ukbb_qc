@@ -1,3 +1,4 @@
+import hail as hl
 from typing import Optional
 from gnomad_hail.resources.resource_utils import DataException
 
@@ -105,7 +106,16 @@ def raw_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, is_temp = False)
     if data_source == 'regeneron':
         return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/data/{data_source}.freeze_{freeze}.nf.mt'
     elif data_source == 'broad':
-        return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/data/{data_source}.freeze_{freeze}{tempstr}.mt'
+        # create dict for raw mts for freeze 5 and later
+        dsp_prefix = 'gs://broad-pharma5-ukbb-outputs'
+        raw_mt_names = {
+            5: 'hail_dataproc_20191108115937',
+            6: 'hail_dataproc_20200130092005.mt'
+        }
+        if freeze == 4:
+            return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/data/{data_source}.freeze_{freeze}{tempstr}.mt'
+        else:
+            return f'{dsp_prefix}/{raw_mt_names[freeze]}'
 
 
 def hardcalls_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, split: bool = True) -> str:
@@ -134,14 +144,14 @@ def non_refs_only_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, split:
     return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/non_refs_only/non_refs_only{".split" if split else ""}.mt'
 
 
-def get_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE, name: str = None, mt: bool) -> str:
+def get_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE,  name: str = None, mt: bool = False) -> str:
     """
     Creates a checkpoint path for Table or MatrixTable
 
     :param str data_type: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
     :param str name: Name of intermediate Table/MatrixTable
-    :param bool mt: Whether path is for a MatrixTable
+    :param bool mt: Whether path is for a MatrixTable, default is False
     :return: Output checkpoint path
     :rtype: str
     """
