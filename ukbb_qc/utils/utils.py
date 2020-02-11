@@ -1,4 +1,7 @@
-from ukbb_qc.resources.resources import logging
+import hail as hl
+import logging
+from typing import Union
+from ukbb_qc.resources.sample_qc import interval_qc_path
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")

@@ -202,7 +202,7 @@ def get_array_sample_map_ht(data_source: str, freeze: int = CURRENT_FREEZE) -> h
     return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/array_sample_map.ht'
 
 
-# Interval resources
+# Capture intervals 
 def capture_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
     Returns path to capture intervals Table.
@@ -218,24 +218,6 @@ def capture_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
         return 'gs://broad-ukbb/resources/ukbb_exome_calling_intervals.summary.ht'
     else:
         raise DataException("No interval file specified for this data_source and freeze yet")
-
-
-def interval_qc_path(data_source: str, freeze: int = CURRENT_FREEZE, chrom: str = None, ht: bool = True) -> str:
-    """
-    Returns path to interval QC results (either as a Table or text file).
-
-    :param str data_source: One of 'regeneron' or 'broad'
-    :param int freeze: One of data freezes
-    :param str chrom: Chromosome of interest
-    :param bool ht: Whether to return path to Table
-    :return: Path to interval QC results
-    :rtype: str
-    """
-    if chrom is None:
-        chrom = ""
-    else:
-        chrom = f'.{chrom}'
-    return f'{sample_qc_prefix(data_source, freeze)}/interval_qc/coverage_by_target{chrom}{".ht" if ht else ".txt"}'
 
 
 # Release resources
