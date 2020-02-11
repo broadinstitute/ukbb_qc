@@ -1,4 +1,4 @@
-from .resource_utils import CURRENT_FREEZE, DataException, DATA_SOURCES, FREEZES
+from .basics import CURRENT_FREEZE, DataException, DATA_SOURCES, FREEZES
 
 
 def sample_qc_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:

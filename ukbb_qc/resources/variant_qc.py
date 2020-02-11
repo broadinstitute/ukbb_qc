@@ -1,4 +1,4 @@
-from .resource_utils import DataException
+from .basics import DataException
 
 
 syndip_bed_path = 'gs://gnomad-public/truth-sets/hail-0.2/syndip.b38.bed'
