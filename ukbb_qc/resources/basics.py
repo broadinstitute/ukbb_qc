@@ -92,13 +92,14 @@ def array_mt_path(liftover: bool = False, checkpoint: bool = False) -> str:
         return f'gs://broad-ukbb/resources/array/ukbb_array{"_liftover_GRCh38" if liftover else ""}.mt'
 
 
-def raw_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, is_temp = False) -> str:
+def raw_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, is_temp = False, densified: bool = False) -> str:
     """
     Returns path to raw UKBB MatrixTable. WARNING: unsplit and no special consideration on sex chromosomes
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
     :param bool is_temp: Whether to return path to temp raw MatrixTable
+    :param bool densified: Whether to return the densified sparse MatrixTable. Only relevant for freeze 5.
     :return: Path to raw MatrixTable
     :rtype: str
     """
@@ -112,7 +113,7 @@ def raw_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, is_temp = False)
             5: 'hail_dataproc_20191108115937',
             6: 'hail_dataproc_20200130092005.mt'
         }
-        if freeze == 4:
+        if freeze == 4 or (freeze == 5 and densified):
             return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/data/{data_source}.freeze_{freeze}{tempstr}.mt'
         else:
             return f'{dsp_prefix}/{raw_mt_names[freeze]}'

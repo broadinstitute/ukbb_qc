@@ -1,7 +1,9 @@
 import hail as hl
 import logging
 from typing import Union
-from ukbb_qc.resources.sample_qc import interval_qc_path
+from gnomad_hail.utils.generic import get_reference_genome
+from ukbb_qc.resources.basics import raw_mt_path
+from ukbb_qc.resources.sample_qc import f_stat_sites_path, interval_qc_path, qc_temp_data_prefix
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -114,7 +116,9 @@ def calculate_fstat_sites() -> None:
     :return: None
     :rtype: None
     """
-    mt = hl.read_matrix_table('gs://broad-ukbb/broad.freeze_5/data/broad.freeze_5.mt')
+    data_source = 'broad'
+    freeze = 5
+    mt = hl.read_matrix_table(raw_mt_path(data_source, freeze, densified=True))
     mt = mt.key_rows_by('locus', 'alleles')
     mt = hl.filter_intervals(mt,
                             [hl.parse_locus_interval(x_contig, reference_genome=get_reference_genome(mt.locus).name)
@@ -126,4 +130,4 @@ def calculate_fstat_sites() -> None:
     mt = hl.variant_qc(mt)
     mt = mt.filter_rows((hl.agg.fraction(hl.is_defined(mt.GT)) > 0.99) & (mt.variant_qc.AF[1] > 0.001))
     ht = mt.rows()
-    ht = ht.write('gs://broad-ukbb/broad.freeze_5/sample_qc/temp/f_stat_sites.ht')
+    ht = ht.write(f_stat_sites_path())
