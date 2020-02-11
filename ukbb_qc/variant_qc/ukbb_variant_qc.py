@@ -1,12 +1,18 @@
-from gnomad_hail.utils import rf
-from gnomad_hail.utils.generic import bi_allelic_site_inbreeding_expr
-from gnomad_qc.v2.variant_qc.variantqc import sample_rf_training_examples
-from ukbb_qc.utils import annotate_interval_qc_filter
-from ukbb_qc.resources import rf_run_hash_path, get_ukbb_data
-from typing import Dict, List
 import json
 import logging
+import argparse
 import uuid
+import sys
+from typing import Dict, List
+from gnomad_hail.utils import rf
+from gnomad_hail.utils.generic import bi_allelic_site_inbreeding_expr
+from gnomad_hail.utils.gnomad_functions import pretty_print_runs
+from gnomad_hail.utils.slack import try_slack
+from gnomad_qc.v2.variant_qc.variantqc import sample_rf_training_examples
+from ukbb_qc.utils import annotate_interval_qc_filter
+from ukbb_qc.resources.basics import get_ukbb_data, CURRENT_FREEZE
+from ukbb_qc.resources.variant_qc import (rf_run_hash_path, var_annotations_ht_path, score_ranking_path,
+                                          rf_path, rf_annotated_path)
 import hail as hl
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -96,7 +102,8 @@ def create_rf_ht(
         freeze: int,
         n_variants_median: int = 50000,
         impute_features_by_variant_type: bool = True,
-        group: str = 'qc_samples_raw'
+        group: str = 'qc_samples_raw',
+        vqsr_type = 'AS'
 ) -> hl.Table:
     """
     Creates a Table with all necessary columns for RF:
@@ -561,7 +568,7 @@ def main(args):
 
     if args.list_rf_runs:
         logger.info(f"RF runs for {data_source}.freeze_{freeze}:")
-        pretty_print_runs(get_rf_runs(data_source, freeze))
+        pretty_print_runs(get_rf_runs(rf_run_hash_path(data_source, freeze)))
 
     if args.annotate_for_rf:
         ht = create_rf_ht(data_source, freeze,
