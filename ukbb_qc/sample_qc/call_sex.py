@@ -1,7 +1,8 @@
-import logging
-from gnomad_hail.utils.sample_qc import get_ploidy_cutoffs,get_sex_expr
+from gnomad_hail.utils.sample_qc import get_ploidy_cutoffs, get_sex_expr
 from gnomad_hail.utils.generic import get_reference_genome
-from ukbb_qc.resources import *
+from ukbb_qc.resources.basics import capture_ht_path
+from ukbb_qc.resources.resource_utils import *
+from ukbb_qc.resources.sample_qc import ploidy_ht_path, sex_ht_path
 
 
 logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
@@ -42,13 +43,30 @@ def impute_sex(mt: hl.MatrixTable, ploidy_ht: hl.Table, aaf_threshold = 0.001, m
     )
 
 
-def run_impute_sex(mt: hl.MatrixTable, data_source: str, freeze: str) -> hl.Table:
+def run_impute_ploidy(mt: hl.MatrixTable, data_source: str, freeze: int) -> hl.Table:
     """
-    Calls sex for the samples in a given mt and writes ht and output sex.txt to specified directory
+    Detects sex chromosome ploidy for samples in given MatrixTable and writes ploidy Table
 
-    :param MatrixTable mt: MatrixTable with samples for sexcheck
-    :param str data_source: One of regeneron or broad
-    :return: Table with sex annotations
+    :param MatrixTable mt: Input MatrixTable 
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :return: Table with imputed sex chromosome ploidies
+    :rtype: Table
+    """
+    logger.info('Imputing sex ploidy...')
+    ploidy_ht = impute_sex_ploidy(mt, included_intervals=capture_ht_path(data_source, freeze))
+    ploidy_ht = ploidy_ht.checkpoint(ploidy_ht_path(data_source, freeze), overwrite=True)
+    return ploidy_ht
+
+
+def run_impute_sex(mt: hl.MatrixTable, data_source: str, freeze: int) -> hl.Table:
+    """
+    Imputes sex karyotypes for samples in given MatrixTable and writes Table
+
+    :param MatrixTable mt: Input MatrixTable 
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :return: Table with imputed sex karyotypes
     :rtype: Table
     """
 
@@ -56,11 +74,6 @@ def run_impute_sex(mt: hl.MatrixTable, data_source: str, freeze: str) -> hl.Tabl
         mt = mt.filter_rows(hl.is_missing(mt.filters))
     # NOTE: Broad callset does not have filter annotations
     mt = mt.filter_rows((hl.len(mt.alleles) == 2) & hl.is_snp(mt.alleles[0], mt.alleles[1]))
-
-    logger.info('Imputing sex ploidy...')
-    ploidy_ht = impute_sex_ploidy(mt, included_intervals=capture_ht_path(data_source, freeze))
-    ploidy_ht = ploidy_ht.checkpoint(ploidy_ht_path(data_source, freeze), overwrite=True)
-    # NOTE: inspect ploidy_ht output before continuing
 
     logger.info('Imputing sex...')
     sex_ht = impute_sex(mt, ploidy_ht)
