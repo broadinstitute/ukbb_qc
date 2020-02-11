@@ -1,3 +1,4 @@
+import logging
 from gnomad_hail.utils.sample_qc import get_ploidy_cutoffs, get_sex_expr
 from gnomad_hail.utils.generic import get_reference_genome
 from ukbb_qc.resources.basics import capture_ht_path
