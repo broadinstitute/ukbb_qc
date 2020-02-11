@@ -1,3 +1,6 @@
+import argparse
+import hail as hl
+import logging
 from gnomad_hail.utils.generic import rep_on_read
 from gnomad_hail.resources.grch38.intervals import lcr
 from gnomad_hail.resources.grch38.reference_data import dbsnp
@@ -6,7 +9,8 @@ from gnomad_qc.v2.variant_qc.prepare_data_release import (generic_field_check, i
 from gnomad_hail.utils.sample_qc import add_filters_expr 
 from gnomad_hail.utils.gnomad_functions import filter_to_adj
 from gnomad_hail.utils.annotations import qual_hist_expr,age_hists_expr
-from ukbb_qc.resources.resources import *
+from typing import Dict, List, Union
+from ukbb_qc.resources import *
 from ukbb_qc.utils.constants import *
 import pickle
 
@@ -555,7 +559,7 @@ def make_combo_header_text(preposition, group_types, combo_fields, prefix, faf=F
     if 'pop' in combo_dict.keys():
         header_text = header_text + f" of {pop_names[combo_dict['pop']]} ancestry"
 
-     if 'gnomad' not in prefix:
+    if 'gnomad' not in prefix:
         header_text = header_text
 
     if 'gnomad' in prefix:
@@ -970,7 +974,7 @@ def main(args):
 
             if 'gnomad' in subset:
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=GNOMAD_POPS)))
-                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], popmax=True))
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], popmax=True)))
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=GNOMAD_POPS, sex=SEXES)))
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=['nfe'], subpop=GNOMAD_NFE_SUBPOPS)))
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=['eas'], subpop=GNOMAD_EAS_SUBPOPS)))
@@ -1024,11 +1028,10 @@ def main(args):
         mt.write(release_mt_path(data_source, freeze, temp=True), args.overwrite)
 
 
-    if args.sanity_check_sites:
+    if args.sanity_check:
         subset_list = ['', 'gnomad_exomes_', 'gnomad_genomes_'] 
         mt = hl.read_matrix_table(release_mt_path(data_source, freeze, temp=True))
         mt = set_female_y_metrics_to_na(mt)
-
         sanity_check_mt(mt, subset_list, missingness_threshold=0.5, verbose=args.verbose)
 
 
@@ -1069,9 +1072,6 @@ def main(args):
         pickle_file = f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/header_dict.pickle'
         with hl.hadoop_open(pickle_file, 'rb') as p:
             header_dict = pickle.load(p)
-        logger.info('Confirm info dict looks correct:')
-        for i in header_dict['info']:
-            logger.info(i, header_dict['info'][i])
         
         # tranche 2 set female faf on chrY to NA fix
         mt = set_female_y_metrics_to_na(mt)
@@ -1090,6 +1090,38 @@ def main(args):
             new_row_annots.append(x)
 
         info_annot_mapping = dict(zip(new_row_annots, [mt.info[f'{x}'] for x in row_annots]))
+
+        # Confirm all VCF fields/descriptions are present before exporting
+        missing_fields = []
+        missing_descriptions = []
+        for item in ['info', 'filters', 'format']:
+            if item == 'info':
+                annots = new_row_annots
+            elif item == 'format':
+                annots = list(mt.entry)
+            else:
+                item = 'filter'
+                annot_mt = mt.explode_rows(mt.filters)
+                annots = list(annot_mt.aggregate_rows(hl.agg.collect_as_set(annot_mt.filters)))
+
+            temp_missing_fields = []
+            temp_missing_descriptions = []
+            for field in annots:
+                try:
+                    description = header_dict[item][field]
+                    if len(description) == 0:
+                        logger.warn(f'{field} in mt info field has empty description in VCF header!')
+                        temp_missing_descriptions.append(field)    
+                except KeyError:
+                    logger.warn(f'{field} in mt info field does not exist in VCF header!')
+                    temp_missing_fields.append(field)
+
+            missing_fields.extend(temp_missing_fields)
+            missing_descriptions.extend(temp_missing_descriptions)
+        if len(missing_fields) != 0 or len(missing_descriptions) != 0:
+            logger.error('Some fields are either missing or missing descriptions in the VCF header! Please reconcile.')
+            return
+
         mt = mt.transmute_rows(info=hl.struct(**info_annot_mapping))
 
         # Rearrange INFO field in desired ordering
@@ -1121,7 +1153,7 @@ if __name__ == '__main__':
     parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE, type=int)
     parser.add_argument('--prepare_internal_mt', help='Prepare internal MatrixTable', action='store_true')
     parser.add_argument('--prepare_vcf_mt', help='Use release mt to create vcf mt', action='store_true')
-    parser.add_argument('--sanity_check_sites', help='Run sanity checks function', action='store_true') 
+    parser.add_argument('--sanity_check', help='Run sanity checks function', action='store_true') 
     parser.add_argument('--prepare_browser_ht', help='Prepare sites ht for browser', action='store_true')
     parser.add_argument('--verbose', help='Run sanity checks function with verbose output', action='store_true')
     parser.add_argument('--prepare_release_vcf', help='Prepare release VCF', action='store_true')
