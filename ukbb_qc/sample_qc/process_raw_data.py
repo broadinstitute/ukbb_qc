@@ -1,9 +1,7 @@
-from gnomad_hail import *
 from gnomad_hail.utils.sample_qc import *
-from ukbb_qc.resources import *
-import hail as hl
+from ukbb_qc.resources.resources import *
 import argparse
-from ukbb_qc.sanity_checks import *
+
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("process_raw")
@@ -91,17 +89,17 @@ def main(args):
         mt = filter_to_adj(mt)
 
         lcr = get_lcr_intervals()
+        mt = mt.filter_rows(hl.is_missing(lcr[mt.locus]))
+
         if args.interval_qc_filter:
-            interval_qc_ht = hl.read_table(interval_qc_path(data_source, freeze))
-            good_intervals_ht = interval_qc_ht.filter(
-                interval_qc_ht.pct_samples_20x > args.pct_samples_20x
-            ).key_by("interval")
+            mt = annotate_interval_qc_filter(data_source, freeze, mt, autosomes_only=True)
             mt = mt.filter_rows(
-                hl.is_missing(lcr[mt.locus])
-                & hl.is_defined(good_intervals_ht[mt.locus])
+                mt.interval_qc_pass
             )
-        else:
-            mt = mt.filter_rows(hl.is_missing(lcr[mt.locus]))
+        if args.filter_sites:
+            qc_mt = hl.read_matrix_table(qc_mt_path(data_source, freeze=5, ld_pruned=True))
+            qc_sites = qc_mt.rows().select()
+            mt = mt.filter_rows(hl.is_defined(qc_sites[mt.row_key]))
 
         mt = mt.checkpoint(
             get_mt_checkpoint_path(
@@ -112,8 +110,10 @@ def main(args):
             overwrite=True,
         )
         logger.info(
-            f"Total number of variants after LCR and interval filtering: {mt.count_rows()}"
+            f"Total number of variants after LCR and interval/site filtering: {mt.count_rows()}"
         )
+
+        # TODO change this for later tranches
         # sites_ht = hl.import_vcf('gs://broad-ukbb/broad.freeze_5/temp/broad.freeze_5.sites.vcf.bgz',reference_genome='GRCh38')
         sites_ht = hl.read_matrix_table(
             "gs://broad-ukbb/broad.freeze_5/temp/broad.freeze_5.sites.ht"
@@ -218,6 +218,7 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
+    parser.add_argument(
         "--compute_qc_mt",
         help="Compute matrix to be used in sample qc",
         action="store_true",
@@ -237,6 +238,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--interval_qc_filter",
         help="Should interval QC be applied",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--filter_sites",
+        help="Whether to filter to QC sites (from tranche 2 QC mt)",
         action="store_true",
     )
     parser.add_argument(

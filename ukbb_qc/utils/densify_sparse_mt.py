@@ -1,7 +1,6 @@
 import hail as hl
-from gnomad_hail import *
 from gnomad_hail.utils.generic import rep_on_read
-from ukbb_qc.resources import *
+from ukbb_qc.resources.resources import *
 
 
 logging.basicConfig(format='%(asctime)s (%(name)s %(lineno)s): %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')

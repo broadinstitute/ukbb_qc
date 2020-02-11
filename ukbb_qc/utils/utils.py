@@ -1,5 +1,9 @@
+import hail as hl
 import logging
-from ukbb_qc.resources.resources import *
+from typing import Union
+from gnomad_hail.utils.generic import get_reference_genome
+from ukbb_qc.resources.basics import raw_mt_path
+from ukbb_qc.resources.sample_qc import f_stat_sites_path, interval_qc_path, qc_temp_data_prefix
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -103,73 +107,27 @@ def annotate_interval_qc_filter(
     return t
 
 
-def annotate_relationship(
-    relatedness_ht: hl.Table,
-    first_degree_threshold: List[float] = [0.1767767, 0.4],
-    second_degree_threshold: float = 0.08838835,
-    ibd2_parent_offspring_threshold: float = 0.14
-):
+def calculate_fstat_sites() -> None:
     """
-    Annotates a kinship Table with second-degree, full-sibling, and parent-child relationships
+    Writes a Table with high callrate, common, biallelic SNPs in regions that pass interval QC on chromosome X.
+    This Table is designed to be used as an interval filter in sex imputation.
+    NOTE: This function generates sites only for tranche 2/freeze 5, which is the last dataset that contains AF.
 
-    :param Table relatedness_ht: kinship Table to be annotated
-    :param List of floats first_degree_threshold: lower and upper kinship thresholds for first degree relatedness
-    :param float second_degree_threshold: kinship threshold for second degree relatedness
-    :param float ibd2_parent_offspring_threshold: IBD2 threshold to differentiate parent-child from full-sibling
     :return: None
     :rtype: None
     """
-    relatedness_ht = relatedness_ht.annotate(
-        relationship_classification=hl.case()
-        .when(
-            (relatedness_ht.kin > second_degree_threshold)
-            & (relatedness_ht.kin < first_degree_threshold[0]),
-            "Second-degree",
-        )
-        .when(
-            (relatedness_ht.kin > first_degree_threshold[0])
-            & (relatedness_ht.kin < first_degree_threshold[1])
-            & (relatedness_ht.ibd2 >= ibd2_parent_offspring_threshold),
-            "Full-sibling",
-        )
-        .when(
-            (relatedness_ht.kin > first_degree_threshold[0])
-            & (relatedness_ht.kin < first_degree_threshold[1])
-            & (relatedness_ht.ibd2 < ibd2_parent_offspring_threshold),
-            "Parent-child",
-        )
-        .default("None")
-    )
-
-    return relatedness_ht
-
-
-def import_capture_regions(interval_path: str, output_path: str, ow: bool) -> None:
-    """
-    Imports capture region text file into Table and writes Table at specified path
-
-    :param str interval_path: Path to input file
-    :param str output_path: Path to output file
-    :param bool ow: Whether to overwrite data
-    :return: None
-    :rtype: None
-    """
-
-    logger.info("Importing capture table")
-    capture_ht = hl.import_table(
-        interval_path, no_header=True, impute=True, min_partitions=10
-    )
-
-    # seqnames	start	end	width	strand	target_type	region_type	target_id
-    # chr1	11719	12377	659	*	processed_transcript|transcribed_unprocessed_pseudogene|ice_target_1	gnomad	target_1
-    capture_ht = capture_ht.transmute(
-        interval=hl.parse_locus_interval(
-            hl.format("[%s:%s-%s]", capture_ht.f0, capture_ht.f1, capture_ht.f2),
-            reference_genome="GRCh38",
-        )
-    )
-    capture_ht = capture_ht.select("interval").key_by("interval")
-
-    capture_ht.describe()
-    logger.info("Writing capture ht")
-    capture_ht.write(output_path, overwrite=ow)
+    data_source = 'broad'
+    freeze = 5
+    mt = hl.read_matrix_table(raw_mt_path(data_source, freeze, densified=True))
+    mt = mt.key_rows_by('locus', 'alleles')
+    mt = hl.filter_intervals(mt,
+                            [hl.parse_locus_interval(x_contig, reference_genome=get_reference_genome(mt.locus).name)
+                            for x_contig in get_reference_genome(mt.locus).x_contigs])
+    mt = mt.filter_rows((hl.len(mt.alleles) == 2) & hl.is_snp(mt.alleles[0], mt.alleles[1]))
+    mt = annotate_interval_qc_filter('broad', 5, mt, autosomes_only=False)
+    mt = mt.filter_rows(mt.interval_qc_pass)
+    mt = mt.transmute_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
+    mt = hl.variant_qc(mt)
+    mt = mt.filter_rows((hl.agg.fraction(hl.is_defined(mt.GT)) > 0.99) & (mt.variant_qc.AF[1] > 0.001))
+    ht = mt.rows()
+    ht = ht.write(f_stat_sites_path())
