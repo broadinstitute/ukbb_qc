@@ -436,7 +436,7 @@ def qc_temp_data_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
 
 
 def platform_pop_outlier_ht_path(data_source: str, freeze: int = CURRENT_FREEZE, pop_assignment_method: str = None) -> str:
-     """
+    """
     Returns path to Table containing samples flagged for outlier sample QC metrics
 
     :param str data_source: One of 'regeneron' or 'broad'
