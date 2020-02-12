@@ -11,13 +11,16 @@ ukbb_phenotype_path = "gs://broad-ukbb/resources/ukb24295.phenotypes.txt"
 
 
 # UKBB data resources
-def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, adj: bool = False, split: bool = True,
-                  raw: bool = False, non_refs_only: bool = False, meta_root: Optional[str] = None) -> hl.MatrixTable:
+def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, key_by_locus_and_alleles: bool = False,
+                    adj: bool = False, split: bool = True, raw: bool = False, 
+                    non_refs_only: bool = False, meta_root: Optional[str] = None
+    ) -> hl.MatrixTable:
     """
     Wrapper function to get UKBB data as MatrixTable. By default, returns split hardcalls (with adj annotated but not filtered).
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
+    :param bool key_by_locus_and_alleles: Whether to key the MatrixTable by locus and alleles
     :param bool adj: Whether the returned data should be filtered to adj genotypes
     :param bool split: Whether the dataset should be split (only applies to raw=False)
     :param bool raw: Whether to return the raw data (not recommended: unsplit, and no special consideration on sex chromosomes)
@@ -44,6 +47,9 @@ def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, adj: bool = Fa
     if meta_root:
         meta_ht = hl.read_table(meta_ht_path(data_source, freeze))
         mt = mt.annotate_cols(**{meta_root: meta_ht[mt.s]})
+
+    if key_by_locus_and_alleles:
+        mt = hl.MatrixTable(hl.ir.MatrixKeyRowsBy(mt._mir, ['locus', 'alleles'], is_sorted=True)) # taken from v3 qc
 
     return mt
 
