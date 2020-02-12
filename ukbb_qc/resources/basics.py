@@ -1,12 +1,8 @@
 import hail as hl
 from typing import Optional
 from gnomad_hail.resources.resource_utils import DataException
-
-
-CURRENT_FREEZE = 5
-DATA_SOURCES = ['regeneron', 'broad']
-FREEZES = [4, 5]
-CURRENT_HAIL_VERSION = "0.2"
+from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES, CURRENT_HAIL_VERSION
+from .sample_qc import meta_ht_path
 
 
 broad_calling_intervals_path = 'gs://broad-ukbb/resources/broad_exome_calling.interval_list'
