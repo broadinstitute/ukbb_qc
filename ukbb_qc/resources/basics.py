@@ -265,7 +265,7 @@ def release_ht_path(data_source: str, freeze: int) -> str:
     return f'{get_release_path(data_source, freeze)}/ht/release.sites.ht'
 
 
-def release_vcf_path(data_source: str, freeze: int, contig=None) -> str:
+def release_vcf_path(data_source: str, freeze: int, contig: str = None) -> str:
     '''
     Fetch bucket for release (variant-only) VCFs
 
