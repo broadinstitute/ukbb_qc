@@ -267,7 +267,7 @@ def release_ht_path(data_source: str, freeze: int) -> str:
 
 def release_vcf_path(data_source: str, freeze: int, contig=None) -> str:
     '''
-    Fetch filepath for release (variant-only) VCFs
+    Fetch bucket for release (variant-only) VCFs
 
     :param str data_source: 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
@@ -276,6 +276,6 @@ def release_vcf_path(data_source: str, freeze: int, contig=None) -> str:
     :rtype: str
     '''
     if contig:
-        return f'{get_release_path(data_source, freeze)}/vcf/{contig}.vcf.bgz'
+        return f'{get_release_path(data_source, freeze)}/vcf/{contig}/'
     else:
         raise DataException("No VCF for all contigs. Must pick a contig")
