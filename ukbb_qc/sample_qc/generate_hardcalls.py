@@ -19,16 +19,17 @@ def main(args):
     freeze = args.freeze
 
     # NOTE: do not use autoscale when running this; run with 100 normal workers
-    if args.impute_sex:
-        logger.info("Imputing sex...")
-        mt = get_ukbb_data(data_source, freeze, split=False, raw=True)
-
-        # prepare densified sparse ht for sex imputation
-        mt = mt.key_rows_by("locus", "alleles")
+    if args.impute_ploidy:
+        logger.info("Imputing sex ploidy...")
+        mt = get_ukbb_data(data_source, freeze, split=False, raw=True, key_by_locus_and_alleles=True)
         sex_check_intervals = [hl.parse_locus_interval(x, reference_genome="GRCh38") for x in ["chr20", "chrX", "chrY"]]
         mt = hl.filter_intervals(mt, sex_check_intervals)
-        mt = mt.annotate_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
-        mt = hl.variant_qc(mt)
+        run_impute_ploidy(mt, data_source, freeze)
+    # NOTE: check distributions here before continuing with sex imputation
+
+    if args.impute_sex:
+        logger.info("Imputing sex...")
+        mt = get_ukbb_data(data_source, freeze, split=False, raw=True, key_by_locus_and_alleles=True)
         run_impute_sex(mt, data_source, freeze)
     # NOTE: check distributions here before continuing with hardcalls
 
