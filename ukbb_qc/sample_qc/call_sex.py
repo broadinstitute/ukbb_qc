@@ -10,20 +10,19 @@ logger = logging.getLogger("call_sex")
 logger.setLevel(logging.INFO)
 
 
-def run_impute_ploidy(mt: hl.MatrixTable, data_source: str, freeze: int) -> hl.Table:
+def run_impute_ploidy(mt: hl.MatrixTable, data_source: str, freeze: int) -> None:
     """
     Detects sex chromosome ploidy for samples in given MatrixTable and writes ploidy Table
 
     :param MatrixTable mt: Input MatrixTable 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
-    :return: Table with imputed sex chromosome ploidies
-    :rtype: Table
+    :return: None
+    :rtype: None
     """
     logger.info("Imputing sex ploidy...")
     ploidy_ht = impute_sex_ploidy(mt, included_intervals=capture_ht_path(data_source, freeze))
     ploidy_ht = ploidy_ht.checkpoint(ploidy_ht_path(data_source, freeze), overwrite=True)
-    return ploidy_ht
 
 
 def run_impute_sex(mt: hl.MatrixTable, data_source: str, freeze: int) -> hl.Table:
