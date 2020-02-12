@@ -64,19 +64,9 @@ def main(args):
         ht.write(var_annotations_ht_path(data_source, freeze, "allele_data"), args.overwrite)
 
     if args.write_nonrefs:
-        logger.info("Creating sparse MT with only non-ref genotypes...")
-        mt = get_ukbb_data(data_source, freeze, split=False, raw=True, key_by_locus_and_alleles=True).select_cols()
-        mt = mt.annotate_entries(is_missing=hl.is_missing(mt.GT))
-        mt = mt.filter_entries(mt.is_missing | mt.GT.is_non_ref())
-        mt = annotate_adj(mt)
-        mt = mt.naive_coalesce(args.n_partitions)
-        mt.write(get_ukbb_data_path(data_source, freeze, split=False, non_refs_only=True), args.overwrite)
-
-    if args.split_nonrefs:
-        logger.info("Running split_multi on non-ref MT...")
+        logger.info("Creating split sparse MT with only non-ref genotypes...")
         mt = get_ukbb_data(data_source, freeze, split=False, raw=True, key_by_locus_and_alleles=True).select_cols()
         mt = mt.drop("gvcf_info")
-        mt = mt.key_rows_by("locus", "alleles")
         mt = mt.annotate_entries(is_missing=hl.is_missing(mt.LGT))
         mt = mt.filter_entries(mt.is_missing | mt.LGT.is_non_ref())
 
@@ -100,8 +90,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--impute_sex", help="Impute sex on raw MT (prerequisite for creating hardcalls)", action="store_true")
     parser.add_argument("--write_hardcalls", help="Creates a split hardcalls mt", action="store_true")
-    parser.add_argument("--write_nonrefs", help="Creates a sparse mt with only non-ref genotypes", action="store_true")
-    parser.add_argument("--split_nonrefs", help="Creates a split sparse mt with only non-ref genotypes", action="store_true")
+    parser.add_argument("--write_nonrefs", help="Creates a split sparse mt with only non-ref genotypes", action="store_true")
 
     args = parser.parse_args()
 
