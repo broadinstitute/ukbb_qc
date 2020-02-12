@@ -31,13 +31,6 @@ SITES_FEATURES = [
     'info_ReadPosRankSum'
 ]
 
-VQSR_FEATURES = [
-    'info_FS',
-    'info_QD',
-    'info_MQ',
-    'info_VarDP'
-]
-
 ALLELE_FEATURES = [
     'variant_type',
     'allele_type',
@@ -48,12 +41,19 @@ ALLELE_FEATURES = [
     'pab_max'
 ]
 
-MEDIAN_FEATURES = [
-    'gq_median',
-    'dp_median',
-    'nrq_median',
-    'ab_median'
+VQSR_FEATURES = [ # TODO: Do we really need these, I don't think they are used for RF ?
+    'info_FS',
+    'info_QD',
+    'info_MQ',
+    'info_VarDP'
 ]
+
+
+# Many of these we can get from VQSR table, don't need to annotate RF table, but need to change prep code
+# If doesn't even look like we add the median features and they are not used in RF
+#    rf_ht = rf_ht.select('info_FS', 'inbreeding_coeff', 'info_MQ', 'info_MQRankSum', 'info_QD', 'info_ReadPosRankSum',
+      #           'info_SOR', 'tp', 'fail_hard_filters', 'rf_label', 'rf_train', 'rf_probability',
+      #           'transmitted_singleton', 'pab_max', 'info_VarDP', 'interval_qc_pass', 'filters')
 
 INBREEDING_COEFF_HARD_CUTOFF = -0.3
 
