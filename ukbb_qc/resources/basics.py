@@ -276,6 +276,6 @@ def release_vcf_path(data_source: str, freeze: int, contig=None) -> str:
     :rtype: str
     '''
     if contig:
-        return f'{get_release_path(data_source, freeze)}/vcf/{contig}/'
+        return f'{get_release_path(data_source, freeze)}/vcf/{contig}.vcf.bgz'
     else:
-        raise DataException("No VCF for all contigs. Must pick a contig")
+        return f'{get_release_path(data_source, freeze)}/vcf/sharded_vcf'
