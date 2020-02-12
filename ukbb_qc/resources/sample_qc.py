@@ -1,4 +1,5 @@
-from .basics import CURRENT_FREEZE, DataException, DATA_SOURCES, FREEZES
+from gnomad_hail.resources.resource_utils import DataException
+from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES
 
 
 def sample_qc_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
