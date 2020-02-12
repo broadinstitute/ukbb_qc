@@ -130,4 +130,5 @@ def calculate_fstat_sites() -> None:
     mt = hl.variant_qc(mt)
     mt = mt.filter_rows((hl.agg.fraction(hl.is_defined(mt.GT)) > 0.99) & (mt.variant_qc.AF[1] > 0.001))
     ht = mt.rows()
+    ht = ht.transmute(AF=ht.variant_qc.AF[1])
     ht = ht.write(f_stat_sites_path())
