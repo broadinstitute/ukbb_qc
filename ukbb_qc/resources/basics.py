@@ -278,4 +278,4 @@ def release_vcf_path(data_source: str, freeze: int, contig: str = None) -> str:
     if contig:
         return f'{get_release_path(data_source, freeze)}/vcf/{contig}.vcf.bgz'
     else:
-        return f'{get_release_path(data_source, freeze)}/vcf/sharded_vcf'
+        return f'{get_release_path(data_source, freeze)}/vcf/sharded_vcf/ukbb_freeze_{freeze}_release.vcf.bgz'
