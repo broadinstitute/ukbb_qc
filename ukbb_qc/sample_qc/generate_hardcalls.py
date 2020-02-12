@@ -34,37 +34,22 @@ def main(args):
     # NOTE: check distributions here before continuing with hardcalls
 
     if args.write_hardcalls:
-        logger.info("Generating hardcalls...")
-        mt = get_ukbb_data(data_source, freeze, split=False, raw=True)
-        ht = hl.read_table(sex_ht_path(data_source, freeze))
-        mt = mt.annotate_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
-        mt = annotate_adj(mt.select_cols(sex=ht[mt.col_key].sex))
-        mt = mt.select_entries(GT=mt.GT, adj=mt.adj)  # Note: this is different from gnomAD hardcalls file because no PGT or PID
-        mt = adjust_sex_ploidy(mt, mt.sex)
-        mt = mt.select_cols().naive_coalesce(15000)
-        mt.write(get_ukbb_data_path(data_source, freeze, hardcalls=True, split=False), args.overwrite)
-
-    if args.split_hardcalls:
-        logger.info("Running split_multi on the hardcalls...")
-        #mt = get_ukbb_data(data_source, freeze, split=False, raw=False)
-        #mt = hl.split_multi_hts(mt)
-        # NOTE: did not create unsplit hardcalls for tranche 2
-        # NOTE: read in raw, densified mt for tranche 2 because needed sparse_split_multi to handle local alleles
-        mt = get_ukbb_data(data_source, freeze, split=False, raw=True)
+        logger.info("Generating split hardcalls...")
+        mt = get_ukbb_data(data_source, freeze, split=False, raw=True, key_by_locus_and_alleles=True)
+        sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
 
         # Add allele data to mt
         allele_data = hl.struct(original_alleles=mt.alleles,
                             has_star=hl.any(lambda a: a == "*", mt.alleles))
         mt = mt.annotate_rows(allele_data=allele_data.annotate(**add_variant_type(mt.alleles)))
 
-        sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
-        mt = mt.key_rows_by("locus", "alleles")
+        # Split mt, add adj annotation, and adjust sex ploidies 
         mt = hl.experimental.sparse_split_multi(mt)
-        mt = annotate_adj(mt.select_cols(sex=sex_ht[mt.col_key].sex))
-        mt = mt.select_entries(GT=mt.GT, adj=mt.adj)
-        mt = adjust_sex_ploidy(mt, mt.sex)
-        mt = mt.select_cols().naive_coalesce(20000)
-        mt = mt.checkpoint(get_ukbb_data_path(data_source, freeze, hardcalls=True, split=True), args.overwrite)
+        mt = annotate_adj(mt.select_cols(sex_karyotype=ht[mt.col_key].sex_karyotype))
+        mt = mt.select_entries(GT=mt.GT, adj=mt.adj)  # Note: this is different from gnomAD hardcalls file because no PGT or PID
+        mt = adjust_sex_ploidy(mt, mt.sex_karyotype, male_str="XY", female_str="XX")
+        mt = mt.select_cols().naive_coalesce(args.n_partitions)
+        mt.write(get_ukbb_data_path(data_source, freeze, hardcalls=True, split=False), args.overwrite)
 
         # Finish generating allele data
         ht = mt.rows().select("allele_data")
@@ -80,17 +65,16 @@ def main(args):
 
     if args.write_nonrefs:
         logger.info("Creating sparse MT with only non-ref genotypes...")
-        mt = get_ukbb_data(data_source, freeze, split=False, raw=True).select_cols()
+        mt = get_ukbb_data(data_source, freeze, split=False, raw=True, key_by_locus_and_alleles=True).select_cols()
         mt = mt.annotate_entries(is_missing=hl.is_missing(mt.GT))
         mt = mt.filter_entries(mt.is_missing | mt.GT.is_non_ref())
         mt = annotate_adj(mt)
-        mt = mt.naive_coalesce(10000)
+        mt = mt.naive_coalesce(args.n_partitions)
         mt.write(get_ukbb_data_path(data_source, freeze, split=False, non_refs_only=True), args.overwrite)
 
     if args.split_nonrefs:
         logger.info("Running split_multi on non-ref MT...")
-        #mt = get_ukbb_data(data_source, freeze, split=False, non_refs_only=True)
-        mt = get_ukbb_data(data_source, freeze, split=False, raw=True).select_cols()
+        mt = get_ukbb_data(data_source, freeze, split=False, raw=True, key_by_locus_and_alleles=True).select_cols()
         mt = mt.drop("gvcf_info")
         mt = mt.key_rows_by("locus", "alleles")
         mt = mt.annotate_entries(is_missing=hl.is_missing(mt.LGT))
@@ -101,7 +85,7 @@ def main(args):
         mt = hl.experimental.sparse_split_multi(mt)
         mt = mt.filter_entries(mt.is_missing | mt.GT.is_non_ref())
         mt = annotate_adj(mt)
-        mt = mt.naive_coalesce(10000)
+        mt = mt.naive_coalesce(args.n_partitions)
         mt.write(get_ukbb_data_path(data_source, freeze, split=True, non_refs_only=True), args.overwrite)
 
 
@@ -112,10 +96,10 @@ if __name__ == "__main__":
     parser.add_argument("--slack_channel", help="Slack channel to post results and notifications to.")
     parser.add_argument("-s", "--data_source", help="Data source", choices=["regeneron", "broad"], default="broad")
     parser.add_argument("-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int)
+    parser.add_argument("--n_partitions", help="Desired number of partitions for output", type=int)
 
     parser.add_argument("--impute_sex", help="Impute sex on raw MT (prerequisite for creating hardcalls)", action="store_true")
-    parser.add_argument("--write_hardcalls", help="Creates a hardcalls mt", action="store_true")
-    parser.add_argument("--split_hardcalls", help="Creates a split hardcalls mt from the hardcalls mt", action="store_true")
+    parser.add_argument("--write_hardcalls", help="Creates a split hardcalls mt", action="store_true")
     parser.add_argument("--write_nonrefs", help="Creates a sparse mt with only non-ref genotypes", action="store_true")
     parser.add_argument("--split_nonrefs", help="Creates a split sparse mt with only non-ref genotypes", action="store_true")
 
