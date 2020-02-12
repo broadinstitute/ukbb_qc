@@ -12,7 +12,7 @@ logger.setLevel(logging.INFO)
 
 def run_impute_ploidy(mt: hl.MatrixTable, data_source: str, freeze: int) -> None:
     """
-    Detects sex chromosome ploidy for samples in given MatrixTable and writes ploidy Table
+    Detects sex chromosome ploidy for samples in given MatrixTable and writes ploidy Table (ploidy_ht)
 
     :param MatrixTable mt: Input MatrixTable 
     :param str data_source: One of 'regeneron' or 'broad'
@@ -25,22 +25,19 @@ def run_impute_ploidy(mt: hl.MatrixTable, data_source: str, freeze: int) -> None
     ploidy_ht = ploidy_ht.checkpoint(ploidy_ht_path(data_source, freeze), overwrite=True)
 
 
-def run_impute_sex(mt: hl.MatrixTable, data_source: str, freeze: int) -> hl.Table:
+def run_impute_sex(mt: hl.MatrixTable, data_source: str, freeze: int) -> None:
     """
-    Imputes sex karyotypes for samples in given MatrixTable and writes Table
+    Imputes sex karyotypes for samples in given MatrixTable and writes Table (sex_ht)
 
     :param MatrixTable mt: Input MatrixTable 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
-    :return: Table with imputed sex karyotypes
-    :rtype: Table
+    :return: None
+    :rtype: None
     """
     # NOTE: Broad callset does not have filter annotations
     if data_source == "regeneron":
         mt = mt.filter_rows(hl.is_missing(mt.filters))
-
-    logger.info("Filtering to biallelic SNPs...")
-    mt = mt.filter_rows((hl.len(mt.alleles) == 2) & hl.is_snp(mt.alleles[0], mt.alleles[1]))
 
     logger.info("Imputing sex...")
     sites_ht = hl.read_table(f_stats_sites_path())
