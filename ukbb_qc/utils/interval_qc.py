@@ -1,7 +1,7 @@
 import argparse
 import hail as hl
 import logging
-from gnomad_hail.utils.generic import filter_to_autosomes
+from gnomad_hail.utils.generic import filter_to_autosomes, interval_length
 from gnomad_hail.utils.slack import try_slack
 from ukbb_qc.resources.basics import CURRENT_FREEZE, capture_ht_path, get_checkpoint_path, get_ukbb_data
 from ukbb_qc.resources.sample_qc import interval_qc_path, sex_ht_path
@@ -16,35 +16,50 @@ def interval_qc(
     mt: hl.MatrixTable,
     interval_ht: hl.Table,
     split_by_sex: bool = False,
+    mt_n_partitions: int = 5000,
+    ht_n_partitions: int = 100,
     checkpoint_path: Optional[str] = None,
-):
+) -> hl.Table:
     """
     Determines the percent of samples reaching 10x, 15x, 20x, 25x, and 30x mean coverage in each interval
 
     :param MatrixTable mt: Matrix table to use for interval QC
     :param Table interval_ht: Table containing the intervals that interval QC is performed over
     :param bool split_by_sex: Whether the interval QC should be stratified by sex. if True, mt must be annotated with sex_karyotype.
+    :param int mt_n_partitions: Number of desired partitions for intermediate MatrixTable
+    :param int ht_n_partitions: Number of desired partitions for output Table
     :param str checkpoint_path: Optional path to a file to checkpoint the mean_dp per sample across each interval MT
     :return: Table with percent samples with coverage at 10x, 15x, 20x, 25x, and 30x coverage
     :rtype: Table
     """
 
     interval_ht = interval_ht.annotate(
-        interval_label=interval_ht.interval
+        interval_label=interval_ht.interval,
+        interval_size=interval_length(interval_ht.interval)
     )
-    mt = mt.annotate_rows(interval=interval_ht[mt.locus].interval_label)
+    interval_ht = interval_ht.select("interval_label", "length")
+
+    mt = mt.annotate_rows(**interval_ht[mt.locus])
+    mt = mt.transmute_rows(interval_label=mt.interval)
 
     target_mt = (
         mt.group_rows_by(mt.interval)
         .aggregate_entries(
-            mean_dp=hl.if_else(hl.agg.mean(hl.cond(hl.is_defined(mt.DP), mt.DP, 0)),
+            mean_dp=hl.agg.sum(
+                    hl.if_else(
+                        mt.LGT.is_hom_ref(),
+                        mt.DP * (mt.END - mt.locus.position), 
+                        hl.if_else((hl.is_defined(mt.DP), mt.DP, 0))
+                    )
+            ) / mt.interval_size,
             pct_gt_20x=hl.agg.fraction(hl.cond(hl.is_defined(mt.DP), mt.DP, 0) >= 20),
             pct_dp_defined=hl.agg.count_where(hl.is_defined(mt.DP)) / hl.agg.count(),
         )
         .result()
     )
-    target_mt = target_mt.naive_coalesce(5000)
+    target_mt = target_mt.naive_coalesce(mt_n_partitions)
     target_mt = target_mt.checkpoint(checkpoint_path, overwrite=True)
+
     if split_by_sex:
         target_mt = target_mt.annotate_rows(
             target_mean_dp=hl.agg.group_by(
@@ -86,9 +101,8 @@ def interval_qc(
         )
 
     target_ht = target_mt.rows()
-    target_ht = target_ht.naive_coalesce(100)
+    target_ht = target_ht.naive_coalesce(ht_n_partitions)
     target_ht.describe()
-
     return target_ht
 
 
@@ -96,7 +110,7 @@ def main(args):
     hl.init(log="/interval_qc.log")
 
     if not args.autosomes and not args.sex_chr:
-        logger.warn("Must choose one of autosomes or sex_chr options")
+        logger.warning("Must choose one of autosomes or sex_chr options")
 
     data_source = args.data_source
     freeze = args.freeze
@@ -131,11 +145,11 @@ def main(args):
         mt = hl.filter_intervals(
             mt,
             [
-                hl.parse_locus_interval(f"chrX", reference_genome="GRCh38"),
-                hl.parse_locus_interval(f"chrY", reference_genome="GRCh38")
+                hl.parse_locus_interval("chrX", reference_genome="GRCh38"),
+                hl.parse_locus_interval("chrY", reference_genome="GRCh38")
             ]
         )
-        sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
+        sex_ht = hl.read_table(sex_ht_path(data_source, freeze)).select("sex_karyotype")
         mt = mt.annotate_cols(**sex_ht[mt.col_key])
         mt.describe()
         mt = mt.filter_cols((mt.sex_karyotype == "XX") | (mt.sex_karyotype == "XY"))
@@ -148,7 +162,7 @@ def main(args):
             ),
         )
         target_ht.write(
-            urc.interval_qc_path(data_source, freeze, "sex_chr"),
+            interval_qc_path(data_source, freeze, "sex_chr"),
             overwrite=args.overwrite,
         )
 
