@@ -19,7 +19,7 @@ def import_array_exome_id_map_ht(freeze: int = CURRENT_FREEZE): -> hl.Table
     :return: Table with array IDs mapped to exome IDs
     :rtype: hl.Table
     """
-    sample_map_ht = hl.import_table(get_array_sample_map_path(freeze), delimiter=",", quote='"')
+    sample_map_ht = hl.import_table(array_sample_map_path(freeze), delimiter=",", quote='"')
     sample_map_ht = sample_map_ht.key_by(s=sample_map_ht.eid_sample)
     sample_map_ht = sample_map_ht.transmute(
         batch_num=sample_map_ht.batch,
