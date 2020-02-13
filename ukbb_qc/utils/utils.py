@@ -137,7 +137,7 @@ def calculate_fstat_sites() -> None:
     ht = ht.write(f_stat_sites_path())
 
 
-def qc_mt_sites() -> None:
+def get_qc_mt_sites() -> None:
     """
     Writes a Table with sites to use in QC MatrixTable generation. 
     NOTE: This function generates sites based on the tranche 2/freeze 5 QC MatrixTable.
