@@ -1,11 +1,12 @@
 import argparse
 import hail as hl
 import logging
-from gnomad_hail.utils.generic import filter_to_autosomes, interval_length
+from gnomad_hail.utils.generic import filter_to_autosomes
 from gnomad_hail.utils.slack import try_slack
 from ukbb_qc.resources.basics import CURRENT_FREEZE, capture_ht_path, get_checkpoint_path, get_ukbb_data
 from ukbb_qc.resources.sample_qc import interval_qc_path, sex_ht_path
 from typing import Optional
+
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("interval_qc")
@@ -34,24 +35,21 @@ def interval_qc(
     """
 
     interval_ht = interval_ht.annotate(
-        interval_label=interval_ht.interval,
-        interval_size=interval_length(interval_ht.interval)
+        interval_label=interval_ht.interval
     )
-    interval_ht = interval_ht.select("interval_label", "length")
 
-    mt = mt.annotate_rows(**interval_ht[mt.locus])
-    mt = mt.transmute_rows(interval_label=mt.interval)
+    mt = mt.annotate_rows(interval=interval_ht[mt.locus].interval_label)
 
     target_mt = (
         mt.group_rows_by(mt.interval)
         .aggregate_entries(
-            mean_dp=hl.agg.sum(
+            mean_dp=hl.agg.mean(
                     hl.if_else(
                         mt.LGT.is_hom_ref(),
                         mt.DP * (mt.END - mt.locus.position), 
                         hl.if_else((hl.is_defined(mt.DP), mt.DP, 0))
                     )
-            ) / mt.interval_size,
+            ),
             pct_gt_20x=hl.agg.fraction(hl.cond(hl.is_defined(mt.DP), mt.DP, 0) >= 20),
             pct_dp_defined=hl.agg.count_where(hl.is_defined(mt.DP)) / hl.agg.count(),
         )
