@@ -52,45 +52,59 @@ def main(args):
             array_sample_map_ht_path(data_source, freeze), overwrite=args.overwrite
         )
 
+
     if args.compute_last_END_positions:
         mt = get_ukbb_data(data_source, freeze, raw=True, adj=False, split=False)
         last_END_positions_ht = compute_last_ref_block_end(mt)
         last_END_positions_ht.write(last_END_positions_ht_path(data_source, freeze))
 
+
     if args.compute_qc_mt:
         mt = get_ukbb_data(data_source, freeze, raw=True, adj=False, split=False, key_by_locus_and_alleles=True)
-        mt = mt.select_entries("DP", "END", "LGT")
+        mt = mt.annotate_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
+        mt = mt.select_entries("DP", "END", "GT")
         logger.info(
             f"Total number of variants in raw unsplit matrix table: {mt.count_rows()}"
         )
 
-        logger.info("Filtering to QC MT sites from tranche 2/freeze 5 and removing LCR intervals")
+        logger.info("Reading in QC MT sites from tranche 2/freeze 5")
         if not hl.utils.hadoop_exists(f"{qc_sites_path()}/_SUCCESS"):
             get_qc_mt_sites()
         qc_sites_ht = hl.read_table(qc_sites_path())
-        lcr = get_lcr_intervals()
-        qc_sites_ht = qc_sites_ht.filter(
-            hl.is_missing(lcr[qc_sites_ht.key])
-        )
-        mt = mt.annotate_rows(**sites_ht[mt.row_key])
-        mt = mt.filter_rows(hl.is_defined(mt.info)
-        
-        logger.info("Splitting multiallelics and filtering to adj")
-        mt = hl.experimental.sparse_split_multi(mt)
-        mt = filter_to_adj(mt)
 
+        logger.info("Densifying QC MT sites")
+        mt = densify_sites(
+            mt,
+            qc_sites_ht,
+            hl.read_table(last_END_positions_ht_path(data_source, freeze))
+        )
+        
+        logger.info("Checkpointing densified MT")
         mt = mt.checkpoint(
             get_checkpoint_path(
                 data_source,
                 freeze,
-                name=f"{data_source}.freeze_{freeze}.rekey.biallelic.adj.lcr.mt",
+                name=f"{data_source}.freeze_{freeze}.dense.mt",
                 mt=True
             ),
             overwrite=True,
         )
-        logger.info(
-            f"Total number of variants after splitting and LCR+site filtering: {mt.count_rows()}"
+
+        logger.info("Repartitioning densified MT")
+        mt = mt.naive_coalesce(args.n_partitions)
+        mt = mt.checkpoint(
+            get_checkpoint_path(
+                data_source,
+                freeze,
+                name=f"{data_source}.freeze_{freeze}.dense.repartitioned.mt",
+                mt=True
+            ),
+            overwrite=True,
         )
+        
+        logger.info("Adding info annotation from QC sites HT and filtering to adj")
+        mt = mt.annotate_rows(info=sites_ht[mt.row_key].info)
+        mt = filter_to_adj(mt)
 
         if data_source == "regeneron":
             apply_hard_filters = False
@@ -108,13 +122,13 @@ def main(args):
             filter_decoy=False,
             filter_segdup=False,
         )
-        qc_mt = qc_mt.naive_coalesce(args.n_partitions)
         qc_mt = qc_mt.checkpoint(
             qc_mt_path(data_source, freeze), overwrite=args.overwrite
         )
         logger.info(
             f"Total number of bi-allelic, high-callrate, common SNPs for sample QC: {qc_mt.count_rows()}"
         )
+
 
     if args.compute_sample_qc_ht:
         qc_mt = hl.read_matrix_table(qc_mt_path(data_source, freeze))
@@ -124,6 +138,7 @@ def main(args):
             sample_qc=qc_ht.sample_qc.select("call_rate", "gq_stats", "dp_stats")
         )
         qc_ht.write(qc_ht_path(data_source, freeze), overwrite=args.overwrite)
+
 
     if args.extract_truth_samples:
         mt = get_ukbb_data(data_source, freeze, raw=True, adj=False, split=False)
