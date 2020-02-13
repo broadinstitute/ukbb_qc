@@ -97,19 +97,19 @@ def main(args):
     hl.init(log="/interval_qc.log")
 
     if not args.autosomes and not args.sex_chr:
-        logger.warning("Must choose one of autosomes or sex_chr options")
+        logger.warn("Must choose one of autosomes or sex_chr options")
 
     data_source = args.data_source
     freeze = args.freeze
     ht = hl.read_table(capture_ht_path(data_source, freeze))
 
     checkpoint_path = get_checkpoint_path(
-        data_source, freeze, "DP_only_checkpoint_interval_qc_broad_tranche1", mt=True #"DP_only_checkpoint_interval_qc"
+        data_source, freeze, name=f"DP_only_checkpoint_interval_qc_broad_freeze{freeze}", mt=True
     )
     if not hl.utils.hadoop_exists(f"{checkpoint_path}/_SUCCESS"):
         mt = get_ukbb_data(data_source, freeze, raw=True, adj=False, split=False)
         mt = mt.key_rows_by("locus", "alleles")
-        mt = mt.select_entries(mt.DP)
+        mt = mt.select_entries("DP", "END")
         mt.write(checkpoint_path, overwrite=True)
 
     if args.autosomes:
