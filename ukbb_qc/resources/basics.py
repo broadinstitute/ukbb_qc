@@ -147,7 +147,7 @@ def non_refs_only_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, split:
     return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/non_refs_only/non_refs_only{".split" if split else ""}.mt'
 
 
-def get_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE,  name: str = None, mt: bool = False) -> str:
+def get_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE, name: str = None, mt: bool = False) -> str:
     """
     Creates a checkpoint path for Table or MatrixTable
 
