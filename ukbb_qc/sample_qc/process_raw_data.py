@@ -51,6 +51,11 @@ def main(args):
             array_sample_map_ht_path(data_source, freeze), overwrite=args.overwrite
         )
 
+    if args.compute_last_END_positions:
+        mt = get_ukbb_data(data_source, freeze, raw=True, adj=False, split=False)
+        last_END_positions_ht = compute_last_ref_block_end(mt)
+        last_END_positions_ht.write(last_END_positions_ht_path(data_source, freeze))
+
     if args.compute_qc_mt:
         mt = get_ukbb_data(data_source, freeze, raw=True, adj=False, split=False, key_by_locus_and_alleles=True)
         mt = mt.select_entries("DP", "END", "LGT")
@@ -161,6 +166,11 @@ if __name__ == "__main__":
         "--create_exome_array_id_map_ht",
         help="Load exome to array id mapping file into hail Table",
         action="store_true",
+    )
+    parser.add_argument(
+        "--compute_last_END_positions",
+        help="Compute last END position for each line in sparse matrix table",
+        action="store_true"
     )
     parser.add_argument(
         "--compute_qc_mt",
