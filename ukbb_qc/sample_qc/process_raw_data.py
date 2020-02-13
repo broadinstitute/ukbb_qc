@@ -7,6 +7,7 @@ from gnomad_hail.utils.sample_qc import get_qc_mt
 from gnomad_hail.utils.sparse_mt import compute_last_ref_block_end, densify_sites
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE, get_checkpoint_path, get_ukbb_data
 from ukbb_qc.resources.sample_qc import array_sample_map_ht_path, qc_mt_path 
+from ukbb_qc.resources.variant_qc import get_truth_sample_info
 from ukbb_qc.utils.utils import get_qc_mt_sites
 
 
@@ -159,7 +160,7 @@ def main(args):
             mt = mt.key_rows_by("locus", "alleles")
             mt = hl.experimental.sparse_split_multi(mt)
             mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
-            mt.naive_coalesce(100).write(
+            mt.naive_coalesce(args.n_partitions).write(
                 truth_samples[truth_sample]["mt"], overwrite=args.overwrite
             )
 
