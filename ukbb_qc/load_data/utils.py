@@ -1,6 +1,33 @@
-from ukbb_qc.utils.utils import logger
+import hail as hl
+import logging
+from ukbb_qc.resources.basics import array_sample_map
+from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 
 
+logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
+logger = logging.getLogger("load_data")
+logger.setLevel(logging.INFO)
+
+
+# Sample resources
+def import_array_exome_id_map_ht(freeze: int = CURRENT_FREEZE, array_sample_map: str): -> hl.Table
+    """
+    Imports file linking array IDs to exome IDs into Table
+
+    :param int freeze: One of the data freezes. Default is CURRENT_FREEZE.
+    :param str array_sample_map: Path to linking csv for data freeze.
+    :return: Table with array IDs mapped to exome IDs
+    :rtype: hl.Table
+    """
+    sample_map_ht = hl.import_table(array_sample_map(freeze), delimiter=",", quote='"')
+    sample_map_ht = sample_map_ht.key_by(s=sample_map_ht.eid_sample)
+    logger.info(
+            f"Total number of IDs in the array to exome sample map: {sample_map_ht.count()}..."
+        )
+    return sample_map_ht
+
+
+# Interval resources
 def import_capture_intervals(interval_path: str, output_path: str, header: bool, overwrite: bool) -> None:
     """
     Imports capture intervals text file into Table and writes Table at specified path
