@@ -23,7 +23,7 @@ def interval_qc(
 
     :param MatrixTable mt: Matrix table to use for interval QC
     :param Table interval_ht: Table containing the intervals that interval QC is performed over
-    :param bool split_by_sex: Should the interval QC be stratified by sex, if True, mt must be annotated with sex_karyotype
+    :param bool split_by_sex: Whether the interval QC should be stratified by sex. if True, mt must be annotated with sex_karyotype.
     :param str checkpoint_path: Optional path to a file to checkpoint the mean_dp per sample across each interval MT
     :return: Table with percent samples with coverage at 10x, 15x, 20x, 25x, and 30x coverage
     :rtype: Table
@@ -32,13 +32,12 @@ def interval_qc(
     interval_ht = interval_ht.annotate(
         interval_label=interval_ht.interval
     )
-
     mt = mt.annotate_rows(interval=interval_ht[mt.locus].interval_label)
 
     target_mt = (
         mt.group_rows_by(mt.interval)
         .aggregate_entries(
-            mean_dp=hl.agg.mean(hl.cond(hl.is_defined(mt.DP), mt.DP, 0)),
+            mean_dp=hl.if_else(hl.agg.mean(hl.cond(hl.is_defined(mt.DP), mt.DP, 0)),
             pct_gt_20x=hl.agg.fraction(hl.cond(hl.is_defined(mt.DP), mt.DP, 0) >= 20),
             pct_dp_defined=hl.agg.count_where(hl.is_defined(mt.DP)) / hl.agg.count(),
         )
@@ -109,7 +108,7 @@ def main(args):
     if not hl.utils.hadoop_exists(f"{checkpoint_path}/_SUCCESS"):
         mt = get_ukbb_data(data_source, freeze, raw=True, adj=False, split=False)
         mt = mt.key_rows_by("locus", "alleles")
-        mt = mt.select_entries("DP", "END")
+        mt = mt.select_entries("DP", "END", "LGT")
         mt.write(checkpoint_path, overwrite=True)
 
     if args.autosomes:
@@ -126,6 +125,7 @@ def main(args):
             interval_qc_path(data_source, freeze, "autosomes"),
             overwrite=args.overwrite,
         )
+
     if args.sex_chr:
         mt = hl.read_matrix_table(checkpoint_path)
         mt = hl.filter_intervals(
