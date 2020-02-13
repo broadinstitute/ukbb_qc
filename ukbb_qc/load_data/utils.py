@@ -10,7 +10,7 @@ logger.setLevel(logging.INFO)
 
 
 # Sample resources
-def import_array_exome_id_map_ht(data_source: str, freeze: int = CURRENT_FREEZE): -> hl.Table
+def import_array_exome_id_map_ht(freeze: int = CURRENT_FREEZE): -> hl.Table
     """
     Imports file linking array IDs to exome IDs into Table
 
@@ -28,7 +28,6 @@ def import_array_exome_id_map_ht(data_source: str, freeze: int = CURRENT_FREEZE)
     logger.info(
             f"Total number of IDs in the array to exome sample map: {sample_map_ht.count()}..."
         )
-    sample_map_ht = sample_map_ht.checkpoint(get_array_sample_map_ht_path(data_source, freeze))
     return sample_map_ht
 
 
