@@ -18,19 +18,18 @@ def main(args):
     data_source = args.data_source
     freeze = args.freeze
 
-    # NOTE: do not use autoscale when running this; run with 100 normal workers
-    if args.impute_ploidy:
-        logger.info("Imputing sex ploidy...")
-        mt = get_ukbb_data(data_source, freeze, split=False, raw=True, key_by_locus_and_alleles=True)
-        sex_check_intervals = [hl.parse_locus_interval(x, reference_genome="GRCh38") for x in ["chr20", "chrX", "chrY"]]
-        mt = hl.filter_intervals(mt, sex_check_intervals)
-        run_impute_ploidy(mt, data_source, freeze)
-    # NOTE: check distributions here before continuing with sex imputation
-
     if args.impute_sex:
         logger.info("Imputing sex...")
         mt = get_ukbb_data(data_source, freeze, split=False, raw=True, key_by_locus_and_alleles=True)
-        run_impute_sex(mt, data_source, freeze)
+
+        # NOTE: Broad callset does not have filter annotations
+        if data_source == "regeneron":
+            mt = mt.filter_rows(hl.is_missing(mt.filters))
+
+        sex_ht = default_annotate_sex(
+            mt, included_intervals=capture_ht_path(data_source, freeze),
+            sites_ht=hl.read_table(f_stats_sites_path()), aaf_expr='AF', gt_expr='LGT')
+        sex_ht = sex_ht.checkpoint(sex_ht_path(data_source, freeze), overwrite=True)
     # NOTE: check distributions here before continuing with hardcalls
 
     if args.write_hardcalls:
