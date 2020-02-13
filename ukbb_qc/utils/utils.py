@@ -2,6 +2,7 @@ import hail as hl
 import logging
 from typing import Union
 from gnomad_hail.utils.generic import get_reference_genome
+from gnomad_hail.resources.grch38.intervals import lcr
 from ukbb_qc.resources.basics import raw_mt_path
 from ukbb_qc.resources.sample_qc import f_stat_sites_path, interval_qc_path, qc_temp_data_prefix, qc_sites_path
 
@@ -146,11 +147,19 @@ def get_qc_mt_sites() -> None:
     :return: None
     :rtype: None
     """
+    logger.info("Preparing to make QC MT sites HT")
     data_source = "broad"
     freeze = 5
     mt = hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned=True))
     ht = mt.rows()
 
+    logger.info("Removing LCR intervals from QC sites")
+    lcr_intervals = lcr.ht()
+    ht = ht.filter(
+            hl.is_missing(lcr[ht.key])
+    )
+
+    logger.info("Adding info annotations to QC sites HT")
     # NOTE: info ht is hard coded from tranche 2/freeze 5
     info_ht = hl.read_matrix_table("gs://broad-ukbb/broad.freeze_5/temp/broad.freeze_5.sites.ht")
     ht = ht.annotate(info=info_ht[ht.key].info)
