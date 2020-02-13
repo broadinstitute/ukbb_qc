@@ -10,20 +10,25 @@ logger.setLevel(logging.INFO)
 
 
 # Sample resources
-def import_array_exome_id_map_ht(freeze: int = CURRENT_FREEZE, array_sample_map: str): -> hl.Table
+def import_array_exome_id_map_ht(data_source: str, freeze: int = CURRENT_FREEZE): -> hl.Table
     """
     Imports file linking array IDs to exome IDs into Table
 
+    :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes. Default is CURRENT_FREEZE.
-    :param str array_sample_map: Path to linking csv for data freeze.
     :return: Table with array IDs mapped to exome IDs
     :rtype: hl.Table
     """
-    sample_map_ht = hl.import_table(array_sample_map(freeze), delimiter=",", quote='"')
+    sample_map_ht = hl.import_table(get_array_sample_map_path(freeze), delimiter=",", quote='"')
     sample_map_ht = sample_map_ht.key_by(s=sample_map_ht.eid_sample)
+    sample_map_ht = sample_map_ht.transmute(
+        batch_num=sample_map_ht.batch,
+        batch=sample_map_ht['batch.c']
+        )
     logger.info(
             f"Total number of IDs in the array to exome sample map: {sample_map_ht.count()}..."
         )
+    sample_map_ht = sample_map_ht.checkpoint(get_array_sample_map_ht_path(data_source, freeze))
     return sample_map_ht
 
 
