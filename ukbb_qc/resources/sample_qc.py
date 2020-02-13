@@ -50,7 +50,20 @@ def f_stat_sites_path() -> str:
     return f'{qc_temp_data_prefix(data_source, freeze)}/f_stat_sites.ht'
 
 
-# QC resources (meta ht, qc mt, qc ht)
+def qc_sites_path() -> str:
+    """
+    Returns path to Table with sites to use in QC MatrixTable generation.
+    NOTE: Sites were generated using QC MT from tranche 2/freeze 5.
+
+    :return: Path to QC MT sites Table
+    :rtype: str
+    """
+    data_source = 'broad'
+    freeze = 5
+    return f'{sample_qc_path(data_source, freeze)}/qc_data/qc_sites.ht'
+
+
+# QC resources (meta ht, qc mt, qc ht, qc sites ht)
 def meta_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
     Returns path to metadata Table
