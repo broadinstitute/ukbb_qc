@@ -1,9 +1,11 @@
-import hail as hl
-import ukbb_qc.resources as urc
-from gnomad_hail import try_slack, filter_to_autosomes
 import argparse
+import hail as hl
 import logging
-from typing import *
+from gnomad_hail.utils.generic import filter_to_autosomes
+from gnomad_hail.utils.slack import try_slack
+from ukbb_qc.resources.basics import CURRENT_FREEZE, capture_ht_path, get_checkpoint_path, get_ukbb_data
+from ukbb_qc.resources.sample_qc import interval_qc_path, sex_ht_path
+from typing import Optional
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("interval_qc")
@@ -99,13 +101,13 @@ def main(args):
 
     data_source = args.data_source
     freeze = args.freeze
-    ht = hl.read_table(urc.capture_ht_path(data_source, freeze))
+    ht = hl.read_table(capture_ht_path(data_source, freeze))
 
-    checkpoint_path = urc.get_mt_checkpoint_path(
-        data_source, freeze, "DP_only_checkpoint_interval_qc_broad_tranche1" #"DP_only_checkpoint_interval_qc"
+    checkpoint_path = get_checkpoint_path(
+        data_source, freeze, "DP_only_checkpoint_interval_qc_broad_tranche1", mt=True #"DP_only_checkpoint_interval_qc"
     )
     if not hl.utils.hadoop_exists(f"{checkpoint_path}/_SUCCESS"):
-        mt = urc.get_ukbb_data(data_source, freeze, raw=True, adj=False, split=False)
+        mt = get_ukbb_data(data_source, freeze, raw=True, adj=False, split=False)
         mt = mt.key_rows_by("locus", "alleles")
         mt = mt.select_entries(mt.DP)
         mt.write(checkpoint_path, overwrite=True)
@@ -116,12 +118,12 @@ def main(args):
         target_ht = interval_qc(
             mt,
             ht,
-            checkpoint_path=urc.get_mt_checkpoint_path(
-                data_source, freeze, "coverage_by_target_samples"
+            checkpoint_path=get_checkpoint_path(
+                data_source, freeze, "coverage_by_target_samples", mt=True
             ),
         )
         target_ht.write(
-            urc.interval_qc_path(data_source, freeze, "autosomes"),
+            interval_qc_path(data_source, freeze, "autosomes"),
             overwrite=args.overwrite,
         )
     if args.sex_chr:
@@ -133,7 +135,7 @@ def main(args):
                 hl.parse_locus_interval(f"chrY", reference_genome="GRCh38")
             ]
         )
-        sex_ht = hl.read_table(urc.sex_ht_path(data_source, freeze))
+        sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
         mt = mt.annotate_cols(**sex_ht[mt.col_key])
         mt.describe()
         mt = mt.filter_cols((mt.sex_karyotype == "XX") | (mt.sex_karyotype == "XY"))
@@ -141,8 +143,8 @@ def main(args):
             mt,
             ht,
             split_by_sex=True,
-            checkpoint_path=urc.get_mt_checkpoint_path(
-                data_source, freeze, "coverage_by_target_samples"
+            checkpoint_path=get_checkpoint_path(
+                data_source, freeze, "coverage_by_target_samples", mt=True
             ),
         )
         target_ht.write(
@@ -173,7 +175,7 @@ if __name__ == "__main__":
         "-f",
         "--freeze",
         help="Data freeze to use",
-        default=urc.CURRENT_FREEZE,
+        default=CURRENT_FREEZE,
         type=int,
     )
 
