@@ -10,12 +10,12 @@ from ukbb_qc.utils.utils import get_qc_mt_sites
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
-logger = logging.getLogger("process_raw")
+logger = logging.getLogger("process_raw_data")
 logger.setLevel(logging.INFO)
 
 
 def main(args):
-    hl.init(log="/process_raw.log", default_reference="GRCh38")
+    hl.init(log="/process_raw_data.log", default_reference="GRCh38")
 
     data_source = args.data_source
     freeze = args.freeze
@@ -58,15 +58,16 @@ def main(args):
             f"Total number of variants in raw unsplit matrix table: {mt.count_rows()}"
         )
 
-        logger.info("Removing LCR intervals...")
-        lcr = get_lcr_intervals()
-        mt = mt.filter_rows(hl.is_missing(lcr[mt.locus]))
-
-        logger.info("Filtering to QC MT sites from tranche 2/freeze 5")
+        logger.info("Filtering to QC MT sites from tranche 2/freeze 5 and removing LCR intervals")
         if not hl.utils.hadoop_exists(f"{qc_sites_path()}/_SUCCESS"):
             get_qc_mt_sites()
-        ht = hl.read_table(qc_sites_path())
-        mt = mt.filter_rows(hl.is_defined(ht[mt.row_key]))
+        qc_sites_ht = hl.read_table(qc_sites_path())
+        lcr = get_lcr_intervals()
+        qc_sites_ht = qc_sites_ht.filter(
+            hl.is_missing(lcr[qc_sites_ht.key])
+        )
+        mt = mt.annotate_rows(**sites_ht[mt.row_key])
+        mt = mt.filter_rows(hl.is_defined(mt.info)
         
         logger.info("Splitting multiallelics and filtering to adj")
         mt = hl.experimental.sparse_split_multi(mt)
@@ -85,20 +86,12 @@ def main(args):
             f"Total number of variants after splitting and LCR+site filtering: {mt.count_rows()}"
         )
 
-        # TODO change this for later tranches
-        # sites_ht = hl.import_vcf('gs://broad-ukbb/broad.freeze_5/temp/broad.freeze_5.sites.vcf.bgz',reference_genome='GRCh38')
-        sites_ht = hl.read_matrix_table(
-            "gs://broad-ukbb/broad.freeze_5/temp/broad.freeze_5.sites.ht"
-        ).rows()
-        mt = mt.annotate_rows(info=sites_ht[mt.row_key].info)
-
         if data_source == "regeneron":
             apply_hard_filters = False
         else:
             apply_hard_filters = True
 
-        # Todo: changed to use Laurent's code for the qc_mt, change is that it uses inbreeding_coeff and hardy_weinberg_threshold, is this OK and are defaults OK?
-        # Todo: add segdup and decoy filter
+        # NOTE: adding decoy and segdup hg38 resources/filters are still pending
         qc_mt = get_qc_mt(
             mt,
             min_af=args.min_af,
@@ -114,7 +107,7 @@ def main(args):
             qc_mt_path(data_source, freeze), overwrite=args.overwrite
         )
         logger.info(
-            f"Total number of variants in bi-allelic, high-callrate, common SNPs for sample QC: {qc_mt.count_rows()}"
+            f"Total number of bi-allelic, high-callrate, common SNPs for sample QC: {qc_mt.count_rows()}"
         )
 
     if args.compute_sample_qc_ht:
