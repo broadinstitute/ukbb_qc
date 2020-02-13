@@ -179,7 +179,7 @@ def get_array_data_path(extension: str, chrom: str) -> str:
         return 'gs://broad-ukbb/resources/array/ukb26041_cal_chr22_v2_s488292.fam'
 
 
-def get_array_sample_map_path(freeze: int) -> str:
+def get_array_sample_map_path(freeze: int = CURRENT_FREEZE) -> str:
     """
     Get path to UKBB array sample mapping csv file.
 
@@ -193,7 +193,7 @@ def get_array_sample_map_path(freeze: int) -> str:
         return 'gs://broad-ukbb/resources/array/linking_file_200K_withbatch.csv'
 
 
-def get_array_sample_map_ht(data_source: str, freeze: int = CURRENT_FREEZE) -> hl.Table:
+def get_array_sample_map_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> hl.Table:
     """
     Returns array sample map Table.
 
