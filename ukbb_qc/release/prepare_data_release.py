@@ -545,13 +545,13 @@ def make_combo_header_text(preposition, group_types, combo_fields, prefix, faf=F
     :rtype: str
     '''
     combo_dict = dict(zip(group_types, combo_fields))
-    if not faf:
-        header_text = " " + preposition
-    else:
-        header_text = ""
+    header_text = " " + preposition
 
     if 'sex' in combo_dict.keys():
         header_text = header_text + " " + combo_dict['sex']
+
+    if faf:
+        header_text = header_text + " samples"
 
     if 'subpop' in combo_dict.keys():
         header_text = header_text + f" of {pop_names[combo_dict['subpop']]} ancestry"
@@ -563,11 +563,14 @@ def make_combo_header_text(preposition, group_types, combo_fields, prefix, faf=F
         header_text = header_text
 
     if 'gnomad' in prefix:
-        header_text = header_Text + " in gnomAD"
+        header_text = header_text + " in gnomAD"
 
     if 'group' in group_types:
         if combo_dict['group'] == 'raw':
             header_text = header_text + ", before removing low-confidence genotypes"
+
+    if header_text == f" {preposition}":
+        header_text = ""
 
     return header_text
 
@@ -971,14 +974,17 @@ def main(args):
         for subset in subset_list:
             INFO_DICT.update(make_info_dict(subset, dict(group=GROUPS)))
             INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], sex=SEXES)))
+            INFO_DICT.update(make_info_dict(subset, dict(group=['adj']), faf=True))
+            INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], sex=SEXES), faf=True))
 
             if 'gnomad' in subset:
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=GNOMAD_POPS)))
-                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], popmax=True)))
+                INFO_DICT.update(make_info_dict(subset, popmax=True))
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=GNOMAD_POPS, sex=SEXES)))
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=['nfe'], subpop=GNOMAD_NFE_SUBPOPS)))
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=['eas'], subpop=GNOMAD_EAS_SUBPOPS)))
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=GNOMAD_FAF_POPS), faf=True))
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=GNOMAD_FAF_POPS, sex=SEXES), faf=True))
 
             else:
                 INFO_DICT.update(make_info_dict(subset, bin_edges=bin_edges, popmax=True,
@@ -986,17 +992,25 @@ def main(args):
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=POPS)))
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=POPS, sex=SEXES)))
                 INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=FAF_POPS), faf=True))
-        INFO_DICT.update(make_info_dict(subset, dict(group=['adj']), faf=True))
+                INFO_DICT.update(make_info_dict(subset, dict(group=['adj'], pop=FAF_POPS, sex=SEXES), faf=True))
         INFO_DICT.update(make_hist_dict(bin_edges, adj=False))
 
         # Adjust keys to remove adj tags before exporting to VCF
         #new_info_dict = {i.replace('_adj', '').replace('adj_', '').replace('_adj_', '').replace('.', '_').replace('raw_', ''): j for i,j in INFO_DICT.items()}
-        new_info_dict = {i.replace('_adj', '').replace('_adj_', ''): j for i,j in INFO_DICT.items()}
+        new_info_dict = {i.replace('adj_', '').replace('_adj', '').replace('_adj_', ''): j for i,j in INFO_DICT.items()}
         new_info_dict.update(make_hist_dict(bin_edges, adj=True))
+        logger.info(new_info_dict['faf95'])
+        logger.info(new_info_dict['gnomad_exomes_faf95'])
+        logger.info(new_info_dict['faf95_nfe'])
+        logger.info(new_info_dict['faf95_nfe_male'])
+        logger.info(new_info_dict['faf95_0'])
+        logger.info(new_info_dict['gnomad_exomes_popmax'])
+        logger.info(new_info_dict['gnomad_exomes_AC_popmax'])
         logger.info(new_info_dict['dp_hist_alt_adj_bin_freq'])
         logger.info(new_info_dict['dp_hist_alt_bin_freq'])
         logger.info(new_info_dict['AC'])
         logger.info(new_info_dict['AC_raw'])
+        logger.info(new_info_dict['AC_nfe'])
         logger.info(new_info_dict['gnomad_exomes_AC'])
 
         # add non par annotation back
@@ -1114,7 +1128,8 @@ def main(args):
                         temp_missing_descriptions.append(field)    
                 except KeyError:
                     logger.warn(f'{field} in mt info field does not exist in VCF header!')
-                    temp_missing_fields.append(field)
+                    if 'hist' not in field: # some hists are not exported
+                        temp_missing_fields.append(field)
 
             missing_fields.extend(temp_missing_fields)
             missing_descriptions.extend(temp_missing_descriptions)
@@ -1130,23 +1145,30 @@ def main(args):
 
         mt = mt.annotate_rows(info=mt.info.select('AC', 'AN', 'AF', 'rf_tp_probability',
                                              *mt.info.drop('AC', 'AN', 'AF', 'rf_tp_probability', *drop_hists)))
-        # Export VCFs by chromosome
-        mt = mt.key_rows_by(locus=hl.locus(mt.locus.contig, mt.locus.position),
-                       alleles=mt.alleles)
-        mt.describe()
 
-        logger.info(f'full mt count: {mt.count()}')
-        # NOTE: need to run this on all workers
-        rg = hl.get_reference('GRCh38')
-        contigs = rg.contigs[:24] # autosomes + X/Y
-        logger.info(f'Contigs: {contigs}')
+        if args.per_chromosome:
+            # Export VCFs by chromosome
+            mt = mt.key_rows_by(locus=hl.locus(mt.locus.contig, mt.locus.position),
+                           alleles=mt.alleles)
+            mt.describe()
 
-        for contig in contigs:
-            contig_mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
-            logger.info(f'{contig} mt count: {contig_mt.count()}')
-            hl.export_vcf(contig_mt, release_vcf_path(data_source, freeze, contig=contig), metadata=header_dict)
+            logger.info(f'full mt count: {mt.count()}')
+            # NOTE: need to run this on all workers
+            rg = hl.get_reference('GRCh38')
+            contigs = rg.contigs[:24] # autosomes + X/Y
+            logger.info(f'Contigs: {contigs}')
 
- 
+            for contig in contigs:
+                contig_mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
+                logger.info(f'{contig} mt count: {contig_mt.count()}')
+                hl.export_vcf(contig_mt, release_vcf_path(data_source, freeze, contig=contig), metadata=header_dict)
+
+        if args.h_per_shard:
+            # Export sharded VCF
+            mt = mt.naive_coalesce(5000)
+            hl.export_vcf(mt, release_vcf_path(data_source, freeze), parallel='header_per_shard', metadata=header_dict)
+
+     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
@@ -1157,6 +1179,8 @@ if __name__ == '__main__':
     parser.add_argument('--prepare_browser_ht', help='Prepare sites ht for browser', action='store_true')
     parser.add_argument('--verbose', help='Run sanity checks function with verbose output', action='store_true')
     parser.add_argument('--prepare_release_vcf', help='Prepare release VCF', action='store_true')
+    parser.add_argument('--per_chromosome', help='Prepare release VCFs per chromosome', action='store_true')
+    parser.add_argument('--h_per_shard', help='Parallelize release VCF export using header_per_shard', action='store_true')
     parser.add_argument('--slack_channel', help='Slack channel to post results and notifications to.')
     parser.add_argument('--overwrite', help='Overwrite data', action='store_true')
     args = parser.parse_args()
