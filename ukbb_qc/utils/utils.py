@@ -140,6 +140,7 @@ def calculate_fstat_sites() -> None:
 def get_qc_mt_sites() -> None:
     """
     Writes a Table with sites to use in QC MatrixTable generation. 
+    Table includes the fields 'locus', 'alleles', and 'info'. 
     NOTE: This function generates sites based on the tranche 2/freeze 5 QC MatrixTable.
 
     :return: None
@@ -149,5 +150,9 @@ def get_qc_mt_sites() -> None:
     freeze = 5
     mt = hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned=True))
     ht = mt.rows()
+
+    # NOTE: info ht is hard coded from tranche 2/freeze 5
+    info_ht = hl.read_matrix_table("gs://broad-ukbb/broad.freeze_5/temp/broad.freeze_5.sites.ht")
+    ht = ht.annotate(info=info_ht[ht.key].info)
     ht.write(qc_sites_path())
 
