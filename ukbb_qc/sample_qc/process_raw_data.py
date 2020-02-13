@@ -1,6 +1,9 @@
-from gnomad_hail.utils.sample_qc import *
-from ukbb_qc.resources.resources import *
 import argparse
+import hail as hl
+import logging
+from gnomad_hail.utils.sample_qc import *
+from ukbb_qc.resources.resource_utils import CURRENT_FREEZE, get_checkpoint_path, get_ukbb_data
+from ukbb_qc.resources.sample_qc import qc_mt_path 
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
