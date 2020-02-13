@@ -161,6 +161,19 @@ def get_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE, name: st
     return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/{name}.{"mt" if mt else "ht"}'
 
 
+# Sparse MatrixTable resources
+def last_END_positions_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Retrieves path to Table with last END positions annotation
+
+    :param str data_type: One of 'regeneron' or 'broad'
+    :param int freeze: One of data freezes
+    :return: Path to Table with last_END_position annotation
+    :rtype: str
+    """
+    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/sparse_resources/last_END_positions.ht'
+
+    
 # Array resources
 def get_array_data_path(extension: str, chrom: str) -> str:
     """
