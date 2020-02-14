@@ -1,4 +1,5 @@
-from .basics import CURRENT_FREEZE, CURRENT_HAIL_VERSION, DATA_SOURCES, FREEZES, DataException
+from gnomad_hail.resources.resource_utils import DataException
+from .resource_utils import CURRENT_FREEZE, CURRENT_HAIL_VERSION, DATA_SOURCES, FREEZES
 from typing import Dict
 
 
