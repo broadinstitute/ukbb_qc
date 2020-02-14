@@ -112,7 +112,7 @@ def main(args):
 
     data_source = args.data_source
     freeze = args.freeze
-    ht = hl.read_table(capture_ht_path(data_source, freeze))
+    ht = hl.read_table(capture_ht_path(data_source))
 
     checkpoint_path = get_checkpoint_path(
         data_source, freeze, name=f"DP_only_checkpoint_interval_qc_broad_freeze{freeze}", mt=True
