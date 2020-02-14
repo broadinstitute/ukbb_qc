@@ -155,8 +155,8 @@ def create_rf_ht(
             ht.allele_data.n_alt_alleles,
             ht.allele_data.was_mixed,
             ht.allele_data.has_star,
-            ht.qc_stats[qc_stats_group_index].qd,
-            ht.qc_stats[qc_stats_group_index].pab.max
+            ht.info.AS_QD,
+            ht.info.AS_pab_max
         ]))
 
     def get_median_features_expr(ht: hl.Table, qc_stats_group_index: int) -> Dict[str, hl.expr.Expression]:
