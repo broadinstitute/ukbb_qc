@@ -59,25 +59,13 @@ def get_rf_runs(rf_json_fp: str) -> Dict:
         return {}
 
 
-def get_features_list(
-        sites_features: bool,
-        allele_features: bool
-) -> List[str]:
+def get_features_list() -> List[str]:
     """
     Returns the list of features to use based on desired arguments (currently only VQSR / alleles)
 
-    :param bool sites_features: Whether to use site-level features
-    :param bool allele_features: Whether to use Allele-specific features
     :return: List of features to use
     """
-
-    features = []
-    if sites_features:
-        features.extend(SITES_FEATURES)
-    if allele_features:
-        features.extend(ALLELE_FEATURES)
-
-    return features
+    return SITES_FEATURES + ALLELE_FEATURES
 
 
 def create_rf_ht(
@@ -185,13 +173,11 @@ def create_rf_ht(
     family_stats_group_index = next(x[0] for x in enumerate(family_stats_groups) if x[1] == 'raw')
 
     ht = ht.select(
-        **get_allele_features_expr(ht, qc_stats_group_index),
+        **get_allele_features_expr(ht),
         **get_site_features_expr(ht),
         **get_training_sites_expr(ht, family_stats_group_index),
         omni=ht.truth_data.omni,
         mills=ht.truth_data.mills,
-        #ukbb_array=ht.truth_data.ukbb_array,
-        #ukbb_array_con=ht.truth_data.ukbb_array_con,
         ukbb_array_con_common=ht.truth_data.ukbb_array_con_common,
         sib_singletons=ht.truth_data.sib_singletons,
         n_nonref=ht.n_nonref,
@@ -261,9 +247,7 @@ def get_run_data(
         data_source: str,
         freeze: int,
         interval_qc_filter,
-        vqsr_training: bool,
         no_transmitted_singletons: bool,
-        array_con: bool,
         array_con_common: bool,
         adj: bool,
         test_intervals: List[str],
@@ -275,9 +259,7 @@ def get_run_data(
         'freeze': freeze,
         'input_args': {
             'interval_qc_filter':interval_qc_filter,
-            'vqsr_training': vqsr_training,
             'no_transmitted_singletons': no_transmitted_singletons,
-            'array_con': array_con,
             'array_con_common': array_con_common,
             'adj': adj
         },
@@ -308,16 +290,8 @@ def train_rf(data_source: str, freeze: int, args):
         run_hash = str(uuid.uuid4())[:8]
 
     ht = hl.read_table(rf_annotated_path(data_source, freeze, args.adj))
-
-
-    #interval_qc_ht = hl.read_table(interval_qc_path(data_source, freeze))
-    #good_intervals_ht = interval_qc_ht.filter(interval_qc_ht.pct_samples_20x > args.pct_samples_20x).key_by('interval')
-    #ht = ht.annotate(interval_qc_pass=hl.is_defined(good_intervals_ht[ht.locus]))
     ht = annotate_interval_qc_filter('broad', 5, ht)
 
-
-    # TODO: Revisit this
-    #summary = ht.group_by('omni', 'mills', 'transmitted_singleton', 'ukbb_array', 'ukbb_array_con', 'ukbb_array_con_common', 'sib_singletons').aggregate(n=hl.agg.count())
     summary = ht.group_by('omni', 'mills', 'transmitted_singleton', 'ukbb_array_con_common', 'sib_singletons').aggregate(n=hl.agg.count())
     logger.info("Summary of truth data annotations:")
     summary.show(20)
@@ -328,15 +302,8 @@ def train_rf(data_source: str, freeze: int, args):
         tp_expr = ht.omni | ht.mills
         if args.array_con_common:
             tp_expr = tp_expr | ht.ukbb_array_con_common
-        # TODO: Revisit this
-        #elif args.array_con:
-        #    tp_expr = tp_expr | ht.ukbb_array_con
-        #elif args.array:
-        #    tp_expr = tp_expr | ht.ukbb_array
-
         if not args.no_transmitted_singletons:
             tp_expr = tp_expr | ht.transmitted_singleton  # | ht.info_POSITIVE_TRAIN_SITE
-
         if not args.no_sibling_singletons:
             tp_expr = tp_expr | ht.sib_singletons  # | ht.info_POSITIVE_TRAIN_SITE
 
@@ -366,10 +333,7 @@ def train_rf(data_source: str, freeze: int, args):
     if args.interval_qc_filter:
         rf_ht = rf_ht.filter(rf_ht.interval_qc_pass)
 
-    rf_features = get_features_list(True,
-                                    not (args.vqsr_features or args.median_features),
-                                    args.vqsr_features,
-                                    args.median_features)
+    rf_features = get_features_list()
 
     logger.info("Training RF model:\nfeatures: {}\nnum_tree: {}\nmax_depth:{}\nTest intervals: {}".format(
         ",".join(rf_features),
@@ -397,7 +361,7 @@ def train_rf(data_source: str, freeze: int, args):
         test_ht = test_ht.filter(hl.is_defined(test_ht[LABEL_COL]))
         test_results = rf.test_model(test_ht,
                                      rf_model,
-                                     features=get_features_list(True, not (args.vqsr_features or args.median_features), args.vqsr_features, args.median_features),
+                                     features=get_features_list(),
                                      label=LABEL_COL)
 
         ht = ht.annotate_globals(
@@ -408,7 +372,7 @@ def train_rf(data_source: str, freeze: int, args):
     features_importance = rf.get_features_importance(rf_model)
     ht = ht.annotate_globals(
         features_importance=features_importance,
-        features=get_features_list(True, not (args.vqsr_features or args.median_features), args.vqsr_features, args.median_features),
+        features=get_features_list(),
         vqsr_training=args.vqsr_training,
         no_transmitted_singletons=args.no_transmitted_singletons,
         adj=args.adj
@@ -577,20 +541,11 @@ if __name__ == '__main__':
 
     training_params = parser.add_argument_group('Training data parameters')
     training_params.add_argument('--adj', help='Use adj genotypes.', action='store_true')
-    training_params.add_argument('--vqsr_features', help='Use VQSR features only (+ snv/indel variant type)',
-                                 action='store_true')
-    training_params.add_argument('--median_features', help='Use gnomAD 2.0.2 features',
-                                 action='store_true')
-    training_params.add_argument('--vqsr_training', help='Use VQSR training examples', action='store_true')
     training_params.add_argument('--no_transmitted_singletons', help='Do not use transmitted singletons for training.',
                                  action='store_true')
     training_params.add_argument('--no_sibling_singletons', help='Do not use sibling singletons for training.',
                                  action='store_true')
     training_params.add_argument('--array_con_common', help='Use only array variants >0.1% AF.',
-                                 action='store_true')
-    training_params.add_argument('--array_con', help='Use only highly concordant array variants.',
-                                 action='store_true')
-    training_params.add_argument('--array', help='Use all array variants.',
                                  action='store_true')
     training_params.add_argument('--interval_qc_filter', help='Should interval QC be applied', action='store_true')
     training_params.add_argument('--pct_samples_20x',
