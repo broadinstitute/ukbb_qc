@@ -27,7 +27,7 @@ prediction_col_name = 'rf_prediction'
 SITES_FEATURES = [
     'info_MQRankSum',
     'info_SOR',
-    'inbreeding_coeff',
+    'InbreedingCoeff',
     'info_ReadPosRankSum'
 ]
 
@@ -121,7 +121,7 @@ def create_rf_ht(
         return dict(zip(SITES_FEATURES, [
             ht.info.MQRankSum,
             ht.info.SOR,
-            ht.inbreeding_coeff,
+            ht.info.InbreedingCoeff,
             ht.info.ReadPosRankSum
         ]))
 
