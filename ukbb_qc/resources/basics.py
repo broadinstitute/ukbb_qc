@@ -243,12 +243,11 @@ def array_sample_map_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> 
 
 
 # Capture intervals 
-def capture_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+def capture_ht_path(data_source: str) -> str:
     """
     Returns path to capture intervals Table.
 
     :param str data_source: One of 'regeneron' or 'broad'
-    :param int freeze: One of data freezes
     :return: Path to capture intervals Table
     :rtype: str
     """
@@ -257,7 +256,7 @@ def capture_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     elif data_source == 'regeneron':
         return 'gs://broad-ukbb/resources/ukbb_exome_calling_intervals.summary.ht'
     else:
-        raise DataException("No interval file specified for this data_source and freeze yet")
+        raise DataException("This data_source is currently not present")
 
 
 # Release resources
