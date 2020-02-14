@@ -124,7 +124,6 @@ def create_rf_ht(
         Returns expressions to annotate allele-level features (RF only)
 
         :param Table ht: Table to create annotation expression for.
-        :param int qc_stats_group_index: Index of group to get stats for
         :return: Dict with keys containing column names and values expressions
         :rtype: Dict of str: Expression
         """
@@ -157,7 +156,6 @@ def create_rf_ht(
 
     mt = get_ukbb_data(data_source, freeze, meta_root='meta')
     ht_family_stats = hl.read_table(var_annotations_ht_path(data_source, freeze, 'family_stats'))
-    ht_qc_stats = hl.read_table(var_annotations_ht_path(data_source, freeze, 'qc_stats'))
     ht_call_stats = hl.read_table(var_annotations_ht_path(data_source, freeze, 'call_stats'))
     ht_truth_data = hl.read_table(var_annotations_ht_path(data_source, freeze, 'truth_data'))
     ht_allele_data = hl.read_table(var_annotations_ht_path(data_source, freeze, 'allele_data'))
@@ -173,7 +171,6 @@ def create_rf_ht(
         info_ac=mt.info.AC, #[mt.a_index - 1],
         **ht_call_stats[mt.row_key],
         **ht_family_stats[mt.row_key],
-        **ht_qc_stats[mt.row_key],
         **ht_truth_data[mt.row_key],
         **ht_allele_data[mt.row_key]
     ).rows()
@@ -183,8 +180,7 @@ def create_rf_ht(
     # Filter to only variants found in high qual samples and with no LowQual filter
     ht = ht.filter((ht.qc_callstats.find(lambda x: x.meta.get('group') == group).AC[1] > 0) & ~info_ht[ht.key].filters.contains("LowQual"))
 
-    qc_stats_groups = ht_qc_stats.aggregate(hl.agg.take(ht_qc_stats.qc_stats.map(lambda x: x.meta['group']), 1))[0]
-    qc_stats_group_index = next(x[0] for x in enumerate(qc_stats_groups) if x[1] == group)
+    #What is this doing? Is it just getting the index for each of the groups in qc_stats and family stats, I think this all changes
     family_stats_groups = ht_family_stats.aggregate(hl.agg.take(ht_family_stats.family_stats.map(lambda x: x.meta['group']), 1))[0]
     family_stats_group_index = next(x[0] for x in enumerate(family_stats_groups) if x[1] == 'raw')
 
