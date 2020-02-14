@@ -8,7 +8,7 @@ from gnomad_hail.utils.sparse_mt import compute_last_ref_block_end, densify_site
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE, get_checkpoint_path, get_ukbb_data
 from ukbb_qc.resources.sample_qc import array_sample_map_ht_path, qc_mt_path 
 from ukbb_qc.resources.variant_qc import get_truth_sample_info
-from ukbb_qc.utils.utils import get_qc_mt_sites
+from ukbb_qc.utils.utils import annotate_interval_qc_filter, get_qc_mt_sites
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -72,6 +72,12 @@ def main(args):
         if not hl.utils.hadoop_exists(f"{qc_sites_path()}/_SUCCESS"):
             get_qc_mt_sites()
         qc_sites_ht = hl.read_table(qc_sites_path())
+
+        if args.apply_interval_qc_filter:
+            logger.info("Applying interval QC filter to QC MT sites")
+            qc_sites_ht = annotate_interval_qc_filter(data_source, freeze, qc_sites_ht, autosomes_only=True)
+            qc_sites_ht = qc_sites_ht.filter(qc_sites_ht.interval_qc_pass)
+            logger.info(f"Sites after applying interval QC filter: {qc_sites_ht.count()}")
 
         logger.info("Densifying QC MT sites")
         mt = densify_sites(
@@ -193,6 +199,11 @@ if __name__ == "__main__":
         "--compute_qc_mt",
         help="Compute matrix to be used in sample qc",
         action="store_true",
+    )
+    parser.add_argument(
+        "--apply_interval_qc_filter",
+        help="Filter to good intervals from interval QC",
+        action="store_true"
     )
     parser.add_argument(
         "--min_callrate",
