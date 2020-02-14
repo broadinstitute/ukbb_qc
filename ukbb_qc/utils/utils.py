@@ -2,8 +2,9 @@ import hail as hl
 import logging
 from typing import Union
 from gnomad_hail.utils.generic import get_reference_genome
+from gnomad_hail.resources.grch38.intervals import lcr
 from ukbb_qc.resources.basics import raw_mt_path
-from ukbb_qc.resources.sample_qc import f_stat_sites_path, interval_qc_path, qc_temp_data_prefix
+from ukbb_qc.resources.sample_qc import f_stat_sites_path, interval_qc_path, qc_temp_data_prefix, qc_sites_path
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -11,6 +12,7 @@ logger = logging.getLogger("utils")
 logger.setLevel(logging.INFO)
 
 
+# Sample resources
 def remove_hard_filter_samples(
     data_source: str, freeze: int, t: Union[hl.MatrixTable, hl.Table]
 ) -> Union[hl.MatrixTable, hl.Table]:
@@ -46,6 +48,7 @@ def remove_hard_filter_samples(
     return t
 
 
+# Variant resources
 def annotate_interval_qc_filter(
     data_source: str,
     freeze: int,
@@ -107,6 +110,7 @@ def annotate_interval_qc_filter(
     return t
 
 
+# Sites resources
 def calculate_fstat_sites() -> None:
     """
     Writes a Table with high callrate, common, biallelic SNPs in regions that pass interval QC on chromosome X.
@@ -116,7 +120,7 @@ def calculate_fstat_sites() -> None:
     :return: None
     :rtype: None
     """
-    data_source = 'broad'
+    data_source = "broad"
     freeze = 5
     mt = hl.read_matrix_table(raw_mt_path(data_source, freeze, densified=True))
     mt = mt.key_rows_by('locus', 'alleles')
@@ -130,4 +134,34 @@ def calculate_fstat_sites() -> None:
     mt = hl.variant_qc(mt)
     mt = mt.filter_rows((hl.agg.fraction(hl.is_defined(mt.GT)) > 0.99) & (mt.variant_qc.AF[1] > 0.001))
     ht = mt.rows()
+    ht = ht.transmute(AF=ht.variant_qc.AF[1])
     ht = ht.write(f_stat_sites_path())
+
+
+def get_qc_mt_sites() -> None:
+    """
+    Writes a Table with sites to use in QC MatrixTable generation. 
+    Table includes the fields 'locus', 'alleles', and 'info'. 
+    NOTE: This function generates sites based on the tranche 2/freeze 5 QC MatrixTable.
+
+    :return: None
+    :rtype: None
+    """
+    logger.info("Preparing to make QC MT sites HT")
+    data_source = "broad"
+    freeze = 5
+    mt = hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned=True))
+    ht = mt.rows()
+
+    logger.info("Removing LCR intervals from QC sites")
+    lcr_intervals = lcr.ht()
+    ht = ht.filter(
+            hl.is_missing(lcr[ht.key])
+    )
+
+    logger.info("Adding info annotations to QC sites HT")
+    # NOTE: info ht is hard coded from tranche 2/freeze 5
+    info_ht = hl.read_matrix_table("gs://broad-ukbb/broad.freeze_5/temp/broad.freeze_5.sites.ht")
+    ht = ht.annotate(info=info_ht[ht.key].info)
+    ht.write(qc_sites_path())
+

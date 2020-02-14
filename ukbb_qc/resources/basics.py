@@ -1,12 +1,8 @@
 import hail as hl
 from typing import Optional
 from gnomad_hail.resources.resource_utils import DataException
-
-
-CURRENT_FREEZE = 5
-DATA_SOURCES = ['regeneron', 'broad']
-FREEZES = [4, 5]
-CURRENT_HAIL_VERSION = "0.2"
+from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES, CURRENT_HAIL_VERSION
+from .sample_qc import meta_ht_path
 
 
 broad_calling_intervals_path = 'gs://broad-ukbb/resources/broad_exome_calling.interval_list'
@@ -15,13 +11,16 @@ ukbb_phenotype_path = "gs://broad-ukbb/resources/ukb24295.phenotypes.txt"
 
 
 # UKBB data resources
-def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, adj: bool = False, split: bool = True,
-                  raw: bool = False, non_refs_only: bool = False, meta_root: Optional[str] = None) -> hl.MatrixTable:
+def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, key_by_locus_and_alleles: bool = False,
+                    adj: bool = False, split: bool = True, raw: bool = False, 
+                    non_refs_only: bool = False, meta_root: Optional[str] = None
+    ) -> hl.MatrixTable:
     """
     Wrapper function to get UKBB data as MatrixTable. By default, returns split hardcalls (with adj annotated but not filtered).
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
+    :param bool key_by_locus_and_alleles: Whether to key the MatrixTable by locus and alleles
     :param bool adj: Whether the returned data should be filtered to adj genotypes
     :param bool split: Whether the dataset should be split (only applies to raw=False)
     :param bool raw: Whether to return the raw data (not recommended: unsplit, and no special consideration on sex chromosomes)
@@ -48,6 +47,9 @@ def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, adj: bool = Fa
     if meta_root:
         meta_ht = hl.read_table(meta_ht_path(data_source, freeze))
         mt = mt.annotate_cols(**{meta_root: meta_ht[mt.s]})
+
+    if key_by_locus_and_alleles:
+        mt = hl.MatrixTable(hl.ir.MatrixKeyRowsBy(mt._mir, ['locus', 'alleles'], is_sorted=True)) # taken from v3 qc
 
     return mt
 
@@ -145,7 +147,7 @@ def non_refs_only_mt_path(data_source: str, freeze: int = CURRENT_FREEZE, split:
     return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/non_refs_only/non_refs_only{".split" if split else ""}.mt'
 
 
-def get_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE,  name: str = None, mt: bool = False) -> str:
+def get_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE, name: str = None, mt: bool = False) -> str:
     """
     Creates a checkpoint path for Table or MatrixTable
 
@@ -159,6 +161,19 @@ def get_checkpoint_path(data_source: str, freeze: int = CURRENT_FREEZE,  name: s
     return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/{name}.{"mt" if mt else "ht"}'
 
 
+# Sparse MatrixTable resources
+def last_END_positions_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Retrieves path to Table with last END positions annotation
+
+    :param str data_type: One of 'regeneron' or 'broad'
+    :param int freeze: One of data freezes
+    :return: Path to Table with last_END_position annotation
+    :rtype: str
+    """
+    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/sparse_resources/last_END_positions.ht'
+
+    
 # Array resources
 def get_array_data_path(extension: str, chrom: str) -> str:
     """
@@ -177,7 +192,7 @@ def get_array_data_path(extension: str, chrom: str) -> str:
         return 'gs://broad-ukbb/resources/array/ukb26041_cal_chr22_v2_s488292.fam'
 
 
-def get_array_sample_map_path(freeze: int) -> str:
+def array_sample_map_path(freeze: int = CURRENT_FREEZE) -> str:
     """
     Get path to UKBB array sample mapping csv file.
 
@@ -191,7 +206,7 @@ def get_array_sample_map_path(freeze: int) -> str:
         return 'gs://broad-ukbb/resources/array/linking_file_200K_withbatch.csv'
 
 
-def get_array_sample_map_ht(data_source: str, freeze: int = CURRENT_FREEZE) -> hl.Table:
+def array_sample_map_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> hl.Table:
     """
     Returns array sample map Table.
 
@@ -265,9 +280,9 @@ def release_ht_path(data_source: str, freeze: int) -> str:
     return f'{get_release_path(data_source, freeze)}/ht/release.sites.ht'
 
 
-def release_vcf_path(data_source: str, freeze: int, contig=None) -> str:
+def release_vcf_path(data_source: str, freeze: int, contig: str = None) -> str:
     '''
-    Fetch filepath for release (variant-only) VCFs
+    Fetch bucket for release (variant-only) VCFs
 
     :param str data_source: 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
@@ -278,4 +293,4 @@ def release_vcf_path(data_source: str, freeze: int, contig=None) -> str:
     if contig:
         return f'{get_release_path(data_source, freeze)}/vcf/{contig}.vcf.bgz'
     else:
-        raise DataException("No VCF for all contigs. Must pick a contig")
+        return f'{get_release_path(data_source, freeze)}/vcf/sharded_vcf/ukbb_freeze_{freeze}_release.vcf.bgz'
