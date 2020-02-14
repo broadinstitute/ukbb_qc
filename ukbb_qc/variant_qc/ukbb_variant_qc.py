@@ -167,13 +167,6 @@ def create_rf_ht(
     mt = mt.annotate_rows(info=info_ht[mt.row_key].info)
     mt = mt.annotate_rows(info=mt.info.annotate(AC=hl.agg.sum(mt.GT.n_alt_alleles())))
 
-    # Add inbreeding coefficient
-    ic_mt = mt.filter_cols(mt.meta.related_filter, keep=False)
-    ic_mt = ic_mt.filter_rows(hl.agg.sum(ic_mt.GT.n_alt_alleles()) > 0)
-    ic_mt = ic_mt.annotate_rows(inbreeding_coeff=bi_allelic_site_inbreeding_expr(ic_mt.GT))
-    ic_ht = ic_mt.rows().select('inbreeding_coeff')
-    mt = mt.annotate_rows(**ic_ht[mt.row_key])
-
     ht = mt.annotate_rows(
         n_nonref=ht_call_stats[mt.row_key].qc_callstats[0].AC[1],
         singleton=mt.info.AC == 1,#[mt.a_index - 1] == 1,
