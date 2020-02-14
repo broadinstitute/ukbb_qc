@@ -1,5 +1,6 @@
 import hail as hl
 from typing import Optional
+from gnomad_hail.utils.generic import file_exists
 from gnomad_hail.resources.resource_utils import DataException
 from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES, CURRENT_HAIL_VERSION
 from .sample_qc import meta_ht_path
@@ -11,6 +12,18 @@ ukbb_phenotype_path = "gs://broad-ukbb/resources/ukb24295.phenotypes.txt"
 
 
 # UKBB data resources
+def excluded_samples_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Returns path to list of samples to exclude from QC due to withdrawn consents
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of data freezes
+    :return: Path to excluded samples list
+    :rtype: str
+    """
+    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/data/samples_to_exclude.txt'
+
+
 def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, key_by_locus_and_alleles: bool = False,
                     adj: bool = False, split: bool = True, raw: bool = False, 
                     non_refs_only: bool = False, meta_root: Optional[str] = None
@@ -50,6 +63,17 @@ def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, key_by_locus_a
 
     if key_by_locus_and_alleles:
         mt = hl.MatrixTable(hl.ir.MatrixKeyRowsBy(mt._mir, ['locus', 'alleles'], is_sorted=True)) # taken from v3 qc
+
+    if file_exists(excluded_samples_path):
+        ht = hl.import_table(excluded_samples_path, no_header=True, impute=True)
+        excluded_samples = hl.literal(ht.aggregate(hl.agg.collect_as_set(ht.f0)))
+        mt = mt.filter_cols(~excluded_samples.contains(mt.s))
+        mt = mt.filter_rows(
+            (hl.len(mt.alleles) > 1) & 
+            ~(hl.agg.any(mt.LGT.is_non_ref())),
+            keep=False
+        )
+
 
     return mt
 
@@ -173,7 +197,7 @@ def last_END_positions_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -
     """
     return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/sparse_resources/last_END_positions.ht'
 
-    
+
 # Array resources
 def get_array_data_path(extension: str, chrom: str) -> str:
     """
