@@ -67,9 +67,7 @@ def get_features_list(
     Returns the list of features to use based on desired arguments (currently only VQSR / alleles)
 
     :param bool sites_features: Whether to use site-level features
-    :param bool vqsr_features: Whether to use VQSR features
     :param bool allele_features: Whether to use Allele-specific features
-    :param bool median_features: Whether to use 2.0.2 features
     :return: List of features to use
     """
 
@@ -78,10 +76,6 @@ def get_features_list(
         features.extend(SITES_FEATURES)
     if allele_features:
         features.extend(ALLELE_FEATURES)
-    if vqsr_features:
-        features.extend(VQSR_FEATURES)
-    if median_features:
-        features.extend(MEDIAN_FEATURES)
 
     return features
 
@@ -96,7 +90,7 @@ def create_rf_ht(
 ) -> hl.Table:
     """
     Creates a Table with all necessary columns for RF:
-    - Features columns (both VQSR and RF)
+    - Features columns
     - Training criteria columns
 
     Numerical features are median-imputed. If impute_features_by_variant_type is set, imputation is done based on the median of the variant type.
@@ -125,22 +119,7 @@ def create_rf_ht(
             ht.info.ReadPosRankSum
         ]))
 
-    def get_vqsr_features_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression]:
-        """
-        Returns expressions to annotate site-level features only used by VQSRs
-
-        :param Table ht: Table to create annotation expression for.
-        :return: Dict with keys containing column names and values expressions
-        :rtype: Dict of str: Expression
-        """
-        return dict(zip(VQSR_FEATURES, [
-            ht.info.FS,
-            ht.info.QD,
-            ht.info.MQ,
-            ht.info.VarDP
-        ]))
-
-    def get_allele_features_expr(ht: hl.Table, qc_stats_group_index: int) -> Dict[str, hl.expr.Expression]:
+    def get_allele_features_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression]:
         """
         Returns expressions to annotate allele-level features (RF only)
 
@@ -157,22 +136,6 @@ def create_rf_ht(
             ht.allele_data.has_star,
             ht.info.AS_QD,
             ht.info.AS_pab_max
-        ]))
-
-    def get_median_features_expr(ht: hl.Table, qc_stats_group_index: int) -> Dict[str, hl.expr.Expression]:
-        """
-        Returns expressions to annotate 2.0.2 allele-specific features (RF only)
-
-        :param Table ht: Table to create annotation expression for.
-        :param int qc_stats_group_index: Index of group to get stats for
-        :return: Dict with keys containing column names and values expressions
-        :rtype: Dict of str: Expression
-        """
-        return dict(zip(MEDIAN_FEATURES, [
-            ht.qc_stats[qc_stats_group_index].gq_median,
-            ht.qc_stats[qc_stats_group_index].dp_median,
-            ht.qc_stats[qc_stats_group_index].nrq_median,
-            ht.qc_stats[qc_stats_group_index].ab_median
         ]))
 
     def get_training_sites_expr(ht: hl.Table, family_stats_group_index: int) -> Dict[str, hl.expr.Expression]:
@@ -235,9 +198,7 @@ def create_rf_ht(
     ht = ht.select(
         **get_allele_features_expr(ht, qc_stats_group_index),
         **get_site_features_expr(ht),
-        **get_vqsr_features_expr(ht),
         **get_training_sites_expr(ht, family_stats_group_index),
-        **get_median_features_expr(ht, qc_stats_group_index),
         omni=ht.truth_data.omni,
         mills=ht.truth_data.mills,
         #ukbb_array=ht.truth_data.ukbb_array,
