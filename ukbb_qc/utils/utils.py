@@ -3,7 +3,7 @@ import logging
 from typing import Union
 from gnomad_hail.utils.generic import get_reference_genome
 from gnomad_hail.resources.grch38.intervals import lcr
-from ukbb_qc.resources.basics import raw_mt_path
+from ukbb_qc.resources.basics import get_ukbb_data, raw_mt_path
 from ukbb_qc.resources.sample_qc import f_stat_sites_path, interval_qc_path, qc_temp_data_prefix, qc_sites_path
 
 
@@ -111,6 +111,39 @@ def annotate_interval_qc_filter(
 
 
 # Sites resources
+def get_sites(
+    af_cutoff: float, greater: bool = True,  
+    pass_interval_qc: bool = True, autosomes_only: bool = True
+    ) -> hl.Table:
+    """
+    Returns a Table of sites that meet af_cutoff from the 200K (tranche 2/freeze 5) callset. 
+    
+    :param float af_cutoff: Desired AF cutoff
+    :param bool greater: Whether to return variants with AFs higher than the cutoff. Default is True.
+    :param bool pass_interval_qc: Whether to only return sites that pass interval QC. Default is True.
+    :param bool autosomes_only: Whether to use interval QC results on autosomes only. Default is True
+    :return: None
+    :rtype: None
+    """
+    data_source = "broad"
+    freeze = 5
+    mt = hl.read_matrix_table(get_ukbb_data(data_source, freeze, split=True))
+    if pass_interval_qc:
+        mt = annotate_interval_qc_filter('broad', 5, mt, autosomes_only=autosomes_only)
+        mt = mt.filter_rows(mt.interval_qc_pass)
+    
+    mt = hl.variant_qc(mt)
+
+    if greater:
+        mt = mt.filter_rows(mt.variant_qc.AF[1] > af_cutoff)
+    else:
+        mt = mt.filter_rows(mt.variant_qc.AF[1] < af_cutoff)
+
+    ht = mt.rows()
+    ht = ht.transmute(AF=ht.variant_qc.AF[1])
+    return ht
+
+
 def calculate_fstat_sites() -> None:
     """
     Writes a Table with high callrate, common, biallelic SNPs in regions that pass interval QC on chromosome X.
