@@ -4,6 +4,7 @@ from gnomad_hail.utils.generic import file_exists
 from gnomad_hail.resources.resource_utils import DataException
 from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES, CURRENT_HAIL_VERSION
 from .sample_qc import meta_ht_path
+from ukbb_qc.load_data.utils import import_array_exome_id_map_ht
 
 
 broad_calling_intervals_path = 'gs://broad-ukbb/resources/broad_exome_calling.interval_list'
@@ -66,12 +67,18 @@ def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, key_by_locus_a
     if key_by_locus_and_alleles:
         mt = hl.MatrixTable(hl.ir.MatrixKeyRowsBy(mt._mir, ['locus', 'alleles'], is_sorted=True)) # taken from v3 qc
 
-    if file_exists(f"{array_sample_map_ht_path}_SUCCESS"):
-        ht = hl.read_table(array_sample_map_ht_path(data_source, freeze))
-        ht = ht.filter()
-        excluded_samples = hl.literal(ht.aggregate(hl.agg.collect_as_set(ht.f0)))
-        mt = mt.filter_cols(~excluded_samples.contains(mt.s))
+    # Remove any samples with withdrawn consents if file with excluded samples exists
+    if file_exists(excluded_samples_path(freeze)):
+        if not file_exists(f"{array_sample_map_ht_path(data_source, freeze)}_SUCCESS"):
+            ht = import_array_exome_id_map_ht(freeze)
+        else:
+            ht = hl.read_table(array_sample_map_ht_path(data_source, freeze))
+        mt = mt.annotate_cols(
+            withdrawn_consent=sample_map_ht[exome_ht.s.split("_")[1]].withdrawn_consent
+        )
+        mt = mt.filter_cols(~mt.withdrawn_consent)
         mt = mt.filter_rows(hl.agg.any(mt.LGT.is_non_ref()) | hl.agg.any(hl.is_defined(mt.END)))
+        mt = mt.drop('withdrawn_consent')
 
     return mt
 
