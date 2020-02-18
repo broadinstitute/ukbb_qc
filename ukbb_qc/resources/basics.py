@@ -68,7 +68,7 @@ def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, key_by_locus_a
         ht = hl.import_table(excluded_samples_path, no_header=True, impute=True)
         excluded_samples = hl.literal(ht.aggregate(hl.agg.collect_as_set(ht.f0)))
         mt = mt.filter_cols(~excluded_samples.contains(mt.s))
-        mt = mt.filter_rows(hl.agg.any(mt.LGT.is_non_ref()) & hl.agg.any(hl.is_defined(mt.END)))
+        mt = mt.filter_rows(hl.agg.any(mt.LGT.is_non_ref()) | hl.agg.any(hl.is_defined(mt.END)))
 
     return mt
 
