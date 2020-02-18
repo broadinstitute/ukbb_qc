@@ -12,16 +12,18 @@ ukbb_phenotype_path = "gs://broad-ukbb/resources/ukb24295.phenotypes.txt"
 
 
 # UKBB data resources
-def excluded_samples_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+def excluded_samples_path(freeze: int = CURRENT_FREEZE) -> str:
     """
     Returns path to list of samples to exclude from QC due to withdrawn consents
 
-    :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
     :return: Path to excluded samples list
     :rtype: str
     """
-    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/data/samples_to_exclude.txt'
+    consent_file_name = {
+        6: 'w26041_20200204.csv'
+    }
+    return f'gs://broad-ukbb/resources/withdrawn_consents/{consent_file_name[freeze]}'
 
 
 def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, key_by_locus_and_alleles: bool = False,
@@ -64,8 +66,9 @@ def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, key_by_locus_a
     if key_by_locus_and_alleles:
         mt = hl.MatrixTable(hl.ir.MatrixKeyRowsBy(mt._mir, ['locus', 'alleles'], is_sorted=True)) # taken from v3 qc
 
-    if file_exists(excluded_samples_path):
-        ht = hl.import_table(excluded_samples_path, no_header=True, impute=True)
+    if file_exists(f"{array_sample_map_ht_path}_SUCCESS"):
+        ht = hl.read_table(array_sample_map_ht_path(data_source, freeze))
+        ht = ht.filter()
         excluded_samples = hl.literal(ht.aggregate(hl.agg.collect_as_set(ht.f0)))
         mt = mt.filter_cols(~excluded_samples.contains(mt.s))
         mt = mt.filter_rows(hl.agg.any(mt.LGT.is_non_ref()) | hl.agg.any(hl.is_defined(mt.END)))
@@ -219,11 +222,13 @@ def array_sample_map_path(freeze: int = CURRENT_FREEZE) -> str:
     :return: Path to array sample map csv
     :rtype: str
     """
-    if freeze == 4:
-        return 'gs://broad-ukbb/resources/array/Project_26041_bridge.csv'
-    elif freeze == 5:
-        return 'gs://broad-ukbb/resources/array/linking_file_200K_withbatch.csv'
-
+    array_map_names = {
+            4: 'Project_26041_bridge.csv'
+            5: 'linking_file_200K_withbatch.csv',
+            6: 'linking_file_300K_withbatch.csv'
+    }
+    return f'gs://broad-ukbb/resources/array/{array_map_names[freeze]}'
+    
 
 def array_sample_map_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> hl.Table:
     """
@@ -234,7 +239,9 @@ def array_sample_map_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> 
     :return: array sample map Table
     :rtype: hl.Table
     """
-    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/array_sample_map.ht'
+    if freeze == 5:
+        f'gs://broad-ukbb/{data_source}.freeze_{freeze}/array_sample_map.ht'
+    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/array/array_sample_map.ht'
 
 
 # Capture intervals 
