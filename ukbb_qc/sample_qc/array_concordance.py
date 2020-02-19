@@ -46,36 +46,13 @@ def prepare_array_and_exome_mt(
         f"Total number of IDs in the sample map that are also in the array data: {exome_array_count}..."
     )
 
-    array_mt = hl.variant_qc(array_mt)
-    array_mt = array_mt.checkpoint(
-        get_checkpoint_path(data_source, freeze, name=f"array_mt_variant_qc", mt=True),
-        overwrite=True,
-    )
-    array_mt = array_mt.filter_rows(
-        (array_mt.variant_qc.call_rate > call_rate_cutoff)
-        & (array_mt.variant_qc.AF[1] > af_cutoff)
-    )
+    # Get high callrate, common sites in autosomes only from tranche 2/freeze 5 
+    # NOTE: Filter to autosomes because of adjusted sex ploidies in hardcalls mt (hail throws ploidy 0 error)
+    sites_ht = get_sites(af_cutoff, call_rate_cutoff)
 
-    # NOTE: Filter to autosomes because of adjusted sex ploidies in hardcalls mt (hail throws a ploidy 0 error)
-    exome_mt = exome_mt.filter_rows(exome_mt.locus.in_autosome())
-    exome_mt = exome_mt.filter_rows(
-        hl.is_defined(array_mt.index_rows(exome_mt.row_key))
-    )
-
-    exome_mt = hl.variant_qc(exome_mt)
-    exome_mt = exome_mt.checkpoint(
-        get_checkpoint_path(data_source, freeze, name=f"exome_mt_variant_qc", mt=True),
-        overwrite=True,
-    )
-    exome_mt = exome_mt.filter_rows(
-        (exome_mt.variant_qc.call_rate > call_rate_cutoff)
-        & (exome_mt.variant_qc.AF[1] > af_cutoff)
-    )
-
-    array_mt = array_mt.filter_rows(
-        hl.is_defined(exome_mt.index_rows(array_mt.row_key))
-    )
-
+    # Filter array and exome mt to sites from tranche 2 and return
+    exome_mt = exome_mt.filter_rows(hl.is_defined(sites_ht[exome_mt.row_key]))
+    array_mt = array_mt.filter_rows(hl.is_defined(sites_ht[array_mt.row_key]))
     return array_mt, exome_mt
 
 
