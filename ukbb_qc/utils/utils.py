@@ -112,13 +112,14 @@ def annotate_interval_qc_filter(
 
 # Sites resources
 def get_sites(
-    af_cutoff: float, greater: bool = True,  
+    af_cutoff: float, callrate_cutoff: float, greater: bool = True,  
     pass_interval_qc: bool = True, autosomes_only: bool = True
     ) -> hl.Table:
     """
     Returns a Table of sites that meet af_cutoff from the 200K (tranche 2/freeze 5) callset. 
     
     :param float af_cutoff: Desired AF cutoff
+    :param float callrate_cutoff: Desired callrate cutoff
     :param bool greater: Whether to return variants with AFs higher than the cutoff.
     :param bool pass_interval_qc: Whether to only return sites that pass interval QC. 
     :param bool autosomes_only: Whether to return autosomal sites only. Also sets interval QC flag.
@@ -137,14 +138,15 @@ def get_sites(
         mt = mt.filter_rows(mt.interval_qc_pass)
     
     # Add callstats (for AF) and filter on AF cutoff
-    mt = mt.annotate_rows(call_stats=hl.agg.call_stats(mt.GT, mt.alleles))
+    mt = hl.variant_qc(mt)
+    mt = mt.filter_rows(mt.variant_qc.call_rate > callrate_cutoff)
     if greater:
-        mt = mt.filter_rows(mt.call_stats.AF[1] > af_cutoff)
+        mt = mt.filter_rows(mt.variant_qc.AF[1] > af_cutoff)
     else:
-        mt = mt.filter_rows(mt.call_stats.AF[1] < af_cutoff)
+        mt = mt.filter_rows(mt.variant_qc.AF[1] < af_cutoff)
 
     ht = mt.rows()
-    ht = ht.transmute(AF=ht.call_stats.AF[1])
+    ht = ht.transmute(AF=ht.variant_qc.AF[1])
     return ht
 
 
