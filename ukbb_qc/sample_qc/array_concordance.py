@@ -16,10 +16,25 @@ logger = logging.getLogger("load_array_data")
 logger.setLevel(logging.INFO)
 
 
-def prepare_array_and_exome_mt(data_source, freeze, array_mt, exome_mt, call_rate_cutoff, af_cutoff):
+def prepare_array_and_exome_mt(
+    data_source, freeze, array_mt, exome_mt, call_rate_cutoff, af_cutoff
+    ) -> hl.MatrixTable, hl.MatrixTable:
+    """
+    Prepares array and exome MatrixTables for concordance. 
+    Maps array to exome IDs and filters to high callrate, common sites.
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param MatrixTable array_mt: Array MatrixTable
+    :param MatrixTable exome_mt: Exome MatrixTable
+    :param float call_rate_cutoff: Minimum call rate cutoff for sites
+    :param float af_cutoff: Minimum alternate allele frequency cutoff for sites
+    :return: Prepared array and exome MatrixTables
+    :rtype: hl.MatrixTable, hl.MatrixTable
+    """
     logger.info("Mapping array sample names to exome sample names...")
-    sample_map = hl.read_table(array_sample_map_ht_path("broad", freeze))
-    exome_mt = exome_mt.annotate_cols(**sample_map[exome_mt.col_key])
+    sample_map = hl.read_table(array_sample_map_ht_path(data_source, freeze))
+    exome_mt = exome_mt.annotate_cols(**sample_map[exome_ht.col_key.split("_")[1]])
     exome_mt = exome_mt.filter_cols(hl.is_defined(exome_mt.ukbb_app_26041_id))
 
     sample_map = sample_map.key_by(exome_s=sample_map.ukbb_app_26041_id)
@@ -64,7 +79,18 @@ def prepare_array_and_exome_mt(data_source, freeze, array_mt, exome_mt, call_rat
     return array_mt, exome_mt
 
 
-def get_array_exome_concordance(array_mt, exome_mt):
+def get_array_exome_concordance(
+    array_mt: hl.MatrixTable, exome_mt: hl.MatrixTable
+    ) -> hl.Table, hl.Table:
+    """
+    Runs concordance on input array and exome MatrixTables.
+    Returns both sample and variant concordance Tables.
+
+    :param MatrixTable array_mt: Array MatrixTable
+    :param MatrixTable exome_mt: Exome MatrixTable
+    :return: Sample and variant concordance Tables
+    :rtype: hl.Table, hl.Table
+    """
     summary, samples, variants = hl.concordance(array_mt, exome_mt)
     variants = variants.annotate(
         num_gt_con=(
