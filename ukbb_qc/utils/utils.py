@@ -1,7 +1,7 @@
 import hail as hl
 import logging
 from typing import Union
-from gnomad_hail.utils.generic import get_reference_genome
+from gnomad_hail.utils.generic import filter_to_autosomes, get_reference_genome
 from gnomad_hail.resources.grch38.intervals import lcr
 from ukbb_qc.resources.basics import get_ukbb_data, raw_mt_path
 from ukbb_qc.resources.sample_qc import f_stat_sites_path, interval_qc_path, qc_temp_data_prefix, qc_sites_path
@@ -119,28 +119,32 @@ def get_sites(
     Returns a Table of sites that meet af_cutoff from the 200K (tranche 2/freeze 5) callset. 
     
     :param float af_cutoff: Desired AF cutoff
-    :param bool greater: Whether to return variants with AFs higher than the cutoff. Default is True.
-    :param bool pass_interval_qc: Whether to only return sites that pass interval QC. Default is True.
-    :param bool autosomes_only: Whether to use interval QC results on autosomes only. Default is True
+    :param bool greater: Whether to return variants with AFs higher than the cutoff.
+    :param bool pass_interval_qc: Whether to only return sites that pass interval QC. 
+    :param bool autosomes_only: Whether to return autosomal sites only. Also sets interval QC flag.
     :return: None
     :rtype: None
     """
     data_source = "broad"
     freeze = 5
     mt = hl.read_matrix_table(get_ukbb_data(data_source, freeze, split=True))
+
+    if autosomes_only:
+        mt = filter_to_autosomes(mt)
+
     if pass_interval_qc:
         mt = annotate_interval_qc_filter('broad', 5, mt, autosomes_only=autosomes_only)
         mt = mt.filter_rows(mt.interval_qc_pass)
     
-    mt = hl.variant_qc(mt)
-
+    # Add callstats (for AF) and filter on AF cutoff
+    mt = mt.annotate_rows(call_stats=hl.agg.call_stats(mt.GT, mt.alleles))
     if greater:
-        mt = mt.filter_rows(mt.variant_qc.AF[1] > af_cutoff)
+        mt = mt.filter_rows(mt.call_stats.AF[1] > af_cutoff)
     else:
-        mt = mt.filter_rows(mt.variant_qc.AF[1] < af_cutoff)
+        mt = mt.filter_rows(mt.call_stats.AF[1] < af_cutoff)
 
     ht = mt.rows()
-    ht = ht.transmute(AF=ht.variant_qc.AF[1])
+    ht = ht.transmute(AF=ht.call_stats.AF[1])
     return ht
 
 
