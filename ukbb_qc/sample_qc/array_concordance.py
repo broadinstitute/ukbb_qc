@@ -6,9 +6,9 @@ from ukbb_qc.resources.basics import (
     get_array_data_path, get_checkpoint_path, get_ukbb_data
     )
 from ukbb_qc.resources.sample_qc import array_variant_concordance_path, array_sample_concordance_path
-from gnomad_hail import try_slack
+from gnomad_hail.utils.slack import try_slack
 from gnomad_hail.utils.liftover import get_liftover_genome, lift_data, annotate_snp_mismatch
-from ukbb_qc.utils import interval_qc_filter, remove_hard_filter_samples
+from ukbb_qc.utils.utils import annotate_interval_qc_filter, remove_hard_filter_samples
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
