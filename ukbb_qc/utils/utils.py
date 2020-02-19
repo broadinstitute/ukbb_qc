@@ -112,7 +112,7 @@ def annotate_interval_qc_filter(
 
 # Sites resources
 def get_sites(
-    af_cutoff: float, callrate_cutoff: float, greater: bool = True,  
+    af_cutoff: float, call_rate_cutoff: float, greater: bool = True,  
     pass_interval_qc: bool = True, autosomes_only: bool = True
     ) -> hl.Table:
     """
@@ -139,7 +139,7 @@ def get_sites(
     
     # Add callstats (for AF) and filter on AF cutoff
     mt = hl.variant_qc(mt)
-    mt = mt.filter_rows(mt.variant_qc.call_rate > callrate_cutoff)
+    mt = mt.filter_rows(mt.variant_qc.call_rate > call_rate_cutoff)
     if greater:
         mt = mt.filter_rows(mt.variant_qc.AF[1] > af_cutoff)
     else:
