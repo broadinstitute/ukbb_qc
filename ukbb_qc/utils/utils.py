@@ -128,6 +128,7 @@ def get_sparse_sample_qc(mt: hl.MatrixTable, autosomes_only: bool = True) -> hl.
         chrom = "autosomes"
     else:
         chrom = None
+
     # Read in interval QC table and get total number of bases in high coverage intervals
     interval_qc_ht = hl.read_table(interval_qc_path(data_source, freeze, chrom=chrom))
     good_intervals_ht = interval_qc_ht.filter(
@@ -135,9 +136,11 @@ def get_sparse_sample_qc(mt: hl.MatrixTable, autosomes_only: bool = True) -> hl.
     )
     good_intervals_ht = good_intervals_ht.annotate(interval_label=good_intervals_ht.interval)
     good_intervals = good_intervals_ht.aggregate(hl.agg.collect(good_intervals_ht.interval))
-    total_bases = 0
-    for i in good_intervals:
-        total_bases += interval_length(i)
+    total_bases = good_intervals_ht.aggregate(
+        hl.agg.sum(
+            hl.abs(good_intervals_ht.interval.end.position - good_intervals_ht.interval.start.position)
+        )
+    )
     logger.info(f"Total number of bases in high coverage intervals: {total_bases}")
 
     # Add END entry to rows
