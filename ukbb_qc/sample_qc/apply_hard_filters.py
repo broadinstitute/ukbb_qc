@@ -1,7 +1,10 @@
 import argparse
+import hail as hl
+import logging
 from gnomad_hail.utils.sample_qc import add_filters_expr
-from ukbb_qc.call_sex import *
-from ukbb_qc.utils import interval_qc_filter 
+from ukbb_qc.resources.basics import get_ukbb_data
+from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
+from ukbb_qc.utils.utils import annotate_interval_qc_filter 
 
 
 logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
@@ -41,7 +44,7 @@ def apply_hard_filters_expr(ht: hl.Table, min_callrate: float, min_depth: float)
 
 
 def main(args):
-    hl.init(log='/apply_hard_filters.log')
+    hl.init(log='/apply_hard_filters.log', default_reference='GRCh38')
 
     data_source = args.data_source
     freeze = args.freeze
@@ -69,7 +72,7 @@ def main(args):
     ht = apply_hard_filters_expr(ht, args.callrate, args.depth)
     
     logger.info('Writing out hard filters HT...')
-    ht = ht.naive_coalesce(10000)
+    ht = ht.naive_coalesce(args.n_partitions)
     ht = ht.checkpoint(hard_filters_ht_path(data_source, freeze), overwrite=args.overwrite)
     
     logger.info('Checking number of samples flagged with hard filters...')
@@ -85,6 +88,7 @@ if __name__ == '__main__':
     parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE, type=int)
     parser.add_argument('-c', '--callrate', help='Minimum callrate', default=0.99, type=float)
     parser.add_argument('-d', '--depth', help='Minimum depth', default=20.0, type=float)
+    parser.add_argument('--n_partitions', help='Desired number of partitions', default=15000, type=int)
     parser.add_argument('-o', '--overwrite', help='Overwrite pre-existing data', action='store_true', default=True)
     parser.add_argument('-i', '--intervals', help='Filter to intervals to check distributions', action='store_true')
     args = parser.parse_args()

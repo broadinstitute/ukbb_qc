@@ -1,10 +1,14 @@
-import hail as hl
-import ukbb_qc.resources as urc
-from gnomad_hail import try_slack
-from gnomad_hail.utils.liftover import get_liftover_genome, lift_data, annotate_snp_mismatch
-from ukbb_qc.utils import interval_qc_filter, remove_hard_filter_samples
 import argparse
+import hail as hl
 import logging
+from ukbb_qc.resources.basics import (
+    array_mt_path, array_sample_map_ht_path, 
+    get_array_data_path, get_checkpoint_path, get_ukbb_data
+    )
+from ukbb_qc.resources.sample_qc import array_variant_concordance_path, array_sample_concordance_path
+from gnomad_hail.utils.slack import try_slack
+from gnomad_hail.utils.liftover import get_liftover_genome, lift_data, annotate_snp_mismatch
+from ukbb_qc.utils.utils import annotate_interval_qc_filter, remove_hard_filter_samples
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -12,10 +16,25 @@ logger = logging.getLogger("load_array_data")
 logger.setLevel(logging.INFO)
 
 
-def prepare_array_and_exome_mt(data_source, freeze, array_mt, exome_mt, call_rate_cutoff, af_cutoff):
+def prepare_array_and_exome_mt(
+    data_source, freeze, array_mt, exome_mt, call_rate_cutoff, af_cutoff
+    ) -> hl.MatrixTable, hl.MatrixTable:
+    """
+    Prepares array and exome MatrixTables for concordance. 
+    Maps array to exome IDs and filters to high callrate, common sites.
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param MatrixTable array_mt: Array MatrixTable
+    :param MatrixTable exome_mt: Exome MatrixTable
+    :param float call_rate_cutoff: Minimum call rate cutoff for sites
+    :param float af_cutoff: Minimum alternate allele frequency cutoff for sites
+    :return: Prepared array and exome MatrixTables
+    :rtype: hl.MatrixTable, hl.MatrixTable
+    """
     logger.info("Mapping array sample names to exome sample names...")
-    sample_map = hl.read_table(urc.array_sample_map_ht("broad", freeze))
-    exome_mt = exome_mt.annotate_cols(**sample_map[exome_mt.col_key])
+    sample_map = hl.read_table(array_sample_map_ht_path(data_source, freeze))
+    exome_mt = exome_mt.annotate_cols(**sample_map[exome_ht.col_key.split("_")[1]])
     exome_mt = exome_mt.filter_cols(hl.is_defined(exome_mt.ukbb_app_26041_id))
 
     sample_map = sample_map.key_by(exome_s=sample_map.ukbb_app_26041_id)
@@ -27,40 +46,33 @@ def prepare_array_and_exome_mt(data_source, freeze, array_mt, exome_mt, call_rat
         f"Total number of IDs in the sample map that are also in the array data: {exome_array_count}..."
     )
 
-    array_mt = hl.variant_qc(array_mt)
-    array_mt = array_mt.checkpoint(
-        urc.get_mt_checkpoint_path(data_source, freeze, name=f"array_mt_variant_qc"),
-        overwrite=True,
-    )
-    array_mt = array_mt.filter_rows(
-        (array_mt.variant_qc.call_rate > call_rate_cutoff)
-        & (array_mt.variant_qc.AF[1] > af_cutoff)
-    )
+    # Get high callrate, common sites in autosomes only from tranche 2/freeze 5 
+    # NOTE: Filter to autosomes because of adjusted sex ploidies in hardcalls mt (hail throws ploidy 0 error)
+    sites_ht = get_sites(af_cutoff, call_rate_cutoff)
 
-    # NOTE: Filter to autosomes because of adjusted sex ploidies in hardcalls mt (hail throws a ploidy 0 error)
-    exome_mt = exome_mt.filter_rows(exome_mt.locus.in_autosome())
-    exome_mt = exome_mt.filter_rows(
-        hl.is_defined(array_mt.index_rows(exome_mt.row_key))
+    # Filter array and exome mt to sites from tranche 2 and return
+    exome_mt = exome_mt.filter_rows(hl.is_defined(sites_ht[exome_mt.row_key]))
+    exome_mt = exome_mt.annotate_entries(
+        GT=hl.experimental.lgt_to_gt(
+            exome_mt.LGT, exome_mt.LA
+        )
     )
-
-    exome_mt = hl.variant_qc(exome_mt)
-    exome_mt = exome_mt.checkpoint(
-        urc.get_mt_checkpoint_path(data_source, freeze, name=f"exome_mt_variant_qc"),
-        overwrite=True,
-    )
-    exome_mt = exome_mt.filter_rows(
-        (exome_mt.variant_qc.call_rate > call_rate_cutoff)
-        & (exome_mt.variant_qc.AF[1] > af_cutoff)
-    )
-
-    array_mt = array_mt.filter_rows(
-        hl.is_defined(exome_mt.index_rows(array_mt.row_key))
-    )
-
+    array_mt = array_mt.filter_rows(hl.is_defined(sites_ht[array_mt.row_key]))
     return array_mt, exome_mt
 
 
-def get_array_exome_concordance(array_mt, exome_mt):
+def get_array_exome_concordance(
+    array_mt: hl.MatrixTable, exome_mt: hl.MatrixTable
+    ) -> hl.Table, hl.Table:
+    """
+    Runs concordance on input array and exome MatrixTables.
+    Returns both sample and variant concordance Tables.
+
+    :param MatrixTable array_mt: Array MatrixTable
+    :param MatrixTable exome_mt: Exome MatrixTable
+    :return: Sample and variant concordance Tables
+    :rtype: hl.Table, hl.Table
+    """
     summary, samples, variants = hl.concordance(array_mt, exome_mt)
     variants = variants.annotate(
         num_gt_con=(
@@ -123,8 +135,8 @@ def main(args):
 
         array_files = [
             (
-                urc.get_array_data_path("bed", f"chr{chrom}"),
-                urc.get_array_data_path("bim", f"chr{chrom}"),
+                get_array_data_path("bed", f"chr{chrom}"),
+                get_array_data_path("bim", f"chr{chrom}"),
             )
             for chrom in range(1, 23)
         ]
@@ -133,7 +145,7 @@ def main(args):
             hl.import_plink(
                 bed=f[0],
                 bim=f[1],
-                fam=urc.get_array_data_path("fam", "chr22"),
+                fam=get_array_data_path("fam", "chr22"),
                 reference_genome="GRCh37",
                 a2_reference=False,
                 skip_invalid_loci=True,
@@ -142,7 +154,7 @@ def main(args):
         ]
 
         array_mt = mts[0].union_rows(*mts[1:])
-        array_mt = array_mt.checkpoint(urc.array_mt_path(), overwrite=overwrite)
+        array_mt = array_mt.checkpoint(array_mt_path(), overwrite=overwrite)
         array_variants, array_samples = array_mt.count()
         logger.info(
             f"{array_variants} variants and {array_samples} samples found in array data"
@@ -150,7 +162,7 @@ def main(args):
 
     if args.liftover_arrays:
         logger.info("Lifting over array data from GRCh37 to GRCh38...")
-        array_mt = hl.read_matrix_table(urc.array_mt_path())
+        array_mt = hl.read_matrix_table(array_mt_path())
 
         logger.info("Preparing reference genomes for liftover")
         source, target = get_liftover_genome(array_mt)
@@ -160,7 +172,7 @@ def main(args):
             array_mt,
             gnomad=False,
             data_type=None,
-            path=urc.array_mt_path(liftover=True, checkpoint=True),
+            path=array_mt_path(liftover=True, checkpoint=True),
             rg=target,
             overwrite=overwrite
         )
@@ -168,7 +180,7 @@ def main(args):
         logger.info("Checking SNPs for reference mismatches")
         array_mt = annotate_snp_mismatch(array_mt, data_type=None, rg=target)
         array_mt = array_mt.checkpoint(
-            urc.array_mt_path(liftover=True), overwrite=overwrite
+            array_mt_path(liftover=True), overwrite=overwrite
         )
         array_variants, array_samples = array_mt.count()
         logger.info(
@@ -177,8 +189,8 @@ def main(args):
 
     if args.array_concordance:
         logger.info("Checking concordance between exome and array data...")
-        array_mt = hl.read_matrix_table(urc.array_mt_path(liftover=True))
-        exome_mt = urc.get_ukbb_data(data_source, freeze, adj=True, split=True)
+        array_mt = hl.read_matrix_table(array_mt_path(liftover=True))
+        exome_mt = get_ukbb_data(data_source, freeze, adj=True, split=True)
 
         exome_mt = remove_hard_filter_samples(data_source, freeze, exome_mt)
         logger.info(f"Count after removing hard filtered samples: {exome_mt.count()}")
@@ -193,18 +205,20 @@ def main(args):
         )
 
         exome_mt = exome_mt.checkpoint(
-            urc.get_mt_checkpoint_path(
+            get_checkpoint_path(
                 data_source,
                 freeze,
-                name=f"exome_subset_concordance_callrate_{call_rate_cutoff}_af_{af_cutoff}"
+                name=f"exome_subset_concordance_callrate_{call_rate_cutoff}_af_{af_cutoff}",
+                mt=True
             ),
             overwrite=overwrite
         )
         array_mt = array_mt.checkpoint(
-            urc.get_mt_checkpoint_path(
+            get_checkpoint_path(
                 data_source,
                 freeze,
-                name=f"array_subset_concordance_callrate_{call_rate_cutoff}_af_{af_cutoff}"
+                name=f"array_subset_concordance_callrate_{call_rate_cutoff}_af_{af_cutoff}",
+                mt=True
             ),
             overwrite=overwrite
         )
@@ -219,10 +233,10 @@ def main(args):
         )
 
         variants.write(
-            urc.array_variant_concordance_path(data_source, freeze), overwrite=overwrite
+            array_variant_concordance_path(data_source, freeze), overwrite=overwrite
         )
         samples.write(
-            urc.array_sample_concordance_path(data_source, freeze), overwrite=overwrite
+            array_sample_concordance_path(data_source, freeze), overwrite=overwrite
         )
 
 
@@ -260,7 +274,7 @@ if __name__ == "__main__":
         default="broad"
     )
     concordance.add_argument(
-        "-f", "--freeze", help="Data freeze to use", default=urc.CURRENT_FREEZE, type=int
+        "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
     )
     concordance.add_argument(
         "-c",

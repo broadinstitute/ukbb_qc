@@ -35,23 +35,29 @@ def interval_qc(
     """
 
     interval_ht = interval_ht.annotate(
-        interval_label=interval_ht.interval
+        interval_label=interval_ht.interval,
+        interval_size=(interval_ht.interval.end - interval_ht.interval.start)
     )
 
-    mt = mt.annotate_rows(interval=interval_ht[mt.locus].interval_label)
+    mt = mt.annotate_rows(
+        interval=interval_ht[mt.locus].interval_label,
+        interval_size=interval_ht[mt.locus].interval_size
+        )
 
     target_mt = (
         mt.group_rows_by(mt.interval)
         .aggregate_entries(
-            mean_dp=hl.agg.mean(
+            mean_dp=hl.agg.sum(
                     hl.if_else(
                         mt.LGT.is_hom_ref(),
                         mt.DP * (mt.END - mt.locus.position), 
-                        hl.if_else((hl.is_defined(mt.DP), mt.DP, 0))
+                        hl.if_else(
+                            hl.is_defined(mt.DP), mt.DP, 0
+                        )
                     )
-            ),
+            ) / mt.interval_size,
             pct_gt_20x=hl.agg.fraction(hl.cond(hl.is_defined(mt.DP), mt.DP, 0) >= 20),
-            pct_dp_defined=hl.agg.count_where(hl.is_defined(mt.DP)) / hl.agg.count(),
+            pct_dp_defined=hl.agg.count_where(hl.is_defined(mt.DP)) / mt.interval_size,
         )
         .result()
     )
@@ -112,7 +118,7 @@ def main(args):
 
     data_source = args.data_source
     freeze = args.freeze
-    ht = hl.read_table(capture_ht_path(data_source, freeze))
+    ht = hl.read_table(capture_ht_path(data_source))
 
     checkpoint_path = get_checkpoint_path(
         data_source, freeze, name=f"DP_only_checkpoint_interval_qc_broad_freeze{freeze}", mt=True
