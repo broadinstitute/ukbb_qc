@@ -130,7 +130,7 @@ def main(args):
             filter_segdup=False,
         )
         qc_mt = qc_mt.checkpoint(
-            qc_mt_path(data_source, freeze), overwrite=args.overwrite
+            qc_mt_path(data_source, freeze, ld_pruned=True), overwrite=args.overwrite
         )
         logger.info(
             f"Total number of bi-allelic, high-callrate, common SNPs for sample QC: {qc_mt.count_rows()}"
