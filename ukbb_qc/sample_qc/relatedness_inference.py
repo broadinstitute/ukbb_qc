@@ -151,40 +151,78 @@ def main(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-o', '--overwrite', help='Overwrite all data from this subset (default: False)',
-                        action='store_true')
-    parser.add_argument('--slack_channel', help='Slack channel to post results and notifications to.')
-    parser.add_argument('-s', '--data_source', help='Data source', choices=['regeneron', 'broad'], default='broad')
-    parser.add_argument('-f', '--freeze', help='Data freeze to use', default=CURRENT_FREEZE, type=int)
 
-    parser.add_argument('--skip_pc_relate',
-                        help='Skip running PC-relate on all samples. NOTE: This needs SSDs on your workers (for the temp files) and no pre-emptibles while the BlockMatrix writes',
-                        action='store_true')
-    parser.add_argument('--min_emission_kinship',
-                        help='Minimum kinship threshold for emitting a pair of samples in PC relate and filtering related individuals.',
-                        default=0.05,
-                        type=float)
-    parser.add_argument('--min_individual_maf',
-                        help='Minor allele frequency cutoff, must be greater that 0.001 because the qc_mt used was already filtered to that maf.',
-                        default=0.05,
-                        type=float)
-    parser.add_argument('--min_filtering_kinship',
-                        help='Minimum kinship threshold for filtering a pair of samples in PC relate and filtering related individuals. (Default = 0.08838835; 2nd degree relatives)',
-                        default=0.08838835, type=float)
-    parser.add_argument('--skip_filter_dups', help='Skip filtering duplicated samples', action='store_true')
-    parser.add_argument('--skip_infer_families',
-                        help='Skip extracting duplicate samples and infers families samples based on PC-relate results',
-                        action='store_true')
-    parser.add_argument('--skip_filter_related_samples',
-                        help='Skip Filter related samples (based on the pairs present from the --run_pc_relate and using the --min_filtering_kinship value for that run)',
-                        action='store_true')
-    parser.add_argument('--dup_kinship_cutoff',
-                        help='Kinship threshold for filtering a pair of duplicate samples. (Default = 0.4)',
-                        default=0.4, type=float)
-    parser.add_argument('--first_kinship_cutoff',
-                        help='First degree kinship threshold for filtering a pair of samples with a first degree relationship. (Default = 0.1767767; 1st degree relatives)',
-                        default=0.1767767, type=float)
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        '-s', '--data_source', 
+        help='Data source', choices=['regeneron', 'broad'], 
+        default='broad'
+    )
+    parser.add_argument(
+        '-f', '--freeze', 
+        help='Data freeze to use', default=CURRENT_FREEZE, type=int
+    )
+
+    parser.add_argument(
+        '--skip_pc_relate',
+        help='Skip running PC-relate on all samples. \
+        NOTE: This needs SSDs on your workers (for the temp files) and no pre-emptibles while the BlockMatrix writes',
+        action='store_true'
+        )
+    parser.add_argument(
+        '--min_emission_kinship',                 
+        help='Minimum kinship threshold for emitting a pair of samples in PC relate and filtering related individuals.',
+        default=0.05, type=float
+    )
+    parser.add_argument(
+        '--min_individual_maf',
+        help='Minor allele frequency cutoff, must be greater that 0.001 \
+        because the qc_mt used was already filtered to that maf.',
+        default=0.05, type=float
+    )
+    parser.add_argument(
+        '--min_filtering_kinship',
+        help='Minimum kinship threshold for filtering a pair of samples \
+        in PC relate and filtering related individuals. (Default = 0.08838835; 2nd degree relatives)',
+        default=0.08838835, type=float
+    )
+    parser.add_argument(
+        '--skip_filter_dups', help='Skip filtering duplicated samples', 
+        action='store_true'
+    )
+    parser.add_argument(
+        '--skip_infer_families',
+        help='Skip extracting duplicate samples and infers families samples based on PC-relate results',
+        action='store_true'
+    )
+    parser.add_argument(
+        '--skip_filter_related_samples',
+        help='Skip Filter related samples \
+        (based on the pairs present from the --run_pc_relate and using the --min_filtering_kinship value for that run)',
+        action='store_true'
+    )
+    parser.add_argument(
+        '--dup_kinship_cutoff',
+        help='Kinship threshold for filtering a pair of duplicate samples. (Default = 0.4)',
+        default=0.4, type=float
+    )
+    parser.add_argument(
+        '--first_kinship_cutoff',
+        help='First degree kinship threshold for filtering a pair of samples with a first degree relationship. \
+        (Default = 0.1767767; 1st degree relatives)',
+        default=0.1767767, type=float
+    )
+
+    parser.add_argument(
+        '-o', '--overwrite', 
+        help='Overwrite all data from this subset (default: False)',       
+        action='store_true'
+    )
+    parser.add_argument(
+        '--slack_channel', 
+        help='Slack channel to post results and notifications to.'
+    )
     args = parser.parse_args()
 
     if args.slack_channel:
