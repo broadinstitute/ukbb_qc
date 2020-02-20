@@ -2,9 +2,13 @@ import argparse
 import hail as hl
 import logging
 from gnomad_hail.utils.slack import try_slack
-from gnomad_hail.utils.relatedness import get_relationship_expr
+from gnomad_hail.utils.relatedness import (
+                                explode_duplicate_samples_ht,
+                                get_duplicate_samples_ht, get_duplicated_samples,
+                                get_relationship_expr
+                                )
 from ukbb_qc.resources.basics import get_checkpoint_path
-from ukbb_qc.resources.sample_qc import relatedness_pca_scores_ht_path
+from ukbb_qc.resources.sample_qc import relatedness_pca_scores_ht_path, qc_ht_path
 from ukbb_qc.utils.utils import (
                                 duplicates_ht_path, inferred_ped_path, remove_hard_filter_samples,
                                 related_drop_path relatedness_ht_path
@@ -103,7 +107,7 @@ def main(args):
                 )
         )
 
-        logger.info("Annotating PC relate results with relationships")
+        logger.info("Annotating PC relate results with relationships...")
         relatedness_ht = relatedness_ht.annotate(
             relationship=get_relationship_expr(
                 kin=relatedness_ht.kin,
@@ -120,12 +124,12 @@ def main(args):
     if not args.skip_filter_dups:
         logger.info("Filtering duplicate samples...")
         sample_qc_ht = remove_hard_filter_samples(data_source, freeze, hl.read_table(qc_ht_path(data_source, freeze)))
-        samples_rankings_ht = sample_qc_ht.select(rank=-1 * sample_qc_ht.sample_qc.dp_stats.mean)
+        samples_rankings_ht = sample_qc_ht.select(rank=(-1 * sample_qc_ht.sample_qc.dp_stats.mean))
         relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
         if len(get_duplicated_samples(relatedness_ht)) > 0:
-            dups_ht = filter_duplicate_samples(relatedness_ht, samples_rankings_ht)
+            dups_ht = get_duplicate_samples_ht(relatedness_ht, samples_rankings_ht)
             dups_ht.write(duplicates_ht_path(data_source, freeze, dup_sets=True), overwrite=args.overwrite)
-            dups_ht = flatten_duplicate_samples_ht(dups_ht)
+            dups_ht = explode_duplicate_samples_ht(dups_ht)
             dups_ht = sample_qc_ht.select(
                 duplicate=hl.is_defined(dups_ht[sample_qc_ht.key].dup_filtered) & dups_ht[
                     sample_qc_ht.key].dup_filtered,
