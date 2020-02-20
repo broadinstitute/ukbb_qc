@@ -1,9 +1,13 @@
-from gnomad_hail import *
-from gnomad_hail.utils.sample_qc import *
-from ukbb_qc.resources import *
-from ukbb_qc.utils import *
-import hail as hl
 import argparse
+import hail as hl
+import logging
+from gnomad_hail.utils.slack import try_slack
+from gnomad_hail.utils.sample_qc import filter_duplicate_samples, flatten_duplicate_samples_ht
+from ukbb_qc.resources.sample_qc import relatedness_pca_scores_ht_path
+from ukbb_qc.utils.utils import (
+                                duplicates_ht_path, inferred_ped_path, remove_hard_filter_samples,
+                                related_drop_path relatedness_ht_path
+                                )
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -71,7 +75,7 @@ def filter_related_samples(relatedness_ht, data_source, freeze, kinship_cutoff):
 
 
 def main(args):
-    hl.init(log='/relatedness.log', tmp_dir='hdfs:///pc_relate.tmp/')
+    hl.init(log='/relatedness.log', default_reference='GRCh38', tmp_dir='hdfs:///pc_relate.tmp/')
 
     data_source = args.data_source
     freeze = args.freeze
@@ -79,8 +83,11 @@ def main(args):
     if not args.skip_pc_relate:
         logger.info('Running PCA for PC-Relate...')
         pruned_qc_mt = remove_hard_filter_samples(data_source, freeze,
-                                                  hl.read_matrix_table(qc_mt_path(data_source, freeze,
-                                                                                  ld_pruned=True))).unfilter_entries()
+                                                    hl.read_matrix_table(qc_mt_path(
+                                                                            data_source, freeze,
+                                                                            ld_pruned=True)
+                                                                        )
+                                                  ).unfilter_entries()
         eig, scores, _ = hl.hwe_normalized_pca(pruned_qc_mt.GT, k=10, compute_loadings=False)
         scores.write(relatedness_pca_scores_ht_path(data_source, freeze), args.overwrite)
 
