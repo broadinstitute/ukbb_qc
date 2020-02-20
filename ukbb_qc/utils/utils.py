@@ -113,16 +113,23 @@ def annotate_interval_qc_filter(
     return t
 
 
-def get_sparse_sample_qc(mt: hl.MatrixTable) -> hl.Table:
+def get_sparse_sample_qc(mt: hl.MatrixTable, autosomes_only: bool = True) -> hl.Table:
     """
     Calculates approximation for call rate and mean DP on a sparse MatrixTable. 
 
     :param MatrixTable mt: Input sparse MatrixTable
+    :param bool autosomes_only: Whether to use interval QC results calculated on autosomes only.
     :return: Table of samples with their call rate and mean DP
     :rtype: hl.Table
     """
+    # Filter MatrixTable to autosomes if set
+    if autosomes_only:
+        mt = filter_to_autosomes(mt)
+        chrom = "autosomes"
+    else:
+        chrom = None
     # Read in interval QC table and get total number of bases in high coverage intervals
-    interval_qc_ht = hl.read_table(interval_qc_path(data_source, freeze, "autosomes"))
+    interval_qc_ht = hl.read_table(interval_qc_path(data_source, freeze, chrom=chrom))
     good_intervals_ht = interval_qc_ht.filter(
         interval_qc_ht[cov_filter_field] > pct_samples
     )
@@ -132,7 +139,6 @@ def get_sparse_sample_qc(mt: hl.MatrixTable) -> hl.Table:
     for i in good_intervals:
         total_bases += interval_length(i)
     logger.info(f"Total number of bases in high coverage intervals: {total_bases}")
-
 
     # Add END entry to rows
     mt = mt.annotate_rows(
