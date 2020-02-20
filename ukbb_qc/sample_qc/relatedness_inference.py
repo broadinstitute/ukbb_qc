@@ -2,7 +2,8 @@ import argparse
 import hail as hl
 import logging
 from gnomad_hail.utils.slack import try_slack
-from gnomad_hail.utils.sample_qc import filter_duplicate_samples, flatten_duplicate_samples_ht
+from gnomad_hail.utils.relatedness import get_relationship_expr
+from ukbb_qc.resources.basics import get_checkpoint_path
 from ukbb_qc.resources.sample_qc import relatedness_pca_scores_ht_path
 from ukbb_qc.utils.utils import (
                                 duplicates_ht_path, inferred_ped_path, remove_hard_filter_samples,
@@ -96,6 +97,24 @@ def main(args):
         relatedness_ht = hl.pc_relate(pruned_qc_mt.GT, min_individual_maf=args.min_individual_maf,
                                       scores_expr=scores[pruned_qc_mt.col_key].scores,
                                       block_size=4096, min_kinship=args.min_emission_kinship, statistics='all')
+        relatedness_ht = relatedness_ht.checkpoint(
+            get_checkpoint_path(
+                data_source, freeze, name="pc_relate_temp"
+                )
+        )
+
+        logger.info("Annotating PC relate results with relationships")
+        relatedness_ht = relatedness_ht.annotate(
+            relationship=get_relationship_expr(
+                kin=relatedness_ht.kin,
+                ibd0_expr=relatedness_ht.ibd0,
+                ibd1_expr=relatedness_ht.ibd1,
+                ibd2_expr=relatedness_ht.ibd2,
+                first_degree_kin_cutoff=args.first_degree_kin_cutoff,
+                second_degree_min_kin=args.second_degree_min_kin,
+                ibd0_0_max=args.ibd0_0_max
+            )
+        )
         relatedness_ht.write(relatedness_ht_path(data_source, freeze), args.overwrite)
 
     if not args.skip_filter_dups:
@@ -132,7 +151,7 @@ def main(args):
         logger.info("Filtering related samples")
         relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
         related_samples_to_drop_second_deg_ht = filter_related_samples(relatedness_ht, data_source, freeze,
-                                                                       args.min_filtering_kinship)
+                                                                       args.second_degree_min_kin)
         related_samples_to_drop_second_deg_ht = related_samples_to_drop_second_deg_ht.annotate(
             relationship="second-degree")
         related_samples_to_drop_dup_ht = filter_related_samples(relatedness_ht, data_source, freeze,
@@ -140,14 +159,14 @@ def main(args):
         related_samples_to_drop_dup_ht = related_samples_to_drop_dup_ht.annotate(
             relationship="duplicate")
         related_samples_to_drop_first_deg_ht = filter_related_samples(relatedness_ht, data_source, freeze,
-                                                                      args.first_kinship_cutoff)
+                                                                      args.first_degree_kin_cutoff)
         related_samples_to_drop_first_deg_ht = related_samples_to_drop_first_deg_ht.annotate(
             relationship="first-degree")
         related_samples_to_drop_ht = related_samples_to_drop_second_deg_ht.union(related_samples_to_drop_dup_ht,
                                                                                  related_samples_to_drop_first_deg_ht)
         related_samples_to_drop_ht = related_samples_to_drop_ht.annotate_globals(
-            second_degree_kin_cutoff=args.min_filtering_kinship,
-            first_degree_kin_cutoff=args.first_kinship_cutoff,
+            second_degree_kin_cutoff=args.second_degree_min_kin,
+            first_degree_kin_cutoff=args.first_degree_kin_cutoff,
             dup_kin_cutoff=args.dup_kinship_cutoff
         )
 
@@ -176,7 +195,7 @@ if __name__ == '__main__':
         help='Skip running PC-relate on all samples. \
         NOTE: This needs SSDs on your workers (for the temp files) and no pre-emptibles while the BlockMatrix writes',
         action='store_true'
-        )
+    )
     parser.add_argument(
         '--min_emission_kinship',                 
         help='Minimum kinship threshold for emitting a pair of samples in PC relate and filtering related individuals.',
@@ -189,11 +208,22 @@ if __name__ == '__main__':
         default=0.05, type=float
     )
     parser.add_argument(
-        '--min_filtering_kinship',
+        '--first_degree_kin_cutoff',
+        help='First degree kinship threshold for filtering a pair of samples with a first degree relationship. \
+        (Default = 0.1767767; 1st degree relatives)',
+        default=0.1767767, type=float
+    )
+    parser.add_argument(
+        '--second_degree_min_kin',
         help='Minimum kinship threshold for filtering a pair of samples \
         in PC relate and filtering related individuals. (Default = 0.08838835; 2nd degree relatives)',
         default=0.08838835, type=float
     )
+    parser.add_argument(
+        '--ibd0_0_max', help='IBD0 cutoff to determine parent offspring vs full sibling',
+        default=0.05
+    )
+
     parser.add_argument(
         '--skip_filter_dups', help='Skip filtering duplicated samples', 
         action='store_true'
@@ -206,19 +236,13 @@ if __name__ == '__main__':
     parser.add_argument(
         '--skip_filter_related_samples',
         help='Skip Filter related samples \
-        (based on the pairs present from the --run_pc_relate and using the --min_filtering_kinship value for that run)',
+        (based on the pairs present from the --run_pc_relate and using the --second_degree_min_kin value for that run)',
         action='store_true'
     )
     parser.add_argument(
         '--dup_kinship_cutoff',
         help='Kinship threshold for filtering a pair of duplicate samples. (Default = 0.4)',
         default=0.4, type=float
-    )
-    parser.add_argument(
-        '--first_kinship_cutoff',
-        help='First degree kinship threshold for filtering a pair of samples with a first degree relationship. \
-        (Default = 0.1767767; 1st degree relatives)',
-        default=0.1767767, type=float
     )
 
     parser.add_argument(
