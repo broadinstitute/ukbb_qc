@@ -1,12 +1,12 @@
 import argparse
 import hail as hl
 import logging
-from gnomad_hail.utils.generic import rep_on_read
 from gnomad_hail.resources.grch38.intervals import lcr
 from gnomad_hail.resources.grch38.reference_data import dbsnp
 from gnomad_qc.v2.variant_qc.prepare_data_release import (generic_field_check, index_globals, 
                                                         make_filters_sanity_check_expr, make_label_combos)
-from gnomad_hail.utils.sample_qc import add_filters_expr 
+from gnomad_hail.utils.sample_qc import add_filters_expr
+from gnomad_hail.utils.generic import get_reference_genome, rep_on_read
 from gnomad_hail.utils.gnomad_functions import filter_to_adj
 from gnomad_hail.utils.annotations import qual_hist_expr,age_hists_expr
 from typing import Dict, List, Union
@@ -1154,7 +1154,7 @@ def main(args):
 
             logger.info(f'full mt count: {mt.count()}')
             # NOTE: need to run this on all workers
-            rg = hl.get_reference('GRCh38')
+            rg = get_reference_genome(mt.locus)
             contigs = rg.contigs[:24] # autosomes + X/Y
             logger.info(f'Contigs: {contigs}')
 
@@ -1164,6 +1164,11 @@ def main(args):
                 hl.export_vcf(contig_mt, release_vcf_path(data_source, freeze, contig=contig), metadata=header_dict)
 
         if args.h_per_shard:
+            # Filter to autosomes + X/Y (remove chrM)
+            rg = get_reference_genome(mt.locus)
+            contigs = hl.parse_locus_interval(f'{reference.contigs[0]}-{reference.contigs[23]}', reference_genome=rg)
+            mt = hl.filter_intervals(mt, [contigs])
+
             # Export sharded VCF
             mt = mt.naive_coalesce(5000)
             hl.export_vcf(mt, release_vcf_path(data_source, freeze), parallel='header_per_shard', metadata=header_dict)

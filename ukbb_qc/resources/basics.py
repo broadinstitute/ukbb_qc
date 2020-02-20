@@ -1,8 +1,10 @@
 import hail as hl
 from typing import Optional
+from gnomad_hail.utils.generic import file_exists
 from gnomad_hail.resources.resource_utils import DataException
 from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES, CURRENT_HAIL_VERSION
 from .sample_qc import meta_ht_path
+from ukbb_qc.load_data.utils import import_array_exome_id_map_ht
 
 
 broad_calling_intervals_path = 'gs://broad-ukbb/resources/broad_exome_calling.interval_list'
@@ -11,6 +13,20 @@ ukbb_phenotype_path = "gs://broad-ukbb/resources/ukb24295.phenotypes.txt"
 
 
 # UKBB data resources
+def excluded_samples_path(freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Returns path to list of samples to exclude from QC due to withdrawn consents
+
+    :param int freeze: One of data freezes
+    :return: Path to excluded samples list
+    :rtype: str
+    """
+    consent_file_name = {
+        6: 'w26041_20200204.csv'
+    }
+    return f'gs://broad-ukbb/resources/withdrawn_consents/{consent_file_name[freeze]}'
+
+
 def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, key_by_locus_and_alleles: bool = False,
                     adj: bool = False, split: bool = True, raw: bool = False, 
                     non_refs_only: bool = False, meta_root: Optional[str] = None
@@ -50,6 +66,19 @@ def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, key_by_locus_a
 
     if key_by_locus_and_alleles:
         mt = hl.MatrixTable(hl.ir.MatrixKeyRowsBy(mt._mir, ['locus', 'alleles'], is_sorted=True)) # taken from v3 qc
+
+    # Remove any samples with withdrawn consents if file with excluded samples exists
+    if file_exists(excluded_samples_path(freeze)):
+        if not file_exists(f"{array_sample_map_ht_path(data_source, freeze)}_SUCCESS"):
+            ht = import_array_exome_id_map_ht(freeze)
+        else:
+            ht = hl.read_table(array_sample_map_ht_path(data_source, freeze))
+        mt = mt.annotate_cols(
+            withdrawn_consent=sample_map_ht[exome_ht.s.split("_")[1]].withdrawn_consent
+        )
+        mt = mt.filter_cols(~mt.withdrawn_consent)
+        mt = mt.filter_rows(hl.agg.any(mt.LGT.is_non_ref()) | hl.agg.any(hl.is_defined(mt.END)))
+        mt = mt.drop('withdrawn_consent')
 
     return mt
 
@@ -173,7 +202,7 @@ def last_END_positions_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -
     """
     return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/sparse_resources/last_END_positions.ht'
 
-    
+
 # Array resources
 def get_array_data_path(extension: str, chrom: str) -> str:
     """
@@ -200,11 +229,13 @@ def array_sample_map_path(freeze: int = CURRENT_FREEZE) -> str:
     :return: Path to array sample map csv
     :rtype: str
     """
-    if freeze == 4:
-        return 'gs://broad-ukbb/resources/array/Project_26041_bridge.csv'
-    elif freeze == 5:
-        return 'gs://broad-ukbb/resources/array/linking_file_200K_withbatch.csv'
-
+    array_map_names = {
+            4: 'Project_26041_bridge.csv'
+            5: 'linking_file_200K_withbatch.csv',
+            6: 'linking_file_300K_withbatch.csv'
+    }
+    return f'gs://broad-ukbb/resources/array/{array_map_names[freeze]}'
+    
 
 def array_sample_map_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> hl.Table:
     """
@@ -215,16 +246,17 @@ def array_sample_map_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> 
     :return: array sample map Table
     :rtype: hl.Table
     """
-    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/array_sample_map.ht'
+    if freeze == 5:
+        f'gs://broad-ukbb/{data_source}.freeze_{freeze}/array_sample_map.ht'
+    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/array/array_sample_map.ht'
 
 
 # Capture intervals 
-def capture_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+def capture_ht_path(data_source: str) -> str:
     """
     Returns path to capture intervals Table.
 
     :param str data_source: One of 'regeneron' or 'broad'
-    :param int freeze: One of data freezes
     :return: Path to capture intervals Table
     :rtype: str
     """
@@ -233,7 +265,7 @@ def capture_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     elif data_source == 'regeneron':
         return 'gs://broad-ukbb/resources/ukbb_exome_calling_intervals.summary.ht'
     else:
-        raise DataException("No interval file specified for this data_source and freeze yet")
+        raise DataException("This data_source is currently not present")
 
 
 # Release resources
