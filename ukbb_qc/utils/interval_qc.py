@@ -47,7 +47,7 @@ def interval_qc(
     target_mt = (
         mt.group_rows_by(mt.interval)
         .aggregate_entries(
-            mean_dp=hl.agg.sum(
+            mean_dp=hl.agg.mean(
                     hl.if_else(
                         mt.LGT.is_hom_ref(),
                         mt.DP * (mt.END - mt.locus.position), 
@@ -55,9 +55,9 @@ def interval_qc(
                             hl.is_defined(mt.DP), mt.DP, 0
                         )
                     )
-            ) / mt.interval_size,
+            ),
             pct_gt_20x=hl.agg.fraction(hl.cond(hl.is_defined(mt.DP), mt.DP, 0) >= 20),
-            pct_dp_defined=hl.agg.count_where(hl.is_defined(mt.DP)) / mt.interval_size,
+            pct_dp_defined=hl.agg.count_where(hl.is_defined(mt.DP)) / hl.agg.count(),
         )
         .result()
     )
