@@ -48,6 +48,19 @@ def var_annotations_ht_path(data_source: str, freeze: int, annotation_type: str)
     return f'{variant_qc_prefix(data_source, freeze)}/variant_annotations/{annotation_type}.ht'
 
 
+def info_ht_path(data_source: str, freeze: int, split: bool = True) -> str:
+    """
+    Get variant-level annotations
+
+    :param str data_source: 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param bool split: Whether the dataset should be split (only applies to raw=False)
+    :return: Path to annotations Table
+    :rtype: str
+    """
+    return f'{variant_qc_prefix(data_source, freeze)}/variant_annotations/info{"_split" if split else ""}.ht'
+
+
 def truth_sample_mt_path(data_source: str, freeze: int, truth_sample: str) -> str:
     """
     Get truth sample path
