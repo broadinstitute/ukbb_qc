@@ -1,11 +1,12 @@
 import argparse
 import hail as hl
 import logging
+from typing import Tuple
 from gnomad_hail.utils.slack import try_slack
 from gnomad_hail.utils.relatedness import (
-                                explode_duplicate_samples_ht,
-                                get_duplicate_samples_ht, get_duplicated_samples,
-                                get_relationship_expr
+                                explode_duplicate_samples_ht, get_duplicate_samples_ht,
+                                get_duplicated_samples, get_relationship_expr
+                                infer_families
                                 )
 from ukbb_qc.resources.basics import get_checkpoint_path
 from ukbb_qc.resources.sample_qc import relatedness_pca_scores_ht_path, qc_ht_path
@@ -20,30 +21,20 @@ logger = logging.getLogger("relatedness")
 logger.setLevel(logging.INFO)
 
 
-def get_ped(relatedness_ht: hl.Table, sex_ht: hl.Table, dups_ht: hl.Table = None) -> hl.Pedigree:
-    relatedness_ht = relatedness_ht.key_by(  # Needed for familial inference at this point -- should be generalized
-        i=relatedness_ht.i.s,
-        j=relatedness_ht.j.s
-    )
-    sex = {row.s: row.is_female for row in sex_ht.to_pandas().itertuples()}
-
-    # check for empty set
-    if dups_ht:
-        dups_to_remove = dups_ht.aggregate(hl.agg.filter(dups_ht.duplicate, hl.agg.collect_as_set(dups_ht.s)))
-        logger.info(f"Removing {len(dups_to_remove)} duplicates from family creation.")
-    else:
-        dups_to_remove = hl.empty_set(hl.tstr)
-    ped = infer_families(relatedness_ht, sex, dups_to_remove)
-    logger.info(f"Found {len(ped.complete_trios())} complete trios.")
-    return ped
-
-
 # Note: Will need to change this to work with gnomAD, we will want to default to gnomAD ranking, unless tied pair is gnomAD, UKBB pair
 def rank_related_samples(
         relatedness_ht: hl.Table,
         qc_ht: hl.Table
 ) -> Tuple[hl.Table, Callable[[hl.expr.Expression, hl.expr.Expression], hl.expr.NumericExpression]]:
+    """
+    Rank related samples based on their mean depths. 
+    Ranking is used when determining which sample to filter from a  pair of related samples.
 
+    :param Table relatedness_ht: Table of samples with relatedness results from pc_relate.
+    :param Table qc_ht: Table of samples and their sample QC metrics, including mean depth.
+    :return: Tuple of the relatedness table, annotated with ranking, and a tie breaker 
+    :rtype: Tuple[hl.Table, Callable[[hl.expr.Expression, hl.expr.Expression], hl.expr.NumericExpression]]
+    """
     def annotate_related_pairs(related_pairs: hl.Table, index_col: str) -> hl.Table:
         related_pairs = related_pairs.key_by(**related_pairs[index_col])
         return related_pairs.annotate(
@@ -63,11 +54,25 @@ def rank_related_samples(
     return relatedness_ht, tie_breaker
 
 
-def filter_related_samples(relatedness_ht, data_source, freeze, kinship_cutoff):
+def filter_related_samples(
+    relatedness_ht: hl.Table, qc_ht: hl.Table,
+    data_source: str, freeze: int, kinship_cutoff: float
+    ) -> hl.Table:
+    """
+    Filters samples based on input kinship cutoff.
+
+    :param Table relatedness_ht: Table of samples with relatedness results from pc_relate.
+    :param Table qc_ht: Table of samples and their sample QC metrics, including mean depth.
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param float kinship_cutoff: Kinship cutoff for related samples.
+    :return: Filtered Table of samples with kinship above input cutoff
+    :rtype: hl.Table
+    """
     relatedness_ht = relatedness_ht.filter(relatedness_ht.kin > kinship_cutoff)
     related_pairs_ht, related_pairs_tie_breaker = rank_related_samples(
         relatedness_ht,
-        hl.read_table(qc_ht_path(data_source, freeze))
+        qc_ht,
     )
 
     related_samples_to_drop_ht = hl.maximal_independent_set(related_pairs_ht.i, related_pairs_ht.j,
@@ -75,7 +80,6 @@ def filter_related_samples(relatedness_ht, data_source, freeze, kinship_cutoff):
     related_samples_to_drop_ht = related_samples_to_drop_ht.key_by()
     related_samples_to_drop_ht = related_samples_to_drop_ht.select(**related_samples_to_drop_ht.node)
     related_samples_to_drop_ht = related_samples_to_drop_ht.key_by('s')
-
     return related_samples_to_drop_ht
 
 
@@ -139,12 +143,11 @@ def main(args):
         dups_ht.write(duplicates_ht_path(data_source, freeze), overwrite=args.overwrite)
 
     if not args.skip_infer_families:
-        logger.info("Inferring families")
+        logger.info("Inferring families...")
         dups_ht = hl.read_table(duplicates_ht_path(data_source, freeze))    
-        dups_ht.describe()
         if dups_ht.aggregate(hl.agg.count_where(dups_ht.duplicate)) == 0:
             dups_ht = None
-        ped = get_ped(
+        ped = infer_families(
             hl.read_table(relatedness_ht_path(data_source, freeze)),
             hl.read_table(sex_ht_path(data_source, freeze)),
             dups_ht
@@ -152,32 +155,51 @@ def main(args):
         ped.write(inferred_ped_path(data_source, freeze))
 
     if not args.skip_filter_related_samples:
-        logger.info("Filtering related samples")
+        logger.info("Filtering related samples...")
         relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
-        related_samples_to_drop_second_deg_ht = filter_related_samples(relatedness_ht, data_source, freeze,
-                                                                       args.second_degree_min_kin)
-        related_samples_to_drop_second_deg_ht = related_samples_to_drop_second_deg_ht.annotate(
-            relationship="second-degree")
-        related_samples_to_drop_dup_ht = filter_related_samples(relatedness_ht, data_source, freeze,
-                                                                args.dup_kinship_cutoff)
-        related_samples_to_drop_dup_ht = related_samples_to_drop_dup_ht.annotate(
-            relationship="duplicate")
-        related_samples_to_drop_first_deg_ht = filter_related_samples(relatedness_ht, data_source, freeze,
-                                                                      args.first_degree_kin_cutoff)
-        related_samples_to_drop_first_deg_ht = related_samples_to_drop_first_deg_ht.annotate(
-            relationship="first-degree")
-        related_samples_to_drop_ht = related_samples_to_drop_second_deg_ht.union(related_samples_to_drop_dup_ht,
-                                                                                 related_samples_to_drop_first_deg_ht)
+        qc_ht = hl.read_table(qc_ht_path(data_source, freeze)
+
+        # Filter second degree samples
+        related_samples_to_drop_second_deg_ht = filter_related_samples(
+            relatedness_ht, qc_ht data_source, freeze, args.second_degree_min_kin
+        )
+
+        # Filter duplicate samples
+        related_samples_to_drop_dup_ht = filter_related_samples(
+            relatedness_ht, qc_ht, data_source, freeze, args.dup_kinship_cutoff
+        )
+
+        # Filter first degree samples
+        related_samples_to_drop_first_deg_ht = filter_related_samples(
+            relatedness_ht, qc_ht, data_source, freeze, args.first_degree_kin_cutoff
+        )
+
+        # Combine first, second, and duplicate sample tables and annotate cutoffs
+        related_samples_to_drop_ht = related_samples_to_drop_second_deg_ht.union(
+            related_samples_to_drop_dup_ht,
+            related_samples_to_drop_first_deg_ht
+        )
         related_samples_to_drop_ht = related_samples_to_drop_ht.annotate_globals(
             second_degree_kin_cutoff=args.second_degree_min_kin,
             first_degree_kin_cutoff=args.first_degree_kin_cutoff,
             dup_kin_cutoff=args.dup_kinship_cutoff
         )
 
-        related_samples_to_drop_ht = related_samples_to_drop_ht.checkpoint(related_drop_path(data_source, freeze), overwrite=args.overwrite)
-        logger.info(f'{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == "second-degree").count()} second degree samples flagged in callset using maximal independent set')
-        logger.info(f'{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == "first-degree").count()} first degree samples flagged in callset using maximal independent set')
-        logger.info(f'{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == "duplicate").count()} duplicate samples flagged in callset using maximal independent set')
+        related_samples_to_drop_ht = related_samples_to_drop_ht.checkpoint(
+            related_drop_path(data_source, freeze), overwrite=args.overwrite
+        )
+        logger.info(
+            f'{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == "second-degree").count()}' 
+            "second degree samples flagged in callset using maximal independent set"
+        )
+        logger.info(
+            f'{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == "first-degree").count()}'
+            "first degree samples flagged in callset using maximal independent set"
+        )
+        logger.info(
+            f'{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == "duplicate").count()}' 
+            "duplicate samples flagged in callset using maximal independent set"
+        )
 
 
 if __name__ == '__main__':
