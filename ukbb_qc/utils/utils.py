@@ -1,6 +1,6 @@
 import hail as hl
 import logging
-from typing import Union
+from typing import Optional, Union
 from gnomad_hail.utils.generic import (
     filter_to_autosomes, interval_length, 
     get_reference_genome, union_intervals
@@ -17,7 +17,8 @@ logger.setLevel(logging.INFO)
 
 # Sample resources
 def remove_hard_filter_samples(
-    data_source: str, freeze: int, t: Union[hl.MatrixTable, hl.Table]
+    data_source: str, freeze: int, t: Union[hl.MatrixTable, hl.Table],
+    non_refs_only: bool = True, gt_expr: Optional[hl.expr.CallExpression]
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Removes samples that failed hard filters from MatrixTable or Table. 
@@ -25,7 +26,9 @@ def remove_hard_filter_samples(
 
     :param str data_source: 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
-    :param MatrixTable/able t: Input MatrixTable or Table
+    :param MatrixTable/Table t: Input MatrixTable or Table
+    :param bool non_refs_only: Whether to filter to non_reference sites only. Relevant only if input is a MatrixTable.
+    :param hl.expr.CallExpression gt_expr: Field containing genotype. Relevant only if non_refs_only is set.
     :return: MatrixTable or Table with samples removed
     :rtype: MatrixTable or Table
     """
@@ -44,8 +47,8 @@ def remove_hard_filter_samples(
     ht = ht.filter(hl.len(ht.hard_filters) == 0)
     if isinstance(t, hl.MatrixTable):
         t = t.filter_cols(hl.is_defined(ht[t.col_key]))
-        t = t.annotate_rows(non_refs=hl.agg.count_where(t.GT.is_non_ref()))
-        t = t.filter_rows(t.non_refs > 0).drop("non_refs")
+        if non_refs_only:
+            t = t.filter_rows(hl.agg.any(t[gt_expr]is_non_ref()))
     else:
         t.filter((hl.len(ht[t.key].hard_filters) == 0))
     return t
