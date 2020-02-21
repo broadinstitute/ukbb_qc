@@ -1,7 +1,10 @@
 import hail as hl
 import logging
 from gnomad_hail.utils.generic import file_exists
-from ukbb_qc.resources.basics import array_sample_map, excluded_samples_path
+from ukbb_qc.resources.basics import (
+                            array_sample_map_path, array_sample_map_ht_path,
+                            excluded_samples_path, ukbb_phenotype_path
+                            )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 
 
@@ -42,6 +45,18 @@ def import_array_exome_id_map_ht(freeze: int = CURRENT_FREEZE): -> hl.Table
             f"Total number of IDs with withdrawn consents in sample map ht: {withdrawn_ids}"
             )
     return sample_map_ht
+
+
+def import_phenotype_ht() -> hl.Table:
+    """
+    Imports UKBB phenotype file as a Table.
+
+    :return: None
+    :rtype: None
+    """
+    phenotype_ht = hl.import_table(ukbb_phenotype_path, impute=True)
+    phenotype_ht = phenotype_ht.key_by(s_old=hl.str(phenotype_ht['f.eid']))
+    phenotype_ht.write(phenotype_ht_path(), overwrite=True)
 
 
 # Interval resources
