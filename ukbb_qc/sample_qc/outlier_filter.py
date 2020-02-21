@@ -68,6 +68,9 @@ def run_sample_qc(mt: hl.MatrixTable) -> hl.MatrixTable:
 
 
 def main(args):
+
+    hl.init(log="/outlier_detection.log", default_reference="GRCh38")
+
     data_source = args.data_source
     freeze = args.freeze
     pop_assignment_method = args.pop_assignment_method

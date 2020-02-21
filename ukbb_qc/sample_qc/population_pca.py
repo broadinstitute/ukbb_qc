@@ -107,7 +107,7 @@ def load_ukbb_array_pcs(data_source, freeze, num_pcs=16):
 
 
 def main(args):
-    hl.init(log="/population_pca.log")
+    hl.init(log="/population_pca.log", default_reference="GRCh38")
 
     data_source = args.data_source
     freeze = args.freeze
