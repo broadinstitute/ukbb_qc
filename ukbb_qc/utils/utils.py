@@ -15,6 +15,42 @@ logger = logging.getLogger("utils")
 logger.setLevel(logging.INFO)
 
 
+# Generic
+def compare_samples(ht1: hl.Table, ht2: hl.Table) -> bool:
+    """
+    Checks if sample counts in two Tables are the same
+
+    :param Table ht1: First Table to be checked
+    :param Table ht2: Second Table to be checked
+    :return: Whether the sample counts are the same
+    :rtype: bool
+    """
+    s_count1 = ht1.count()
+    s_count2 = ht2.count()
+    logger.info(f"{s_count1} samples in left table; {s_count2} samples in right table")
+    return s_count1 == s_count2
+
+
+def join_tables(
+    left_ht: hl.Table, left_key: str, right_ht: hl.Table, right_key: str, join_type: str
+    ) -> hl.Table:
+    """
+    Joins two tables and returns joined table. Also prints warning if sample counts are not the same.
+
+    :param Table left_ht: left Table to be joined
+    :param str left_key: key for left Table
+    :param Table right_ht: right Table to be joined
+    :param str right_key: key for right Table
+    :param str join_type: how to join the tables (left, right, inner, outer)
+    :return: joined Table
+    :rtype: Table
+    """
+    sample_count_match = compare_samples(left_ht, right_ht)
+    if not sample_count_match:
+        logger.warning(:Sample counts in left and right tables do not match!"")
+    return left_ht.key_by(left_key).join(right_ht.key_by(right_key), how=join_type)
+
+    
 # Sample resources
 def remove_hard_filter_samples(
     data_source: str, freeze: int, t: Union[hl.MatrixTable, hl.Table],
