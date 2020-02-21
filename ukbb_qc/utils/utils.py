@@ -47,10 +47,10 @@ def join_tables(
     """
     sample_count_match = compare_samples(left_ht, right_ht)
     if not sample_count_match:
-        logger.warning(:Sample counts in left and right tables do not match!"")
+        logger.warning("Sample counts in left and right tables do not match!")
     return left_ht.key_by(left_key).join(right_ht.key_by(right_key), how=join_type)
 
-    
+
 # Sample resources
 def remove_hard_filter_samples(
     data_source: str, freeze: int, t: Union[hl.MatrixTable, hl.Table],
