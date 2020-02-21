@@ -9,6 +9,7 @@ from gnomad_hail.utils.generic import (
 from gnomad_hail.utils.sample_qc import compute_stratified_metrics_filter
 from gnomad_hail.utils.slack import try_slack
 from ukbb_qc.resources.basics import array_sample_map_ht_path, get_ukbb_data
+from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import ancestry_hybrid_ht_path, platform_pop_outlier_ht_path, qc_temp_data_prefix
 from ukbb_qc.utils import annotate_interval_qc_filter, remove_hard_filter_samples
 
