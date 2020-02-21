@@ -9,7 +9,6 @@ from ukbb_qc.load_data.utils import import_array_exome_id_map_ht
 
 broad_calling_intervals_path = 'gs://broad-ukbb/resources/broad_exome_calling.interval_list'
 ukbb_calling_intervals_summary = 'gs://broad-ukbb/resources/ukbb_exome_calling_intervals.summary.txt'
-ukbb_phenotype_path = "gs://broad-ukbb/resources/ukb24295.phenotypes.txt"
 
 
 # UKBB data resources
@@ -71,6 +70,7 @@ def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, key_by_locus_a
     if file_exists(excluded_samples_path(freeze)):
         if not file_exists(f"{array_sample_map_ht_path(data_source, freeze)}_SUCCESS"):
             ht = import_array_exome_id_map_ht(freeze)
+            ht = ht.write(array_sample_map_ht_path(data_source, freeze))
         else:
             ht = hl.read_table(array_sample_map_ht_path(data_source, freeze))
         mt = mt.annotate_cols(
@@ -266,6 +266,19 @@ def capture_ht_path(data_source: str) -> str:
         return 'gs://broad-ukbb/resources/ukbb_exome_calling_intervals.summary.ht'
     else:
         raise DataException("This data_source is currently not present")
+
+
+# Phenotype resources
+ukbb_phenotype_path = "gs://broad-ukbb/resources/ukb24295.phenotypes.txt"
+
+def phenotype_ht_path() -> str:
+    """
+    Returns path to phenotype Table.
+
+    :return: Path to phenotype Table
+    :rtype: str
+    """
+    return "gs://broad-ukbb/resources/ukb24295.phenotypes.ht"
 
 
 # Release resources
