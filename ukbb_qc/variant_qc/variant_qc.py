@@ -5,14 +5,13 @@ import uuid
 import sys
 from typing import Dict, List
 from gnomad_hail.utils import rf
-from gnomad_hail.utils.generic import bi_allelic_site_inbreeding_expr
 from gnomad_hail.utils.gnomad_functions import pretty_print_runs
 from gnomad_hail.utils.slack import try_slack
 from gnomad_qc.v2.variant_qc.variantqc import sample_rf_training_examples
 from ukbb_qc.utils import annotate_interval_qc_filter
 from ukbb_qc.resources.basics import get_ukbb_data, CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import (rf_run_hash_path, var_annotations_ht_path, score_ranking_path,
-                                          rf_path, rf_annotated_path)
+                                          rf_path, rf_annotated_path, info_ht_path)
 import hail as hl
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -73,8 +72,7 @@ def create_rf_ht(
         freeze: int,
         n_variants_median: int = 50000,
         impute_features_by_variant_type: bool = True,
-        group: str = 'qc_samples_raw',
-        vqsr_type = 'AS'
+        group: str = 'raw'
 ) -> hl.Table:
     """
     Creates a Table with all necessary columns for RF:
@@ -125,80 +123,73 @@ def create_rf_ht(
             ht.info.AS_pab_max
         ]))
 
-    def get_training_sites_expr(ht: hl.Table, family_stats_group_index: int) -> Dict[str, hl.expr.Expression]:
+    def get_training_sites_expr(ht: hl.Table, group) -> Dict[str, hl.expr.Expression]:
         """
         Returns expressions to columns to select training examples
 
         :param Table ht: Table to create annotation expression for.
-        :param int family_stats_group_index: Index of group to get stats for
+        :param str group: Whether to use 'raw' or 'adj' genotypes
         :return: Dict with keys containing column names and values expressions
         :rtype: Dict of str: Expression
         """
         return {
-            'transmitted_singleton': (ht.family_stats[family_stats_group_index].tdt.t == 1) &
-                                     (ht.family_stats[family_stats_group_index].unrelated_qc_callstats.AC[1] == 1),
-            'fail_hard_filters': (ht.info.QD < 2) | (ht.info.FS > 60) | (ht.info.MQ < 30),
-            'info_POSITIVE_TRAIN_SITE': ht.info.POSITIVE_TRAIN_SITE,
-            'info_NEGATIVE_TRAIN_SITE': ht.info.NEGATIVE_TRAIN_SITE
+            'transmitted_singleton': (ht.trio_stats[f'n_transmitted_{group}'] == 1)
+                                     & ((ht.info[f'ac_qc_samples_{group}'] - ht.trio_stats[f'ac_children{group}']) == 1),
+            'fail_hard_filters': (ht.info.QD < 2) | (ht.info.FS > 60) | (ht.info.MQ < 30)
         }
 
     mt = get_ukbb_data(data_source, freeze, meta_root='meta')
-    ht_family_stats = hl.read_table(var_annotations_ht_path(data_source, freeze, 'family_stats'))
-    ht_call_stats = hl.read_table(var_annotations_ht_path(data_source, freeze, 'call_stats'))
+    ht_trio_stats = hl.read_table(var_annotations_ht_path(data_source, freeze, 'trio_stats'))
     ht_truth_data = hl.read_table(var_annotations_ht_path(data_source, freeze, 'truth_data'))
     ht_allele_data = hl.read_table(var_annotations_ht_path(data_source, freeze, 'allele_data'))
-
-    # TODO: remove hard path for info HT
-    info_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, "vqsr" if vqsr_type == "AS" else "AS_TS_vqsr"))
-    mt = mt.annotate_rows(info=info_ht[mt.row_key].info)
-    mt = mt.annotate_rows(info=mt.info.annotate(AC=hl.agg.sum(mt.GT.n_alt_alleles())))
+    info_ht = hl.read_table(info_ht_path())
 
     ht = mt.annotate_rows(
-        n_nonref=ht_call_stats[mt.row_key].qc_callstats[0].AC[1],
-        singleton=mt.info.AC == 1,#[mt.a_index - 1] == 1,
-        info_ac=mt.info.AC, #[mt.a_index - 1],
-        **ht_call_stats[mt.row_key],
-        **ht_family_stats[mt.row_key],
+        info=info_ht[mt.row_key].info
+        **ht_trio_stats[mt.row_key],
         **ht_truth_data[mt.row_key],
         **ht_allele_data[mt.row_key]
     ).rows()
 
+    # TODO: Really need to understand all the types of allele counts and when to use them, here it looks like we are using
+    # TODO: qc_samples_raw (I think this is high quality samples no adj)
     ht = ht.annotate(AC=ht.qc_callstats.find(lambda x: x.meta.get('group') == group).AC[1])
 
     # Filter to only variants found in high qual samples and with no LowQual filter
+    #TODO: add lowqual filter to loading
     ht = ht.filter((ht.qc_callstats.find(lambda x: x.meta.get('group') == group).AC[1] > 0) & ~info_ht[ht.key].filters.contains("LowQual"))
 
     #What is this doing? Is it just getting the index for each of the groups in qc_stats and family stats, I think this all changes
     family_stats_groups = ht_family_stats.aggregate(hl.agg.take(ht_family_stats.family_stats.map(lambda x: x.meta['group']), 1))[0]
     family_stats_group_index = next(x[0] for x in enumerate(family_stats_groups) if x[1] == 'raw')
 
+    # TODO: changed this to align with what Lauren't does where ac is adj and ac_raw is this, need to think about samples, are these counts before/after removing QC samples and with or without related individuals
     ht = ht.select(
         **get_allele_features_expr(ht),
         **get_site_features_expr(ht),
-        **get_training_sites_expr(ht, family_stats_group_index),
+        **get_training_sites_expr(ht, group),
         omni=ht.truth_data.omni,
         mills=ht.truth_data.mills,
         ukbb_array_con_common=ht.truth_data.ukbb_array_con_common,
         sib_singletons=ht.truth_data.sib_singletons,
-        n_nonref=ht.n_nonref,
-        singleton=ht.singleton,
+        n_nonref=mt.info.ac_qc_samples_raw,
+        singleton=ht.info.ac_raw == 1, # TODO: Confirm with Laurent if this should be pre or post filtering high quality samples
         was_split=ht.was_split,
-        info_ac=ht.info_ac
+        ac_raw=ht.info.ac_raw, # TODO: Confirm with Laurent if this should be pre or post filtering high quality samples
+        ac=ht.info.ac_ad # TODO: Confirm with Laurent if this should be pre or post filtering high quality samplesj
     )
+
+    ht = annotate_interval_qc_filter(data_source, freeze, ht)
 
     # Annotate variants by type (e.g. for downsampling purpose)
     variants_by_type = ht.aggregate(hl.agg.counter(ht.variant_type))
     logger.info('Variants by type:\n{}'.format('\n'.join(['{}: {}'.format(k, v) for k, v in variants_by_type.items()])))
 
     ht = ht.annotate_globals(variants_by_type=variants_by_type)
-
-    #ht = ht.persist()
-    ht = ht.checkpoint(f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/rf_annotations_cp.ht', overwrite=True)
-
     ht = ht.repartition(5000, shuffle=False)
+    ht = ht.persist()
 
     # Compute medians
-    # numerical_features = [k for k, v in ht.row.dtype.items() if annotation_type_is_numeric(v)]
     numerical_features = [k for k, v in ht.row.dtype.items() if v == hl.tint or v == hl.tfloat]
 
     if impute_features_by_variant_type:
@@ -258,7 +249,7 @@ def get_run_data(
         'data': data_source,
         'freeze': freeze,
         'input_args': {
-            'interval_qc_filter':interval_qc_filter,
+            'interval_qc_filter': interval_qc_filter,
             'no_transmitted_singletons': no_transmitted_singletons,
             'array_con_common': array_con_common,
             'adj': adj
@@ -282,7 +273,6 @@ def get_run_data(
 
 
 def train_rf(data_source: str, freeze: int, args):
-
     # Get unique hash for run and load previous runs
     run_hash = str(uuid.uuid4())[:8]
     rf_runs = get_rf_runs(rf_run_hash_path(data_source, freeze))
@@ -290,26 +280,22 @@ def train_rf(data_source: str, freeze: int, args):
         run_hash = str(uuid.uuid4())[:8]
 
     ht = hl.read_table(rf_annotated_path(data_source, freeze, args.adj))
-    ht = annotate_interval_qc_filter('broad', 5, ht)
 
     summary = ht.group_by('omni', 'mills', 'transmitted_singleton', 'ukbb_array_con_common', 'sib_singletons').aggregate(n=hl.agg.count())
     logger.info("Summary of truth data annotations:")
     summary.show(20)
 
-    # ht = ht.repartition(500, shuffle=False)
+    tp_expr = ht.omni | ht.mills
+    if args.array_con_common:
+        tp_expr = tp_expr | ht.ukbb_array_con_common
+    if not args.no_transmitted_singletons:
+        tp_expr = tp_expr | ht.transmitted_singleton
+    if not args.no_sibling_singletons:
+        tp_expr = tp_expr | ht.sib_singletons
 
-    if not args.vqsr_training:
-        tp_expr = ht.omni | ht.mills
-        if args.array_con_common:
-            tp_expr = tp_expr | ht.ukbb_array_con_common
-        if not args.no_transmitted_singletons:
-            tp_expr = tp_expr | ht.transmitted_singleton  # | ht.info_POSITIVE_TRAIN_SITE
-        if not args.no_sibling_singletons:
-            tp_expr = tp_expr | ht.sib_singletons  # | ht.info_POSITIVE_TRAIN_SITE
-
-        ht = ht.annotate(
-            tp=tp_expr
-        )
+    ht = ht.annotate(
+        tp=tp_expr
+    )
 
     test_intervals_str = [] if not args.test_intervals else [args.test_intervals] if isinstance(args.test_intervals, str) else args.test_intervals
     test_intervals_locus = [hl.parse_locus_interval(x, reference_genome='GRCh38') for x in test_intervals_str]
@@ -319,10 +305,12 @@ def train_rf(data_source: str, freeze: int, args):
             test_intervals=test_intervals_locus
         )
 
-    ht = sample_rf_training_examples(ht,
-                                     tp_col='info_POSITIVE_TRAIN_SITE' if args.vqsr_training else 'tp',  # TODO: remove VQSR option
-                                     fp_col='info_NEGATIVE_TRAIN_SITE' if args.vqsr_training else 'fail_hard_filters',  # TODO: remove VQSR option
-                                     fp_to_tp=args.fp_to_tp)
+    ht = sample_rf_training_examples(
+        ht,
+        tp_col='tp',
+        fp_col='fail_hard_filters',
+        fp_to_tp=args.fp_to_tp
+    )
     ht = ht.persist()
 
     summary = ht.group_by('tp', 'fail_hard_filters', 'rf_train', 'rf_label').aggregate(n=hl.agg.count())
@@ -339,19 +327,23 @@ def train_rf(data_source: str, freeze: int, args):
         ",".join(rf_features),
         args.num_trees,
         args.max_depth,
-        ",".join(test_intervals_str)))
+        ",".join(test_intervals_str))
+    )
 
-    rf_model = rf.train_rf(rf_ht,
-                           features=rf_features,
-                           label=LABEL_COL,
-                           num_trees=args.num_trees,
-                           max_depth=args.max_depth)
+    rf_model = rf.train_rf(
+        rf_ht,
+        features=rf_features,
+        label=LABEL_COL,
+        num_trees=args.num_trees,
+        max_depth=args.max_depth
+    )
 
     logger.info("Saving RF model")
-    rf.save_model(rf_model,
-                  rf_path(data_source, freeze, data='model', run_hash=run_hash),
-                  overwrite=args.overwrite
-                  )
+    rf.save_model(
+        rf_model,
+        rf_path(data_source, freeze, data='model', run_hash=run_hash),
+        overwrite=args.overwrite
+    )
 
     test_results = None
     if args.test_intervals:
@@ -359,10 +351,12 @@ def train_rf(data_source: str, freeze: int, args):
         test_ht = hl.filter_intervals(ht, test_intervals_locus, keep=True)
         test_ht = test_ht.checkpoint(f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/test_rf.ht', overwrite=True)  # TODO: revisit temp placement?
         test_ht = test_ht.filter(hl.is_defined(test_ht[LABEL_COL]))
-        test_results = rf.test_model(test_ht,
-                                     rf_model,
-                                     features=get_features_list(),
-                                     label=LABEL_COL)
+        test_results = rf.test_model(
+            test_ht,
+            rf_model,
+            features=get_features_list(),
+            label=LABEL_COL
+        )
 
         ht = ht.annotate_globals(
             test_results=test_results
@@ -373,7 +367,6 @@ def train_rf(data_source: str, freeze: int, args):
     ht = ht.annotate_globals(
         features_importance=features_importance,
         features=get_features_list(),
-        vqsr_training=args.vqsr_training,
         no_transmitted_singletons=args.no_transmitted_singletons,
         adj=args.adj
     )
@@ -384,7 +377,6 @@ def train_rf(data_source: str, freeze: int, args):
         data_source,
         freeze,
         args.interval_qc_filter,
-        args.vqsr_training,
         args.no_transmitted_singletons,
         args.array_con,
         args.array_con_common,
@@ -399,38 +391,63 @@ def train_rf(data_source: str, freeze: int, args):
     return run_hash
 
 
-def prepare_final_ht(data_source: str, freeze: int, run_hash: str, snp_cutoff: int, indel_cutoff: int, treat_cutoff_as_prob: bool) -> hl.Table:
+def prepare_final_ht(
+        data_source: str,
+        freeze: int,
+        run_hash: str,
+        snp_cutoff: int,
+        indel_cutoff: int,
+        treat_cutoff_as_prob: bool
+) -> hl.Table:
 
     # Get snv and indel RF cutoffs based on bin
     binned_ht_path = score_ranking_path(data_source, freeze, run_hash, binned=True)
     if not hl.hadoop_exists(score_ranking_path(data_source, freeze, run_hash, binned=True)):
-        sys.exit(f"Could not find binned HT for RF  run {run_hash} ({binned_ht_path}). Please run create_ranked_scores.py for that hash.")
+        sys.exit(
+            f"Could not find binned HT for RF  run {run_hash} ({binned_ht_path}). Please run create_ranked_scores.py for that hash."
+        )
     binned_ht = hl.read_table(binned_ht_path)
     if treat_cutoff_as_prob:
         snp_cutoff_global = hl.struct(min_score=snp_cutoff)
         indel_cutoff_global = hl.struct(min_score=indel_cutoff)
     else:
-        snp_rf_cutoff, indel_rf_cutoff = binned_ht.aggregate([hl.agg.filter(binned_ht.snv & (binned_ht.bin == snp_cutoff), hl.agg.min(binned_ht.min_score)),
-                                                          hl.agg.filter(~binned_ht.snv & (binned_ht.bin == indel_cutoff), hl.agg.min(binned_ht.min_score))])
+        snp_rf_cutoff, indel_rf_cutoff = binned_ht.aggregate([
+            hl.agg.filter(
+                binned_ht.snv & (binned_ht.bin == snp_cutoff),
+                hl.agg.min(binned_ht.min_score)
+            ),
+            hl.agg.filter(
+                ~binned_ht.snv & (binned_ht.bin == indel_cutoff),
+                hl.agg.min(binned_ht.min_score)
+            )
+        ])
         snp_cutoff_global = hl.struct(bin=snp_cutoff, min_score=snp_rf_cutoff)
         indel_cutoff_global = hl.struct(bin=indel_cutoff, min_score=indel_rf_cutoff)
 
     # Add filters to RF HT
     ht = hl.read_table(rf_path(data_source, freeze, 'rf_result', run_hash=run_hash))
-    ht = ht.annotate_globals(rf_hash=run_hash,
-                             rf_snv_cutoff=snp_cutoff_global,
-                             rf_indel_cutoff=indel_cutoff_global)
-    rf_filter_criteria = (hl.is_snp(ht.alleles[0], ht.alleles[1]) & (ht.rf_probability['TP'] < ht.rf_snv_cutoff.min_score)) | (
-            ~hl.is_snp(ht.alleles[0], ht.alleles[1]) & (ht.rf_probability['TP'] < ht.rf_indel_cutoff.min_score))
+    ht = ht.annotate_globals(
+        rf_hash=run_hash,
+        rf_snv_cutoff=snp_cutoff_global,
+        rf_indel_cutoff=indel_cutoff_global
+    )
+    rf_filter_criteria = (
+            (hl.is_snp(ht.alleles[0], ht.alleles[1]) & (ht.rf_probability['TP'] < ht.rf_snv_cutoff.min_score))
+            | (~hl.is_snp(ht.alleles[0], ht.alleles[1]) & (ht.rf_probability['TP'] < ht.rf_indel_cutoff.min_score))
+    )
     ht = ht.annotate(filters=hl.case()
                      .when(rf_filter_criteria, {'RF'})
                      .when(~rf_filter_criteria, hl.empty_set(hl.tstr))
-                     .or_error('Missing RF probability!'))
+                     .or_error('Missing RF probability!')
+                     )
 
-    inbreeding_coeff_filter_criteria = hl.is_defined(ht.inbreeding_coeff) & (
-            ht.inbreeding_coeff < INBREEDING_COEFF_HARD_CUTOFF)
+    inbreeding_coeff_filter_criteria = (
+            hl.is_defined(ht.inbreeding_coeff)
+            & (ht.inbreeding_coeff < INBREEDING_COEFF_HARD_CUTOFF)
+    )
     ht = ht.annotate(filters=hl.cond(inbreeding_coeff_filter_criteria,
-                                     ht.filters.add('InbreedingCoeff'), ht.filters))
+                                     ht.filters.add('InbreedingCoeff'), ht.filters)
+                     )
 
     freq_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, 'join_freq'))
     ac0_filter_criteria = freq_ht[ht.key].freq[0].AC == 0
@@ -474,10 +491,13 @@ def main(args):
         pretty_print_runs(get_rf_runs(rf_run_hash_path(data_source, freeze)))
 
     if args.annotate_for_rf:
-        ht = create_rf_ht(data_source, freeze,
-                          n_variants_median=args.n_variants_median,
-                          impute_features_by_variant_type=not args.impute_features_no_variant_type,
-                          group='qc_samples_raw')  # group='adj' if args.adj else 'raw'
+        ht = create_rf_ht(
+            data_source,
+            freeze,
+            n_variants_median=args.n_variants_median,
+            impute_features_by_variant_type=not args.impute_features_no_variant_type,
+            group='adj' if args.adj else 'raw'
+        )
         ht.write(rf_annotated_path(data_source, freeze, args.adj), overwrite=args.overwrite)
         logger.info(f"Completed annotation wrangling for random forests model training")
 
@@ -488,9 +508,9 @@ def main(args):
         logger.info(f"Applying RF model {run_hash} to {data_source}.freeze_{freeze}.")
 
         rf_model = rf.load_model(rf_path(data_source, freeze, data='model', run_hash=run_hash))
-        ht = hl.read_table(rf_path(data_source, freeze, data='training', run_hash=run_hash))  #.persist()
+        ht = hl.read_table(rf_path(data_source, freeze, data='training', run_hash=run_hash))
 
-        ht = rf.apply_rf_model(ht, rf_model, get_features_list(True, not (args.vqsr_features or args.median_features), args.vqsr_features, args.median_features), label=LABEL_COL)
+        ht = rf.apply_rf_model(ht, rf_model, get_features_list(), label=LABEL_COL)
 
         logger.info('Finished applying RF model')
         ht = ht.checkpoint(rf_path(data_source, freeze, 'rf_result', run_hash=run_hash), overwrite=args.overwrite)
