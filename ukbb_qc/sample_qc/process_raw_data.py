@@ -100,13 +100,9 @@ def main(args):
 
 
     if args.compute_qc_mt:
-        logger.info("Reading in densified MT from hard filters...")
+        logger.info("Reading in densified MT (created when running hard filters)...")
         mt = hl.read_matrix_table(
-            get_checkpoint_path(
-                data_source, freeze,
-                name=f"{data_source}.freeze_{freeze}.dense.repartitioned.mt",
-                mt=True
-            )
+            densified_interval_qc_path(data_source, freeze, repartitioned=True)
         )
 
         logger.info("Reading in QC MT sites from tranche 2/freeze 5...")
@@ -120,7 +116,7 @@ def main(args):
         logger.info("Adding info annotation from QC sites HT and filtering to adj")
         mt = mt.annotate_rows(info=sites_ht[mt.row_key].info)
         mt = filter_to_adj(mt)
-        
+
         logger.info("Checkpointing MT...")
         mt = mt.checkpoint(
             get_checkpoint_path(

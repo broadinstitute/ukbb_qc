@@ -3,6 +3,7 @@ import hail as hl
 import logging
 from gnomad_hail.utils.sample_qc import add_filters_expr
 from gnomad_hail.utils.sparse_mt import densify_sites
+from ukbb_qc.resources.sample_qc import densified_interval_qc_path
 
 
 logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt="%m/%d/%Y %I:%M:%S %p")
@@ -72,23 +73,14 @@ def hard_filter_samples(
 
     logger.info("Checkpointing densified MT")
     mt = mt.checkpoint(
-        get_checkpoint_path(
-            data_source, freeze,
-            name=f"{data_source}.freeze_{freeze}.dense.mt",
-            mt=True
-        ),
+        densified_interval_qc_path(data_source, freeze),
         overwrite=True
     )
 
     logger.info("Repartitioning densified MT")
         mt = mt.naive_coalesce(n_partitions)
         mt = mt.checkpoint(
-            get_checkpoint_path(
-                data_source,
-                freeze,
-                name=f"{data_source}.freeze_{freeze}.dense.repartitioned.mt",
-                mt=True
-            ),
+            ensified_interval_qc_path(data_source, freeze, repartitioned=True),
             overwrite=True,
     )
 
