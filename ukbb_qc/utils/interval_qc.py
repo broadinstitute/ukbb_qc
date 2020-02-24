@@ -3,7 +3,12 @@ import hail as hl
 import logging
 from gnomad_hail.utils.generic import filter_to_autosomes
 from gnomad_hail.utils.slack import try_slack
-from ukbb_qc.resources.basics import CURRENT_FREEZE, capture_ht_path, get_checkpoint_path, get_ukbb_data
+from ukbb_qc.resources.basics import (
+    CURRENT_FREEZE,
+    capture_ht_path,
+    get_checkpoint_path,
+    get_ukbb_data,
+)
 from ukbb_qc.resources.sample_qc import interval_qc_path, sex_ht_path
 from typing import Optional
 
@@ -36,25 +41,23 @@ def interval_qc(
 
     interval_ht = interval_ht.annotate(
         interval_label=interval_ht.interval,
-        interval_size=(interval_ht.interval.end - interval_ht.interval.start)
+        interval_size=(interval_ht.interval.end - interval_ht.interval.start),
     )
 
     mt = mt.annotate_rows(
         interval=interval_ht[mt.locus].interval_label,
-        interval_size=interval_ht[mt.locus].interval_size
-        )
+        interval_size=interval_ht[mt.locus].interval_size,
+    )
 
     target_mt = (
         mt.group_rows_by(mt.interval)
         .aggregate_entries(
             mean_dp=hl.agg.mean(
-                    hl.if_else(
-                        mt.LGT.is_hom_ref(),
-                        mt.DP * (mt.END - mt.locus.position), 
-                        hl.if_else(
-                            hl.is_defined(mt.DP), mt.DP, 0
-                        )
-                    )
+                hl.if_else(
+                    mt.LGT.is_hom_ref(),
+                    mt.DP * (mt.END - mt.locus.position),
+                    hl.if_else(hl.is_defined(mt.DP), mt.DP, 0),
+                )
             ),
             pct_gt_20x=hl.agg.fraction(hl.cond(hl.is_defined(mt.DP), mt.DP, 0) >= 20),
             pct_dp_defined=hl.agg.count_where(hl.is_defined(mt.DP)) / hl.agg.count(),
@@ -121,7 +124,10 @@ def main(args):
     ht = hl.read_table(capture_ht_path(data_source))
 
     checkpoint_path = get_checkpoint_path(
-        data_source, freeze, name=f"DP_only_checkpoint_interval_qc_broad_freeze{freeze}", mt=True
+        data_source,
+        freeze,
+        name=f"DP_only_checkpoint_interval_qc_broad_freeze{freeze}",
+        mt=True,
     )
     if not hl.utils.hadoop_exists(f"{checkpoint_path}/_SUCCESS"):
         mt = get_ukbb_data(data_source, freeze, raw=True, adj=False, split=False)
@@ -150,8 +156,8 @@ def main(args):
             mt,
             [
                 hl.parse_locus_interval("chrX", reference_genome="GRCh38"),
-                hl.parse_locus_interval("chrY", reference_genome="GRCh38")
-            ]
+                hl.parse_locus_interval("chrY", reference_genome="GRCh38"),
+            ],
         )
         sex_ht = hl.read_table(sex_ht_path(data_source, freeze)).select("sex_karyotype")
         mt = mt.annotate_cols(**sex_ht[mt.col_key])
@@ -166,8 +172,7 @@ def main(args):
             ),
         )
         target_ht.write(
-            interval_qc_path(data_source, freeze, "sex_chr"),
-            overwrite=args.overwrite,
+            interval_qc_path(data_source, freeze, "sex_chr"), overwrite=args.overwrite,
         )
 
 
@@ -190,11 +195,7 @@ if __name__ == "__main__":
         default="broad",
     )
     parser.add_argument(
-        "-f",
-        "--freeze",
-        help="Data freeze to use",
-        default=CURRENT_FREEZE,
-        type=int,
+        "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int,
     )
 
     parser.add_argument(
