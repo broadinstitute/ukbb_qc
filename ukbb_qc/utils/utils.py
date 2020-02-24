@@ -54,7 +54,8 @@ def join_tables(
 # Sample resources
 def remove_hard_filter_samples(
     data_source: str, freeze: int, t: Union[hl.MatrixTable, hl.Table],
-    non_refs_only: bool = True, gt_expr: Optional[hl.expr.CallExpression]
+    gt_expr: Optional[hl.expr.CallExpression],
+    non_refs_only: bool = True
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Removes samples that failed hard filters from MatrixTable or Table. 
@@ -63,8 +64,8 @@ def remove_hard_filter_samples(
     :param str data_source: 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
     :param MatrixTable/Table t: Input MatrixTable or Table
-    :param bool non_refs_only: Whether to filter to non_reference sites only. Relevant only if input is a MatrixTable.
     :param hl.expr.CallExpression gt_expr: Field containing genotype. Relevant only if non_refs_only is set.
+    :param bool non_refs_only: Whether to filter to non_reference sites only. Relevant only if input is a MatrixTable.
     :return: MatrixTable or Table with samples removed
     :rtype: MatrixTable or Table
     """
@@ -84,7 +85,7 @@ def remove_hard_filter_samples(
     if isinstance(t, hl.MatrixTable):
         t = t.filter_cols(hl.is_defined(ht[t.col_key]))
         if non_refs_only:
-            t = t.filter_rows(hl.agg.any(t[gt_expr]is_non_ref()))
+            t = t.filter_rows(hl.agg.any(t[gt_expr].is_non_ref()))
     else:
         t.filter((hl.len(ht[t.key].hard_filters) == 0))
     return t
