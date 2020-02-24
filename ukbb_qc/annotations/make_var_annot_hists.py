@@ -1,5 +1,6 @@
 from gnomad_hail.utils.slack import try_slack
 from ukbb_qc.resources.basics import release_ht_path
+from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 import argparse
 import hail as hl
 import logging
@@ -12,16 +13,16 @@ logger = logging.getLogger("variant_histograms")
 logger.setLevel(logging.INFO)
 
 
-def define_hist_ranges(ht: hl.Table) -> Dict[str: hl.expr.StructExpression]:
+def define_hist_ranges(ht: hl.Table) -> Dict[str, hl.expr.StructExpression]:
     """
     Creates histograms for relevant metrics
 
     :param Table ht: Table with variant metrics
     :return: Dictionary of metrics and their histograms
-    :rtype: Dict[str: hl.expr.StructExpression]
+    :rtype: Dict[str, hl.expr.StructExpression]
     """
     hist_dict = {
-        "FS": hl.agg.hist(ht.FS, 0, 50, 50),  # NOTE: in 2.0.2 release this was on (0,20)
+        "FS": hl.agg.hist(ht.FS, 0, 50, 50), 
         "InbreedingCoeff": hl.agg.hist(ht.inbreeding_coeff, -0.25, 0.25, 50),
         "MQ": hl.agg.hist(ht.MQ, 0, 80, 40),
         "MQRankSum": hl.agg.hist(ht.MQRankSum, -15, 15, 60),
@@ -29,8 +30,8 @@ def define_hist_ranges(ht: hl.Table) -> Dict[str: hl.expr.StructExpression]:
         "ReadPosRankSum": hl.agg.hist(ht.ReadPosRankSum, -15, 15, 60),
         "SOR": hl.agg.hist(ht.SOR, 0, 10, 50),
         #"BaseQRankSum": hl.agg.hist(ht.BaseQRankSum, -15, 15, 60),
-        "VarDP": hl.agg.hist(hl.log(ht.VarDP, base=10), 1, 9, 32),  # NOTE: in 2.0.2 release this was on (0,8)
-        "AS_VQSLOD": hl.agg.hist(ht.AS_VQSLOD, -30, 30, 60),  # NOTE: in 2.0.2 release this was on (-20,20)
+        "VarDP": hl.agg.hist(hl.log(ht.VarDP, base=10), 1, 9, 32),  
+        "AS_VQSLOD": hl.agg.hist(ht.AS_VQSLOD, -30, 30, 60),  
         "rf_probability": hl.agg.hist(ht.rf_probability, 0, 1, 50),
         "pab_max": hl.agg.hist(ht.pab_max, 0, 1, 50)
     }
@@ -68,7 +69,10 @@ def aggregate_qual_stats_by_bin(ht: hl.Table) -> hl.Table:
 
 
 def main(args):
+
     hl.init(log="/variant_histograms.log", default_reference="GRCh38")
+    data_source = args.data_source
+    freeze = args.freeze
 
     metrics = [
                 "FS", "InbreedingCoeff", "MQ", "MQRankSum", "QD", "ReadPosRankSum", "SOR", 
@@ -85,7 +89,8 @@ def main(args):
         SOR=ht.rf.info_SOR, VarDP=ht.rf.info_VarDP, rf_probability=ht.rf.rf_probability,
         pab_max=ht.rf.pab_max, AS_VQSLOD=ht.vqsr.AS_VQSLOD
     )
-    
+    ht = ht.explode(ht.AS_VQSLOD)
+    ht = ht.transmute(AS_VQSLOD=hl.float(ht.AS_VQSLOD))
     # NOTE: histogram aggregations are done on the entire callset (not just PASS variants), on raw data
 
     # NOTE: run the following code in a first pass to determine bounds for metrics
@@ -95,7 +100,7 @@ def main(args):
         for metric in metrics:
             minmax_dict[metric] = hl.struct(
                 min=hl.agg.min(ht[metric]), 
-                max=hl.cond(hl.agg.max(ht[metric])<1e10, hl.agg.max(ht[metric]), 1e10)
+                max=hl.cond(hl.agg.max(ht[metric]) < 1e10, hl.agg.max(ht[metric]), 1e10)
             )
         minmax = ht.aggregate(hl.struct(**minmax_dict))
         logger.info(f"Metrics bounds: {minmax}")
