@@ -4,7 +4,6 @@ from gnomad_hail.utils.generic import file_exists
 from gnomad_hail.resources.resource_utils import DataException
 from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES, CURRENT_HAIL_VERSION
 from .sample_qc import meta_ht_path
-from ukbb_qc.load_data.utils import import_array_exome_id_map_ht
 
 
 broad_calling_intervals_path = 'gs://broad-ukbb/resources/broad_exome_calling.interval_list'
@@ -69,8 +68,7 @@ def get_ukbb_data(data_source: str, freeze: int = CURRENT_FREEZE, key_by_locus_a
     # Remove any samples with withdrawn consents if file with excluded samples exists
     if file_exists(excluded_samples_path(freeze)):
         if not file_exists(f"{array_sample_map_ht_path(data_source, freeze)}_SUCCESS"):
-            ht = import_array_exome_id_map_ht(freeze)
-            ht = ht.write(array_sample_map_ht_path(data_source, freeze))
+            raise DataException(f"Need to import array sample map ht for freeze {freeze}!")
         else:
             ht = hl.read_table(array_sample_map_ht_path(data_source, freeze))
         mt = mt.annotate_cols(
@@ -230,7 +228,7 @@ def array_sample_map_path(freeze: int = CURRENT_FREEZE) -> str:
     :rtype: str
     """
     array_map_names = {
-            4: 'Project_26041_bridge.csv'
+            4: 'Project_26041_bridge.csv',
             5: 'linking_file_200K_withbatch.csv',
             6: 'linking_file_300K_withbatch.csv'
     }
