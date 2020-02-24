@@ -325,6 +325,18 @@ def release_ht_path(data_source: str, freeze: int) -> str:
     return f'{get_release_path(data_source, freeze)}/ht/release.sites.ht'
 
 
+def release_var_hist_path(data_source: str, freeze: int) -> str:
+    '''
+    Fetch bucket for release variant histograms (json files)
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :return: Filepath for release jsons
+    :rtype: str
+    '''
+    return f'{get_release_path(data_source, freeze)}/json/ukbb.json'
+
+
 def release_vcf_path(data_source: str, freeze: int, contig: str = None) -> str:
     '''
     Fetch bucket for release (variant-only) VCFs
