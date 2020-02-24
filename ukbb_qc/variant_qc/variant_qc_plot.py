@@ -301,7 +301,7 @@ def plot_score_distributions(
         model_order = inv_model.keys()
     for model_name in model_order:
         model_id = inv_model[model_name]
-        if model_id in ["vqsr","AS_TS_vqsr", "cnn", "rf_2.0.2", "rf_2.0.2_beta"]:
+        if model_id in ["vqsr", "AS_TS_vqsr", "cnn", "rf_2.0.2", "rf_2.0.2_beta"]:
             ht = hl.read_table(
                 score_ranking_path(data_source, freeze, model_id, binned=False)
             )
@@ -328,7 +328,9 @@ def plot_score_distributions(
         else:
             cut_value = cut
 
-        min_score, max_score = (-40, 200) if model_id in ["vqsr","AS_TS_vqsr"] else (0.0, 1.0)
+        min_score, max_score = (
+            (-40, 200) if model_id in ["vqsr", "AS_TS_vqsr"] else (0.0, 1.0)
+        )
         agg_values = ht.aggregate(
             hl.struct(
                 score_hist=[
