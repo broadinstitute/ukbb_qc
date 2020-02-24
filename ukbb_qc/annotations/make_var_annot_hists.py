@@ -20,19 +20,35 @@ def main(args):
     freeze = args.freeze
 
     metrics = [
-                "FS", "InbreedingCoeff", "MQ", "MQRankSum", "QD", "ReadPosRankSum", "SOR", 
-                # "BaseQRankSum" NOTE: this was removed from vcf export for ukbb and therefore release mt/ht
-                "VarDP", "rf_probability", "pab_max", "AS_VQSLOD"
+        "FS",
+        "InbreedingCoeff",
+        "MQ",
+        "MQRankSum",
+        "QD",
+        "ReadPosRankSum",
+        "SOR",
+        # "BaseQRankSum" NOTE: this was removed from vcf export for ukbb and therefore release mt/ht
+        "VarDP",
+        "rf_probability",
+        "pab_max",
+        "AS_VQSLOD",
     ]
 
     ht = hl.read_table(release_ht_path(data_source, freeze))
 
     # Move necessary annotations out of nested structs
     ht = ht.transmute(
-        FS=ht.rf.info_FS, InbreedingCoeff=ht.rf.inbreeding_coeff, MQ=ht.rf.info_MQ,
-        MQRankSum=ht.rf.info_MQRankSum, QD=ht.rf.info_QD, ReadPosRankSum=ht.rf.info_ReadPosRankSum,
-        SOR=ht.rf.info_SOR, VarDP=ht.rf.info_VarDP, rf_probability=ht.rf.rf_probability,
-        pab_max=ht.rf.pab_max, AS_VQSLOD=ht.vqsr.AS_VQSLOD
+        FS=ht.rf.info_FS,
+        InbreedingCoeff=ht.rf.inbreeding_coeff,
+        MQ=ht.rf.info_MQ,
+        MQRankSum=ht.rf.info_MQRankSum,
+        QD=ht.rf.info_QD,
+        ReadPosRankSum=ht.rf.info_ReadPosRankSum,
+        SOR=ht.rf.info_SOR,
+        VarDP=ht.rf.info_VarDP,
+        rf_probability=ht.rf.rf_probability,
+        pab_max=ht.rf.pab_max,
+        AS_VQSLOD=ht.vqsr.AS_VQSLOD,
     )
     ht = ht.explode(ht.AS_VQSLOD)
     ht = ht.transmute(AS_VQSLOD=hl.float(ht.AS_VQSLOD))
@@ -44,22 +60,30 @@ def main(args):
         minmax_dict = {}
         for metric in metrics:
             minmax_dict[metric] = hl.struct(
-                min=hl.agg.min(ht[metric]), 
-                max=hl.cond(hl.agg.max(ht[metric]) < 1e10, hl.agg.max(ht[metric]), 1e10)
+                min=hl.agg.min(ht[metric]),
+                max=hl.cond(
+                    hl.agg.max(ht[metric]) < 1e10, hl.agg.max(ht[metric]), 1e10
+                ),
             )
         minmax = ht.aggregate(hl.struct(**minmax_dict))
         logger.info(f"Metrics bounds: {minmax}")
     else:
         logger.info("Aggregating hists over hand-tooled ranges")
         hists = ht.aggregate(hl.struct(**define_hist_ranges(ht)))
-        hist_out = hl.array([hists[f"{metric}"].annotate(metric=metric) for metric in metrics])
+        hist_out = hl.array(
+            [hists[f"{metric}"].annotate(metric=metric) for metric in metrics]
+        )
 
         # Aggregate QUAL stats by bin:
         logger.info("Aggregating QUAL stats by bin")
         ht = aggregate_qual_stats_by_bin(ht)
-        ht = ht.group_by("metric").aggregate(hist=hl.agg.hist(hl.log(ht.qual, base=10), 1, 10, 36))
+        ht = ht.group_by("metric").aggregate(
+            hist=hl.agg.hist(hl.log(ht.qual, base=10), 1, 10, 36)
+        )
         hists = ht.collect()
-        hist_out = hist_out.extend(hl.array([x.hist.annotate(metric=x.metric) for x in hists]))
+        hist_out = hist_out.extend(
+            hl.array([x.hist.annotate(metric=x.metric) for x in hists])
+        )
 
         with hl.hadoop_open(release_var_hist_path(data_type), "w") as f:
             f.write(hl.eval(hl.json(hist_out)))
@@ -68,16 +92,20 @@ def main(args):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-s", "--data_source", help="Data source", 
-        choices=["regeneron", "broad"], default="broad"
+    parser.add_argument(
+        "-s",
+        "--data_source",
+        help="Data source",
+        choices=["regeneron", "broad"],
+        default="broad",
     )
     parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
     )
     parser.add_argument(
-        "--first_pass", 
-        help="Determine min/max values for each variant metric (to be used in hand-tooled histogram ranges", 
-        action="store_true"
+        "--first_pass",
+        help="Determine min/max values for each variant metric (to be used in hand-tooled histogram ranges",
+        action="store_true",
     )
     parser.add_argument(
         "--slack_channel", help="Slack channel to post results and notifications to."

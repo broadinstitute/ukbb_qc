@@ -1,7 +1,10 @@
 from gnomad_hail import *
 from gnomad_qc.annotations.generate_qc_annotations import *
 from gnomad_hail.utils.relatedness import get_relationship_expr
-from gnomad_hail.utils.annotations import default_generate_sib_stats, generate_family_stats
+from gnomad_hail.utils.annotations import (
+    default_generate_sib_stats,
+    generate_family_stats,
+)
 import gnomad_hail.resources.basics as gres
 from gnomad_hail.utils.generic import vep_or_lookup_vep, vep_struct_to_csq
 from ukbb_qc.resources.resources import *
@@ -119,15 +122,11 @@ def main(args):
                 kin_expr=relatedness_ht.kin,
                 ibd0_expr=relatedness_ht.ibd0,
                 ibd1_expr=relatedness_ht.ibd1,
-                ibd2_expr=relatedness_ht.ibd2
+                ibd2_expr=relatedness_ht.ibd2,
             )
         )
 
-        sib_stats_ht = default_generate_sib_stats(
-            mt,
-            relatedness_ht,
-            sex_ht
-        )
+        sib_stats_ht = default_generate_sib_stats(mt, relatedness_ht, sex_ht)
 
         sib_stats_ht.naive_coalesce(500).write(
             var_annotations_ht_path(data_source, freeze, "sib_stats"),
