@@ -9,6 +9,7 @@ from ukbb_qc.resources.basics import get_checkpoint_path, get_ukbb_data
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import array_sample_map_ht_path, qc_mt_path 
 from ukbb_qc.resources.variant_qc import get_truth_sample_info
+from ukbb_qc.sample_qc.apply_hard_filters import hard_filter_samples
 from ukbb_qc.utils.utils import annotate_interval_qc_filter, get_qc_mt_sites
 
 
@@ -61,58 +62,75 @@ def main(args):
         last_END_positions_ht.write(last_END_positions_ht_path(data_source, freeze))
 
 
-    if args.compute_qc_mt:
-        mt = get_ukbb_data(data_source, freeze, raw=True, adj=False, split=False, key_by_locus_and_alleles=True)
+    if args.apply_hard_filters:
+        logger.info("Reading in raw MT...")
+        mt = get_ukbb_data(data_source, freeze, raw=True, adj=False, key_by_locus_and_alleles=True)
         mt = mt.annotate_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
         mt = mt.select_entries("DP", "END", "GT")
         logger.info(
             f"Total number of variants in raw unsplit matrix table: {mt.count_rows()}"
         )
 
-        logger.info("Reading in QC MT sites from tranche 2/freeze 5")
+        last_END_ht = hl.read_table(last_END_positions_ht_path(data_source, freeze))
+        sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
+        interval_qc_ht = hl.read_table(interval_qc_path(data_source, freeze, "autosomes"))
+        intervals_qc_ht = interval_qc_ht.filter(
+            interval_qc_ht[args.cov_filter_field] > args.pct_samples
+        )
+
+        # Rename interval so that there are no name collisions when calling densify_sites
+        intervals_qc_ht = interval_qc_ht.key_by()
+        intervals_qc_ht = interval_qc_ht.transmute(
+            qc_interval=interval_qc.interval
+        ).key_by('qc_interval')
+
+        hard_filters_ht = hard_filter_samples(
+            data_source, freeze, mt,
+            interval_qc_ht, last_END_ht, sex_ht, 
+            args.min_callrate, args.min_dp,
+            args.densified_partitions
+        )
+        ht = ht.naive_coalesce(args.n_partitions)
+        ht = ht.checkpoint(hard_filters_ht_path(data_source, freeze), overwrite=args.overwrite)
+        logger.info("Checking number of samples flagged with hard filters...")
+        ht = ht.explode(ht.hard_filters)
+        filters = ht.aggregate(hl.agg.counter(ht.hard_filters))
+        for filt in filters:
+            logger.info(f"Samples flagged due to {filt}: {filters[filt]}")
+
+
+    if args.compute_qc_mt:
+        logger.info("Reading in densified MT from hard filters...")
+        mt = hl.read_matrix_table(
+            get_checkpoint_path(
+                data_source, freeze,
+                name=f"{data_source}.freeze_{freeze}.dense.repartitioned.mt",
+                mt=True
+            )
+        )
+
+        logger.info("Reading in QC MT sites from tranche 2/freeze 5...")
         if not hl.utils.hadoop_exists(f"{qc_sites_path()}/_SUCCESS"):
             get_qc_mt_sites()
         qc_sites_ht = hl.read_table(qc_sites_path())
 
-        if args.apply_interval_qc_filter:
-            logger.info("Applying interval QC filter to QC MT sites")
-            qc_sites_ht = annotate_interval_qc_filter(data_source, freeze, qc_sites_ht, autosomes_only=True)
-            qc_sites_ht = qc_sites_ht.filter(qc_sites_ht.interval_qc_pass)
-            logger.info(f"Sites after applying interval QC filter: {qc_sites_ht.count()}")
-
-        logger.info("Densifying QC MT sites")
-        mt = densify_sites(
-            mt,
-            qc_sites_ht,
-            hl.read_table(last_END_positions_ht_path(data_source, freeze))
-        )
-        
-        logger.info("Checkpointing densified MT")
-        mt = mt.checkpoint(
-            get_checkpoint_path(
-                data_source,
-                freeze,
-                name=f"{data_source}.freeze_{freeze}.dense.mt",
-                mt=True
-            ),
-            overwrite=True,
-        )
-
-        logger.info("Repartitioning densified MT")
-        mt = mt.naive_coalesce(args.n_partitions)
-        mt = mt.checkpoint(
-            get_checkpoint_path(
-                data_source,
-                freeze,
-                name=f"{data_source}.freeze_{freeze}.dense.repartitioned.mt",
-                mt=True
-            ),
-            overwrite=True,
-        )
+        logger.info("Filtering to QC MT sites...")
+        mt = mt.filter_rows(hl.is_defined(qc_sites_ht[mt.row_key]))
         
         logger.info("Adding info annotation from QC sites HT and filtering to adj")
         mt = mt.annotate_rows(info=sites_ht[mt.row_key].info)
         mt = filter_to_adj(mt)
+        
+        logger.info("Checkpointing MT...")
+        mt = mt.checkpoint(
+            get_checkpoint_path(
+                data_source,
+                freeze,
+                name=f"{data_source}.freeze_{freeze}.qc_sites.mt",
+                mt=True
+            ),
+            overwrite=True,
+        )
 
         if data_source == "regeneron":
             apply_hard_filters = False
@@ -197,12 +215,17 @@ if __name__ == "__main__":
         action="store_true"
     )
     parser.add_argument(
+        "--apply_hard_filters".
+        help="Apply hard filters to samples",
+        aciton="store_true")
+    parser.add_argument("--min-dp", help="Minimum depth", default=20.0, type=float)
+    parser.add_argument(
         "--compute_qc_mt",
         help="Compute matrix to be used in sample qc",
         action="store_true",
     )
     parser.add_argument(
-        "--apply_interval_qc_filter",
+        "--apply_interval_qc_filter", # NOTE not super sure this is necessary
         help="Filter to good intervals from interval QC",
         action="store_true"
     )
@@ -233,6 +256,10 @@ if __name__ == "__main__":
         "--extract_truth_samples",
         help="Extract truth samples from matrix table",
         action="store_true",
+    )
+    parser.add_argument(
+        "--densified_partitions", help="Desired number of partitions for densified MatrixTable",
+        default=25000, type=int
     )
     parser.add_argument(
         "--n_partitions", help="Desired number of partitions for output Table/MatrixTable",

@@ -353,7 +353,7 @@ def get_qc_mt_sites() -> None:
     logger.info("Removing LCR intervals from QC sites")
     lcr_intervals = lcr.ht()
     ht = ht.filter(
-            hl.is_missing(lcr[ht.key])
+            hl.is_missing(lcr[ht.locus])
     )
 
     logger.info("Adding info annotations to QC sites HT")
