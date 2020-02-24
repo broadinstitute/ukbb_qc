@@ -2,9 +2,10 @@ import hail as hl
 import logging
 from gnomad_hail.utils.generic import file_exists
 from ukbb_qc.resources.basics import (
-                            array_sample_map_path,
-                            excluded_samples_path, ukbb_phenotype_path
-                            )
+    array_sample_map_path,
+    excluded_samples_path,
+    ukbb_phenotype_path,
+)
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 
 
@@ -23,27 +24,34 @@ def import_array_exome_id_map_ht(freeze: int = CURRENT_FREEZE) -> hl.Table:
     :return: Table with array IDs mapped to exome IDs
     :rtype: hl.Table
     """
-    sample_map_ht = hl.import_table(array_sample_map_path(freeze), delimiter=",", quote='"')
+    sample_map_ht = hl.import_table(
+        array_sample_map_path(freeze), delimiter=",", quote='"'
+    )
     sample_map_ht = sample_map_ht.key_by(s=sample_map_ht.eid_sample)
     sample_map_ht = sample_map_ht.transmute(
-        batch_num=sample_map_ht.batch,
-        batch=sample_map_ht['batch.c']
-        )
+        batch_num=sample_map_ht.batch, batch=sample_map_ht["batch.c"]
+    )
     logger.info(
-            f"Total number of IDs in the array to exome sample map: {sample_map_ht.count()}..."
-        )
+        f"Total number of IDs in the array to exome sample map: {sample_map_ht.count()}..."
+    )
 
     if file_exists(excluded_samples_path(freeze)):
-        excluded_samples_ht = hl.import_table(excluded_samples_path(freeze), no_header=True)
+        excluded_samples_ht = hl.import_table(
+            excluded_samples_path(freeze), no_header=True
+        )
         excluded_samples = hl.literal(ht.aggregate(hl.agg.collect_as_set(ht.f0)))
         logger.info(
             f"Total number of samples to exclude: {hl.eval(hl.len(excluded_samples))}"
-            )
-        sample_map_ht = sample_map_ht.annotate(withdrawn_consent=excluded_samples.contains(sample_map_ht.eid_26041))
-        withdrawn_ids = sample_map_ht.aggregate(hl.agg.count_where(sample_map_ht.withdrawn_consent))
+        )
+        sample_map_ht = sample_map_ht.annotate(
+            withdrawn_consent=excluded_samples.contains(sample_map_ht.eid_26041)
+        )
+        withdrawn_ids = sample_map_ht.aggregate(
+            hl.agg.count_where(sample_map_ht.withdrawn_consent)
+        )
         logger.info(
             f"Total number of IDs with withdrawn consents in sample map ht: {withdrawn_ids}"
-            )
+        )
     return sample_map_ht
 
 
@@ -55,12 +63,14 @@ def import_phenotype_ht() -> hl.Table:
     :rtype: None
     """
     phenotype_ht = hl.import_table(ukbb_phenotype_path, impute=True)
-    phenotype_ht = phenotype_ht.key_by(s_old=hl.str(phenotype_ht['f.eid']))
+    phenotype_ht = phenotype_ht.key_by(s_old=hl.str(phenotype_ht["f.eid"]))
     phenotype_ht.write(phenotype_ht_path(), overwrite=True)
 
 
 # Interval resources
-def import_capture_intervals(interval_path: str, output_path: str, header: bool, overwrite: bool) -> None:
+def import_capture_intervals(
+    interval_path: str, output_path: str, header: bool, overwrite: bool
+) -> None:
     """
     Imports capture intervals text file into Table and writes Table at specified path
 
