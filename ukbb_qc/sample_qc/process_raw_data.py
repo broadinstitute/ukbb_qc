@@ -7,7 +7,7 @@ from gnomad_hail.utils.sample_qc import get_qc_mt
 from gnomad_hail.utils.sparse_mt import compute_last_ref_block_end, densify_sites
 from ukbb_qc.resources.basics import get_checkpoint_path, get_ukbb_data
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
-from ukbb_qc.resources.sample_qc import array_sample_map_ht_path, qc_mt_path
+from ukbb_qc.resources.sample_qc import array_sample_map_ht_path, interval_qc_path, qc_mt_path
 from ukbb_qc.resources.variant_qc import get_truth_sample_info
 from ukbb_qc.sample_qc.apply_hard_filters import hard_filter_samples
 from ukbb_qc.utils.utils import annotate_interval_qc_filter, get_qc_mt_sites
