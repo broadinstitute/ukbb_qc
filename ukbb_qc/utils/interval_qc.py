@@ -39,26 +39,14 @@ def interval_qc(
     :rtype: Table
     """
 
-    interval_ht = interval_ht.annotate(
-        interval_label=interval_ht.interval,
-        interval_size=(interval_ht.interval.end - interval_ht.interval.start),
-    )
+    interval_ht = interval_ht.annotate(interval_label=interval_ht.interval)
 
-    mt = mt.annotate_rows(
-        interval=interval_ht[mt.locus].interval_label,
-        interval_size=interval_ht[mt.locus].interval_size,
-    )
+    mt = mt.annotate_rows(interval=interval_ht[mt.locus].interval_label)
 
     target_mt = (
         mt.group_rows_by(mt.interval)
         .aggregate_entries(
-            mean_dp=hl.agg.mean(
-                hl.if_else(
-                    mt.LGT.is_hom_ref(),
-                    mt.DP * (mt.END - mt.locus.position),
-                    hl.if_else(hl.is_defined(mt.DP), mt.DP, 0),
-                )
-            ),
+            mean_dp=hl.agg.mean(hl.if_else(hl.is_defined(mt.DP), mt.DP, 0),),
             pct_gt_20x=hl.agg.fraction(hl.cond(hl.is_defined(mt.DP), mt.DP, 0) >= 20),
             pct_dp_defined=hl.agg.count_where(hl.is_defined(mt.DP)) / hl.agg.count(),
         )
@@ -136,8 +124,10 @@ def main(args):
         mt.write(checkpoint_path, overwrite=True)
 
     if args.autosomes:
-        mt = hl.read_matrix_table(checkpoint_path)
+        mt = rep_on_read(checkpoint_path, args.n_partitions)
+        mt = hl.experimental.densify(mt)
         mt = filter_to_autosomes(mt)
+
         target_ht = interval_qc(
             mt,
             ht,
@@ -151,7 +141,8 @@ def main(args):
         )
 
     if args.sex_chr:
-        mt = hl.read_matrix_table(checkpoint_path)
+        mt = rep_on_read(checkpoint_path, args.n_partitions)
+        mt = hl.experimental.densify(mt)
         mt = hl.filter_intervals(
             mt,
             [
@@ -198,6 +189,9 @@ if __name__ == "__main__":
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int,
     )
 
+    parser.add_argument(
+        "--n_partitions", help="Desired number of partitions for output", type=int
+    )
     parser.add_argument(
         "--autosomes",
         action="store_true",
