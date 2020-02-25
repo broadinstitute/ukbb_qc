@@ -2,12 +2,22 @@ import argparse
 import hail as hl
 import logging
 from ukbb_qc.resources.basics import (
-    array_mt_path, array_sample_map_ht_path, 
-    get_array_data_path, get_checkpoint_path, get_ukbb_data
-    )
-from ukbb_qc.resources.sample_qc import array_variant_concordance_path, array_sample_concordance_path
+    array_mt_path,
+    array_sample_map_ht_path,
+    get_array_data_path,
+    get_checkpoint_path,
+    get_ukbb_data,
+)
+from ukbb_qc.resources.sample_qc import (
+    array_variant_concordance_path,
+    array_sample_concordance_path,
+)
 from gnomad_hail.utils.slack import try_slack
-from gnomad_hail.utils.liftover import get_liftover_genome, lift_data, annotate_snp_mismatch
+from gnomad_hail.utils.liftover import (
+    get_liftover_genome,
+    lift_data,
+    annotate_snp_mismatch,
+)
 from ukbb_qc.utils.utils import annotate_interval_qc_filter, remove_hard_filter_samples
 
 
@@ -18,7 +28,7 @@ logger.setLevel(logging.INFO)
 
 def prepare_array_and_exome_mt(
     data_source, freeze, array_mt, exome_mt, call_rate_cutoff, af_cutoff
-    ) -> hl.MatrixTable, hl.MatrixTable:
+) -> hl.MatrixTable, hl.MatrixTable:
     """
     Prepares array and exome MatrixTables for concordance. 
     Maps array to exome IDs and filters to high callrate, common sites.
@@ -46,16 +56,14 @@ def prepare_array_and_exome_mt(
         f"Total number of IDs in the sample map that are also in the array data: {exome_array_count}..."
     )
 
-    # Get high callrate, common sites in autosomes only from tranche 2/freeze 5 
+    # Get high callrate, common sites in autosomes only from tranche 2/freeze 5
     # NOTE: Filter to autosomes because of adjusted sex ploidies in hardcalls mt (hail throws ploidy 0 error)
     sites_ht = get_sites(af_cutoff, call_rate_cutoff)
 
     # Filter array and exome mt to sites from tranche 2 and return
     exome_mt = exome_mt.filter_rows(hl.is_defined(sites_ht[exome_mt.row_key]))
     exome_mt = exome_mt.annotate_entries(
-        GT=hl.experimental.lgt_to_gt(
-            exome_mt.LGT, exome_mt.LA
-        )
+        GT=hl.experimental.lgt_to_gt(exome_mt.LGT, exome_mt.LA)
     )
     array_mt = array_mt.filter_rows(hl.is_defined(sites_ht[array_mt.row_key]))
     return array_mt, exome_mt
@@ -63,7 +71,7 @@ def prepare_array_and_exome_mt(
 
 def get_array_exome_concordance(
     array_mt: hl.MatrixTable, exome_mt: hl.MatrixTable
-    ) -> hl.Table, hl.Table:
+) -> hl.Table, hl.Table:
     """
     Runs concordance on input array and exome MatrixTables.
     Returns both sample and variant concordance Tables.
@@ -174,7 +182,7 @@ def main(args):
             data_type=None,
             path=array_mt_path(liftover=True, checkpoint=True),
             rg=target,
-            overwrite=overwrite
+            overwrite=overwrite,
         )
 
         logger.info("Checking SNPs for reference mismatches")
@@ -209,18 +217,18 @@ def main(args):
                 data_source,
                 freeze,
                 name=f"exome_subset_concordance_callrate_{call_rate_cutoff}_af_{af_cutoff}",
-                mt=True
+                mt=True,
             ),
-            overwrite=overwrite
+            overwrite=overwrite,
         )
         array_mt = array_mt.checkpoint(
             get_checkpoint_path(
                 data_source,
                 freeze,
                 name=f"array_subset_concordance_callrate_{call_rate_cutoff}_af_{af_cutoff}",
-                mt=True
+                mt=True,
             ),
-            overwrite=overwrite
+            overwrite=overwrite,
         )
 
         samples, variants = get_array_exome_concordance(array_mt, exome_mt)
@@ -246,7 +254,7 @@ if __name__ == "__main__":
         "-o",
         "--overwrite",
         help="Overwrite all data from this subset (default: False)",
-        action="store_true"
+        action="store_true",
     )
     parser.add_argument(
         "--slack_channel", help="Slack channel to post results and notifications to."
@@ -262,7 +270,7 @@ if __name__ == "__main__":
         "-l",
         "--liftover_arrays",
         help="Liftover array Matrix Table to GRCh38",
-        action="store_true"
+        action="store_true",
     )
 
     concordance = parser.add_argument_group("Compute array concordance with exomes")
@@ -271,7 +279,7 @@ if __name__ == "__main__":
         "--data_source",
         help="Data source",
         choices=["regeneron", "broad"],
-        default="broad"
+        default="broad",
     )
     concordance.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
@@ -280,7 +288,7 @@ if __name__ == "__main__":
         "-c",
         "--array_concordance",
         help="Compute array concordance",
-        action="store_true"
+        action="store_true",
     )
     concordance.add_argument(
         "--call_rate_cutoff", help="Call rate cutoff.", type=float, default=0.95
@@ -294,13 +302,13 @@ if __name__ == "__main__":
     concordance.add_argument(
         "--interval_qc_filter",
         help="Should interval QC be applied",
-        action="store_true"
+        action="store_true",
     )
     concordance.add_argument(
         "--pct_samples_20x",
         help="Percent samples at 20X to filter intervals",
         default=0.85,
-        type=float
+        type=float,
     )
 
     args = parser.parse_args()
