@@ -98,6 +98,28 @@ def qc_mt_path(
     return f"{sample_qc_path(data_source, freeze)}/qc_data/high_callrate_common_biallelic_snps{ld_pruned}.mt"
 
 
+def get_qc_mt(
+    data_source: str, freeze: int = CURRENT_FREEZE, ld_pruned: bool = False
+) -> hl.MatrixTable:
+    """
+    Returns MatrixTable filtered to high callrate, common, biallelc snps for sample QC purposes
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of data freezes
+    :param bool ld_pruned: Whether to return the LD pruned version of the MatrixTable
+    :return: MatrixTable for sample QC purposes
+    :rtype: hl.MatrixTable
+    """
+    mt = hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned))
+    mt = mt.annotate_rows(
+        lowqual=get_lowqual_expr(
+            mt.alleles, mt.info.QUALapprox, indel_phred_het_prior=40
+        )
+    )
+    mt = mt.filter_rows(~mt.lowqual)
+    return mt
+
+
 def qc_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
     Returns path to Table for sample QC purposes (specifically, relatedness checks)

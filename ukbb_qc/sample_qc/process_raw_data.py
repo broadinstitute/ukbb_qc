@@ -146,7 +146,7 @@ def main(args):
             overwrite=True,
         )
         logger.info(
-            "Adding info annotations, filtering low QUAL variants, and filtering to adj..."
+            "Adding info and low QUAL annotations and filtering to adj..."
         )
         # NOTE: Need MQ, QD, FS for hard filters
         info_expr = get_site_info_expr(mt)
@@ -157,7 +157,6 @@ def main(args):
                 mt.alleles, mt.info.QUALapprox, indel_phred_het_prior=40
             )
         )
-        mt = mt.filter_rows(~mt.lowqual)
         mt = filter_to_adj(mt)
 
         logger.info("Checkpointing MT...")
