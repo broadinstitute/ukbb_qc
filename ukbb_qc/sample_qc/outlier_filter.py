@@ -103,7 +103,7 @@ def main(args):
         logger.info(f"mt count post interval filtering: {mt.count()}")
 
         logger.info("Filtering samples that fail hard filters...")
-        mt = remove_hard_filter_samples(data_source, freeze, mt, non_refs_only=False)
+        mt = remove_hard_filter_samples(data_source, freeze, mt)
         logger.info(f"mt count post filtering: {mt.count()}")
 
         logger.info(
