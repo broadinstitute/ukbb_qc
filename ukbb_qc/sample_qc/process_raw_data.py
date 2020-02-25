@@ -293,12 +293,6 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--densified_partitions",
-        help="Desired number of partitions for densified MatrixTable",
-        default=25000,
-        type=int,
-    )
-    parser.add_argument(
         "--n_partitions",
         help="Desired number of partitions for output Table/MatrixTable",
         default=5000,
