@@ -5,18 +5,24 @@ from ukbb_qc.load_data.utils import import_phenotype_ht
 from ukbb_qc.resources.basics import array_sample_map_ht_path, phenotype_ht_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import (
-                                ancestry_hybrid_ht_path, array_sample_concordance_path,
-                                duplicates_ht_path, hard_filters_ht_path,
-                                platform_pca_results_ht_path, platform_pop_outlier_ht_path,
-                                qc_ht_path, related_drop_path
-                                )
+    ancestry_hybrid_ht_path,
+    array_sample_concordance_path,
+    duplicates_ht_path,
+    hard_filters_ht_path,
+    platform_pca_results_ht_path,
+    platform_pop_outlier_ht_path,
+    qc_ht_path,
+    related_drop_path,
+)
 from ukbb_qc.utils.utils import join_tables
 
 
-logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt="%m/%d/%Y %I:%M:%S %p")
+logging.basicConfig(
+    format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
+    datefmt="%m/%d/%Y %I:%M:%S %p",
+)
 logger = logging.getLogger("create_meta_ht")
 logger.setLevel(logging.INFO)
-
 
 
 def get_age_ht(data_source: str, freeze: int) -> hl.Table:
@@ -81,10 +87,13 @@ def main(args):
 
     logger.info("Getting age information from phenotype file")
     right_ht = get_age_ht(data_source, freeze)
-    left_ht = join_tables(left_ht, "s", right_ht, "s", "left") 
+    left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
 
     logger.info("Creating checkpoint")
-    left_ht = left_ht.checkpoint(get_ht_checkpoint_path(data_source, freeze, "intermediate_ht_join"), overwrite=True)
+    left_ht = left_ht.checkpoint(
+        get_ht_checkpoint_path(data_source, freeze, "intermediate_ht_join"),
+        overwrite=True,
+    )
 
     logger.info("Reading in array sample concordance ht")
     right_ht = hl.read_table(array_sample_concordance_path(data_source, freeze))
@@ -107,23 +116,30 @@ def main(args):
         related_samples_to_drop_ht.relationship == "2nd degree relatives"
     )
     related_samples_to_drop_first_ht = related_samples_to_drop_ht.filter(
-        related_samples_to_drop_ht.relationship == "Parent-child" |
-        related_samples_to_drop_ht.relationship == "Siblings"
+        related_samples_to_drop_ht.relationship
+        == "Parent-child" | related_samples_to_drop_ht.relationship
+        == "Siblings"
     )
     related_samples_to_drop_dup_ht = related_samples_to_drop_ht.filter(
         related_samples_to_drop_ht.relationship == "Duplicate/twins"
     )
-    
+
     logger.info("Annotating meta ht with related samples")
-    left_ht = left_ht.annotate(related_filter=hl.is_defined(related_samples_to_drop_second_ht[left_ht.s]))
-    left_ht = left_ht.annotate(related_dup_filter=hl.is_defined(related_samples_to_drop_dup_ht[left_ht.s]))
-    left_ht = left_ht.annotate(related_first_filter=hl.is_defined(related_samples_to_drop_first_ht[left_ht.s]))
-    left_ht = left_ht.annotate_globals(
-        **related_samples_to_drop_ht.globals
+    left_ht = left_ht.annotate(
+        related_filter=hl.is_defined(related_samples_to_drop_second_ht[left_ht.s])
     )
-   
+    left_ht = left_ht.annotate(
+        related_dup_filter=hl.is_defined(related_samples_to_drop_dup_ht[left_ht.s])
+    )
+    left_ht = left_ht.annotate(
+        related_first_filter=hl.is_defined(related_samples_to_drop_first_ht[left_ht.s])
+    )
+    left_ht = left_ht.annotate_globals(**related_samples_to_drop_ht.globals)
+
     logger.info("Reading in outlier ht")
-    right_ht = hl.read_table(platform_pop_outlier_ht_path(data_source, freeze, args.pop_assignment_method))
+    right_ht = hl.read_table(
+        platform_pop_outlier_ht_path(data_source, freeze, args.pop_assignment_method)
+    )
 
     logger.info("Joining outlier ht to current join")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
@@ -131,16 +147,15 @@ def main(args):
     logger.info("Annotating high_quality field")
     left_ht = left_ht.annotate(
         high_quality=(
-            (hl.len(left_ht.hard_filters) == 0) &
-            (hl.len(left_ht.qc_metrics_filters) == 0)
+            (hl.len(left_ht.hard_filters) == 0)
+            & (hl.len(left_ht.qc_metrics_filters) == 0)
         )
     )
 
     logger.info("Annotating releasable field")
     left_ht = left_ht.annotate(
         release=hl.if_else(
-            (left_ht.s.contains("UKB") & left_ht.high_quality), 
-            True, False
+            (left_ht.s.contains("UKB") & left_ht.high_quality), True, False
         )
     )
     logger.info(
@@ -151,27 +166,41 @@ def main(args):
     logger.info("Writing out meta ht")
     left_ht.write(meta_ht_path(data_source, freeze), overwrite=args.overwrite)
     logger.info(f"Final count: {left_ht.count()}")
-    logger.info("Complete") 
+    logger.info("Complete")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="This script applies hard filters to UKBB data")
+    parser = argparse.ArgumentParser(
+        description="This script applies hard filters to UKBB data"
+    )
     parser.add_argument(
-        "-s", "--data_source", help="Data source", 
-        choices=["regeneron", "broad"], default="broad"
+        "-s",
+        "--data_source",
+        help="Data source",
+        choices=["regeneron", "broad"],
+        default="broad",
     )
     parser.add_argument(
         "-f", "--freeze", help="Current freeze #", default=CURRENT_FREEZE, type=int
     )
     parser.add_argument(
-        "-d", "--dup_sets", help="Dup sets for duplicate ht table", action="store_true", default=False
+        "-d",
+        "--dup_sets",
+        help="Dup sets for duplicate ht table",
+        action="store_true",
+        default=False,
     )
     parser.add_argument(
-        "--pop_assignment_method", help="Population assignment method to use for outlier stratification",
-        default="hybrid_pop", choices=["gnomad_pc_project_pop","HDBSCAN_pop_cluster","hybrid_pop"]
+        "--pop_assignment_method",
+        help="Population assignment method to use for outlier stratification",
+        default="hybrid_pop",
+        choices=["gnomad_pc_project_pop", "HDBSCAN_pop_cluster", "hybrid_pop"],
     )
     parser.add_argument(
-        "-o", "--overwrite", help="Overwrite all data from this subset (default: False)", action="store_true"
+        "-o",
+        "--overwrite",
+        help="Overwrite all data from this subset (default: False)",
+        action="store_true",
     )
     args = parser.parse_args()
 

@@ -6,12 +6,17 @@ from gnomad_hail.utils.sparse_mt import densify_sites
 from ukbb_qc.resources.sample_qc import densified_interval_qc_path
 
 
-logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt="%m/%d/%Y %I:%M:%S %p")
+logging.basicConfig(
+    format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
+    datefmt="%m/%d/%Y %I:%M:%S %p",
+)
 logger = logging.getLogger("apply_hard_filters")
 logger.setLevel(logging.INFO)
 
 
-def apply_hard_filters_expr(ht: hl.Table, min_callrate: float, min_depth: float) -> hl.Table:
+def apply_hard_filters_expr(
+    ht: hl.Table, min_callrate: float, min_depth: float
+) -> hl.Table:
     """
     Creates hard filters expression and annotates Table with expression (creates hard_filters column).
 
@@ -21,7 +26,7 @@ def apply_hard_filters_expr(ht: hl.Table, min_callrate: float, min_depth: float)
     :return: Table with hard_filters column
     :rtype: Table
     """
-    
+
     # the default coverage/depth cutoffs were set visually using plots:
     # p = hl.plot.histogram(mt.sample_qc.dp_stats.mean, range=(10,120), legend="Mean Sample DP")
     # p = hl.plot.histogram(mt.sample_qc.call_rate, range=(0.991, 0.997), legend="Mean Sample Callrate")
@@ -31,12 +36,12 @@ def apply_hard_filters_expr(ht: hl.Table, min_callrate: float, min_depth: float)
 
     hard_filters = {
         # we don"t have contamination/chimera for regeneron vcf
-        #"contamination": ht.freemix > 0.05,
-        #"chimera": ht.pct_chimeras > 0.05,
+        # "contamination": ht.freemix > 0.05,
+        # "chimera": ht.pct_chimeras > 0.05,
         "low_callrate": ht.raw_sample_qc.call_rate < min_callrate,
         "ambiguous_sex": ht.sex == "ambiguous_sex",
         "sex_aneuploidy": ht.sex == "sex_aneuploidy",
-        "low_coverage": ht.raw_sample_qc.dp_stats.mean < min_depth
+        "low_coverage": ht.raw_sample_qc.dp_stats.mean < min_depth,
     }
 
     ht = ht.annotate(hard_filters=add_filters_expr(hard_filters, None))
@@ -44,12 +49,16 @@ def apply_hard_filters_expr(ht: hl.Table, min_callrate: float, min_depth: float)
 
 
 def hard_filter_samples(
-    data_source: str, freeze: int,
-    mt: hl.MatrixTable, interval_qc_ht: hl.Table,
-    last_END_ht: hl.Table, sex_ht: hl.Table,
-    min_callrate: float, min_depth: float,
-    n_partitions: int
-    ) -> hl.Table:
+    data_source: str,
+    freeze: int,
+    mt: hl.MatrixTable,
+    interval_qc_ht: hl.Table,
+    last_END_ht: hl.Table,
+    sex_ht: hl.Table,
+    min_callrate: float,
+    min_depth: float,
+    n_partitions: int,
+) -> hl.Table:
     """
     Applys hard filters to samples and returns Table with samples and their hard filter status.
 
@@ -67,21 +76,16 @@ def hard_filter_samples(
     """
 
     logger.info("Densifying sites...")
-    mt = densify_sites(
-        mt, interval_qc_ht, last_END_ht
-    )
+    mt = densify_sites(mt, interval_qc_ht, last_END_ht)
 
     logger.info("Checkpointing densified MT")
-    mt = mt.checkpoint(
-        densified_interval_qc_path(data_source, freeze),
-        overwrite=True
-    )
+    mt = mt.checkpoint(densified_interval_qc_path(data_source, freeze), overwrite=True)
 
     logger.info("Repartitioning densified MT")
-        mt = mt.naive_coalesce(n_partitions)
-        mt = mt.checkpoint(
-            ensified_interval_qc_path(data_source, freeze, repartitioned=True),
-            overwrite=True,
+    mt = mt.naive_coalesce(n_partitions)
+    mt = mt.checkpoint(
+        densified_interval_qc_path(data_source, freeze, repartitioned=True),
+        overwrite=True,
     )
 
     logger.info("Adding sex imputation annotations...")
@@ -90,13 +94,12 @@ def hard_filter_samples(
     logger.info("Computing raw sample QC metrics...")
     mt = mt.key_rows_by("locus", "alleles")
     mt = hl.sample_qc(mt)
-    ht = mt.transmute_cols(raw_sample_qc=mt.sample_qc.select("call_rate", "gq_stats", "dp_stats")).cols()
+    ht = mt.transmute_cols(
+        raw_sample_qc=mt.sample_qc.select("call_rate", "gq_stats", "dp_stats")
+    ).cols()
     ht = ht.checkpoint(
-        get_checkpoint_path(
-            data_source, freeze,
-            name="interval_qc_sample_qc"
-            ),
-        overwrite=True
+        get_checkpoint_path(data_source, freeze, name="interval_qc_sample_qc"),
+        overwrite=True,
     )
 
     logger.info("Applying hard filters and writing out hard filters HT...")
