@@ -13,6 +13,7 @@ from gnomad_hail.utils.slack import try_slack
 from ukbb_qc.resources.basics import capture_ht_path, get_ukbb_data
 from ukbb_qc.resources.sample_qc import (
     callrate_mt_path,
+    interval_qc_path,
     platform_pca_loadings_ht_path,
     platform_pca_results_ht_path,
     platform_pca_scores_ht_path,
@@ -48,16 +49,16 @@ def main(args):
             )
 
         else:
-            logger.info(
-                "Reading in densified MT (created when running hard filters)..."
+            intervals = hl.read_table(interval_qc_path(data_source, freeze, "autosomes"))
+            mt = get_ukbb_data(data_source, freeze, adj=True)
+            logger.info(f"Input MatrixTable (hardcalls) count: {mt.count()}")
+
+            logger.info("Densifying sites...")
+            mt = densify_sites(
+                mt,
+                intervals,
+                hl.read_table(last_END_positions_ht_path(data_source, freeze)),
             )
-            intervals = hl.read_table(
-                interval_qc_path(data_source, freeze, "autosomes")
-            )
-            mt = hl.read_matrix_table(
-                densified_interval_qc_path(data_source, freeze, repartitioned=True)
-            )
-            logger.info(f"Input MatrixTable count: {mt.count()}")
 
         logger.info("Removing hard filtered samples...")
         mt = remove_hard_filter_samples(data_source, freeze, mt)
