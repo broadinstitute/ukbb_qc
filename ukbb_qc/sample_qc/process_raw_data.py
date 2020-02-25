@@ -98,7 +98,7 @@ def main(args):
             last_END_ht,
             sex_ht,
             args.min_callrate,
-            args.min_dp
+            args.min_dp,
         )
         ht = ht.naive_coalesce(args.n_partitions)
         ht = ht.checkpoint(
@@ -115,8 +115,9 @@ def main(args):
         mt = get_ukbb_data(
             data_source, freeze, raw=True, adj=False, key_by_locus_and_alleles=True
         )
-        mt = mt.annotate_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
-        mt = mt.select_entries("DP", "END", "GT")
+        mt = mt.select_entries(
+            "DP", GT=mt.LGT, adj=get_adj_expr(mt.LGT, mt.GQ, mt.DP, mt.LAD)
+        )
         logger.info(
             f"Total number of variants in raw unsplit matrix table: {mt.count_rows()}"
         )
