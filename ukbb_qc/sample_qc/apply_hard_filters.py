@@ -3,7 +3,6 @@ import hail as hl
 import logging
 from gnomad_hail.utils.sample_qc import add_filters_expr
 from gnomad_hail.utils.sparse_mt import densify_sites
-from ukbb_qc.resources.sample_qc import densified_interval_qc_path
 
 
 logging.basicConfig(
@@ -56,8 +55,7 @@ def hard_filter_samples(
     last_END_ht: hl.Table,
     sex_ht: hl.Table,
     min_callrate: float,
-    min_depth: float,
-    n_partitions: int,
+    min_depth: float
 ) -> hl.Table:
     """
     Applys hard filters to samples and returns Table with samples and their hard filter status.
@@ -70,23 +68,12 @@ def hard_filter_samples(
     :param Table sex_ht: Table with samples and their inferred sex
     :param float min_callrate: Callrate threshold to be used to filter samples; default is 0.99
     :param float min_depth: Mean depth threshold to be used to filter samples; default is 20.0
-    :param int n_partitions: Number of partitions for densified MatrixTable
     :return: Table with samples and their hard filter status
     :rtype: hl.Table
     """
 
     logger.info("Densifying sites...")
     mt = densify_sites(mt, interval_qc_ht, last_END_ht)
-
-    logger.info("Checkpointing densified MT")
-    mt = mt.checkpoint(densified_interval_qc_path(data_source, freeze), overwrite=True)
-
-    logger.info("Repartitioning densified MT")
-    mt = mt.naive_coalesce(n_partitions)
-    mt = mt.checkpoint(
-        densified_interval_qc_path(data_source, freeze, repartitioned=True),
-        overwrite=True,
-    )
 
     logger.info("Adding sex imputation annotations...")
     mt = mt.annotate_cols(**sex_ht[mt.col_key])
@@ -104,5 +91,4 @@ def hard_filter_samples(
 
     logger.info("Applying hard filters and writing out hard filters HT...")
     ht = apply_hard_filters_expr(ht, min_callrate, min_depth)
-    ht = ht.naive_coalesce(n_partitions)
     return ht
