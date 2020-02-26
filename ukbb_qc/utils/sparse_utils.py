@@ -18,9 +18,10 @@ def compute_callrate_dp_mt(
     match: bool = True,
 ) -> None:
     """
-    Computes sample n_defined and n_count (inputs to callrate) and mean depth per interval.
-    Mean depth annotation is used during interval QC.
-    Callrate annotations are used during platform PCA.
+    Computes sample metrics (n_defined, n_count, mean_dp, pct_gt_20x, pct_dp_defined) per interval. 
+    Mean depth, pct_gt_20x, and pct_dp_defined annotations are used during interval QC.
+    Mean depth and callrate annotations (mean_dp, n_defined, n_count) are used during hard filtering.
+    Callrate annotations (n_defined, n_count) are also used during platform PCA.
     Writes call rate mt (aggregated MatrixTable) keyed by intervals row-wise and samples column-wise.
     NOTE: This function requires a densify! Please use an autoscaling cluster.
 
