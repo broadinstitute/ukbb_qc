@@ -18,10 +18,10 @@ def compute_callrate_dp_mt(
     match: bool = True,
 ) -> None:
     """
-    Computes sample metrics (n_defined, n_count, mean_dp, pct_gt_20x, pct_dp_defined) per interval. 
+    Computes sample metrics (n_defined, total, mean_dp, pct_gt_20x, pct_dp_defined) per interval. 
     Mean depth, pct_gt_20x, and pct_dp_defined annotations are used during interval QC.
-    Mean depth and callrate annotations (mean_dp, n_defined, n_count) are used during hard filtering.
-    Callrate annotations (n_defined, n_count) are also used during platform PCA.
+    Mean depth and callrate annotations (mean_dp, n_defined, total) are used during hard filtering.
+    Callrate annotations (n_defined, total) are also used during platform PCA.
     Writes call rate mt (aggregated MatrixTable) keyed by intervals row-wise and samples column-wise.
     NOTE: This function requires a densify! Please use an autoscaling cluster.
 
@@ -66,9 +66,9 @@ def compute_callrate_dp_mt(
         mt = mt.explode_rows("interval")
 
     logger.info(
-        "Grouping MT by interval and calculating n_defined, n_count, and mean_dp..."
+        "Grouping MT by interval and calculating n_defined, total, and mean_dp..."
     )
-    mt = mt.group_rows_by(**_mt._interval_key).aggregate(
+    mt = mt.group_rows_by(**mt.interval).aggregate(
         n_defined=hl.agg.count_where(hl.is_defined(mt.GT)),
         count=hl.agg.count(),
         mean_dp=hl.agg.mean(hl.if_else(hl.is_defined(mt.DP), mt.DP, 0)),
