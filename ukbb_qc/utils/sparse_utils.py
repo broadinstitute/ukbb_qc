@@ -41,6 +41,8 @@ def compute_callrate_dp_mt(
             f"Call rate matrix computation expects `intervals_ht` with a key of type Interval. Found: {intervals_ht.key}"
         )
     logger.info("Densifying...")
+    mt = mt.annotate_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
+    mt = mt.drop("gvcf_info")
     mt = hl.experimental.densify(mt)
 
     logger.info(
