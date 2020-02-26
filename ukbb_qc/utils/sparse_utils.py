@@ -72,9 +72,9 @@ def compute_callrate_dp_mt(
         GT=hl.or_missing(hl.is_defined(mt.GT), hl.struct()),
         DP=hl.if_else(hl.is_defined(mt.DP), mt.DP, 0)
     )
-    mt = mt.group_rows_by(**mt.interval).aggregate(
+    mt = mt.group_rows_by(mt.interval).aggregate(
         n_defined=hl.agg.count_where(hl.is_defined(mt.GT)),
-        count=hl.agg.count(),
+        total=hl.agg.count(),
         mean_dp=hl.agg.mean(mt.DP),
         pct_gt_20x=hl.agg.fraction(mt.DP >= 20),
         pct_dp_defined=hl.agg.count_where(mt.DP > 0) / hl.agg.count()
