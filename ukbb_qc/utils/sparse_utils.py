@@ -21,7 +21,7 @@ def compute_callrate_dp_mt(
     Computes sample n_defined and n_count (inputs to callrate) and mean depth per interval.
     Mean depth annotation is used during interval QC.
     Callrate annotations are used during platform PCA.
-    Writes call rate mt (Grouped MatrixTable) keyed by intervals row-wise and samples column-wise.
+    Writes call rate mt (aggregated MatrixTable) keyed by intervals row-wise and samples column-wise.
     NOTE: This function requires a densify! Please use an autoscaling cluster.
 
     :param data_source: One of 'regeneron' or 'broad'
@@ -71,6 +71,8 @@ def compute_callrate_dp_mt(
         n_defined=hl.agg.count_where(hl.is_defined(mt.GT)),
         count=hl.agg.count(),
         mean_dp=hl.agg.mean(hl.if_else(hl.is_defined(mt.DP), mt.DP, 0)),
+        pct_gt_20x=hl.agg.fraction(hl.if_else(hl.is_defined(mt.DP), mt.DP, 0) >= 20),
+        pct_dp_defined=hl.agg.count_where(hl.is_defined(mt.DP)) / hl.agg.count()
     )
     mt.write(callrate_mt_path(data_source, freeze, interval_filtered=False))
 
