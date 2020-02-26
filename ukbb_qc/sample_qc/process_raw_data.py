@@ -7,9 +7,10 @@ from gnomad_hail.utils.sample_qc import get_qc_mt
 from gnomad_hail.utils.sparse_mt import compute_last_ref_block_end, densify_sites
 from ukbb_qc.resources.basics import get_checkpoint_path, get_ukbb_data
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
-from ukbb_qc.resources.sample_qc import array_sample_map_ht_path, interval_qc_path, qc_mt_path
+from ukbb_qc.resources.sample_qc import (array_sample_map_ht_path, callrate_mt_path, interval_qc_path, qc_mt_path)
 from ukbb_qc.resources.variant_qc import get_truth_sample_info
 from ukbb_qc.sample_qc.apply_hard_filters import hard_filter_samples
+from ukbb_qc.utils.sparse_utils import compute_callrate_dp_mt
 from ukbb_qc.utils.utils import annotate_interval_qc_filter, get_qc_mt_sites
 
 
@@ -65,37 +66,34 @@ def main(args):
         last_END_positions_ht.write(last_END_positions_ht_path(data_source, freeze))
 
     if args.apply_hard_filters:
-        logger.info("Reading in raw MT...")
-        mt = get_ukbb_data(
-            data_source, freeze, raw=True, adj=False, key_by_locus_and_alleles=True
-        )
-        mt = mt.annotate_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
-        mt = mt.select_entries("DP", "END", "GT")
-        logger.info(
-            f"Total number of variants in raw unsplit matrix table: {mt.count_rows()}"
-        )
 
-        last_END_ht = hl.read_table(last_END_positions_ht_path(data_source, freeze))
+        # NOTE: this function will densify
+        if args.compute_callrate_mt:
+            logger.info("Reading in raw MT...")
+            mt = get_ukbb_data(
+                data_source, freeze, raw=True, adj=False, key_by_locus_and_alleles=True
+            )
+            logger.info(
+                f"Total number of variants in raw unsplit matrix table: {mt.count_rows()}"
+            )
+            compute_callrate_dp_mt(data_source, freeze, mt)
+
+        logger.info("Reading in callrate MT, sex ht, interval qc HT...")
+        callrate_mt = hl.read_matrix_table(callrate_mt_path(data_source, freeze, interval_filtered=False))
         sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
         interval_qc_ht = hl.read_table(
             interval_qc_path(data_source, freeze, "autosomes")
         )
-        intervals_qc_ht = interval_qc_ht.filter(
+        interval_qc_ht = interval_qc_ht.filter(
             interval_qc_ht[args.cov_filter_field] > args.pct_samples
         )
 
-        # Rename interval so that there are no name collisions when calling densify_sites
-        intervals_qc_ht = interval_qc_ht.key_by()
-        intervals_qc_ht = interval_qc_ht.transmute(
-            qc_interval=interval_qc.interval
-        ).key_by("qc_interval")
-
+        logger.info("Hard filtering samples...")
         hard_filters_ht = hard_filter_samples(
             data_source,
             freeze,
             mt,
             interval_qc_ht,
-            last_END_ht,
             sex_ht,
             args.min_callrate,
             args.min_dp,
@@ -251,7 +249,12 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--apply_hard_filters".help="Apply hard filters to samples", aciton="store_true"
+        "--apply_hard_filters".help="Apply hard filters to samples", action="store_true"
+    )
+    parser.add_argument(
+        "--compute_callrate_mt",
+        help="Computes an interval by sample mt of callrate and depth that will be for hard filtering samples",
+        action="store_true",
     )
     parser.add_argument("--min-dp", help="Minimum depth", default=20.0, type=float)
     parser.add_argument(
@@ -275,6 +278,11 @@ if __name__ == "__main__":
         help="Minimum variant allele frequency to retain variant in qc matrix table.",
         default=0.001,
         type=float,
+    )
+    parser.add_argument(
+        "--cov_filter_field",
+        help="Coverage field to use to filter high coverage intervals",
+        default="pct_samples_20x",
     )
     parser.add_argument(
         "--pct_samples_20x",
