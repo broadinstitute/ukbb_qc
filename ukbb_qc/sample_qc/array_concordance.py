@@ -83,48 +83,27 @@ def get_array_exome_concordance(
     """
     summary, samples, variants = hl.concordance(array_mt, exome_mt)
     variants = variants.annotate(
-        num_gt_con=(
-            variants.concordance[2][2]
-            + variants.concordance[3][3]
-            + variants.concordance[4][4]
-        ),
-        num_gt=(
-            hl.sum(variants.concordance[2][2:])
-            + hl.sum(variants.concordance[3][2:])
-            + hl.sum(variants.concordance[4][2:])
-        ),
-        num_gt_con_non_ref=(variants.concordance[3][3] + variants.concordance[4][4]),
+        num_gt_con_non_ref=(variants.concor
+            dance[3][3] + variants.concordance[4][4]),
         num_gt_non_ref=(
             hl.sum(variants.concordance[2][3:])
             + hl.sum(variants.concordance[3][2:])
             + hl.sum(variants.concordance[4][2:])
-        ),
+        )
     )
     variants = variants.annotate(
-        prop_gt_con=variants.num_gt_con / variants.num_gt,
-        prop_gt_con_non_ref=variants.num_gt_con_non_ref / variants.num_gt_non_ref,
+        prop_gt_con_non_ref=variants.num_gt_con_non_ref / variants.num_gt_non_ref
     )
     samples = samples.annotate(
-        num_gt_con=(
-            samples.concordance[2][2]
-            + samples.concordance[3][3]
-            + samples.concordance[4][4]
-        ),
-        num_gt=(
-            hl.sum(samples.concordance[2][2:])
-            + hl.sum(samples.concordance[3][2:])
-            + hl.sum(samples.concordance[4][2:])
-        ),
         num_gt_con_non_ref=(samples.concordance[3][3] + samples.concordance[4][4]),
         num_gt_non_ref=(
             hl.sum(samples.concordance[2][3:])
             + hl.sum(samples.concordance[3][2:])
             + hl.sum(samples.concordance[4][2:])
-        ),
+        )
     )
     samples = samples.annotate(
-        prop_gt_con=samples.num_gt_con / samples.num_gt,
-        prop_gt_con_non_ref=samples.num_gt_con_non_ref / samples.num_gt_non_ref,
+        prop_gt_con_non_ref=samples.num_gt_con_non_ref / samples.num_gt_non_ref
     )
 
     return samples, variants
