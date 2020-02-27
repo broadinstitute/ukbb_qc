@@ -76,6 +76,7 @@ def compute_callrate_dp_mt(
         n_defined=hl.agg.count_where(hl.is_defined(mt.GT)),
         total=hl.agg.count(),
         dp_sum=hl.agg.sum(mt.DP),
+        mean_dp=hl.agg.mean(mt.DP),
         pct_gt_20x=hl.agg.fraction(mt.DP >= 20),
         pct_dp_defined=hl.agg.count_where(mt.DP > 0) / hl.agg.count()
     )
