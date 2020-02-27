@@ -92,7 +92,7 @@ def main(args):
         hard_filters_ht = hard_filter_samples(
             data_source,
             freeze,
-            mt,
+            callrate_mt,
             interval_qc_ht,
             sex_ht,
             args.min_callrate,
