@@ -10,7 +10,7 @@ from ukbb_qc.resources.basics import (
     get_ukbb_data,
 )
 from ukbb_qc.resources.sample_qc import interval_qc_path, sex_ht_path
-from typing import Optional
+from ukbb_qc.utils.sparse_utils import compute_callrate_dp_mt
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -19,42 +19,19 @@ logger.setLevel(logging.INFO)
 
 
 def interval_qc(
-    mt: hl.MatrixTable,
-    interval_ht: hl.Table,
+    target_mt: hl.MatrixTable,
     split_by_sex: bool = False,
-    mt_n_partitions: int = 5000,
-    ht_n_partitions: int = 100,
-    checkpoint_path: Optional[str] = None,
+    ht_n_partitions: int = 100
 ) -> hl.Table:
     """
     Determines the percent of samples reaching 10x, 15x, 20x, 25x, and 30x mean coverage in each interval
 
-    :param MatrixTable mt: Matrix table to use for interval QC
-    :param Table interval_ht: Table containing the intervals that interval QC is performed over
+    :param MatrixTable target_mt: Input MatrixTable for interval QC, output by compute_callrate_dp_mt. Annotated with interval. 
     :param bool split_by_sex: Whether the interval QC should be stratified by sex. if True, mt must be annotated with sex_karyotype.
-    :param int mt_n_partitions: Number of desired partitions for intermediate MatrixTable
     :param int ht_n_partitions: Number of desired partitions for output Table
-    :param str checkpoint_path: Optional path to a file to checkpoint the mean_dp per sample across each interval MT
-    :return: Table with percent samples with coverage at 10x, 15x, 20x, 25x, and 30x coverage
+    :return: Table with mean DP and percent samples with coverage at 10x, 15x, 20x, 25x, 30x across target.
     :rtype: Table
     """
-
-    interval_ht = interval_ht.annotate(interval_label=interval_ht.interval)
-
-    mt = mt.annotate_rows(interval=interval_ht[mt.locus].interval_label)
-
-    target_mt = (
-        mt.group_rows_by(mt.interval)
-        .aggregate_entries(
-            mean_dp=hl.agg.mean(hl.if_else(hl.is_defined(mt.DP), mt.DP, 0),),
-            pct_gt_20x=hl.agg.fraction(hl.cond(hl.is_defined(mt.DP), mt.DP, 0) >= 20),
-            pct_dp_defined=hl.agg.count_where(hl.is_defined(mt.DP)) / hl.agg.count(),
-        )
-        .result()
-    )
-    target_mt = target_mt.naive_coalesce(mt_n_partitions)
-    target_mt = target_mt.checkpoint(checkpoint_path, overwrite=True)
-
     if split_by_sex:
         target_mt = target_mt.annotate_rows(
             target_mean_dp=hl.agg.group_by(
@@ -109,40 +86,34 @@ def main(args):
 
     data_source = args.data_source
     freeze = args.freeze
-    ht = hl.read_table(capture_ht_path(data_source))
 
-    checkpoint_path = get_checkpoint_path(
-        data_source,
-        freeze,
-        name=f"DP_only_checkpoint_interval_qc_broad_freeze{freeze}",
-        mt=True,
-    )
-    if not hl.utils.hadoop_exists(f"{checkpoint_path}/_SUCCESS"):
-        mt = get_ukbb_data(data_source, freeze, raw=True, adj=False, split=False)
-        mt = mt.key_rows_by("locus", "alleles")
-        mt = mt.select_entries("DP", "END", "LGT")
-        mt.write(checkpoint_path, overwrite=True)
+    # NOTE: this function will densify
+    if args.compute_callrate_mt:
+        logger.info("Reading in raw MT...")
+        mt = get_ukbb_data(
+            data_source, freeze, raw=True, adj=False, key_by_locus_and_alleles=True
+        )
+        logger.info(
+            f"Total number of variants in raw unsplit matrix table: {mt.count_rows()}"
+        )
+        capture_ht = hl.read_table(capture_ht_path(data_source))
+        compute_callrate_dp_mt(data_source, freeze, mt, capture_ht, autosomes_only=False)
 
+    logger.info("Reading in call rate MT...")
+    mt = hl.read_matrix_table(callrate_mt_path(data_source, freeze, interval_filtered=False))
     if args.autosomes:
-        mt = rep_on_read(checkpoint_path, args.n_partitions)
-        mt = hl.experimental.densify(mt)
+        logger.info("Filtering to autosomes...")
         mt = filter_to_autosomes(mt)
 
-        target_ht = interval_qc(
-            mt,
-            ht,
-            checkpoint_path=get_checkpoint_path(
-                data_source, freeze, "coverage_by_target_samples", mt=True
-            ),
-        )
+        logger.info("Starting interval QC...")
+        target_ht = interval_qc(mt)
         target_ht.write(
             interval_qc_path(data_source, freeze, "autosomes"),
             overwrite=args.overwrite,
         )
 
     if args.sex_chr:
-        mt = rep_on_read(checkpoint_path, args.n_partitions)
-        mt = hl.experimental.densify(mt)
+        logger.info("Filtering to sex chromosomes...")
         mt = hl.filter_intervals(
             mt,
             [
@@ -150,17 +121,16 @@ def main(args):
                 hl.parse_locus_interval("chrY", reference_genome="GRCh38"),
             ],
         )
+
+        logger.info("Filtering to XX and XY samples...")
         sex_ht = hl.read_table(sex_ht_path(data_source, freeze)).select("sex_karyotype")
         mt = mt.annotate_cols(**sex_ht[mt.col_key])
-        mt.describe()
         mt = mt.filter_cols((mt.sex_karyotype == "XX") | (mt.sex_karyotype == "XY"))
+
+        logger.info("Starting interval QC...")
         target_ht = interval_qc(
             mt,
-            ht,
-            split_by_sex=True,
-            checkpoint_path=get_checkpoint_path(
-                data_source, freeze, "coverage_by_target_samples", mt=True
-            ),
+            split_by_sex=True
         )
         target_ht.write(
             interval_qc_path(data_source, freeze, "sex_chr"), overwrite=args.overwrite,
@@ -169,15 +139,6 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-o",
-        "--overwrite",
-        help="Overwrite all data from this subset (default: False)",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--slack_channel", help="Slack channel to post results and notifications to."
-    )
     parser.add_argument(
         "-s",
         "--data_source",
@@ -192,6 +153,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--n_partitions", help="Desired number of partitions for output", type=int
     )
+
     parser.add_argument(
         "--autosomes",
         action="store_true",
@@ -203,7 +165,20 @@ if __name__ == "__main__":
         action="store_true",
         help="If set it will only run the sex chromosomes",
     )
-
+        parser.add_argument(
+        "--compute_callrate_mt",
+        help="Computes an interval by sample mt of callrate and depth",
+        action="store_true",
+    )
+    parser.add_argument(
+        "-o",
+        "--overwrite",
+        help="Overwrite all data from this subset (default: False)",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--slack_channel", help="Slack channel to post results and notifications to."
+    )
     args = parser.parse_args()
 
     if args.slack_channel:
