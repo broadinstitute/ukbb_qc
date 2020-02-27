@@ -75,11 +75,13 @@ def hard_filter_samples(
     """
     logger.info("Computing callrate and mean DP over high coverage intervals...")
     mt = mt.filter_rows(hl.is_defined(interval_qc_ht[mt.row_key]))
-    mt = mt.annotate_entries(call_rate=mt.n_defined / mt.total)
-
+    ht = mt.annotate_cols(
+        call_rate=hl.agg.sum(mt.n_defined) / hl.agg.sum(mt.total),
+        mean_dp=hl.agg.sum(mt.dp_sum) / hl.agg.sum(mt.total)
+    ).cols()
 
     logger.info("Adding sex imputation annotations...")
-    mt = mt.annotate_cols(sex=sex_ht[mt.col_key].sex_karyotype)
+    ht = ht.annotate(sex=sex_ht[ht.key].sex_karyotype)
 
     ht = ht.checkpoint(
         get_checkpoint_path(data_source, freeze, name="interval_qc_sample_qc"),
@@ -87,7 +89,7 @@ def hard_filter_samples(
     )
 
     logger.info("Applying hard filters and writing out hard filters HT...")
-    ht = ht.annotate_(apply_hard_filters_expr(ht, min_callrate, min_depth))
+    ht = ht.annotate(apply_hard_filters_expr(ht, min_callrate, min_depth))
     ht = ht.annotate(
         hard_filters=add_filters_expr(
             apply_hard_filters_expr(
