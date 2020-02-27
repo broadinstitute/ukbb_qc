@@ -76,7 +76,8 @@ def main(args):
             logger.info(
                 f"Total number of variants in raw unsplit matrix table: {mt.count_rows()}"
             )
-            compute_callrate_dp_mt(data_source, freeze, mt)
+            capture_ht = hl.read_table(capture_ht_path(data_source))
+            compute_callrate_dp_mt(data_source, freeze, mt, capture_ht)
 
         logger.info("Reading in callrate MT, sex ht, interval qc HT...")
         callrate_mt = hl.read_matrix_table(callrate_mt_path(data_source, freeze, interval_filtered=False))
