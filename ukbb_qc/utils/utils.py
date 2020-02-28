@@ -7,7 +7,7 @@ from gnomad_hail.utils.generic import (
     get_reference_genome,
     union_intervals,
 )
-from gnomad_hail.resources.grch38.intervals import lcr
+from gnomad_hail.resources.grch38.reference_data import lcr_intervals
 from ukbb_qc.resources.basics import get_ukbb_data, raw_mt_path
 from ukbb_qc.resources.sample_qc import (
     f_stat_sites_path,
@@ -39,17 +39,18 @@ def compare_samples(ht1: hl.Table, ht2: hl.Table) -> bool:
 
 
 def join_tables(
-    left_ht: hl.Table, left_key: str, right_ht: hl.Table, right_key: str, join_type: str
+    left_ht: hl.Table, right_ht: hl.Table, struct_name: str
 ) -> hl.Table:
     """
-    Joins two tables and returns joined table. Also prints warning if sample counts are not the same.
+    Annotates fields from right Table onto left Table in a struct named struct_name. 
+    Returns left Table with new annotation.
+    Assumes tables have the same key.
+    Also prints warning if sample counts are not the same.
 
-    :param Table left_ht: left Table to be joined
-    :param str left_key: key for left Table
-    :param Table right_ht: right Table to be joined
-    :param str right_key: key for right Table
-    :param str join_type: how to join the tables (left, right, inner, outer)
-    :return: joined Table
+    :param Table left_ht: Table to be annotated
+    :param Table right_ht: Table with annotations to be added
+    :param str rstruct_name: Name of struct to add to left Table
+    :return: Table with annotations
     :rtype: Table
     """
     sample_count_match = compare_samples(left_ht, right_ht)
@@ -256,7 +257,7 @@ def get_qc_mt_sites() -> None:
     ht = mt.rows()
 
     logger.info("Removing LCR intervals from QC sites")
-    lcr_intervals = lcr.ht()
+    lcr = lcr_intervals.ht()
     ht = ht.filter(hl.is_missing(lcr[ht.locus]))
 
     logger.info("Adding info annotations to QC sites HT")
