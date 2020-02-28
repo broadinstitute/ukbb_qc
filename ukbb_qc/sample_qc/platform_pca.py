@@ -32,45 +32,13 @@ def main(args):
     data_source = args.data_source
     freeze = args.freeze
 
-    if args.compute_callrate_mt:
-        logger.info("Preparing data for platform PCA...")
+    callrate_mt = hl.read_matrix_table(
+            callrate_mt_path(data_source, freeze, interval_filtered=args.apply_interval_qc_filter)
+    )
 
-        # Densify if not using interval qc filtered mt
-        if not args.apply_interval_qc_filter:
-            intervals = hl.read_table(capture_ht_path(data_source, freeze))
-            mt = get_ukbb_data(data_source, freeze, adj=True)
-            logger.info(f"Input MatrixTable (hardcalls) count: {mt.count()}")
-
-            logger.info("Densifying sites...")
-            mt = densify_sites(
-                mt,
-                intervals,
-                hl.read_table(last_END_positions_ht_path(data_source, freeze)),
-            )
-
-        else:
-            intervals = hl.read_table(interval_qc_path(data_source, freeze, "autosomes"))
-            mt = get_ukbb_data(data_source, freeze, adj=True)
-            logger.info(f"Input MatrixTable (hardcalls) count: {mt.count()}")
-
-            logger.info("Densifying sites...")
-            mt = densify_sites(
-                mt,
-                intervals,
-                hl.read_table(last_END_positions_ht_path(data_source, freeze)),
-            )
-
-        logger.info("Removing hard filtered samples...")
-        mt = remove_hard_filter_samples(data_source, freeze, mt)
-        logger.info(f"Count after removing hard filtered samples: {mt.count()}")
-        callrate_mt = compute_callrate_mt(mt, intervals)
-        callrate_mt = callrate_mt.checkpoint(
-            callrate_mt_path(
-                data_source, freeze, interval_filtered=args.apply_interval_qc_filter
-            ),
-            overwrite=args.overwrite,
-        )
-        logger.info(f"Callrate MatrixTable count: {callrate_mt.count}")
+    logger.info("Removing hard filtered samples...")
+    mt = remove_hard_filter_samples(data_source, freeze, mt)
+    logger.info(f"Count after removing hard filtered samples: {mt.count()}")
 
     if args.run_platform_pca:
         logger.info("Running platform PCA...")
@@ -131,11 +99,6 @@ if __name__ == "__main__":
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
     )
 
-    parser.add_argument(
-        "--compute_callrate_mt",
-        help="Computes an interval by sample mt of callrate that will be used to compute platform PCs",
-        action="store_true",
-    )
     parser.add_argument(
         "--apply_interval_qc_filter",  # NOTE not super sure this is necessary
         help="Filter to good intervals from interval QC",
