@@ -197,7 +197,7 @@ def main(args):
         qc_mt = filter_to_autosomes(qc_mt)
         qc_ht = hl.sample_qc(qc_mt).cols().select("sample_qc")
         qc_ht = qc_ht.transmute(
-            sample_qc=qc_ht.sample_qc.select("call_rate", "gq_stats", "dp_stats")
+            sample_qc=qc_ht.sample_qc.select("call_rate", "dp_stats")
         )
         qc_ht.write(qc_ht_path(data_source, freeze), overwrite=args.overwrite)
 
