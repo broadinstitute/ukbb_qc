@@ -7,7 +7,13 @@ from gnomad_hail.utils.sample_qc import get_qc_mt
 from gnomad_hail.utils.sparse_mt import compute_last_ref_block_end, densify_sites
 from ukbb_qc.resources.basics import get_checkpoint_path, get_ukbb_data
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
-from ukbb_qc.resources.sample_qc import (array_sample_map_ht_path, callrate_mt_path, interval_qc_path, qc_mt_path)
+from ukbb_qc.resources.sample_qc import (
+    array_sample_map_ht_path,
+    callrate_mt_path,
+    interval_qc_path,
+    sex_ht_path,
+    qc_mt_path,
+)
 from ukbb_qc.resources.variant_qc import get_truth_sample_info
 from ukbb_qc.sample_qc.apply_hard_filters import hard_filter_samples
 from ukbb_qc.utils.sparse_utils import compute_callrate_dp_mt
@@ -80,7 +86,9 @@ def main(args):
             compute_callrate_dp_mt(data_source, freeze, mt, capture_ht)
 
         logger.info("Reading in callrate MT, sex ht, interval qc HT...")
-        callrate_mt = hl.read_matrix_table(callrate_mt_path(data_source, freeze, interval_filtered=False))
+        callrate_mt = hl.read_matrix_table(
+            callrate_mt_path(data_source, freeze, interval_filtered=False)
+        )
         sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
         interval_qc_ht = hl.read_table(
             interval_qc_path(data_source, freeze, "autosomes")
@@ -144,9 +152,7 @@ def main(args):
             ),
             overwrite=True,
         )
-        logger.info(
-            "Adding info and low QUAL annotations and filtering to adj..."
-        )
+        logger.info("Adding info and low QUAL annotations and filtering to adj...")
         # NOTE: Need MQ, QD, FS for hard filters
         info_expr = get_site_info_expr(mt)
         info_expr = info_expr.annotate(**get_as_info_expr(mt))
