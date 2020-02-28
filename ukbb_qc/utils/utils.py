@@ -39,17 +39,18 @@ def compare_samples(ht1: hl.Table, ht2: hl.Table) -> bool:
 
 
 def join_tables(
-    left_ht: hl.Table, right_ht: hl.Table, struct_name: str
+    left_ht: hl.Table, left_key: str, right_ht: hl.Table, right_key: str, join_type: str
 ) -> hl.Table:
     """
-    Annotates fields from right Table onto left Table in a struct named struct_name. 
-    Returns left Table with new annotation.
-    Assumes tables have the same key.
+    Joins left and right Tables on specified keys and join type.
+    Returns joined Table.
     Also prints warning if sample counts are not the same.
 
-    :param Table left_ht: Table to be annotated
+    :param Table left_ht: Left Table to join
+    :param str left_key: Key of left Table
     :param Table right_ht: Table with annotations to be added
-    :param str rstruct_name: Name of struct to add to left Table
+    :param str right_key: Key of right Table
+    :param str join_type: How to join tables
     :return: Table with annotations
     :rtype: Table
     """
