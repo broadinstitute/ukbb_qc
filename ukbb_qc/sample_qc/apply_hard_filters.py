@@ -1,7 +1,6 @@
 import argparse
 import hail as hl
 import logging
-from gnomad_hail.utils.sample_qc import add_filters_expr
 from gnomad_hail.utils.sparse_mt import densify_sites
 
 
@@ -19,7 +18,7 @@ def apply_hard_filters_expr(
     sex_expr: hl.expr.StringExpression,
     min_callrate: float, 
     min_depth: float
-) -> hl.expr.SetExpression:
+) -> hl.expr.StructExpression:
     """
     Creates hard filters expression.
 
@@ -29,7 +28,7 @@ def apply_hard_filters_expr(
     :param float min_callrate: Callrate threshold to be used to filter samples; default is 0.99
     :param float min_depth: Mean depth threshold to be used to filter samples; default is 20.0
     :return: Hard filters expression
-    :rtype: hl.expr.SetExpression
+    :rtype: hl.expr.StructExpression
     """
 
     # the default coverage/depth cutoffs were set visually using plots:
@@ -39,15 +38,15 @@ def apply_hard_filters_expr(
     logger.info("Callrate cutoff for hard filters: {}".format(min_callrate))
     logger.info("Depth cutoff for hard filters: {}".format(min_depth))
 
-    hard_filters = {
+    hard_filters = hl.struct(
         # we don"t have contamination/chimera for regeneron vcf
         # "contamination": ht.freemix > 0.05,
         # "chimera": ht.pct_chimeras > 0.05,
-        "low_callrate": callrate_expr < min_callrate,
-        "ambiguous_sex": sex_expr == "Ambiguous",
-        "sex_aneuploidy": ((sex_expr != "Ambiguous") & (sex_expr != "XX") & (sex_expr != "XY")),
-        "low_coverage": dp_expr < min_depth,
-    }
+        low_callrate=callrate_expr < min_callrate,
+        ambiguous_sex=sex_expr == "Ambiguous",
+        sex_aneuploidy=((sex_expr != "Ambiguous") & (sex_expr != "XX") & (sex_expr != "XY")),
+        low_coverage=dp_expr < min_depth,
+    )
     return hard_filters
 
 
@@ -89,17 +88,23 @@ def hard_filter_samples(
     )
 
     logger.info("Applying hard filters and writing out hard filters HT...")
-    ht = ht.annotate(apply_hard_filters_expr(ht, min_callrate, min_depth))
     ht = ht.annotate(
-        hard_filters=add_filters_expr(
-            apply_hard_filters_expr(
+        hard_filters=apply_hard_filters_expr(
                     ht.call_rate,
                     ht.mean_dp,
                     ht.sex,
                     min_callrate,
                     min_depth
-            ),
-            None
         )
     )
-    return ht
+    ht = ht.annotate(
+        ht.hard_filters.annotate(
+            hard_filtered=(
+                (ht.hard_filters.low_callrate) 
+                | (ht.hard_filters.ambiguous_sex)
+                | (ht.hard_filters.sex_aneuploidy)
+                | (ht.hard_filters.low_coverage)
+                )
+        )
+    )
+    return ht.drop("sex")
