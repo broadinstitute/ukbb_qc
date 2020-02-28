@@ -29,7 +29,9 @@ def import_array_exome_id_map_ht(freeze: int = CURRENT_FREEZE) -> hl.Table:
     )
     sample_map_ht = sample_map_ht.key_by(s=sample_map_ht.eid_sample)
     sample_map_ht = sample_map_ht.transmute(
-        batch_num=sample_map_ht.batch, batch=sample_map_ht["batch.c"]
+        batch_num=sample_map_ht.batch, 
+        batch=sample_map_ht["batch.c"],
+        ukbb_app_26041_id=sample_map_ht.eid_26041
     )
     logger.info(
         f"Total number of IDs in the array to exome sample map: {sample_map_ht.count()}..."
@@ -44,7 +46,7 @@ def import_array_exome_id_map_ht(freeze: int = CURRENT_FREEZE) -> hl.Table:
             f"Total number of samples to exclude: {hl.eval(hl.len(excluded_samples))}"
         )
         sample_map_ht = sample_map_ht.annotate(
-            withdrawn_consent=excluded_samples.contains(sample_map_ht.eid_26041)
+            withdrawn_consent=excluded_samples.contains(sample_map_ht.ukbb_app_26041_id)
         )
         withdrawn_ids = sample_map_ht.aggregate(
             hl.agg.count_where(sample_map_ht.withdrawn_consent)
