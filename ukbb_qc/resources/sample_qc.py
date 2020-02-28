@@ -1,3 +1,4 @@
+import hail as hl
 from gnomad_hail.resources.resource_utils import DataException
 from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES
 
