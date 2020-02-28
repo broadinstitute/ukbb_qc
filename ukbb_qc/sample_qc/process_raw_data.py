@@ -201,6 +201,12 @@ def main(args):
         qc_mt = hl.read_matrix_table(qc_mt_path(data_source, freeze))
         qc_mt = filter_to_autosomes(qc_mt)
         qc_ht = hl.sample_qc(qc_mt).cols().select("sample_qc")
+        qc_ht = qc_ht.transmute(
+            sample_qc=qc_ht.sample_qc.annotate(
+                dp_mean=qc_ht.sample_qc.dp_stats.mean,
+                dp_stdev=qc_ht.sample_qc.dp_stats.stdev,
+                ).select("call_rate", "dp_mean", "dp_stdev")
+        )
         qc_ht.write(qc_ht_path(data_source, freeze), overwrite=args.overwrite)
 
     if args.extract_truth_samples:
