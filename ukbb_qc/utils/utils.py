@@ -87,11 +87,11 @@ def remove_hard_filter_samples(
     ht = ht.select("hard_filters")
 
     # get number of hard filtered samples
-    hf_samples = ht.aggregate(hl.agg.count_where(hl.len(ht.hard_filters) > 0))
+    hf_samples = ht.aggregate(hl.agg.count_where(ht.hard_filters.hard_filtered))
     logger.info(f"Removing {hf_samples} samples that failed hard filters")
 
     # remove hard filtered samples
-    ht = ht.filter(hl.len(ht.hard_filters) == 0)
+    ht = ht.filter(~ht.hard_filters.hard_filtered)
     if isinstance(t, hl.MatrixTable):
         t = t.filter_cols(hl.is_defined(ht[t.col_key]))
         if non_refs_only:
