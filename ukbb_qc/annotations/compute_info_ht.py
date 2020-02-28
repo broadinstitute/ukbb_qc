@@ -39,7 +39,6 @@ def main(args):
     related_ht = related_drop_path(data_source, freeze)
     related_ht = related_ht.filter(
         (related_ht.relationship == "Unrelated")
-        | (related_ht.relationship == "Ambiguous")
     )
     mt = mt.filter_cols(hl.is_defined(related_ht[mt.col_key]))
     mt = mt.filter_rows(hl.agg.any(mt.LGT.is_non_ref()))
