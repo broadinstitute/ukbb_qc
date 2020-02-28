@@ -181,7 +181,7 @@ def get_sites(
     """
     data_source = "broad"
     freeze = 5
-    mt = hl.read_matrix_table(get_ukbb_data(data_source, freeze, split=True))
+    mt = get_ukbb_data(data_source, freeze, split=True)
 
     if autosomes_only:
         mt = filter_to_autosomes(mt)
