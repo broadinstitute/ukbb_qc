@@ -5,10 +5,9 @@ from gnomad_hail.utils.generic import filter_to_autosomes
 from gnomad_hail.utils.gnomad_functions import filter_to_adj
 from gnomad_hail.utils.sample_qc import get_qc_mt
 from gnomad_hail.utils.sparse_mt import compute_last_ref_block_end, densify_sites
-from ukbb_qc.resources.basics import get_checkpoint_path, get_ukbb_data
+from ukbb_qc.resources.basics import array_sample_map_ht_path, get_checkpoint_path, get_ukbb_data
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import (
-    array_sample_map_ht_path,
     callrate_mt_path,
     interval_qc_path,
     sex_ht_path,
@@ -202,9 +201,6 @@ def main(args):
         qc_mt = hl.read_matrix_table(qc_mt_path(data_source, freeze))
         qc_mt = filter_to_autosomes(qc_mt)
         qc_ht = hl.sample_qc(qc_mt).cols().select("sample_qc")
-        qc_ht = qc_ht.transmute(
-            sample_qc=qc_ht.sample_qc.select("call_rate", "dp_stats")
-        )
         qc_ht.write(qc_ht_path(data_source, freeze), overwrite=args.overwrite)
 
     if args.extract_truth_samples:
