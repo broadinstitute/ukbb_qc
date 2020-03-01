@@ -427,9 +427,9 @@ def train_rf(data_source: str, freeze: int, args):
         )
         test_ht = hl.filter_intervals(ht, test_intervals_locus, keep=True)
         test_ht = test_ht.checkpoint(
-            f"gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/test_rf.ht",
+            get_checkpoint_path(data_source, freeze, 'test_rf'),
             overwrite=True,
-        )  # TODO: revisit temp placement?
+        )
         test_ht = test_ht.filter(hl.is_defined(test_ht[LABEL_COL]))
         test_results = rf.test_model(
             test_ht, rf_model, features=get_features_list(), label=LABEL_COL
