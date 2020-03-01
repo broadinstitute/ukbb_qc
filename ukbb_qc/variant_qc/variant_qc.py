@@ -141,7 +141,7 @@ def create_rf_ht(
             )
         )
 
-    def get_training_sites_expr(ht: hl.Table, group) -> Dict[str, hl.expr.Expression]:
+    def get_training_sites_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression]:
         """
         Returns expressions to columns to select training examples
 
@@ -191,14 +191,6 @@ def create_rf_ht(
     ht = ht.filter(
         (ht.qc_callstats.find(lambda x: x.meta.get("group") == group).AC[1] > 0)
         & ~info_ht[ht.key].filters.contains("LowQual")
-    )
-
-    # What is this doing? Is it just getting the index for each of the groups in qc_stats and family stats, I think this all changes
-    family_stats_groups = ht_family_stats.aggregate(
-        hl.agg.take(ht_family_stats.family_stats.map(lambda x: x.meta["group"]), 1)
-    )[0]
-    family_stats_group_index = next(
-        x[0] for x in enumerate(family_stats_groups) if x[1] == "raw"
     )
 
     # TODO: changed this to align with what Lauren't does where ac is adj and ac_raw is this, need to think about samples, are these counts before/after removing QC samples and with or without related individuals
