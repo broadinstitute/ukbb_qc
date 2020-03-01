@@ -41,7 +41,8 @@ ALLELE_FEATURES = [
     "allele_type",
     "n_alt_alleles",
     "was_mixed",
-    "has_star" "qd",
+    "has_star",
+    "qd",
     "pab_max",
 ]
 
@@ -158,9 +159,7 @@ def create_rf_ht(
                 )
                 == 1
             ),
-            "fail_hard_filters": (ht.info.QD < 2)
-            | (ht.info.FS > 60)
-            | (ht.info.MQ < 30),
+            "fail_hard_filters": (ht.info.QD < 2) | (ht.info.FS > 60) | (ht.info.MQ < 30)
         }
 
     mt = get_ukbb_data(data_source, freeze, meta_root="meta")
@@ -206,17 +205,16 @@ def create_rf_ht(
     ht = ht.select(
         **get_allele_features_expr(ht),
         **get_site_features_expr(ht),
-        **get_training_sites_expr(ht, group),
+        **get_training_sites_expr(ht),
         omni=ht.truth_data.omni,
         mills=ht.truth_data.mills,
         ukbb_array_con_common=ht.truth_data.ukbb_array_con_common,
         sib_singletons=ht.truth_data.sib_singletons,
         n_nonref=mt.info.ac_qc_samples_raw,
-        singleton=ht.info.ac_raw
-        == 1,  # TODO: Confirm with Laurent if this should be pre or post filtering high quality samples
+        singleton=ht.info.ac_raw == 1,  # TODO: Confirm with Laurent if this should be pre or post filtering high quality samples
         was_split=ht.was_split,
         ac_raw=ht.info.ac_raw,  # TODO: Confirm with Laurent if this should be pre or post filtering high quality samples
-        ac=ht.info.ac_ad,  # TODO: Confirm with Laurent if this should be pre or post filtering high quality samplesj
+        ac=ht.info.ac_adj,  # TODO: Confirm with Laurent if this should be pre or post filtering high quality samples
     )
 
     ht = annotate_interval_qc_filter(data_source, freeze, ht)
@@ -456,7 +454,6 @@ def train_rf(data_source: str, freeze: int, args):
         freeze,
         args.interval_qc_filter,
         args.no_transmitted_singletons,
-        args.array_con,
         args.array_con_common,
         args.adj,
         test_intervals_str,
