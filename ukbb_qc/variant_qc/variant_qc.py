@@ -9,7 +9,7 @@ from gnomad_hail.utils.gnomad_functions import pretty_print_runs
 from gnomad_hail.utils.slack import try_slack
 from gnomad_qc.v2.variant_qc.variantqc import sample_rf_training_examples
 from ukbb_qc.utils import annotate_interval_qc_filter
-from ukbb_qc.resources.basics import get_ukbb_data, CURRENT_FREEZE
+from ukbb_qc.resources.basics import get_ukbb_data, get_checkpoint_path, CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import (
     rf_run_hash_path,
     var_annotations_ht_path,
