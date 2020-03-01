@@ -11,7 +11,7 @@ from ukbb_qc.resources.variant_qc import score_ranking_path, rf_annotated_path, 
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
-logger = logging.getLogger("rank_rf")
+logger = logging.getLogger("quantile_bin_rf")
 logger.setLevel(logging.INFO)
 
 
@@ -39,94 +39,72 @@ def run_sanity_checks(ht: hl.Table) -> None:
     )
 
 
-def create_rf_rank(data_source: str, freeze: int, run_hash: str) -> None:
+def create_quantile_bin_ht(data_source: str, freeze: int, metric: str, n_bins: int, overwrite: bool) -> None:
     """
-    Creates a ranked table for a RF run and writes it to its correct location in annotations.
+    Creates a table with quantile bin annotations added for a RF run and writes it to its correct location in annotations.
 
     :param str data_source: 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
-    :param str run_hash: RF run hash
+    :param str metric: Which data/run hash is being created
+    :param n_bins: Number of bins to bin the data into
+    :param bool overwrite: Should output files be overwriten if present
     :return: Nothing
     :rtype: None
     """
     # TODO: Should I add VQSR negative_train_site, default expects it ...
     logger.info(
-        f"Annotating RF file for {data_source}.freeze_{freeze} RF run {run_hash} with quantile bins"
+        f"Annotating RF file for {data_source}.freeze_{freeze} RF run {metric} with quantile bins"
     )
-    ht = ht.annotate(score=1 - ht.rf_probability["TP"])
+    if metric.endswith("vqsr"):
+        rf_ht = hl.read_table(rf_annotated_path(data_source, freeze))
+        ht = hl.read_table(
+            var_annotations_ht_path(
+                data_source,
+                freeze,
+                metric
+            )
+        ).repartition(1000)
+
+        # TODO: Should filter sites filtered by Laurent's lowqual, is this info in the info HT ?
+        ht = ht.filter(~ht.filters.contains("LowQual"))
+        ht = ht.annotate(
+            AS_VQSLOD=hl.float(ht.info.AS_VQSLOD[ht.a_index - 1]),
+            AS_culprit=ht.info.AS_culprit[ht.a_index - 1],
+        )
+
+        # TODO: NEGATIVE_TRAIN_SITE & POSITIVE_TRAIN_SITE is there an AS?
+        ht = ht.annotate(
+            **rf_ht[ht.key],
+            score=ht.AS_VQSLOD,
+            negative_train_site=ht.info.NEGATIVE_TRAIN_SITE,
+            positive_train_site=ht.info.POSITIVE_TRAIN_SITE,
+            culprit=ht.AS_culprit,
+        )
+
+        # TODO: Do we want to use the tranche 2 interval QC
+        ht = annotate_interval_qc_filter(data_source, freeze, ht)
+        ht = ht.filter(ht.n_nonref > 0)
+    else:
+        ht = hl.read_table(rf_path(data_source, freeze, 'rf_result', run_hash=metric))
+        # TODO: Might need to rethink the score annotation 1-rf_probability, but default expects score annotation
+        ht = ht.annotate(
+            score=1-ht.rf_probability['TP']
+        )
+
+    # TODO: Should I add VQSR negative_train_site, default expects it ...
     bin_ht = default_create_binned_ht(
-        ht, n_bins, add_substrat={"interval": ht.interval_qc_pass}
+        ht,
+        n_bins,
+        add_substrat={"interval": ht.interval_qc_pass}
     )
 
-    ht.write(
-        rf_path(data_source, freeze, "rf_result", run_hash=run_hash), overwrite=True
-    )
-
-    grouped_binned_ht = compute_grouped_binned_ht(
-        binned_ht, checkpoint_path=f"gs://broad-ukbb-jgoodric/broad_5_vqsr_binned.ht",
-    )
-    # binned_ht.write(score_ranking_path(data_source, freeze, 'vqsr', binned=True), overwrite=args.overwrite)
-
-    agg_ht = grouped_binned_ht.aggregate(
-        **default_score_bin_agg(
-            grouped_binned_ht,
-            fam_stats_ht=hl.read_table(
-                var_annotations_ht_path(data_source, freeze, "trio_stats")
-            ),
-        )
-    )
-
-    agg_ht.write(
-        f"gs://broad-ukbb-jgoodric/broad_5_vqsr_binned.ht", overwrite=args.overwrite
-    )
-
-
-def create_vqsr_annotated_ht(data_source: str, freeze: int, vqsr_type: str):
-    """
-    Creates a rank table for VQSR and writes it to its correct location in annotations.
-
-    :param str data_source: 'regeneron' or 'broad'
-    :param int freeze: One of the data freezes
-    :return: Nothing
-    :rtype: None
-    """
-    rf_ht = hl.read_table(rf_annotated_path(data_source, freeze))
-    ht = hl.read_table(
-        var_annotations_ht_path(
-            data_source, freeze, "vqsr" if vqsr_type == "AS" else "AS_TS_vqsr"
-        )
-    ).repartition(1000)
-    ht = ht.filter(~ht.filters.contains("LowQual"))
-    ht = ht.annotate(
-        AS_VQSLOD=hl.float(ht.info.AS_VQSLOD[ht.a_index - 1]),
-        AS_culprit=ht.info.AS_culprit[ht.a_index - 1],
-    )
-
-    # TODO: NEGATIVE_TRAIN_SITE & POSITIVE_TRAIN_SITE is there an AS?
-    ht = ht.annotate(
-        **rf_ht[ht.key],
-        score=ht.AS_VQSLOD,
-        negative_train_site=ht.info.NEGATIVE_TRAIN_SITE,
-        positive_train_site=ht.info.POSITIVE_TRAIN_SITE,
-        culprit=ht.AS_culprit,
-    )
-    ht = annotate_interval_qc_filter(data_source, freeze, ht)
-    ht = ht.filter(ht.n_nonref > 0)
-    ht.write(
-        f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/{"vqsr" if vqsr_type == "AS" else "AS_TS_vqsr"}.ht',
-        overwrite=True,
-    )
-
-    logger.info(f"Creating rank file for {data_source}.freeze_{freeze} VQSR")
-    ht = hl.read_table(
-        f'gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/{"vqsr" if vqsr_type == "AS" else "AS_TS_vqsr"}.ht'
-    )
-
-    ht.write(
+    bin_ht.write(
         score_ranking_path(
-            data_source, freeze, "vqsr" if vqsr_type == "AS" else "AS_TS_vqsr"
+            data_source,
+            freeze,
+            metric
         ),
-        overwrite=True,
+        overwrite=overwrite,
     )
 
 
@@ -167,21 +145,29 @@ def filter_clinvar_path():
     return clinvar_ht
 
 
-def create_binned_data(
-    ht: hl.Table, data: str, data_source: str, freeze: int, n_bins: int
-) -> hl.Table:
+def create_grouped_bin_ht(
+    data_source: str, freeze: int, metric: str, overwrite: bool
+) -> None:
     """
-    Creates binned data from a rank Table grouped by rank_id (rank, biallelic, etc.), contig, snv, bi_allelic and singleton
-    containing the information needed for evaluation plots.
+    Creates binned data from a quantile bin annotated Table grouped by bin_id (rank, biallelic, etc.), contig, snv,
+    bi_allelic and singleton containing the information needed for evaluation plots.
 
-    :param Table ht: Input rank table
-    :param str data: Which data/run hash is being created
     :param str data_source: 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
-    :param int n_bins: Number of bins.
+    :param str metric: Which data/run hash is being created
+    :param bool overwrite: Should output files be overwriten if present
     :return: Binned Table
-    :rtype: Table
+    :rtype: None
     """
+
+    ht = hl.read_table(
+        score_ranking_path(
+            data_source,
+            freeze,
+            metric
+        ),
+        overwrite=overwrite,
+    )
 
     # Count variants for ranking
     count_expr = {
@@ -196,7 +182,7 @@ def create_binned_data(
     }
     bin_variant_counts = ht.aggregate(hl.Struct(**count_expr))
     logger.info(f"Found the following variant counts:\n {pformat(bin_variant_counts)}")
-    ht = ht.annotate_globals(rank_variant_counts=bin_variant_counts)
+    ht = ht.annotate_globals(bin_variant_counts=bin_variant_counts)
 
     # Load ClinVar path data
     if not hl.utils.hadoop_exists(
@@ -214,7 +200,10 @@ def create_binned_data(
     )
 
     logger.info(f"Creating binned rank table")
-    grouped_binned_ht = compute_grouped_binned_ht(ht, checkpoint_path=f"",)
+    grouped_binned_ht = compute_grouped_binned_ht(
+        ht,
+        checkpoint_path=get_checkpoint_path(data_source, freeze, f'grouped_bin_{metric}'),
+    )
 
     parent_ht = ht._parent
     agg_ht = grouped_binned_ht.aggregate(
@@ -224,73 +213,23 @@ def create_binned_data(
         **default_score_bin_agg(grouped_binned_ht, fam_stats_ht=trio_stats_ht),
     )
 
-    agg_ht.write(
-        f"gs://broad-ukbb-jgoodric/broad_5_vqsr_binned.ht", overwrite=args.overwrite
-    )
+    agg_ht.write(score_ranking_path(data_source, freeze, metric, binned=True), overwrite=overwrite)
 
 
 def main(args):
-    def run_data(
-        rank_func: Callable[..., None],
-        rank_func_args: List[Any],
-        score_type: str,
-        data_source: str,
-        freeze: int,
-    ) -> None:
-        """
-        Wrapper for running script actions on given data.
-
-        :param callable rank_func: Function for creating ranking file
-        :param list of Any rank_func_args: Arguments to pass to the ranking function
-        :param str score_type: Score being processed
-        :param str data_source: 'regeneron' or 'broad'
-        :param int freeze: One of the data freezes
-        :return: Nothing -- this runs the script actions
-        :rtype:  None
-        """
-        print(score_type)
-        if score_type in ["vqsr", "AS_TS_vqsr"]:
-            rank_file_path = score_ranking_path(data_source, freeze, score_type)
-        else:
-            rank_file_path = rf_path(
-                data_source, freeze, "rf_result", run_hash=args.run_hash
-            )
-
-        if args.create_rank_file:
-            rank_func(*rank_func_args)
-        if args.run_sanity_checks:
-            run_sanity_checks(hl.read_table(rank_file_path))
-        if args.create_binned_file:
-            ht = hl.read_table(rank_file_path)
-            binned_ht = create_binned_data(
-                ht, score_type, data_source, freeze, args.n_bins
-            )
-            binned_ht.write(
-                score_ranking_path(data_source, freeze, score_type, binned=True),
-                overwrite=True,
-            )
-
-    hl.init(log="/create_rank.log")
-    data_source = args.data_source
-    freeze = args.freeze
-
-    if args.run_hash:
-        run_data(
-            create_rf_rank,
-            [data_source, freeze, args.run_hash],
-            args.run_hash,
-            data_source,
-            freeze,
-        )
+    hl.init(log="/create_quantile_rank_bins.log")
 
     if args.vqsr:
-        run_data(
-            create_vqsr_rank_ht,
-            [data_source, freeze, args.vqsr_type],
-            "vqsr" if args.vqsr_type == "AS" else "AS_TS_vqsr",
-            data_source,
-            freeze,
-        )
+        metric = "vqsr" if args.vqsr_type == "AS" else "AS_TS_vqsr"
+    else:
+        metric = args.run_hash
+
+    if args.create_quantile_bin_ht:
+        create_quantile_bin_ht(args.data_source, args.freeze, metric, args.overwrite)
+    if args.run_sanity_checks:
+        run_sanity_checks(hl.read_table(score_ranking_path(args.data_source, args.freeze, metric)))
+    if args.create_aggregated_bin_ht:
+        create_grouped_bin_ht(args.data_source, args.freeze, metric, args.overwrite)
 
 
 if __name__ == "__main__":
@@ -327,8 +266,8 @@ if __name__ == "__main__":
         default="AS",
     )
     parser.add_argument(
-        "--create_rank_file",
-        help="When set, creates ranking file.",
+        "--create_quantile_bin_ht",
+        help="When set, creates file annotated with quantile bin based on vqsr/ RF run hash score.",
         action="store_true",
     )
     parser.add_argument(
@@ -337,8 +276,8 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--create_binned_file",
-        help="When set, creates binned ranked file.",
+        "--create_aggregated_bin_ht",
+        help="When set, creates a file with aggregate counts of variants based on quantile bins.",
         action="store_true",
     )
     parser.add_argument(
@@ -350,12 +289,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if (
-        not args.create_rank_file
+        not args.create_quantile_bin_ht
         and not args.run_sanity_checks
-        and not args.create_binned_file
+        and not args.create_aggregated_bin_ht
     ):
         sys.exit(
-            "Error: At least one of --create_rank_file, --run_sanity_checks or --create_binned_file must be specified."
+            "Error: At least one of --create_quantile_bin_ht, --run_sanity_checks or --create_aggregated_bin_ht must be specified."
         )
 
     if args.slack_channel:
