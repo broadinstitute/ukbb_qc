@@ -9,7 +9,7 @@ from gnomad_hail.utils.gnomad_functions import pretty_print_runs
 from gnomad_hail.utils.slack import try_slack
 from gnomad_qc.v2.variant_qc.variantqc import sample_rf_training_examples
 from ukbb_qc.utils import annotate_interval_qc_filter
-from ukbb_qc.resources.basics import get_ukbb_data, CURRENT_FREEZE
+from ukbb_qc.resources.basics import get_ukbb_data, get_checkpoint_path, CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import (
     rf_run_hash_path,
     var_annotations_ht_path,
@@ -41,7 +41,8 @@ ALLELE_FEATURES = [
     "allele_type",
     "n_alt_alleles",
     "was_mixed",
-    "has_star" "qd",
+    "has_star",
+    "qd",
     "pab_max",
 ]
 
@@ -140,7 +141,7 @@ def create_rf_ht(
             )
         )
 
-    def get_training_sites_expr(ht: hl.Table, group) -> Dict[str, hl.expr.Expression]:
+    def get_training_sites_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression]:
         """
         Returns expressions to columns to select training examples
 
@@ -181,42 +182,21 @@ def create_rf_ht(
         **ht_allele_data[mt.row_key],
     ).rows()
 
-    # TODO: Really need to understand all the types of allele counts and when to use them, here it looks like we are using
-    # TODO: qc_samples_raw (I think this is high quality samples no adj)
-    ht = ht.annotate(
-        AC=ht.qc_callstats.find(lambda x: x.meta.get("group") == group).AC[1]
-    )
-
     # Filter to only variants found in high qual samples and with no LowQual filter
-    # TODO: add lowqual filter to loading
-    ht = ht.filter(
-        (ht.qc_callstats.find(lambda x: x.meta.get("group") == group).AC[1] > 0)
-        & ~info_ht[ht.key].filters.contains("LowQual")
-    )
+    ht = ht.filter(ht.info[f'ac_qc_samples_{group}'] & ~info_ht.lowqual)
 
-    # What is this doing? Is it just getting the index for each of the groups in qc_stats and family stats, I think this all changes
-    family_stats_groups = ht_family_stats.aggregate(
-        hl.agg.take(ht_family_stats.family_stats.map(lambda x: x.meta["group"]), 1)
-    )[0]
-    family_stats_group_index = next(
-        x[0] for x in enumerate(family_stats_groups) if x[1] == "raw"
-    )
-
-    # TODO: changed this to align with what Lauren't does where ac is adj and ac_raw is this, need to think about samples, are these counts before/after removing QC samples and with or without related individuals
     ht = ht.select(
         **get_allele_features_expr(ht),
         **get_site_features_expr(ht),
-        **get_training_sites_expr(ht, group),
+        **get_training_sites_expr(ht),
         omni=ht.truth_data.omni,
         mills=ht.truth_data.mills,
         ukbb_array_con_common=ht.truth_data.ukbb_array_con_common,
         sib_singletons=ht.truth_data.sib_singletons,
-        n_nonref=mt.info.ac_qc_samples_raw,
-        singleton=ht.info.ac_raw
-        == 1,  # TODO: Confirm with Laurent if this should be pre or post filtering high quality samples
+        singleton=ht.info.ac_release_samples_raw == 1,
         was_split=ht.was_split,
-        ac_raw=ht.info.ac_raw,  # TODO: Confirm with Laurent if this should be pre or post filtering high quality samples
-        ac=ht.info.ac_ad,  # TODO: Confirm with Laurent if this should be pre or post filtering high quality samplesj
+        ac_raw=ht.info.ac_release_samples_raw,
+        ac=ht.info.ac_release_samples_adj,
     )
 
     ht = annotate_interval_qc_filter(data_source, freeze, ht)
@@ -427,9 +407,8 @@ def train_rf(data_source: str, freeze: int, args):
         )
         test_ht = hl.filter_intervals(ht, test_intervals_locus, keep=True)
         test_ht = test_ht.checkpoint(
-            f"gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/test_rf.ht",
-            overwrite=True,
-        )  # TODO: revisit temp placement?
+            get_checkpoint_path(data_source, freeze, "test_rf"), overwrite=True,
+        )
         test_ht = test_ht.filter(hl.is_defined(test_ht[LABEL_COL]))
         test_results = rf.test_model(
             test_ht, rf_model, features=get_features_list(), label=LABEL_COL
@@ -456,7 +435,6 @@ def train_rf(data_source: str, freeze: int, args):
         freeze,
         args.interval_qc_filter,
         args.no_transmitted_singletons,
-        args.array_con,
         args.array_con_common,
         args.adj,
         test_intervals_str,
