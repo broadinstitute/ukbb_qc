@@ -18,19 +18,6 @@ def sample_qc_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f"gs://broad-ukbb/{data_source}.freeze_{freeze}/sample_qc"
 
 
-def qc_temp_data_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    """
-    Returns path to temporary sample QC data. 
-    Used to store densified MT data (freeze 6 and newer) or outlier detection data.
-
-    :param str data_source: One of 'regeneron' or 'broad'
-    :param int freeze: One of data freezes
-    :return: Path to bucket with temporary sample QC data
-    :rtype: str
-    """
-    return f"{sample_qc_path(data_source, freeze)}/temp/"
-
-
 # Interval resources
 def interval_qc_path(
     data_source: str, freeze: int = CURRENT_FREEZE, chrom: str = None, ht: bool = True
@@ -50,26 +37,6 @@ def interval_qc_path(
     else:
         chrom = f".{chrom}"
     return f'{sample_qc_path(data_source, freeze)}/interval_qc/coverage_by_target{chrom}{".ht" if ht else ".txt"}'
-
-
-def densified_interval_qc_path(
-    data_source: str, freeze: int = CURRENT_FREEZE, repartitioned: bool = False
-) -> str:
-    """
-    Returns path to MatrixTable densified only to interval QC sites
-
-    :param str data_source: One of 'regeneron' or 'broad'
-    :param int freeze: One of data freezes
-    :param bool repartitioned: Whether MatrixTable has been repartitioned
-    :return: Path to densified interval qc sites only MatrixTable
-    :rtype: str
-    """
-    if freeze < 6:
-        raise DataException(
-            "This resource doesn't exist for anything older than tranche 3/freeze 6"
-        )
-    name = "dense.repartitioned" if repartitioned else "dense"
-    return f"{qc_temp_data_prefix(data_source, freeze)}{name}.mt"
 
 
 def f_stat_sites_path() -> str:
@@ -129,6 +96,28 @@ def qc_mt_path(
         )
     ld_pruned = ".pruned" if ld_pruned else ""
     return f"{sample_qc_path(data_source, freeze)}/qc_data/high_callrate_common_biallelic_snps{ld_pruned}.mt"
+
+
+def get_qc_mt(
+    data_source: str, freeze: int = CURRENT_FREEZE, ld_pruned: bool = False
+) -> hl.MatrixTable:
+    """
+    Returns MatrixTable filtered to high callrate, common, biallelc snps for sample QC purposes
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of data freezes
+    :param bool ld_pruned: Whether to return the LD pruned version of the MatrixTable
+    :return: MatrixTable for sample QC purposes
+    :rtype: hl.MatrixTable
+    """
+    mt = hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned))
+    mt = mt.annotate_rows(
+        lowqual=get_lowqual_expr(
+            mt.alleles, mt.info.QUALapprox, indel_phred_het_prior=40
+        )
+    )
+    mt = mt.filter_rows(~mt.lowqual)
+    return mt
 
 
 def qc_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
@@ -563,6 +552,19 @@ def get_joint_regeneron_ancestry_path(
 
 
 # Outlier detection resources
+def qc_temp_data_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Returns path to temporary sample QC data. 
+    Used to store outlier detection data.
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of data freezes
+    :return: Path to bucket with temporary sample QC data
+    :rtype: str
+    """
+    return f"{sample_qc_path(data_source, freeze)}/temp/"
+
+
 def platform_pop_outlier_ht_path(
     data_source: str, freeze: int = CURRENT_FREEZE, pop_assignment_method: str = None
 ) -> str:

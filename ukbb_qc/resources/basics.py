@@ -35,6 +35,7 @@ def get_ukbb_data(
     split: bool = True,
     raw: bool = False,
     non_refs_only: bool = False,
+    ukbb_samples_only: bool = True,
     meta_root: Optional[str] = None,
 ) -> hl.MatrixTable:
     """
@@ -47,6 +48,7 @@ def get_ukbb_data(
     :param bool split: Whether the dataset should be split (only applies to raw=False)
     :param bool raw: Whether to return the raw data (not recommended: unsplit, and no special consideration on sex chromosomes)
     :param bool non_refs_only: Whether to return the non-ref-genotype only MT (warning: no special consideration on sex chromosomes)
+    :param bool ukbb_samples_only: Whether to return only UKBB samples (exclude control samples). Default is True.
     :param str meta_root: Root annotation name for metadata (e.g., 'meta')
     :return: hardcalls dataset
     :rtype: MatrixTable
@@ -95,10 +97,14 @@ def get_ukbb_data(
             withdrawn_consent=sample_map_ht[exome_ht.s.split("_")[1]].withdrawn_consent
         )
         mt = mt.filter_cols(~mt.withdrawn_consent)
-        mt = mt.filter_rows(
-            hl.agg.any(mt.LGT.is_non_ref()) | hl.agg.any(hl.is_defined(mt.END))
-        )
         mt = mt.drop("withdrawn_consent")
+
+    if ukbb_samples_only:
+        mt = mt.filter_cols(mt.s.contains("UKB"))
+
+    mt = mt.filter_rows(
+        hl.agg.any(mt.LGT.is_non_ref()) | hl.agg.any(hl.is_defined(mt.END))
+    )
 
     return mt
 

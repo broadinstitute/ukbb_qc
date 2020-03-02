@@ -61,7 +61,10 @@ def main(args):
         )  # Note: this is different from gnomAD hardcalls file because no PGT or PID
         mt = adjust_sex_ploidy(mt, mt.sex_karyotype, male_str="XY", female_str="XX")
         mt = mt.select_cols().naive_coalesce(args.n_partitions)
-        mt.write(
+
+        # Filter out star alleles and checkpoint
+        mt = mt.filter_rows(mt.alleles[1] != "*")
+        mt = mt.checkpoint(
             get_ukbb_data_path(data_source, freeze, hardcalls=True, split=False),
             args.overwrite,
         )
