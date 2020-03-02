@@ -221,20 +221,25 @@ def main(args):
 
     logger.info("Annotating high_quality field")
     left_ht = left_ht.annotate(
-        high_quality=(
-            (~left_ht.sample_filters.low_callrate)
-            & (~left_ht.sample_filters.ambiguous_sex)
-            & (~left_ht.sample_filters.sex_aneuploidy)
-            & (~left_ht.sample_filters.low_coverage)
-            & (hl.len(left_ht.qc_metrics_filters) == 0)
+        sample_filters=left_ht.sample_filters.annotate(
+            high_quality=(
+                (~left_ht.sample_filters.low_callrate)
+                & (~left_ht.sample_filters.ambiguous_sex)
+                & (~left_ht.sample_filters.sex_aneuploidy)
+                & (~left_ht.sample_filters.low_coverage)
+                & (hl.len(left_ht.qc_metrics_filters) == 0)
+            )
         )
     )
     left_ht = left_ht.drop("qc_metrics_filters")
 
     logger.info("Annotating releasable field")
+    # Control samples: CHMI_CHMI3_Nex1 and Coriell_NA12878_NA12878
     left_ht = left_ht.annotate(
-        release=hl.if_else(
-            (left_ht.s.contains("UKB") & left_ht.high_quality), True, False
+        sample_filters=left_ht.sample_filters.annotate(
+            release=hl.if_else(
+                (left_ht.s.contains("UKB") & left_ht.high_quality), True, False
+            )
         )
     )
     logger.info(
