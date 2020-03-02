@@ -183,7 +183,7 @@ def create_rf_ht(
     ).rows()
 
     # Filter to only variants found in high qual samples and with no LowQual filter
-    ht = ht.filter(ht.info.ac_qc_samples_raw & ~info_ht.lowqual)
+    ht = ht.filter(ht.info[f'ac_qc_samples_{group}'] & ~info_ht.lowqual)
 
     ht = ht.select(
         **get_allele_features_expr(ht),
