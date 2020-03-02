@@ -13,6 +13,7 @@ from ukbb_qc.resources.sample_qc import (
     platform_pop_outlier_ht_path,
     qc_ht_path,
     related_drop_path,
+    sex_ht_path,
 )
 from ukbb_qc.utils.utils import join_tables
 
@@ -57,37 +58,108 @@ def main(args):
     else:
         freeze = CURRENT_FREEZE
 
-    logger.info("Reading hard filters ht")
-    left_ht = hl.read_table(hard_filters_ht_path(data_source, freeze))
+    logger.info(
+        "Reading in HT mapping ukbb pharma (exome) id to ukbb application 26041 (array) id"
+    )
+    left_ht = hl.read_table(array_sample_map_ht_path(data_source, freeze))
+    left_ht = left_ht.key_by(eid_sample=left_ht.s)
+    left_ht = left_ht.annotate(
+        pharma_meta=hl.struct(
+            ukbb_app_26041_id=left_ht.ukbb_app_26041_id,
+            eid_sample=left_ht.eid_sample,
+            batch=left_ht.batch,
+            batch_num=left_ht.batch_num,
+        )
+    ).select("pharma_meta")
 
-    logger.info("Reading in qc ht")
+    logger.info("Getting age information from phenotype file")
+    right_ht = get_age_ht(data_source, freeze)
+    right_ht = right_ht.key_by(array_id=right_ht.s).select("age")
+
+    logger.info(
+        "Joining array map/pharma meta HT (left) and age HT (right) with a right join to start creating meta HT"
+    )
+    left_ht = join_tables(left_ht, "eid_sample", right_ht, "array_id", "right")
+
+    logger.info("Reading in array sample concordance ht")
+    right_ht = hl.read_table(array_sample_concordance_path(data_source, freeze))
+    # Add array ID and struct for join
+    right_ht = right_ht.annotate(array_id=right_ht.s.split("_")[1])
+    right_ht = right_ht.tramsmute(
+        array_concordance=hl.struct(
+            concordance=right_ht.concordance,
+            n_discordant=right_ht.n_discordant,
+            num_gt_con_non_ref=right_ht.num_gt_con_non_ref,
+            num_gt_non_ref=right_ht.num_gt_non_ref,
+            prop_gt_con_non_ref=right_ht.prop_gt_con_non_ref,
+        )
+    ).select("array_concordance")
+
+    logger.info("Joining array sample concordance HT with meta HT")
+    left_ht = join_tables(left_ht, "array_id", right_ht, "array_id", "left")
+    left_ht = left_ht.drop("array_id", "eid_sample")
+
+    logger.info("Reading in sex HT")
+    right_ht = hl.read_table(sex_ht_path(data_source, freeze))
+    # Create struct for join
+    right_ht = right_ht.transmute(
+        sex_imputation=hl.struct(
+            is_female=right_ht.is_female,
+            f_stat=right_ht.f_stat,
+            n_called=right_ht.n_called,
+            expected_homs=right_ht.expected_homs,
+            observed_homs=right_ht.observed_homs,
+            chr20_mean_dp=right_ht.chr20_mean_dp,
+            chrX_mean_dp=right_ht.chrX_mean_dp,
+            chrY_mean_dp=right_ht.chrY_mean_dp,
+            chrX_ploidy=right_ht.chrX_ploidy,
+            chrY_ploidy=right_ht.chrY_ploidy,
+            sex_karyotype=right_ht.sex_karyotype,
+        )
+    )
+
+    logger.info("Joining sex HT with meta HT")
+    left_ht = join_tables(left_ht, "s", right_ht, "s", "right")
+
+    logger.info("Reading in qc HT")
     right_ht = hl.read_table(qc_ht_path(data_source, freeze))
 
-    logger.info("Joining hard filters ht and qc ht to start making meta ht")
-    left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
-
-    logger.info("Reading in ht mapping ukbb pharma id to ukbb application 26041 id")
-    right_ht = hl.read_table(array_sample_map_ht_path(data_source, freeze))
-
-    logger.info("Joining ukbb application 26041 id map into current join (meta ht)")
-    left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
+    logger.info("Joining sample QC HT with meta HT")
+    left_ht = join_tables(left_ht, "s", right_ht, "s", "right")
 
     logger.info("Reading in platform PCA ht")
     right_ht = hl.read_table(platform_pca_results_ht_path(data_source, freeze))
-    right_ht = right_ht.transmute(platform_pca_scores=right_ht.scores)
+    # Put platform info into struct for join
+    right_ht = right_ht.transmute(
+        platform_inference=hl.struct(
+            callrate_pcs=right_ht.scores, qc_platform=right_ht.qc_platform
+        )
+    )
 
-    logger.info("Joining platform PCA ht into current join (meta ht)")
+    logger.info("Joining platform HT with meta HT")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
 
     logger.info("Reading in population PC ht")
     right_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
+    # Put population info into structs for join
+    right_ht = right_ht.transmute(
+        gnomad_PC_project_pop_data=hl.struct(
+            gnomad_PCs=hl.array(
+                [right_ht[f"gnomad_pc_project_PC{i + 1}"] for i in range(n_pcs)]
+            ),
+            gnomad_pc_project_pop=right_ht.gnomad_pc_project_pop,
+        ),
+        hybrid_pop_data=hl.struct(
+            pop_PCs=hl.array(
+                [right_ht[f"pop_pca_PC{i + 1}"] for i in range(n_pcs)]
+            )
+            HDBSCAN_pop_cluster=right_ht.HDBSCAN_pop_cluster,
+            hybrid_pop=right_ht.hybrid_pop,
+        ),
+    )
 
-    logger.info("Joining population PC ht into current join")
+    logger.info("Joining population PC HT with meta HT")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
-
-    logger.info("Getting age information from phenotype file")
-    right_ht = get_age_ht(data_source, freeze)
-    left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
 
     logger.info("Creating checkpoint")
     left_ht = left_ht.checkpoint(
@@ -95,62 +167,69 @@ def main(args):
         overwrite=True,
     )
 
-    logger.info("Reading in array sample concordance ht")
-    right_ht = hl.read_table(array_sample_concordance_path(data_source, freeze))
-    right_ht = right_ht.drop("left_col", "right_col")
+    logger.info("Reading hard filters HT")
+    right_ht = hl.read_table(hard_filters_ht_path(data_source, freeze))
 
-    logger.info("Joining array sample concordance ht to current join")
-    left_ht = left_ht.annotate(array_id=left_ht.s.split("_")[1])
-    left_ht = join_tables(left_ht, "array_id", right_ht, "s", "left")
+    logger.info("Joining hard filters HT with meta HT")
+    left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
 
-    logger.info("Reading in dups ht")
-    right_ht = hl.read_table(duplicates_ht_path(data_source, freeze, args.dup_sets))
-    right_ht = right_ht.drop("qc_mt_params")
+    logger.info("Renaming hard_filters struct to sample_filter struct")
+    left_ht = left_ht.transmute(sample_filters=left_ht.hard_filters)
 
-    logger.info("Joining dups ht to current join")
-    left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
-
-    logger.info("Reading in related samples ht")
+    logger.info("Reading in related samples HT")
     related_samples_to_drop_ht = hl.read_table(related_drop_path(data_source, freeze))
     related_samples_to_drop_second_ht = related_samples_to_drop_ht.filter(
         related_samples_to_drop_ht.relationship == "2nd degree relatives"
     )
-    related_samples_to_drop_first_ht = related_samples_to_drop_ht.filter(
-        related_samples_to_drop_ht.relationship
-        == "Parent-child" | related_samples_to_drop_ht.relationship
-        == "Siblings"
+    related_samples_to_drop_pc_ht = related_samples_to_drop_ht.filter(
+        related_samples_to_drop_ht.relationship == "Parent-child"
+    )
+    related_samples_to_drop_sib_ht = related_samples_to_drop_ht.filter(
+        related_samples_to_drop_ht.relationship == "Siblings"
     )
     related_samples_to_drop_dup_ht = related_samples_to_drop_ht.filter(
         related_samples_to_drop_ht.relationship == "Duplicate/twins"
     )
 
-    logger.info("Annotating meta ht with related samples")
+    logger.info("Annotating sample_filter struct with relatedness booleans")
     left_ht = left_ht.annotate(
-        related_filter=hl.is_defined(related_samples_to_drop_second_ht[left_ht.s])
+        sample_filters=left_ht.sample_filters.annotate(
+            related=hl.is_defined(related_samples_to_drop_second_ht[left_ht.s]),
+            duplicate=hl.is_defined(related_samples_to_drop_dup_ht[left_ht.s]),
+            parent_child=hl.is_defined(related_samples_to_drop_pc_ht[left_ht.s]),
+            sibling=hl.is_defined(related_samples_to_drop_pc_ht[left_ht.s]),
+        )
     )
-    left_ht = left_ht.annotate(
-        related_dup_filter=hl.is_defined(related_samples_to_drop_dup_ht[left_ht.s])
-    )
-    left_ht = left_ht.annotate(
-        related_first_filter=hl.is_defined(related_samples_to_drop_first_ht[left_ht.s])
-    )
-    left_ht = left_ht.annotate_globals(**related_samples_to_drop_ht.globals)
 
-    logger.info("Reading in outlier ht")
+    logger.info("Reading in outlier HT")
     right_ht = hl.read_table(
         platform_pop_outlier_ht_path(data_source, freeze, args.pop_assignment_method)
     )
 
     logger.info("Joining outlier ht to current join")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
+    left_ht = left_ht.transmute(
+        sample_filters=left_ht.sample_filters.annotate(
+            fail_n_snp=left_ht.fail_n_snp,
+            fail_r_ti_tv=left_ht.fail_r_ti_tv,
+            fail_r_insertion_deletion=left_ht.fail_r_insertion_deletion,
+            fail_n_insertion=left_ht.fail_n_insertion,
+            fail_n_deletion=left_ht.fail_n_deletion,
+            fail_r_het_hom_var=left_ht.fail_r_het_hom_var,
+        )
+    )
 
     logger.info("Annotating high_quality field")
     left_ht = left_ht.annotate(
         high_quality=(
-            (hl.len(left_ht.hard_filters) == 0)
+            (~left_ht.sample_filters.low_callrate)
+            & (~left_ht.sample_filters.ambiguous_sex)
+            & (~left_ht.sample_filters.sex_aneuploidy)
+            & (~left_ht.sample_filters.low_coverage)
             & (hl.len(left_ht.qc_metrics_filters) == 0)
         )
     )
+    left_ht = left_ht.drop("qc_metrics_filters")
 
     logger.info("Annotating releasable field")
     left_ht = left_ht.annotate(
@@ -159,7 +238,7 @@ def main(args):
         )
     )
     logger.info(
-        "Releasable and non-releasable counts:"
+        "Release and control sample counts:"
         f"{left_ht.aggregate(hl.struct(release=hl.agg.count_where(left_ht.release), control=hl.agg.count_where(~left_ht.release)))}"
     )
 
@@ -182,6 +261,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-f", "--freeze", help="Current freeze #", default=CURRENT_FREEZE, type=int
+    )
+    parser.add_argument(
+        "--n_pcs",
+        help="Number of PCs used in population inference (default: 10)",
+        default=10,
+        type=int,
     )
     parser.add_argument(
         "-d",
