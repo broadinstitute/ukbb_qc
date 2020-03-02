@@ -1,12 +1,7 @@
 from gnomad_hail.resources.resource_utils import DataException
+import gnomad_hail.resources.grch38 as grch38
 from .resource_utils import CURRENT_FREEZE, CURRENT_HAIL_VERSION, DATA_SOURCES, FREEZES
 from typing import Dict
-
-
-syndip_bed_path = "gs://gnomad-public/truth-sets/hail-0.2/syndip.b38.bed"
-syndip_truth_mt_path = "gs://gnomad-public/truth-sets/hail-0.2/syndip.b38.mt"
-na12878_truth_mt_path = "gs://gnomad-public/truth-sets/hail-0.2/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.mt"
-na12878_bed_path = "gs://gnomad-public/truth-sets/source/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_nosomaticdel_noCENorHET7.bed"
 
 
 def get_truth_sample_info(
@@ -15,15 +10,15 @@ def get_truth_sample_info(
     truth_samples = {
         "syndip": {
             "s": "CHMI_CHMI3_Nex1",
-            "truth_mt": syndip_truth_mt_path,
+            "truth_mt": grch38.syndip,
             "mt": truth_sample_mt_path(data_source, freeze, "syndip"),
-            "bed": syndip_bed_path,
+            "bed": grch38.syndip_hc_intervals,
         },
         "na12878": {
             "s": "Coriell_NA12878_NA12878",
-            "truth_mt": na12878_truth_mt_path,
+            "truth_mt": grch38.na12878_giab,
             "mt": truth_sample_mt_path(data_source, freeze, "na12878"),
-            "bed": na12878_bed_path,
+            "bed": grch38.na12878_giab_hc_intervals,
         },
     }
     return truth_samples
