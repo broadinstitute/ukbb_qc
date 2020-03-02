@@ -180,20 +180,9 @@ def create_rf_ht(
         **ht_allele_data[mt.row_key],
     ).rows()
 
-    # TODO: Really need to understand all the types of allele counts and when to use them, here it looks like we are using
-    # TODO: qc_samples_raw (I think this is high quality samples no adj)
-    ht = ht.annotate(
-        AC=ht.qc_callstats.find(lambda x: x.meta.get("group") == group).AC[1]
-    )
-
     # Filter to only variants found in high qual samples and with no LowQual filter
-    # TODO: add lowqual filter to loading
-    ht = ht.filter(
-        (ht.qc_callstats.find(lambda x: x.meta.get("group") == group).AC[1] > 0)
-        & ~info_ht[ht.key].filters.contains("LowQual")
-    )
+    ht = ht.filter(ht.info.ac_qc_samples_raw & ~info_ht.lowqual)
 
-    # TODO: changed this to align with what Lauren't does where ac is adj and ac_raw is this, need to think about samples, are these counts before/after removing QC samples and with or without related individuals
     ht = ht.select(
         **get_allele_features_expr(ht),
         **get_site_features_expr(ht),
@@ -202,11 +191,10 @@ def create_rf_ht(
         mills=ht.truth_data.mills,
         ukbb_array_con_common=ht.truth_data.ukbb_array_con_common,
         sib_singletons=ht.truth_data.sib_singletons,
-        n_nonref=mt.info.ac_qc_samples_raw,
-        singleton=ht.info.ac_raw == 1,  # TODO: Confirm with Laurent if this should be pre or post filtering high quality samples
+        singleton=ht.info.ac_release_samples_raw == 1,
         was_split=ht.was_split,
-        ac_raw=ht.info.ac_raw,  # TODO: Confirm with Laurent if this should be pre or post filtering high quality samples
-        ac=ht.info.ac_adj,  # TODO: Confirm with Laurent if this should be pre or post filtering high quality samples
+        ac_raw=ht.info.ac_release_samples_raw,
+        ac=ht.info.ac_release_samples_adj,
     )
 
     ht = annotate_interval_qc_filter(data_source, freeze, ht)
