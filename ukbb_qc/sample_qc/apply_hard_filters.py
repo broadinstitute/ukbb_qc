@@ -3,7 +3,6 @@ import hail as hl
 import logging
 from gnomad_hail.utils.sample_qc import add_filters_expr
 from gnomad_hail.utils.sparse_mt import densify_sites
-from ukbb_qc.resources.sample_qc import densified_interval_qc_path
 
 
 logging.basicConfig(
@@ -15,16 +14,22 @@ logger.setLevel(logging.INFO)
 
 
 def apply_hard_filters_expr(
-    ht: hl.Table, min_callrate: float, min_depth: float
-) -> hl.Table:
+    callrate_expr: hl.expr.Float64Expression, 
+    dp_expr: hl.expr.Float64Expression, 
+    sex_expr: hl.expr.StringExpression,
+    min_callrate: float, 
+    min_depth: float
+) -> hl.expr.SetExpression:
     """
-    Creates hard filters expression and annotates Table with expression (creates hard_filters column).
+    Creates hard filters expression.
 
-    :param Table ht: Table to be annotated 
+    :param hl.expr.Float64Expression callrate_expr: Field that contains callrate expression
+    :param hl.expr.Float64Expression dp_expr: Field that contains mean depth expression
+    :param hl.expr.StringExpression sex_expr: Field that contains inferred sex expression
     :param float min_callrate: Callrate threshold to be used to filter samples; default is 0.99
     :param float min_depth: Mean depth threshold to be used to filter samples; default is 20.0
-    :return: Table with hard_filters column
-    :rtype: Table
+    :return: Hard filters expression
+    :rtype: hl.expr.SetExpression
     """
 
     # the default coverage/depth cutoffs were set visually using plots:
@@ -38,14 +43,12 @@ def apply_hard_filters_expr(
         # we don"t have contamination/chimera for regeneron vcf
         # "contamination": ht.freemix > 0.05,
         # "chimera": ht.pct_chimeras > 0.05,
-        "low_callrate": ht.raw_sample_qc.call_rate < min_callrate,
-        "ambiguous_sex": ht.sex == "ambiguous_sex",
-        "sex_aneuploidy": ht.sex == "sex_aneuploidy",
-        "low_coverage": ht.raw_sample_qc.dp_stats.mean < min_depth,
+        "low_callrate": callrate_expr < min_callrate,
+        "ambiguous_sex": sex_expr == "Ambiguous",
+        "sex_aneuploidy": ((sex_expr != "Ambiguous") & (sex_expr != "XX") & (sex_expr != "XY")),
+        "low_coverage": dp_expr < min_depth,
     }
-
-    ht = ht.annotate(hard_filters=add_filters_expr(hard_filters, None))
-    return ht
+    return hard_filters
 
 
 def hard_filter_samples(
@@ -53,11 +56,9 @@ def hard_filter_samples(
     freeze: int,
     mt: hl.MatrixTable,
     interval_qc_ht: hl.Table,
-    last_END_ht: hl.Table,
     sex_ht: hl.Table,
     min_callrate: float,
-    min_depth: float,
-    n_partitions: int,
+    min_depth: float
 ) -> hl.Table:
     """
     Applys hard filters to samples and returns Table with samples and their hard filter status.
@@ -66,43 +67,39 @@ def hard_filter_samples(
     :param int freeze: One of the data freezes
     :param MatrixTable mt: Input MatrixTable with samples to be filtered
     :param Table interval_qc_ht: Table with high coverage intervals
-    :param Table last_END_ht: Table with most upstream reference block annotations
     :param Table sex_ht: Table with samples and their inferred sex
     :param float min_callrate: Callrate threshold to be used to filter samples; default is 0.99
     :param float min_depth: Mean depth threshold to be used to filter samples; default is 20.0
-    :param int n_partitions: Number of partitions for densified MatrixTable
     :return: Table with samples and their hard filter status
     :rtype: hl.Table
     """
-
-    logger.info("Densifying sites...")
-    mt = densify_sites(mt, interval_qc_ht, last_END_ht)
-
-    logger.info("Checkpointing densified MT")
-    mt = mt.checkpoint(densified_interval_qc_path(data_source, freeze), overwrite=True)
-
-    logger.info("Repartitioning densified MT")
-    mt = mt.naive_coalesce(n_partitions)
-    mt = mt.checkpoint(
-        densified_interval_qc_path(data_source, freeze, repartitioned=True),
-        overwrite=True,
-    )
+    logger.info("Computing callrate and mean DP over high coverage intervals...")
+    mt = mt.filter_rows(hl.is_defined(interval_qc_ht[mt.row_key]))
+    ht = mt.annotate_cols(
+        call_rate=hl.agg.sum(mt.n_defined) / hl.agg.sum(mt.total),
+        mean_dp=hl.agg.sum(mt.dp_sum) / hl.agg.sum(mt.total)
+    ).cols()
 
     logger.info("Adding sex imputation annotations...")
-    mt = mt.annotate_cols(**sex_ht[mt.col_key])
+    ht = ht.annotate(sex=sex_ht[ht.key].sex_karyotype)
 
-    logger.info("Computing raw sample QC metrics...")
-    mt = mt.key_rows_by("locus", "alleles")
-    mt = hl.sample_qc(mt)
-    ht = mt.transmute_cols(
-        raw_sample_qc=mt.sample_qc.select("call_rate", "gq_stats", "dp_stats")
-    ).cols()
     ht = ht.checkpoint(
         get_checkpoint_path(data_source, freeze, name="interval_qc_sample_qc"),
         overwrite=True,
     )
 
     logger.info("Applying hard filters and writing out hard filters HT...")
-    ht = apply_hard_filters_expr(ht, min_callrate, min_depth)
-    ht = ht.naive_coalesce(n_partitions)
+    ht = ht.annotate(apply_hard_filters_expr(ht, min_callrate, min_depth))
+    ht = ht.annotate(
+        hard_filters=add_filters_expr(
+            apply_hard_filters_expr(
+                    ht.call_rate,
+                    ht.mean_dp,
+                    ht.sex,
+                    min_callrate,
+                    min_depth
+            ),
+            None
+        )
+    )
     return ht
