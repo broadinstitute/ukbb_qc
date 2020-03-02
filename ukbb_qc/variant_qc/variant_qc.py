@@ -159,7 +159,9 @@ def create_rf_ht(
                 )
                 == 1
             ),
-            "fail_hard_filters": (ht.info.QD < 2) | (ht.info.FS > 60) | (ht.info.MQ < 30)
+            "fail_hard_filters": (ht.info.QD < 2)
+            | (ht.info.FS > 60)
+            | (ht.info.MQ < 30),
         }
 
     mt = get_ukbb_data(data_source, freeze, meta_root="meta")
@@ -405,8 +407,7 @@ def train_rf(data_source: str, freeze: int, args):
         )
         test_ht = hl.filter_intervals(ht, test_intervals_locus, keep=True)
         test_ht = test_ht.checkpoint(
-            get_checkpoint_path(data_source, freeze, 'test_rf'),
-            overwrite=True,
+            get_checkpoint_path(data_source, freeze, "test_rf"), overwrite=True,
         )
         test_ht = test_ht.filter(hl.is_defined(test_ht[LABEL_COL]))
         test_results = rf.test_model(
