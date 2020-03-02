@@ -176,6 +176,16 @@ def hard_filters_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
 
 
 # Array resources
+def array_concordance_sites_path() -> str:
+    """
+    Returns path to Table with sites to use when calculating array concordance
+    Sites are from the 200K (tranche 2/freeze 5)
+
+    :return: Path to sites Table
+    :rtype: Table
+    """
+    return "gs://broad-ukbb/broad.freeze_5/temp/sites_for_array_concordance.ht"
+
 def array_sample_concordance_path(
     data_source: str, freeze: int = CURRENT_FREEZE
 ) -> str:
