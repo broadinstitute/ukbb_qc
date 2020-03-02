@@ -56,16 +56,23 @@ def prepare_array_and_exome_mt(
         f"Total number of IDs in the sample map that are also in the array data: {exome_array_count}..."
     )
 
-    # Get high callrate, common sites in autosomes only from tranche 2/freeze 5
-    # NOTE: Filter to autosomes because of adjusted sex ploidies in hardcalls mt (hail throws ploidy 0 error)
-    sites_ht = get_sites(af_cutoff, call_rate_cutoff)
+    logger.info("Filtering sparse exome MT to non ref sites...")
+    exome_mt = exome_mt.filter_rows(hl.len(exome_mt.alleles) > 1)
 
-    # Filter array and exome mt to sites from tranche 2 and return
-    exome_mt = exome_mt.filter_rows(hl.is_defined(sites_ht[exome_mt.row_key]))
+    logger.info(
+        "Getting high callrate, common sites in autosomes only from tranche 2/freeze 5..."
+    )
+    # NOTE: This is filtered to autosomes because of adjusted sex ploidies in hardcalls mt (hail throws ploidy 0 error)
+    if not file_exists(f"{array_concordance_sites_path()}_SUCCESS"):
+        sites_ht = get_sites(af_cutoff, call_rate_cutoff)
+    sites_ht = sites_ht.key_by("locus")
+
+    logger.info("Filtering exome and array MT to tranche 2 sites...")
+    exome_mt = exome_mt.filter_rows(hl.is_defined(sites_ht[exome_mt.locus]))
     exome_mt = exome_mt.annotate_entries(
         GT=hl.experimental.lgt_to_gt(exome_mt.LGT, exome_mt.LA)
     )
-    array_mt = array_mt.filter_rows(hl.is_defined(sites_ht[array_mt.row_key]))
+    array_mt = array_mt.filter_rows(hl.is_defined(sites_ht[array_mt.locus]))
     return array_mt, exome_mt
 
 
@@ -83,13 +90,13 @@ def get_array_exome_concordance(
     """
     summary, samples, variants = hl.concordance(array_mt, exome_mt)
     variants = variants.annotate(
-        num_gt_con_non_ref=(variants.concor
-            dance[3][3] + variants.concordance[4][4]),
+        num_gt_con_non_ref=(variants.concordance[3][3] + variants.concordance[4][4]),
+        # NOTE: no homref calls in sparse (only check index 3 and higher in second matrix)
         num_gt_non_ref=(
             hl.sum(variants.concordance[2][3:])
-            + hl.sum(variants.concordance[3][2:])
-            + hl.sum(variants.concordance[4][2:])
-        )
+            + hl.sum(variants.concordance[3][3:])
+            + hl.sum(variants.concordance[4][3:])
+        ),
     )
     variants = variants.annotate(
         prop_gt_con_non_ref=variants.num_gt_con_non_ref / variants.num_gt_non_ref
@@ -98,9 +105,9 @@ def get_array_exome_concordance(
         num_gt_con_non_ref=(samples.concordance[3][3] + samples.concordance[4][4]),
         num_gt_non_ref=(
             hl.sum(samples.concordance[2][3:])
-            + hl.sum(samples.concordance[3][2:])
-            + hl.sum(samples.concordance[4][2:])
-        )
+            + hl.sum(samples.concordance[3][3:])
+            + hl.sum(samples.concordance[4][3:])
+        ),
     )
     samples = samples.annotate(
         prop_gt_con_non_ref=samples.num_gt_con_non_ref / samples.num_gt_non_ref
@@ -110,7 +117,8 @@ def get_array_exome_concordance(
 
 
 def main(args):
-    hl.init(log="/array_concordance.log")
+
+    hl.init(log="/array_concordance.log", default_reference="GRCh38")
     data_source = args.data_source
     freeze = args.freeze
     call_rate_cutoff = args.call_rate_cutoff
