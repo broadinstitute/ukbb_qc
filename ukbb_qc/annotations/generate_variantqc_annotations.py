@@ -120,9 +120,6 @@ def main(args):
         truth_ht = annotate_truth_data(
             ht,
             {
-                "sib_singletons": hl.read_table(
-                    var_annotations_ht_path(data_source, freeze, "sib_singletons.train")
-                ),
                 "ukbb_array_con_common": hl.read_table(
                     var_annotations_ht_path(
                         data_source,
