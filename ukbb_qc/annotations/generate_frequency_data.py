@@ -3,7 +3,7 @@ import logging
 from typing import List
 import hail as hl
 from gnomad_hail.utils.slack import try_slack
-from gnomad_hail.utils.generic import write_temp_gcs
+from gnomad_hail.utils.generic import write_temp_gcs, bi_allelic_site_inbreeding_expr
 from gnomad_hail.utils.annotations import age_hists_expr, annotate_freq, qual_hist_expr, faf_expr, pop_max_expr
 from gnomad_hail.utils.gnomad_functions import adjusted_sex_ploidy_expr, filter_to_adj, get_adj_expr
 import gnomad_hail.resources.grch37 as grch37_resources
@@ -197,6 +197,7 @@ def main(args):
     if args.calculate_frequencies:
         logger.info("Calculating InbreedingCoeff to avoid another densify")
         # Note: this is not the ideal location for this, but adding here to avoid another densify
+        # TODO: Still need to decide how to handle variants where there are no hets, this returns NA
         if args.filter_related:
             mt = mt.annotate_rows(InbreedingCoeff=bi_allelic_site_inbreeding_expr(mt.GT))
 
