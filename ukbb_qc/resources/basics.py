@@ -24,7 +24,7 @@ def excluded_samples_path(freeze: int = CURRENT_FREEZE) -> str:
     :rtype: str
     """
     consent_file_name = {6: "w26041_20200204.csv"}
-    return f"gs://broad-ukbb/resources/withdrawn_consents/{consent_file_name[freeze]}"
+    return f"gs://broad-ukbb/resources/withdrawn_consents/{consent_file_name.get(freeze)}"
 
 
 def get_ukbb_data(
