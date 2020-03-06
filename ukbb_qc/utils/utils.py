@@ -3,16 +3,14 @@ import logging
 from typing import Optional, Union
 from gnomad_hail.utils.generic import (
     filter_to_autosomes,
-    interval_length,
     get_reference_genome,
-    union_intervals,
 )
 from gnomad_hail.resources.grch38.reference_data import lcr_intervals
 from ukbb_qc.resources.basics import get_ukbb_data, raw_mt_path
 from ukbb_qc.resources.sample_qc import (
     f_stat_sites_path,
     interval_qc_path,
-    qc_temp_data_prefix,
+    hard_filters_ht_path,
     qc_sites_path,
 )
 
