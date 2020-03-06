@@ -1,4 +1,6 @@
 import argparse
+import logging
+import hail as hl
 from gnomad_hail.utils.annotations import age_hists_expr, annotate_freq, qual_hist_expr
 import gnomad_hail.resources.grch37 as grch37_resources
 from ukbb_qc.resources.resources import *
@@ -170,17 +172,13 @@ def main(args):
         mt = mt.filter_rows(hl.len(mt.alleles) > 1)
         mt = mt.filter_rows(hl.is_defined(capture_ht[mt.locus]))
 
+    logger.info("Filtering out low quality samples and their variants...")
     mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
-    logger.info(
-        f"mt count after filtering out low quality samples and their variants: {mt.count()}"
-    )
 
     if args.filter_related:
+        logger.info("Filtering out related samples and their variants...")
         mt = mt.filter_cols(~mt.meta.related_filter)
         mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
-        logger.info(
-            f"mt count after filtering out related samples and their variants: {mt.count()}"
-        )
 
     if args.by_platform:
         logger.info(
@@ -195,6 +193,7 @@ def main(args):
     if args.calculate_frequencies:
         logger.info("Calculating frequencies")
         ht = generate_frequency_data(mt, POPS_TO_REMOVE_FOR_POPMAX, args.by_platform)
+
         write_temp_gcs(
             ht,
             var_annotations_ht_path(
@@ -204,6 +203,8 @@ def main(args):
             ),
             args.overwrite,
         )
+
+
 
     if args.join_gnomad:
         ht = hl.read_table(
