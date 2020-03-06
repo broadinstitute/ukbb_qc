@@ -1,15 +1,25 @@
-from gnomad_hail import *
-from gnomad_qc.annotations.generate_qc_annotations import *
-from gnomad_hail.utils.relatedness import get_relationship_expr
+import argparse
+import logging
+from typing import Dict
+import hail as hl
+from gnomad_hail.resources.grch38.reference_data import get_truth_ht
 from gnomad_hail.utils.annotations import (
     default_generate_sib_stats,
-    generate_family_stats,
+    filter_mt_to_trios,
+    default_generate_trio_stats,
 )
-import gnomad_hail.resources.basics as gres
 from gnomad_hail.utils.generic import vep_or_lookup_vep, vep_struct_to_csq
-from ukbb_qc.resources.resources import *
-from ukbb_qc.utils.utils import *
-import argparse
+from ukbb_qc.resources.basics import get_ukbb_data, CURRENT_FREEZE
+from ukbb_qc.resources.sample_qc import (
+    array_variant_concordance_path,
+    related_drop_path,
+    sex_ht_path,
+    inferred_ped_path
+)
+from ukbb_qc.resources.variant_qc import (
+    var_annotations_ht_path,
+    info_ht_path
+)
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("variantqc_annotations")
@@ -30,7 +40,7 @@ def annotate_truth_data(ht: hl.Table, truth_tables: Dict[str, hl.Table]) -> hl.T
     :param truth_tables: A dictionary containing additional truth set hail tables keyed by the annotation to use in HT
     :return: Table with qc annotations
     """
-    truth_ht = hl.read_table(truth_ht_path)
+    truth_ht = get_truth_ht()
     ht = ht.join(truth_ht, how="left")
 
     ht = ht.annotate(
@@ -52,79 +62,27 @@ def main(args):
         ht = ht.annotate(vep_csq=vep_struct_to_csq(ht.vep))
         ht.write(var_annotations_ht_path(data_source, freeze, "vep"), args.overwrite)
 
-    if (
-        args.generate_allele_data
-    ):  # TODO: I think this was moved to another location, if so I will remove from here
-        mt = get_ukbb_data(data_source, freeze, split=False)
-        generate_allele_data(mt).write(
-            var_annotations_ht_path(data_source, freeze, "allele_data"),
-            overwrite=args.overwrite,
-        )
-
-    if args.generate_qc_annotations:
-        # Turn on spark speculation: --properties 'spark:spark.speculation=true,spark:spark.speculation.quantile=0.9,spark:spark.speculation.multiplier=3'
-        mt = get_ukbb_data(data_source, freeze, non_refs_only=True, meta_root="meta")
-        mt = generate_qc_annotations(
-            mt,
-            all_annotations=args.calculate_all_annotations,
-            medians=args.calculate_medians,
-        )
-        mt.write(
-            var_annotations_ht_path(data_source, freeze, "qc_stats"),
-            stage_locally=True,
-            overwrite=args.overwrite,
-        )
-
-    if args.generate_call_stats:  # TODO: This likely needs to be moved after densify
+    if args.generate_family_stats:
         mt = get_ukbb_data(data_source, freeze, meta_root="meta")
-        ht = mt.annotate_rows(
-            qc_callstats=hl.stuct(
-                **{
-                    group: hl.agg.filter(
-                        mt[group], hl.agg.call_stats(mt.GT, mt.alleles)
-                    )
-                    for group in {
-                        "qc_samples_raw": mt.meta.high_quality,
-                        "all_samples_raw": True,
-                    }
-                }
-            )
-        ).rows()
+        mt = mt.annotate_cols(is_female=mt.meta.is_female)
 
-        ht.write(
-            var_annotations_ht_path(data_source, freeze, "call_stats"),
-            overwrite=args.overwrite,
-        )
+        ped_fp = inferred_ped_path(data_source, freeze)
+        ped = hl.Pedigree.read(ped_fp, delimiter="\t")
+        fam_ht = hl.import_fam(ped_fp, delimiter="\t")
 
-    if args.generate_family_stats:  # TODO: Need to move this to be after a densify step
+        mt = filter_mt_to_trios(mt, fam_ht)
+        mt = mt.select_entries("GT", "GQ", "AD", "END", "adj")
+
+        mt = hl.experimental.densify(mt)
+
+        mt = hl.trio_matrix(mt, pedigree=ped, complete_trios=True)
+        trio_stats_ht = default_generate_trio_stats(mt, ped)
+        trio_stats_ht.write(var_annotations_ht_path(data_source, freeze, "trio_stats"), overwrite=args.overwrite)
+
+    if args.generate_sibling_stats:
         mt = get_ukbb_data(data_source, freeze, meta_root="meta")
-        ht, sample_table = generate_family_stats(
-            mt, inferred_ped_path(data_source, freeze), args.include_adj_family_stats
-        )
-        ht.write(
-            var_annotations_ht_path(data_source, freeze, "family_stats"),
-            stage_locally=True,
-            overwrite=args.overwrite,
-        )
-        sample_table.write(
-            sample_annotations_table_path(data_source, freeze, "family_stats"),
-            stage_locally=True,
-            overwrite=args.overwrite,
-        )
-
-    if args.generate_sibling_singletons:
-        relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
+        relatedness_ht = hl.read_table(related_drop_path(data_source, freeze))
         sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
-        mt = get_ukbb_data(data_source, freeze)
-
-        relatedness_ht = relatedness_ht.annotate(
-            relationship=get_relationship_expr(
-                kin_expr=relatedness_ht.kin,
-                ibd0_expr=relatedness_ht.ibd0,
-                ibd1_expr=relatedness_ht.ibd1,
-                ibd2_expr=relatedness_ht.ibd2,
-            )
-        )
 
         sib_stats_ht = default_generate_sib_stats(mt, relatedness_ht, sex_ht)
 
@@ -135,28 +93,23 @@ def main(args):
 
     if args.generate_array_concordant_ht:
         variants = hl.read_table(array_variant_concordance_path(data_source, freeze))
-        callrate_cutoff = variants.callrate_cutoff.take(1)[0]
-        af_cutoff = variants.af_cutoff.take(1)[0]
+        info_ht = hl.read_table(info_ht_path(data_source, freeze, split=True))
 
-        exome_mt = hl.read_matrix_table(
-            get_mt_checkpoint_path(
-                data_source,
-                freeze,
-                name=f"exome_subset_concordance_callrate_{callrate_cutoff}_af_{af_cutoff}",
-            )
-        )
-
-        variants = variants.annotate(AF=exome_mt.rows()[variants.key].variant_qc.AF[1])
+        variants = variants.annotate(AF=info_ht[variants.key].ac_qc_samples_raw)
         variants = variants.filter(
             (variants.prop_gt_con_non_ref > args.concordance_cutoff)
             & (variants.AF > args.variant_qc_af_cutoff)
         )
         variants = variants.repartition(1000)
+        variants = variants.annotate_globals(
+            concordance_cutoff=args.concordance_cutoff,
+            variant_qc_af_cutoff=args.variant_qc_af_cutoff
+        )
         variants.write(
             var_annotations_ht_path(
                 data_source,
                 freeze,
-                f"array_con_con_{args.concordance_cutoff}_AF_{args.variant_qc_af_cutoff}",
+                "array_exome_concordant_variants",
             ),
             overwrite=args.overwrite,
         )
@@ -173,7 +126,11 @@ def main(args):
                     var_annotations_ht_path(
                         data_source,
                         freeze,
-                        "array_variant_concordance_callrate_0.95_non_ref_con_0.9_AF_0.001",
+                        var_annotations_ht_path(
+                            data_source,
+                            freeze,
+                            "array_exome_concordant_variants",
+                        ),
                     )
                 ),
             },
