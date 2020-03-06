@@ -3,13 +3,13 @@ import hail as hl
 import hdbscan
 import logging
 import numpy as np
-from gnomad_hail.utils.generic import filter_to_autosomes
-from gnomad_hail.utils.sample_qc import (
+from gnomad.utils.generic import filter_to_autosomes
+from gnomad.utils.sample_qc import (
     assign_platform_from_pcs,
     compute_callrate_mt,
     run_platform_pca,
 )
-from gnomad_hail.utils.slack import try_slack
+from gnomad.utils.slack import try_slack
 from ukbb_qc.resources.basics import capture_ht_path, get_ukbb_data
 from ukbb_qc.resources.sample_qc import (
     callrate_mt_path,

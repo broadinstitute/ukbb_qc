@@ -1,7 +1,7 @@
 import argparse
 import hail as hl
 import logging
-from gnomad_hail.utils.gnomad_functions import adjust_sex_ploidy, annotate_adj
+from gnomad.utils.gnomad_functions import adjust_sex_ploidy, annotate_adj
 from ukbb_qc.resources.basics import CURRENT_FREEZE, get_ukbb_data, get_ukbb_data_path
 from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 from ukbb_qc.sample_qc.call_sex import run_impute_ploidy, run_impute_sex

@@ -12,8 +12,8 @@ from ukbb_qc.resources.sample_qc import (
     array_variant_concordance_path,
     array_sample_concordance_path,
 )
-from gnomad_hail.utils.slack import try_slack
-from gnomad_hail.utils.liftover import (
+from gnomad.utils.slack import try_slack
+from gnomad.utils.liftover import (
     get_liftover_genome,
     lift_data,
     annotate_snp_mismatch,

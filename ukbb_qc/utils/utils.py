@@ -1,11 +1,11 @@
 import hail as hl
 import logging
 from typing import Optional, Union
-from gnomad_hail.utils.generic import (
+from gnomad.utils.generic import (
     filter_to_autosomes,
     get_reference_genome,
 )
-from gnomad_hail.resources.grch38.reference_data import lcr_intervals
+from gnomad.resources.grch38.reference_data import lcr_intervals
 from ukbb_qc.resources.basics import get_ukbb_data, raw_mt_path
 from ukbb_qc.resources.sample_qc import (
     f_stat_sites_path,

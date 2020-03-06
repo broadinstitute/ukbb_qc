@@ -1,5 +1,5 @@
-from gnomad_hail.resources.resource_utils import DataException
-import gnomad_hail.resources.grch38 as grch38
+from gnomad.resources.resource_utils import DataException
+import gnomad.resources.grch38 as grch38
 from .resource_utils import CURRENT_FREEZE, CURRENT_HAIL_VERSION, DATA_SOURCES, FREEZES
 from typing import Dict
 

@@ -2,11 +2,11 @@ import argparse
 import logging
 from typing import List
 import hail as hl
-from gnomad_hail.utils.slack import try_slack
-from gnomad_hail.utils.generic import write_temp_gcs, bi_allelic_site_inbreeding_expr
-from gnomad_hail.utils.annotations import age_hists_expr, annotate_freq, qual_hist_expr, faf_expr, pop_max_expr
-from gnomad_hail.utils.gnomad_functions import adjusted_sex_ploidy_expr, filter_to_adj, get_adj_expr
-import gnomad_hail.resources.grch37 as grch37_resources
+from gnomad.utils.slack import try_slack
+from gnomad.utils.generic import write_temp_gcs, bi_allelic_site_inbreeding_expr
+from gnomad.utils.annotations import age_hists_expr, annotate_freq, qual_hist_expr, faf_expr, pop_max_expr
+from gnomad.utils.gnomad_functions import adjusted_sex_ploidy_expr, filter_to_adj, get_adj_expr
+import gnomad.resources.grch37 as grch37_resources
 from ukbb_qc.resources.basics import ukbb_phenotype_path, get_ukbb_data, capture_ht_path, array_sample_map_ht_path, CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 

@@ -1,9 +1,9 @@
 import argparse
 import logging
 import hail as hl
-from gnomad_hail.utils.slack import try_slack
-from gnomad_hail.utils.variant_qc import create_truth_sample_ht, compute_quantile_bin
-from gnomad_hail.utils.generic import filter_low_conf_regions
+from gnomad.utils.slack import try_slack
+from gnomad.utils.variant_qc import create_truth_sample_ht, compute_quantile_bin
+from gnomad.utils.generic import filter_low_conf_regions
 from ukbb_qc.resources.variant_qc import get_truth_sample_info, info_ht_path, var_annotations_ht_path, score_ranking_path, binned_concordance_path
 from ukbb_qc.resources.basics import capture_ht_path, CURRENT_FREEZE
 

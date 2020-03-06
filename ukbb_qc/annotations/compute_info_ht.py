@@ -1,10 +1,9 @@
 import argparse
 import hail as hl
 import logging
-from gnomad_hail.utils.annotations import get_lowqual_expr
-from gnomad_hail.utils.generic import bi_allelic_site_inbreeding_expr
-from gnomad_hail.utils.slack import try_slack
-from gnomad_hail.utils.sparse_mt import (
+from gnomad.utils.annotations import get_lowqual_expr
+from gnomad.utils.slack import try_slack
+from gnomad.utils.sparse_mt import (
     default_compute_info,
     split_info_annotation,
 )
@@ -36,18 +35,17 @@ def main(args):
     mt = remove_hard_filter_samples(data_source, freeze, mt, mt.LGT, non_refs_only=True)
 
     logger.info("Computing info HT...")
-    info_ht = default_compute_info(mt)
+    info_ht = default_compute_info(mt, site_annotations=True)
 
     logger.info("Dropping default lowqual expr...")
     info_ht = info_ht.drop("lowqual")
-    info_ht = info_ht.checkpoint(info_ht_path(data_source, freeze, split=False))
-
+    info_ht = info_ht.checkpoint(info_ht_path(data_source, freeze, split=False), overwrite=args.overwrite)
 
     logger.info("Splitting info ht...")
     info_ht = hl.split_multi(info_ht)
     info_ht = info_ht.annotate(
         info=info_ht.info.annotate(
-            split_info_annotation(info_ht.info, info_ht.a_index)
+            **split_info_annotation(info_ht.info, info_ht.a_index)
         ),
     )
 
@@ -71,14 +69,16 @@ def main(args):
         (related_ht.relationship == "Unrelated")
     )
     mt = mt.annotate_cols(related=hl.is_defined(related_ht[mt.col_key]))
-    mt = mt.annotate_rows(
+    mt = mt.select_rows()
+    ht = mt.annotate_rows(
         ac_qc_samples_raw=hl.agg.sum(mt.GT.n_alt_alleles()),
         ac_qc_samples_unrelated_raw=hl.agg.filter(~mt.related, hl.agg.sum(mt.GT.n_alt_alleles())),
         ac_qc_samples_adj=hl.agg.filter(mt.adj, hl.agg.sum(mt.GT.n_alt_alleles())),
         ac_qc_samples_unrelated_adj=hl.agg.filter(~mt.related & mt.adj,
-                                                  hl.agg.sum(mt.GT.n_alt_alleles())),
-    )
+                                                  hl.agg.sum(mt.GT.n_alt_alleles()))
+    ).rows()
 
+    info_ht = info_ht.annotate(**ht[info_ht.key])
     info_ht.write(info_ht_path(data_source, freeze, split=True))
 
 

@@ -1,10 +1,10 @@
 import argparse
 import hail as hl
 import logging
-from gnomad_hail.utils.generic import filter_to_autosomes
-from gnomad_hail.utils.gnomad_functions import filter_to_adj
-from gnomad_hail.utils.sample_qc import get_qc_mt
-from gnomad_hail.utils.sparse_mt import compute_last_ref_block_end, densify_sites
+from gnomad.utils.generic import filter_to_autosomes
+from gnomad.utils.gnomad_functions import filter_to_adj
+from gnomad.utils.sample_qc import get_qc_mt
+from gnomad.utils.sparse_mt import compute_last_ref_block_end, densify_sites
 from ukbb_qc.resources.basics import array_sample_map_ht_path, get_checkpoint_path, get_ukbb_data
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import (

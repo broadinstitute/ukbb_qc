@@ -2,14 +2,14 @@ import argparse
 import logging
 from typing import Dict
 import hail as hl
-from gnomad_hail.resources.grch38.reference_data import get_truth_ht
-from gnomad_hail.utils.annotations import (
+from gnomad.resources.grch38.reference_data import get_truth_ht
+from gnomad.utils.annotations import (
     default_generate_sib_stats,
     filter_mt_to_trios,
     default_generate_trio_stats,
 )
-from gnomad_hail.utils.generic import vep_or_lookup_vep, vep_struct_to_csq
-from gnomad_hail.utils.slack import try_slack
+from gnomad.utils.generic import vep_or_lookup_vep, vep_struct_to_csq
+from gnomad.utils.slack import try_slack
 from ukbb_qc.resources.basics import get_ukbb_data, CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import (
     array_variant_concordance_path,

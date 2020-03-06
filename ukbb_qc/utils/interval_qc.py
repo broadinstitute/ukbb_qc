@@ -1,8 +1,8 @@
 import argparse
 import hail as hl
 import logging
-from gnomad_hail.utils.generic import filter_to_autosomes
-from gnomad_hail.utils.slack import try_slack
+from gnomad.utils.generic import filter_to_autosomes
+from gnomad.utils.slack import try_slack
 from ukbb_qc.resources.basics import (
     CURRENT_FREEZE,
     capture_ht_path,

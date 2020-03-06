@@ -3,9 +3,9 @@ import logging
 import sys
 from pprint import pformat
 import hail as hl
-import gnomad_hail.resources.grch38 as grch38_resources
-from gnomad_hail.utils.slack import try_slack
-from gnomad_hail.utils.variant_qc import default_create_binned_ht, compute_grouped_binned_ht, default_score_bin_agg
+import gnomad.resources.grch38 as grch38_resources
+from gnomad.utils.slack import try_slack
+from gnomad.utils.variant_qc import default_create_binned_ht, compute_grouped_binned_ht, default_score_bin_agg
 from ukbb_qc.utils import annotate_interval_qc_filter
 from ukbb_qc.resources.variant_qc import score_ranking_path, rf_annotated_path, rf_path, var_annotations_ht_path, get_checkpoint_path, CURRENT_FREEZE
 

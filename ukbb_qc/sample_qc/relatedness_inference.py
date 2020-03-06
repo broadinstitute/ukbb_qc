@@ -2,8 +2,8 @@ import argparse
 import hail as hl
 import logging
 from typing import Tuple
-from gnomad_hail.utils.slack import try_slack
-from gnomad_hail.utils.relatedness import (
+from gnomad.utils.slack import try_slack
+from gnomad.utils.relatedness import (
     explode_duplicate_samples_ht,
     get_duplicate_samples_ht,
     get_duplicated_samples,

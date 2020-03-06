@@ -1,7 +1,7 @@
 import argparse
 import logging
 import hail
-from gnomad_hail.utils.annotations import annotate_freq
+from gnomad.utils.annotations import annotate_freq
 from ukbb_qc.resources.resources import *
 
 
