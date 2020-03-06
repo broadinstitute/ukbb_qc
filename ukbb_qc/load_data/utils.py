@@ -6,6 +6,7 @@ from ukbb_qc.resources.basics import (
     excluded_samples_path,
     ukbb_phenotype_path,
 )
+from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 
 
@@ -100,3 +101,34 @@ def import_capture_intervals(
     capture_ht.describe()
     logger.info("Writing capture ht")
     capture_ht.write(output_path, overwrite=overwrite)
+
+
+def import_vqsr(
+        data_source,
+        freeze,
+        vqsr_path_regex,
+        vqsr_type="AS",
+        num_partitions=500,
+        overwrite=False,
+        import_header_path=None
+) -> None:
+        logger.info(f"Importing VQSR annotations for {vqsr_type} VQSR...")
+        mt = hl.import_vcf(
+            vqsr_path_regex,
+            force_bgz=True,
+            reference_genome="GRCh38",
+            header_file=import_header_path,
+        ).naive_coalesce(num_partitions)
+
+        ht = mt.rows()
+        row_count1 = ht.count()
+        ht = hl.split_multi_hts(ht).checkpoint(
+            var_annotations_ht_path(
+                data_source, freeze, "vqsr" if vqsr_type == "AS" else "AS_TS_vqsr"
+            ),
+            overwrite=overwrite,
+        )
+        row_count2 = ht.count()
+        logger.info(
+            f"Found {row_count1} unsplit and {row_count2} split variants with VQSR annotations"
+        )
