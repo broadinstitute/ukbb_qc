@@ -8,7 +8,6 @@ from gnomad_hail.utils.annotations import age_hists_expr, annotate_freq, qual_hi
 from gnomad_hail.utils.gnomad_functions import adjusted_sex_ploidy_expr, filter_to_adj, get_adj_expr
 import gnomad_hail.resources.grch37 as grch37_resources
 from ukbb_qc.resources.basics import ukbb_phenotype_path, get_ukbb_data, capture_ht_path, array_sample_map_ht_path, CURRENT_FREEZE
-from ukbb_qc.resources.sample_qc import
 from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 
 logging.basicConfig(
@@ -161,7 +160,7 @@ def main(args):
     # will need to finish adapting code after completing tranche 2 for sparse data
     if args.densify:
         logger.info("Reading in capture ht")
-        capture_ht = hl.read_table(capture_ht_path("broad", freeze))
+        capture_ht = hl.read_table(capture_ht_path("broad"))
 
         # sparse mt only keyed by locus
         mt = mt.key_by("locus", "alleles")
@@ -196,11 +195,15 @@ def main(args):
         mt = mt.transmute_cols(tranche=mt["batch.c"])
 
     if args.calculate_frequencies:
+        logger.info("Calculating InbreedingCoeff to avoid another densify")
+        # Note: this is not the ideal location for this, but adding here to avoid another densify
+        if args.filter_related:
+            mt = mt.annotate_rows(InbreedingCoeff=bi_allelic_site_inbreeding_expr(mt.GT))
+
         logger.info("Calculating frequencies")
         ht = generate_frequency_data(mt, POPS_TO_REMOVE_FOR_POPMAX, args.by_platform)
 
-        write_temp_gcs(
-            ht,
+        ht = ht.checkpoint(
             var_annotations_ht_path(
                 data_source,
                 freeze,
@@ -209,7 +212,15 @@ def main(args):
             args.overwrite,
         )
 
-
+        if args.filter_related:
+            ht.select_rows('InbreedingCoeff').write(
+                var_annotations_ht_path(
+                    data_source,
+                    freeze,
+                    'inbreeding_coeff'
+                ),
+                args.overwrite,
+            )
 
     if args.join_gnomad:
         ht = hl.read_table(
