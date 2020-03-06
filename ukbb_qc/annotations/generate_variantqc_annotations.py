@@ -9,6 +9,7 @@ from gnomad_hail.utils.annotations import (
     default_generate_trio_stats,
 )
 from gnomad_hail.utils.generic import vep_or_lookup_vep, vep_struct_to_csq
+from gnomad_hail.utils.slack import try_slack
 from ukbb_qc.resources.basics import get_ukbb_data, CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import (
     array_variant_concordance_path,
@@ -62,7 +63,7 @@ def main(args):
         ht = ht.annotate(vep_csq=vep_struct_to_csq(ht.vep))
         ht.write(var_annotations_ht_path(data_source, freeze, "vep"), args.overwrite)
 
-    if args.generate_family_stats:
+    if args.generate_trio_stats:
         mt = get_ukbb_data(data_source, freeze, meta_root="meta")
         mt = mt.annotate_cols(is_female=mt.meta.is_female)
 
@@ -76,7 +77,7 @@ def main(args):
         mt = hl.experimental.densify(mt)
 
         mt = hl.trio_matrix(mt, pedigree=ped, complete_trios=True)
-        trio_stats_ht = default_generate_trio_stats(mt, ped)
+        trio_stats_ht = default_generate_trio_stats(mt)
         trio_stats_ht.write(var_annotations_ht_path(data_source, freeze, "trio_stats"), overwrite=args.overwrite)
 
     if args.generate_sibling_stats:
@@ -115,7 +116,7 @@ def main(args):
         )
 
     if args.annotate_truth_data:
-        ht = get_ukbb_data(data_source, freeze, meta_root=None).select_rows()
+        ht = get_ukbb_data(data_source, freeze, meta_root=None).rows()
         truth_ht = annotate_truth_data(
             ht,
             {
@@ -162,21 +163,10 @@ if __name__ == "__main__":
 
     parser.add_argument("--vep", help="Runs VEP", action="store_true")
     parser.add_argument(
-        "--generate_allele_data", help="Calculates allele data", action="store_true"
+        "--generate_trio_stats", help="Calculates trio stats", action="store_true"
     )
     parser.add_argument(
-        "--generate_qc_annotations",
-        help="Calculates QC annotations",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--generate_call_stats", help="Calculates call stats", action="store_true"
-    )
-    parser.add_argument(
-        "--generate_family_stats", help="Calculates family stats", action="store_true"
-    )
-    parser.add_argument(
-        "--generate_sibling_singletons",
+        "--generate_sibling_stats",
         help="Creates a hail Table of variants that are sibling singletons",
         action="store_true",
     )
@@ -198,33 +188,8 @@ if __name__ == "__main__":
         default=0.001,
     )
     parser.add_argument(
-        "--num_var_per_sibs_cutoff",
-        help="Max number of sibling singletons in a pair for the pair to be included in truth set",
-        default=40,
-    )
-    parser.add_argument(
-        "--include_adj_family_stats",
-        help="Also calculate family stats for adj genotypes",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--test_train_split",
-        help="Percentage of truth data to hold back for testing",
-        default=0.2,
-    )
-    parser.add_argument(
         "--annotate_truth_data",
         help="Creates a HT of UKBB variants annotated with truth sites",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--calculate_medians",
-        help="Calculate metric medians (warning: slow)",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--calculate_all_annotations",
-        help="Calculation many more annotations (warning: slow)",
         action="store_true",
     )
     args = parser.parse_args()
