@@ -81,7 +81,7 @@ def main(args):
 
     logger.info("Removing related samples...")
     mt = mt.filter_cols(hl.is_defined(mt.related))
-    mt = mt.filter_rows(hl.agg.any(mt.LGT.is_non_ref()))
+    mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
 
     logger.info("Adding inbreeding coefficient...")
     mt = mt.annotate_rows(InbreedingCoeff=bi_allelic_site_inbreeding_expr(mt.GT))
