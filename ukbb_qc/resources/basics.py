@@ -102,8 +102,9 @@ def get_ukbb_data(
     if ukbb_samples_only:
         mt = mt.filter_cols(mt.s.contains("UKB"))
 
+    gt_expr = mt.LGT if split else mt.GT
     mt = mt.filter_rows(
-        hl.agg.any(mt.LGT.is_non_ref()) | hl.agg.any(hl.is_defined(mt.END))
+        hl.agg.any(gt_expr.is_non_ref()) | hl.agg.any(hl.is_defined(mt.END))
     )
 
     return mt
