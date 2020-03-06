@@ -1,18 +1,18 @@
 import argparse
 import hail as hl
 import logging
-from gnomad_hail.resources.grch38.intervals import lcr
-from gnomad_hail.resources.grch38.reference_data import dbsnp
+from gnomad.resources.grch38.intervals import lcr
+from gnomad.resources.grch38.reference_data import dbsnp
 from gnomad_qc.v2.variant_qc.prepare_data_release import (
     generic_field_check,
     index_globals,
     make_filters_sanity_check_expr,
     make_label_combos,
 )
-from gnomad_hail.utils.sample_qc import add_filters_expr
-from gnomad_hail.utils.generic import get_reference_genome, rep_on_read
-from gnomad_hail.utils.gnomad_functions import filter_to_adj
-from gnomad_hail.utils.annotations import qual_hist_expr, age_hists_expr
+from gnomad.utils.sample_qc import add_filters_expr
+from gnomad.utils.generic import get_reference_genome, rep_on_read
+from gnomad.utils.gnomad_functions import filter_to_adj
+from gnomad.utils.annotations import qual_hist_expr, age_hists_expr
 from typing import Dict, List, Union
 from ukbb_qc.resources import *
 from ukbb_qc.utils.constants import *

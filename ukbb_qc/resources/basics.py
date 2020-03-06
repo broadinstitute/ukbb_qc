@@ -1,7 +1,7 @@
 import hail as hl
 from typing import Optional
-from gnomad_hail.utils.generic import file_exists
-from gnomad_hail.resources.resource_utils import DataException
+from gnomad.utils.generic import file_exists
+from gnomad.resources.resource_utils import DataException
 from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES, CURRENT_HAIL_VERSION
 from .sample_qc import meta_ht_path
 
@@ -53,7 +53,7 @@ def get_ukbb_data(
     :return: hardcalls dataset
     :rtype: MatrixTable
     """
-    from gnomad_hail.utils import filter_to_adj
+    from gnomad.utils import filter_to_adj
 
     if raw and split:
         raise DataException("No split raw data. Use of hardcalls is recommended.")
@@ -102,7 +102,7 @@ def get_ukbb_data(
     if ukbb_samples_only:
         mt = mt.filter_cols(mt.s.contains("UKB"))
 
-    gt_expr = mt.LGT if split else mt.GT
+    gt_expr = mt.GT if split else mt.LGT
     mt = mt.filter_rows(
         hl.agg.any(gt_expr.is_non_ref()) | hl.agg.any(hl.is_defined(mt.END))
     )
@@ -145,7 +145,7 @@ def array_mt_path(liftover: bool = False, checkpoint: bool = False) -> str:
     Function to return path to UKBB array MatrixTable
 
     :param bool liftover: Whether to return the path to the version of the data lifted over to build 38
-    :param bool checkpoint: Whether to return the temporary checkpoint path 
+    :param bool checkpoint: Whether to return the temporary checkpoint path
     :return: Path to array MatrixTable
     :rtype: str
     """
@@ -192,7 +192,7 @@ def hardcalls_mt_path(
 ) -> str:
     """
     Returns path to hardcalls MatrixTable.
-    
+
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
     :param bool split: Whether the dataset should be split

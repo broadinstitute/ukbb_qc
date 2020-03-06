@@ -4,9 +4,9 @@ import argparse
 import uuid
 import sys
 from typing import Dict, List
-from gnomad_hail.utils import rf
-from gnomad_hail.utils.gnomad_functions import pretty_print_runs
-from gnomad_hail.utils.slack import try_slack
+from gnomad.utils import rf
+from gnomad.utils.gnomad_functions import pretty_print_runs
+from gnomad.utils.slack import try_slack
 from gnomad_qc.v2.variant_qc.variantqc import sample_rf_training_examples
 from ukbb_qc.utils import annotate_interval_qc_filter
 from ukbb_qc.resources.basics import get_ukbb_data, get_checkpoint_path, CURRENT_FREEZE
@@ -159,6 +159,14 @@ def create_rf_ht(
                 )
                 == 1
             ),
+            "sibling_singleton": (ht.trio_stats[f"n_transmitted_{group}"] == 1)
+                                     & (
+                                             (
+                                                     ht.info[f"ac_qc_samples_{group}"]
+                                                     - ht.trio_stats[f"ac_children{group}"]
+                                             )
+                                             == 1
+                                     ),
             "fail_hard_filters": (ht.info.QD < 2)
             | (ht.info.FS > 60)
             | (ht.info.MQ < 30),
@@ -167,6 +175,9 @@ def create_rf_ht(
     mt = get_ukbb_data(data_source, freeze, meta_root="meta")
     ht_trio_stats = hl.read_table(
         var_annotations_ht_path(data_source, freeze, "trio_stats")
+    )
+    ht_sibling_stats = hl.read_table(
+        var_annotations_ht_path(data_source, freeze, "sibling_stats")
     )
     ht_truth_data = hl.read_table(
         var_annotations_ht_path(data_source, freeze, "truth_data")
@@ -177,7 +188,9 @@ def create_rf_ht(
     info_ht = hl.read_table(info_ht_path())
 
     ht = mt.annotate_rows(
-        info=info_ht[mt.row_key].info ** ht_trio_stats[mt.row_key],
+        info=info_ht[mt.row_key].info,
+        **ht_trio_stats[mt.row_key],
+        **ht_sibling_stats[mt.row_key],
         **ht_truth_data[mt.row_key],
         **ht_allele_data[mt.row_key],
     ).rows()
@@ -192,7 +205,6 @@ def create_rf_ht(
         omni=ht.truth_data.omni,
         mills=ht.truth_data.mills,
         ukbb_array_con_common=ht.truth_data.ukbb_array_con_common,
-        sib_singletons=ht.truth_data.sib_singletons,
         singleton=ht.info.ac_release_samples_raw == 1,
         was_split=ht.was_split,
         ac_raw=ht.info.ac_release_samples_raw,

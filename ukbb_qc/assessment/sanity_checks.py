@@ -1,4 +1,4 @@
-from gnomad_hail.utils.gnomad_functions import *
+from gnomad.utils.gnomad_functions import *
 from ukbb_qc.resources import *
 
 

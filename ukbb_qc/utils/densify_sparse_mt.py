@@ -1,5 +1,5 @@
 import hail as hl
-from gnomad_hail.utils.generic import rep_on_read
+from gnomad.utils.generic import rep_on_read
 from ukbb_qc.resources.resources import *
 
 

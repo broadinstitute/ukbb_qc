@@ -1,5 +1,5 @@
-from gnomad_hail import *
-from gnomad_hail.utils.sample_qc import *
+from gnomad import *
+from gnomad.utils.sample_qc import *
 from ukbb_qc.resources import *
 import hail as hl
 import argparse

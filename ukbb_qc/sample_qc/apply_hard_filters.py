@@ -1,7 +1,7 @@
 import argparse
 import hail as hl
 import logging
-from gnomad_hail.utils.sparse_mt import densify_sites
+from gnomad.utils.sparse_mt import densify_sites
 
 
 logging.basicConfig(

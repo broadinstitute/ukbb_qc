@@ -1,4 +1,4 @@
-from gnomad_hail.utils.slack import try_slack
+from gnomad.utils.slack import try_slack
 from ukbb_qc.resources.basics import release_ht_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 import argparse

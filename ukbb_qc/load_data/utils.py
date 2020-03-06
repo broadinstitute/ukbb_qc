@@ -1,6 +1,6 @@
 import hail as hl
 import logging
-from gnomad_hail.utils.generic import file_exists
+from gnomad.utils.generic import file_exists
 from ukbb_qc.resources.basics import (
     array_sample_map_path,
     excluded_samples_path,

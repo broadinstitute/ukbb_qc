@@ -2,14 +2,14 @@ import argparse
 import hail as hl
 import logging
 from typing import Union
-from gnomad_hail.resources.grch38.intervals import lcr
-from gnomad_hail.utils.generic import (
+from gnomad.resources.grch38.intervals import lcr
+from gnomad.utils.generic import (
     bi_allelic_expr,
     filter_low_conf_regions,
     filter_to_autosomes,
 )
-from gnomad_hail.utils.sample_qc import compute_stratified_metrics_filter
-from gnomad_hail.utils.slack import try_slack
+from gnomad.utils.sample_qc import compute_stratified_metrics_filter
+from gnomad.utils.slack import try_slack
 from ukbb_qc.resources.basics import array_sample_map_ht_path, get_ukbb_data
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import (

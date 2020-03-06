@@ -4,13 +4,13 @@ import hdbscan
 import logging
 import numpy as np
 import pickle
-from gnomad_hail.utils.liftover import (
+from gnomad.utils.liftover import (
     annotate_snp_mismatch,
     get_liftover_genome,
     lift_data,
 )
-from gnomad_hail.utils.sample_qc import run_pca_with_relateds
-from gnomad_hail.utils.slack import try_slack
+from gnomad.utils.sample_qc import run_pca_with_relateds
+from gnomad.utils.slack import try_slack
 from gnomad_qc.v2.resources.sample_qc import (
     ancestry_cluster_ht_path,
     ancestry_cluster_array_ht_path,

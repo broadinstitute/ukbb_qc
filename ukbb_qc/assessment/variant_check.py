@@ -1,5 +1,5 @@
+import logging
 import hail as hl
-from gnomad_hail import *
 from ukbb_qc.resources import *
 
 logging.basicConfig(format='%(asctime)s (%(name)s %(lineno)s): %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')

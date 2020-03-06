@@ -1,7 +1,7 @@
 import hail as hl
-from gnomad_hail import *
-from gnomad_hail.utils.generic import *
-from gnomad_hail.utils.sparse_mt import *
+from gnomad import *
+from gnomad.utils.generic import *
+from gnomad.utils.sparse_mt import *
 from ukbb_qc.resources import *
 
 logging.basicConfig(

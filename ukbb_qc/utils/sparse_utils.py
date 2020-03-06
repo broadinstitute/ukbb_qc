@@ -1,5 +1,5 @@
 import logging
-from gnomad_hail.utils.generic import bi_allelic_expr, filter_to_autosomes
+from gnomad.utils.generic import bi_allelic_expr, filter_to_autosomes
 from ukbb_qc.resources.sample_qc import interval_qc_path
 
 
