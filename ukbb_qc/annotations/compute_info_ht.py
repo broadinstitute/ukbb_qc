@@ -8,9 +8,10 @@ from gnomad_hail.utils.sparse_mt import (
     default_compute_info,
     split_info_annotation,
 )
+from ukbb_qc.resources.basics import get_ukbb_data, CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import related_drop_path
 from ukbb_qc.resources.variant_qc import info_ht_path
-
+from ukbb_qc.utils.utils import remove_hard_filter_samples
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -59,13 +60,13 @@ def main(args):
 
     logger.info("Loading split hard call MT to compute inbreeding coefficient and allele counts...")
     mt = get_ukbb_data(
-        data_source, freeze, split=True, raw=True, key_by_locus_and_alleles=True
+        data_source, freeze, split=True, key_by_locus_and_alleles=True
     )
     mt = mt.filter_rows((hl.len(mt.alleles) > 1))
     mt = remove_hard_filter_samples(data_source, freeze, mt, mt.GT, non_refs_only=True)
 
     logger.info("Annotate related samples...")
-    related_ht = related_drop_path(data_source, freeze)
+    related_ht = hl.read_table(related_drop_path(data_source, freeze))
     related_ht = related_ht.filter(
         (related_ht.relationship == "Unrelated")
     )
