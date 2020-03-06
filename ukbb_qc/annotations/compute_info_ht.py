@@ -7,7 +7,6 @@ from gnomad_hail.utils.slack import try_slack
 from gnomad_hail.utils.sparse_mt import (
     default_compute_info,
     split_info_annotation,
-    split_lowqual_annotation,
 )
 from ukbb_qc.resources.sample_qc import related_drop_path
 from ukbb_qc.resources.variant_qc import info_ht_path
@@ -35,30 +34,13 @@ def main(args):
     mt = mt.filter_rows((hl.len(mt.alleles) > 1))
     mt = remove_hard_filter_samples(data_source, freeze, mt, mt.LGT, non_refs_only=True)
 
-    logger.info("Removing related samples...")
-    related_ht = related_drop_path(data_source, freeze)
-    related_ht = related_ht.filter(
-        (related_ht.relationship == "Unrelated")
-    )
-    mt = mt.filter_cols(hl.is_defined(related_ht[mt.col_key]))
-    mt = mt.filter_rows(hl.agg.any(mt.LGT.is_non_ref()))
-
-    logger.info("Adding inbreeding coefficient...")
-    mt = mt.annotate_rows(InbreedingCoeff=bi_allelic_site_inbreeding_expr(mt.LGT))
-    ic_ht = mt.rows().select("InbreedingCoeff")
-
     logger.info("Computing info HT...")
     info_ht = default_compute_info(mt)
-    info_ht = info_ht.annotate(**ic_ht[info_ht.key])
 
-    logger.info("Dropping default lowqual expr and reannotating...")
+    logger.info("Dropping default lowqual expr...")
     info_ht = info_ht.drop("lowqual")
-    info_ht = info_ht.annotate(
-        lowqual=get_lowqual_expr(
-            info_ht.alleles, info_ht.info.QUALapprox, indel_phred_het_prior=40
-        )
-    )
     info_ht = info_ht.checkpoint(info_ht_path(data_source, freeze, split=False))
+
 
     logger.info("Splitting info ht...")
     info_ht = hl.split_multi(info_ht)
@@ -66,8 +48,45 @@ def main(args):
         info=info_ht.info.annotate(
             split_info_annotation(info_ht.info, info_ht.a_index)
         ),
-        lowqual=split_lowqual_annotation(info_ht.lowqual, info_ht.a_index),
     )
+
+    logger.info("Reannotating lowqual expr on split info HT...")
+    info_ht = info_ht.annotate(
+        lowqual=get_lowqual_expr(
+            info_ht.alleles, info_ht.info.QUALapprox, indel_phred_het_prior=40
+        )
+    )
+
+    logger.info("Loading split hard call MT to compute inbreeding coefficient and allele counts...")
+    mt = get_ukbb_data(
+        data_source, freeze, split=True, raw=True, key_by_locus_and_alleles=True
+    )
+    mt = mt.filter_rows((hl.len(mt.alleles) > 1))
+    mt = remove_hard_filter_samples(data_source, freeze, mt, mt.GT, non_refs_only=True)
+
+    logger.info("Annotate related samples...")
+    related_ht = related_drop_path(data_source, freeze)
+    related_ht = related_ht.filter(
+        (related_ht.relationship == "Unrelated")
+    )
+    mt = mt.annotate_cols(related=hl.is_defined(related_ht[mt.col_key]))
+    mt = mt.annotate_rows(
+        ac_qc_samples_raw=hl.agg.sum(mt.GT.n_alt_alleles()),
+        ac_qc_samples_unrelated_raw=hl.agg.filter(~mt.related, hl.agg.sum(mt.GT.n_alt_alleles())),
+        ac_qc_samples_adj=hl.agg.filter(mt.adj, hl.agg.sum(mt.GT.n_alt_alleles())),
+        ac_qc_samples_unrelated_adj=hl.agg.filter(~mt.related & mt.adj,
+                                                  hl.agg.sum(mt.GT.n_alt_alleles())),
+    )
+
+    logger.info("Removing related samples...")
+    mt = mt.filter_cols(hl.is_defined(mt.related))
+    mt = mt.filter_rows(hl.agg.any(mt.LGT.is_non_ref()))
+
+    logger.info("Adding inbreeding coefficient...")
+    mt = mt.annotate_rows(InbreedingCoeff=bi_allelic_site_inbreeding_expr(mt.GT))
+    ic_ht = mt.rows().select("InbreedingCoeff")
+    info_ht = info_ht.annotate(**ic_ht[info_ht.key])
+
     info_ht.write(info_ht_path(data_source, freeze, split=True))
 
 
