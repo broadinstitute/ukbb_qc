@@ -1,10 +1,15 @@
 import argparse
 import logging
+from typing import List
 import hail as hl
-from gnomad_hail.utils.annotations import age_hists_expr, annotate_freq, qual_hist_expr
+from gnomad_hail.utils.slack import try_slack
+from gnomad_hail.utils.generic import write_temp_gcs
+from gnomad_hail.utils.annotations import age_hists_expr, annotate_freq, qual_hist_expr, faf_expr, pop_max_expr
+from gnomad_hail.utils.gnomad_functions import adjusted_sex_ploidy_expr, filter_to_adj, get_adj_expr
 import gnomad_hail.resources.grch37 as grch37_resources
-from ukbb_qc.resources.resources import *
-
+from ukbb_qc.resources.basics import ukbb_phenotype_path, get_ukbb_data, capture_ht_path, array_sample_map_ht_path, CURRENT_FREEZE
+from ukbb_qc.resources.sample_qc import
+from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -184,7 +189,7 @@ def main(args):
         logger.info(
             "Annotating sample with tranche information (from array sample map ht)"
         )
-        sample_map_ht = hl.read_table(array_sample_map_ht(data_source, freeze)).select(
+        sample_map_ht = hl.read_table(array_sample_map_ht_path(data_source, freeze)).select(
             "batch.c"
         )
         mt = mt.annotate_cols(**sample_map_ht[mt.s])
