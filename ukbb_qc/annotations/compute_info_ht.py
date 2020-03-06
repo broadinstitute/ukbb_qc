@@ -79,15 +79,6 @@ def main(args):
                                                   hl.agg.sum(mt.GT.n_alt_alleles())),
     )
 
-    logger.info("Removing related samples...")
-    mt = mt.filter_cols(hl.is_defined(mt.related))
-    mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
-
-    logger.info("Adding inbreeding coefficient...")
-    mt = mt.annotate_rows(InbreedingCoeff=bi_allelic_site_inbreeding_expr(mt.GT))
-    ic_ht = mt.rows().select("InbreedingCoeff")
-    info_ht = info_ht.annotate(**ic_ht[info_ht.key])
-
     info_ht.write(info_ht_path(data_source, freeze, split=True))
 
 
