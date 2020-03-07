@@ -17,12 +17,12 @@ from gnomad.utils.gnomad_functions import (
     get_adj_expr,
 )
 import gnomad.resources.grch37 as grch37_resources
+from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.basics import (
     ukbb_phenotype_path,
     get_ukbb_data,
     capture_ht_path,
     array_sample_map_ht_path,
-    CURRENT_FREEZE,
 )
 from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 

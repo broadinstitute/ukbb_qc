@@ -1,8 +1,11 @@
 import argparse
 import logging
-import hail
+import hail as hl
 from gnomad.utils.annotations import annotate_freq
-from ukbb_qc.resources.resources import *
+from gnomad.utils.slack import try_slack
+from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
+from ukbb_qc.resources.basics import get_ukbb_data, array_sample_map_ht_path
+from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 
 
 logging.basicConfig(
@@ -65,7 +68,7 @@ def main(args):
         logger.info(
             "Annotating sample with tranche information (from array sample map ht)"
         )
-        sample_map_ht = hl.read_table(array_sample_map_ht(data_source, freeze)).select(
+        sample_map_ht = hl.read_table(array_sample_map_ht_path(data_source, freeze)).select(
             "batch.c"
         )
         mt = mt.annotate_cols(**sample_map_ht[mt.s])

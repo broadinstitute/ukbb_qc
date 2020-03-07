@@ -1,6 +1,11 @@
 import logging
+import argparse
 import hail as hl
-from ukbb_qc.resources import *
+from typing import Union
+from gnomad.utils.gnomad_functions import filter_to_adj
+from gnomad.utils.slack import try_slack
+from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
+from ukbb_qc.resources.basics import hardcalls_mt_path, capture_ht_path
 
 logging.basicConfig(format='%(asctime)s (%(name)s %(lineno)s): %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
 logger = logging.getLogger('variant_check')
@@ -231,7 +236,7 @@ def filter_to_type(mt: hl.MatrixTable, variant_type: str, multi) -> hl.MatrixTab
     return mt
 
 
-def check_concordance(temp_prefix: str, variant_type: str, multi: bool, ow: str) -> None:
+def check_concordance(temp_prefix: str, variant_type: str, multi: bool, ow: bool) -> None:
     '''
     Checks concordance between broad and regeneron
 

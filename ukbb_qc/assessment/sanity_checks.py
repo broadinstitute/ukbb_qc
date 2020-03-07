@@ -1,5 +1,13 @@
-from gnomad.utils.gnomad_functions import *
-from ukbb_qc.resources import *
+import logging
+import hail as hl
+
+
+logging.basicConfig(
+    format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
+    datefmt="%m/%d/%Y %I:%M:%S %p",
+)
+logger = logging.getLogger("sanity_checks")
+logger.setLevel(logging.INFO)
 
 
 def summarize_mt(mt: hl.MatrixTable) -> hl.Struct:

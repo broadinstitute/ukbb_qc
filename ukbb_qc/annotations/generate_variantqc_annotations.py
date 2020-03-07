@@ -10,7 +10,8 @@ from gnomad.utils.annotations import (
 )
 from gnomad.utils.generic import vep_or_lookup_vep, vep_struct_to_csq
 from gnomad.utils.slack import try_slack
-from ukbb_qc.resources.basics import get_ukbb_data, CURRENT_FREEZE
+from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
+from ukbb_qc.resources.basics import get_ukbb_data
 from ukbb_qc.resources.sample_qc import (
     array_variant_concordance_path,
     related_drop_path,
