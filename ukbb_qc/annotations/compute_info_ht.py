@@ -36,7 +36,9 @@ def main(args):
 
     logger.info("Computing info HT...")
     info_ht = default_compute_info(mt, site_annotations=True)
-    info_ht = info_ht.checkpoint(info_ht_path(data_source, freeze, split=False), overwrite=args.overwrite)
+    info_ht = info_ht.checkpoint(
+        info_ht_path(data_source, freeze, split=False), overwrite=args.overwrite
+    )
 
     logger.info("Splitting info ht...")
     info_ht = hl.split_multi(info_ht)
@@ -55,25 +57,24 @@ def main(args):
     )
 
     logger.info("Loading split hard call MT to compute allele counts...")
-    mt = get_ukbb_data(
-        data_source, freeze, split=True, key_by_locus_and_alleles=True
-    )
+    mt = get_ukbb_data(data_source, freeze, split=True, key_by_locus_and_alleles=True)
     mt = mt.filter_rows((hl.len(mt.alleles) > 1))
     mt = remove_hard_filter_samples(data_source, freeze, mt, mt.GT, non_refs_only=True)
 
     logger.info("Annotate related samples...")
     related_ht = hl.read_table(related_drop_path(data_source, freeze))
-    related_ht = related_ht.filter(
-        (related_ht.relationship == "Unrelated")
-    )
+    related_ht = related_ht.filter((related_ht.relationship == "Unrelated"))
     mt = mt.annotate_cols(related=hl.is_defined(related_ht[mt.col_key]))
     mt = mt.select_rows()
     ht = mt.annotate_rows(
         ac_qc_samples_raw=hl.agg.sum(mt.GT.n_alt_alleles()),
-        ac_qc_samples_unrelated_raw=hl.agg.filter(~mt.related, hl.agg.sum(mt.GT.n_alt_alleles())),
+        ac_qc_samples_unrelated_raw=hl.agg.filter(
+            ~mt.related, hl.agg.sum(mt.GT.n_alt_alleles())
+        ),
         ac_qc_samples_adj=hl.agg.filter(mt.adj, hl.agg.sum(mt.GT.n_alt_alleles())),
-        ac_qc_samples_unrelated_adj=hl.agg.filter(~mt.related & mt.adj,
-                                                  hl.agg.sum(mt.GT.n_alt_alleles()))
+        ac_qc_samples_unrelated_adj=hl.agg.filter(
+            ~mt.related & mt.adj, hl.agg.sum(mt.GT.n_alt_alleles())
+        ),
     ).rows()
 
     info_ht = info_ht.annotate(**ht[info_ht.key])
