@@ -36,9 +36,6 @@ def main(args):
 
     logger.info("Computing info HT...")
     info_ht = default_compute_info(mt, site_annotations=True)
-
-    logger.info("Dropping default lowqual expr...")
-    info_ht = info_ht.drop("lowqual")
     info_ht = info_ht.checkpoint(info_ht_path(data_source, freeze, split=False), overwrite=args.overwrite)
 
     logger.info("Splitting info ht...")
@@ -49,14 +46,15 @@ def main(args):
         ),
     )
 
-    logger.info("Reannotating lowqual expr on split info HT...")
+    # TODO: change to use allele specific version if Laura and Laurent agree
+    logger.info("Annotate lowqual expr on split info HT...")
     info_ht = info_ht.annotate(
         lowqual=get_lowqual_expr(
             info_ht.alleles, info_ht.info.QUALapprox, indel_phred_het_prior=40
         )
     )
 
-    logger.info("Loading split hard call MT to compute inbreeding coefficient and allele counts...")
+    logger.info("Loading split hard call MT to compute allele counts...")
     mt = get_ukbb_data(
         data_source, freeze, split=True, key_by_locus_and_alleles=True
     )
