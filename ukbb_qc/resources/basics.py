@@ -92,9 +92,9 @@ def get_ukbb_data(
                 f"Need to import array sample map ht for freeze {freeze}!"
             )
         else:
-            ht = hl.read_table(array_sample_map_ht_path(data_source, freeze))
+            sample_map_ht = hl.read_table(array_sample_map_ht_path(data_source, freeze))
         mt = mt.annotate_cols(
-            withdrawn_consent=sample_map_ht[exome_ht.s.split("_")[1]].withdrawn_consent
+            withdrawn_consent=sample_map_ht[mt.s.split("_")[1]].withdrawn_consent
         )
         mt = mt.filter_cols(~mt.withdrawn_consent)
         mt = mt.drop("withdrawn_consent")
