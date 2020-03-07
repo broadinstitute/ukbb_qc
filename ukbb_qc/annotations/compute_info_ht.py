@@ -7,7 +7,8 @@ from gnomad.utils.sparse_mt import (
     default_compute_info,
     split_info_annotation,
 )
-from ukbb_qc.resources.basics import get_ukbb_data, CURRENT_FREEZE
+from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
+from ukbb_qc.resources.basics import get_ukbb_data
 from ukbb_qc.resources.sample_qc import related_drop_path
 from ukbb_qc.resources.variant_qc import info_ht_path
 from ukbb_qc.utils.utils import remove_hard_filter_samples

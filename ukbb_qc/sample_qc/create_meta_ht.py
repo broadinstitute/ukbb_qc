@@ -1,19 +1,20 @@
 import argparse
 import hail as hl
 import logging
+from gnomad.utils.generic import file_exists
 from ukbb_qc.load_data.utils import import_phenotype_ht
-from ukbb_qc.resources.basics import array_sample_map_ht_path, phenotype_ht_path
+from ukbb_qc.resources.basics import array_sample_map_ht_path, phenotype_ht_path,  get_checkpoint_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import (
     ancestry_hybrid_ht_path,
     array_sample_concordance_path,
-    duplicates_ht_path,
     hard_filters_ht_path,
     platform_pca_results_ht_path,
     platform_pop_outlier_ht_path,
     qc_ht_path,
     related_drop_path,
     sex_ht_path,
+    meta_ht_path,
 )
 from ukbb_qc.utils.utils import join_tables
 
@@ -163,7 +164,7 @@ def main(args):
 
     logger.info("Creating checkpoint")
     left_ht = left_ht.checkpoint(
-        get_ht_checkpoint_path(data_source, freeze, "intermediate_ht_join"),
+        get_checkpoint_path(data_source, freeze, "intermediate_ht_join", mt=False),
         overwrite=True,
     )
 

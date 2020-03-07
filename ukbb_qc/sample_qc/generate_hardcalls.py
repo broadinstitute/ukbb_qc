@@ -1,10 +1,12 @@
 import argparse
 import hail as hl
 import logging
-from gnomad.utils.gnomad_functions import adjust_sex_ploidy, annotate_adj
-from ukbb_qc.resources.basics import CURRENT_FREEZE, get_ukbb_data, get_ukbb_data_path
+from gnomad.utils.slack import try_slack
+from gnomad.utils.gnomad_functions import adjust_sex_ploidy, annotate_adj, add_variant_type
+from gnomad.utils.sample_qc import default_annotate_sex
+from ukbb_qc.resources.basics import CURRENT_FREEZE, get_ukbb_data, get_ukbb_data_path, capture_ht_path
+from ukbb_qc.resources.sample_qc import sex_ht_path
 from ukbb_qc.resources.variant_qc import var_annotations_ht_path
-from ukbb_qc.sample_qc.call_sex import run_impute_ploidy, run_impute_sex
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -30,7 +32,7 @@ def main(args):
 
         sex_ht = default_annotate_sex(
             mt,
-            included_intervals=capture_ht_path(data_source, freeze),
+            included_intervals=hl.read_table(capture_ht_path(data_source)),
             sites_ht=hl.read_table(f_stats_sites_path()),
             aaf_expr="AF",
             gt_expr="LGT",
