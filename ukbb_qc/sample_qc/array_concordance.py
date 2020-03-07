@@ -1,6 +1,9 @@
 import argparse
 import hail as hl
 import logging
+from typing import Tuple
+from gnomad.utils.generic import file_exists
+from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.basics import (
     array_mt_path,
     array_sample_map_ht_path,
@@ -11,6 +14,7 @@ from ukbb_qc.resources.basics import (
 from ukbb_qc.resources.sample_qc import (
     array_variant_concordance_path,
     array_sample_concordance_path,
+    array_concordance_sites_path
 )
 from gnomad.utils.slack import try_slack
 from gnomad.utils.liftover import (
@@ -18,7 +22,7 @@ from gnomad.utils.liftover import (
     lift_data,
     annotate_snp_mismatch,
 )
-from ukbb_qc.utils.utils import annotate_interval_qc_filter, remove_hard_filter_samples
+from ukbb_qc.utils.utils import remove_hard_filter_samples, get_sites, annotate_interval_qc_filter
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -27,8 +31,13 @@ logger.setLevel(logging.INFO)
 
 
 def prepare_array_and_exome_mt(
-    data_source, freeze, array_mt, exome_mt, call_rate_cutoff, af_cutoff
-) -> hl.MatrixTable, hl.MatrixTable:
+        data_source: str,
+        freeze: int,
+        array_mt: hl.MatrixTable,
+        exome_mt: hl.MatrixTable,
+        call_rate_cutoff: float,
+        af_cutoff: float,
+) -> Tuple[hl.MatrixTable, hl.MatrixTable]:
     """
     Prepares array and exome MatrixTables for concordance. 
     Maps array to exome IDs and filters to high callrate, common sites.
@@ -44,7 +53,7 @@ def prepare_array_and_exome_mt(
     """
     logger.info("Mapping array sample names to exome sample names...")
     sample_map = hl.read_table(array_sample_map_ht_path(data_source, freeze))
-    exome_mt = exome_mt.annotate_cols(**sample_map[exome_ht.col_key.split("_")[1]])
+    exome_mt = exome_mt.annotate_cols(**sample_map[exome_mt.col_key.split("_")[1]])
     exome_mt = exome_mt.filter_cols(hl.is_defined(exome_mt.ukbb_app_26041_id))
 
     sample_map = sample_map.key_by(exome_s=sample_map.ukbb_app_26041_id)
@@ -65,6 +74,8 @@ def prepare_array_and_exome_mt(
     # NOTE: This is filtered to autosomes because of adjusted sex ploidies in hardcalls mt (hail throws ploidy 0 error)
     if not file_exists(f"{array_concordance_sites_path()}_SUCCESS"):
         sites_ht = get_sites(af_cutoff, call_rate_cutoff)
+    else:
+        sites_ht = array_concordance_sites_path()
     sites_ht = sites_ht.key_by("locus")
 
     logger.info("Filtering exome and array MT to tranche 2 sites...")
@@ -77,16 +88,16 @@ def prepare_array_and_exome_mt(
 
 
 def get_array_exome_concordance(
-    array_mt: hl.MatrixTable, exome_mt: hl.MatrixTable
-) -> hl.Table, hl.Table:
+    array_mt: hl.MatrixTable,
+        exome_mt: hl.MatrixTable
+) -> Tuple[hl.Table, hl.Table]:
     """
     Runs concordance on input array and exome MatrixTables.
     Returns both sample and variant concordance Tables.
 
-    :param MatrixTable array_mt: Array MatrixTable
-    :param MatrixTable exome_mt: Exome MatrixTable
+    :param array_mt: Array MatrixTable
+    :param exome_mt: Exome MatrixTable
     :return: Sample and variant concordance Tables
-    :rtype: hl.Table, hl.Table
     """
     summary, samples, variants = hl.concordance(array_mt, exome_mt)
     variants = variants.annotate(
@@ -191,9 +202,15 @@ def main(args):
         logger.info(f"Count after removing hard filtered samples: {exome_mt.count()}")
 
         if args.interval_qc_filter:
-            exome_mt = interval_qc_filter(
-                data_source, freeze, exome_mt, args.pct_samples_20x
+            exome_mt = annotate_interval_qc_filter(
+                data_source,
+                freeze,
+                exome_mt,
+                cov_filter_field="pct_samples_20x",
+                XY_cov_filter_field="pct_samples_10x",
+                pct_samples=args.pct_samples_20x,
             )
+            exome_mt = exome_mt.filter_rows(exome_mt.interval_qc_pass)
 
         array_mt, exome_mt = prepare_array_and_exome_mt(
             data_source, freeze, array_mt, exome_mt, call_rate_cutoff, af_cutoff
