@@ -36,7 +36,7 @@ def get_age_ht(data_source: str, freeze: int) -> hl.Table:
     :rtype: Table
     """
     # Read in phenotype table
-    if not file_exists(f"{phenotype_ht_path(data_source, freeze)}_SUCCESS"):
+    if not file_exists(f"{phenotype_ht_path()}_SUCCESS"):
         import_phenotype_ht()
     phenotype_ht = hl.read_table(phenotype_ht_path()).select("f.21022.0.0")
 
@@ -152,7 +152,7 @@ def main(args):
         hybrid_pop_data=hl.struct(
             pop_PCs=hl.array(
                 [right_ht[f"pop_pca_PC{i + 1}"] for i in range(n_pcs)]
-            )
+            ),
             HDBSCAN_pop_cluster=right_ht.HDBSCAN_pop_cluster,
             hybrid_pop=right_ht.hybrid_pop,
         ),
