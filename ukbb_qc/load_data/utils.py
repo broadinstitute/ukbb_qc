@@ -31,9 +31,9 @@ def import_array_exome_id_map_ht(freeze: int = CURRENT_FREEZE) -> hl.Table:
     )
     sample_map_ht = sample_map_ht.key_by(s=sample_map_ht.eid_sample)
     sample_map_ht = sample_map_ht.transmute(
-        batch_num=sample_map_ht.batch, 
+        batch_num=sample_map_ht.batch,
         batch=sample_map_ht["batch.c"],
-        ukbb_app_26041_id=sample_map_ht.eid_26041
+        ukbb_app_26041_id=sample_map_ht.eid_26041,
     )
     logger.info(
         f"Total number of IDs in the array to exome sample map: {sample_map_ht.count()}..."
@@ -105,13 +105,13 @@ def import_capture_intervals(
 
 
 def import_vqsr(
-        data_source: str,
-        freeze: int,
-        vqsr_path_regex: str,
-        vqsr_type: str = "AS",
-        num_partitions: int = 5000,
-        overwrite: bool = False,
-        import_header_path: Optional[str] = None,
+    data_source: str,
+    freeze: int,
+    vqsr_path_regex: str,
+    vqsr_type: str = "AS",
+    num_partitions: int = 5000,
+    overwrite: bool = False,
+    import_header_path: Optional[str] = None,
 ) -> None:
     """
     Imports vqsr site vcf into a HT
