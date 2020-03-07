@@ -1,5 +1,6 @@
 import hail as hl
 import logging
+from typing import Optional
 from gnomad.utils.generic import file_exists
 from ukbb_qc.resources.basics import (
     array_sample_map_path,
@@ -104,31 +105,43 @@ def import_capture_intervals(
 
 
 def import_vqsr(
-        data_source,
-        freeze,
-        vqsr_path_regex,
-        vqsr_type="AS",
-        num_partitions=500,
-        overwrite=False,
-        import_header_path=None
+        data_source: str,
+        freeze: int,
+        vqsr_path_regex: str,
+        vqsr_type: str = "AS",
+        num_partitions: int = 5000,
+        overwrite: bool = False,
+        import_header_path: Optional[str] = None,
 ) -> None:
-        logger.info(f"Importing VQSR annotations for {vqsr_type} VQSR...")
-        mt = hl.import_vcf(
-            vqsr_path_regex,
-            force_bgz=True,
-            reference_genome="GRCh38",
-            header_file=import_header_path,
-        ).naive_coalesce(num_partitions)
+    """
+    Imports vqsr site vcf into a HT
 
-        ht = mt.rows()
-        row_count1 = ht.count()
-        ht = hl.split_multi_hts(ht).checkpoint(
-            var_annotations_ht_path(
-                data_source, freeze, "vqsr" if vqsr_type == "AS" else "AS_TS_vqsr"
-            ),
-            overwrite=overwrite,
-        )
-        row_count2 = ht.count()
-        logger.info(
-            f"Found {row_count1} unsplit and {row_count2} split variants with VQSR annotations"
-        )
+    :param data_source: One of 'regeneron' or 'broad'
+    :param freeze: One of the data freezes. Default is CURRENT_FREEZE.
+    :param vqsr_path_regex: Path to input vqsr site vcf, can include regex
+    :param vqsr_type: One of `AS` (allele specific) or `AS_TS` (allele specific with transmitted singletons)
+    :param num_partitions: Number of partitions to use for the VQSR HT
+    :param overwrite: Whether to overwrite imported VQSR HT
+    :param import_header_path: Optional path to a header file to use for import
+    :return: None
+    """
+    logger.info(f"Importing VQSR annotations for {vqsr_type} VQSR...")
+    mt = hl.import_vcf(
+        vqsr_path_regex,
+        force_bgz=True,
+        reference_genome="GRCh38",
+        header_file=import_header_path,
+    ).naive_coalesce(num_partitions)
+
+    ht = mt.rows()
+    row_count1 = ht.count()
+    ht = hl.split_multi_hts(ht).checkpoint(
+        var_annotations_ht_path(
+            data_source, freeze, "vqsr" if vqsr_type == "AS" else "AS_TS_vqsr"
+        ),
+        overwrite=overwrite,
+    )
+    row_count2 = ht.count()
+    logger.info(
+        f"Found {row_count1} unsplit and {row_count2} split variants with VQSR annotations"
+    )
