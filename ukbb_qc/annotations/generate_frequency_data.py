@@ -4,10 +4,26 @@ from typing import List
 import hail as hl
 from gnomad.utils.slack import try_slack
 from gnomad.utils.generic import write_temp_gcs, bi_allelic_site_inbreeding_expr
-from gnomad.utils.annotations import age_hists_expr, annotate_freq, qual_hist_expr, faf_expr, pop_max_expr
-from gnomad.utils.gnomad_functions import adjusted_sex_ploidy_expr, filter_to_adj, get_adj_expr
+from gnomad.utils.annotations import (
+    age_hists_expr,
+    annotate_freq,
+    qual_hist_expr,
+    faf_expr,
+    pop_max_expr,
+)
+from gnomad.utils.gnomad_functions import (
+    adjusted_sex_ploidy_expr,
+    filter_to_adj,
+    get_adj_expr,
+)
 import gnomad.resources.grch37 as grch37_resources
-from ukbb_qc.resources.basics import ukbb_phenotype_path, get_ukbb_data, capture_ht_path, array_sample_map_ht_path, CURRENT_FREEZE
+from ukbb_qc.resources.basics import (
+    ukbb_phenotype_path,
+    get_ukbb_data,
+    capture_ht_path,
+    array_sample_map_ht_path,
+    CURRENT_FREEZE,
+)
 from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 
 logging.basicConfig(
@@ -188,9 +204,9 @@ def main(args):
         logger.info(
             "Annotating sample with tranche information (from array sample map ht)"
         )
-        sample_map_ht = hl.read_table(array_sample_map_ht_path(data_source, freeze)).select(
-            "batch.c"
-        )
+        sample_map_ht = hl.read_table(
+            array_sample_map_ht_path(data_source, freeze)
+        ).select("batch.c")
         mt = mt.annotate_cols(**sample_map_ht[mt.s])
         mt = mt.transmute_cols(tranche=mt["batch.c"])
 
@@ -199,7 +215,9 @@ def main(args):
         # Note: this is not the ideal location for this, but adding here to avoid another densify
         # TODO: Still need to decide how to handle variants where there are no hets, this returns NA
         if args.filter_related:
-            mt = mt.annotate_rows(InbreedingCoeff=bi_allelic_site_inbreeding_expr(mt.GT))
+            mt = mt.annotate_rows(
+                InbreedingCoeff=bi_allelic_site_inbreeding_expr(mt.GT)
+            )
 
         logger.info("Calculating frequencies")
         ht = generate_frequency_data(mt, POPS_TO_REMOVE_FOR_POPMAX, args.by_platform)
@@ -214,12 +232,8 @@ def main(args):
         )
 
         if args.filter_related:
-            ht.select_rows('InbreedingCoeff').write(
-                var_annotations_ht_path(
-                    data_source,
-                    freeze,
-                    'inbreeding_coeff'
-                ),
+            ht.select_rows("InbreedingCoeff").write(
+                var_annotations_ht_path(data_source, freeze, "inbreeding_coeff"),
                 args.overwrite,
             )
 

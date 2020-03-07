@@ -15,12 +15,9 @@ from ukbb_qc.resources.sample_qc import (
     array_variant_concordance_path,
     related_drop_path,
     sex_ht_path,
-    inferred_ped_path
+    inferred_ped_path,
 )
-from ukbb_qc.resources.variant_qc import (
-    var_annotations_ht_path,
-    info_ht_path
-)
+from ukbb_qc.resources.variant_qc import var_annotations_ht_path, info_ht_path
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("variantqc_annotations")
@@ -78,7 +75,10 @@ def main(args):
 
         mt = hl.trio_matrix(mt, pedigree=ped, complete_trios=True)
         trio_stats_ht = default_generate_trio_stats(mt)
-        trio_stats_ht.write(var_annotations_ht_path(data_source, freeze, "trio_stats"), overwrite=args.overwrite)
+        trio_stats_ht.write(
+            var_annotations_ht_path(data_source, freeze, "trio_stats"),
+            overwrite=args.overwrite,
+        )
 
     if args.generate_sibling_stats:
         mt = get_ukbb_data(data_source, freeze, meta_root="meta")
@@ -104,13 +104,11 @@ def main(args):
         variants = variants.repartition(1000)
         variants = variants.annotate_globals(
             concordance_cutoff=args.concordance_cutoff,
-            variant_qc_af_cutoff=args.variant_qc_af_cutoff
+            variant_qc_af_cutoff=args.variant_qc_af_cutoff,
         )
         variants.write(
             var_annotations_ht_path(
-                data_source,
-                freeze,
-                "array_exome_concordant_variants",
+                data_source, freeze, "array_exome_concordant_variants",
             ),
             overwrite=args.overwrite,
         )
@@ -125,9 +123,7 @@ def main(args):
                         data_source,
                         freeze,
                         var_annotations_ht_path(
-                            data_source,
-                            freeze,
-                            "array_exome_concordant_variants",
+                            data_source, freeze, "array_exome_concordant_variants",
                         ),
                     )
                 ),
