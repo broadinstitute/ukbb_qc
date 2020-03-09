@@ -5,7 +5,7 @@ from gnomad.utils.slack import try_slack
 from gnomad.utils.gnomad_functions import adjust_sex_ploidy, annotate_adj, add_variant_type
 from gnomad.utils.sample_qc import default_annotate_sex
 from ukbb_qc.resources.basics import CURRENT_FREEZE, get_ukbb_data, get_ukbb_data_path, capture_ht_path
-from ukbb_qc.resources.sample_qc import sex_ht_path
+from ukbb_qc.resources.sample_qc import f_stat_sites_path, sex_ht_path
 from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 
 
