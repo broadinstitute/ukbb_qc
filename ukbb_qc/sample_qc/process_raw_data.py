@@ -30,41 +30,6 @@ def main(args):
     data_source = args.data_source
     freeze = args.freeze
 
-    if args.create_exome_array_id_map_ht:
-        logger.info(
-            "Checking for sample discrepancies between MatrixTable and linking file..."
-        )
-        sample_map_ht = import_array_exome_id_map_ht(data_source, freeze)
-        exome_ht = get_ukbb_data(
-            data_source, freeze, raw=True, split=False, key_by_locus_and_alleles=True
-        ).cols()
-        exome_ht = exome_ht.annotate(
-            ukbb_app_26041_id=sample_map_ht[exome_ht.s.split("_")[1]].eid_26041,
-            **sample_map_ht[exome_ht.s.split("_")[1]],
-        )
-        logger.info(f"Total number of samples in the exome data: {exome_ht.count()}...")
-
-        # Check for samples that are in exome file but not in array file or vice versa
-        s_exome_not_in_map = exome_ht.filter(
-            hl.is_missing(exome_ht.ukbb_app_26041_id)
-        ).select()
-        s_map_not_in_exomes = sample_map_ht.anti_join(
-            exome_ht.key_by(i=exome_ht.s.split("_")[1])
-        )
-
-        logger.info(
-            f"Total number of IDs in the sample map that are not in the exome data: {s_map_not_in_exomes.count()}..."
-        )
-        s_map_not_in_exomes.show(s_map_not_in_exomes.count())
-        logger.info(
-            f"Total number of IDs in the exome data that are not in the sample map: {s_exome_not_in_map.count()}..."
-        )
-        s_exome_not_in_map.show(s_exome_not_in_map.count())
-
-        exome_ht.write(
-            array_sample_map_ht_path(data_source, freeze), overwrite=args.overwrite
-        )
-
     if args.compute_last_END_positions:
         mt = get_ukbb_data(data_source, freeze, raw=True, adj=False, split=False)
         last_END_positions_ht = compute_last_ref_block_end(mt)
@@ -247,11 +212,6 @@ if __name__ == "__main__":
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
     )
 
-    parser.add_argument(
-        "--create_exome_array_id_map_ht",
-        help="Load exome to array id mapping file into hail Table",
-        action="store_true",
-    )
     parser.add_argument(
         "--compute_last_END_positions",
         help="Compute last END position for each line in sparse matrix table",
