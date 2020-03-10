@@ -53,7 +53,7 @@ def check_adj(mt: hl.MatrixTable, mt_adj: hl.MatrixTable) -> bool:
     return adj
 
 
-def sample_check(ht: hl.MatrixTable, exp_ht: hl.Table, sample_qc_path: str) -> None:
+def sample_check(ht: hl.Table, exp_ht: hl.Table, sample_qc_path: str) -> None:
     """
     Checks for sample mismatch between samples in two Tables.
     If there is a sample mismatch, writes unique samples to output txt file
