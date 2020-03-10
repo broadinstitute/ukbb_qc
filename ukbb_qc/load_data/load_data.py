@@ -1,4 +1,5 @@
 from gnomad.utils.slack import try_slack
+from ukbb_qc.assessment.sanity_checks import sample_check, summarize_mt
 from ukbb_qc.resources.basics import array_sample_map_ht_path, capture_ht_path
 from ukbb_qc.load_data.utils import (
     import_array_exome_id_map_ht,
@@ -55,33 +56,17 @@ def main(args):
     # Sanity check MT arg
     if args.sanity_check_raw_mt:
 
-    	logger.info(
-            "Checking for sample discrepancies between MatrixTable and linking file..."
-        )
-        sample_map_ht = hl.read_table(array_sample_map_ht_path(data_source, freeze))
-        exome_ht = get_ukbb_data(
+    	logger.info("Reading in raw MT and summarizing variants...")
+    	mt = get_ukbb_data(
             data_source, freeze, raw=True, split=False, key_by_locus_and_alleles=True
-        ).cols()
-        exome_ht = exome_ht.annotate(
-            **sample_map_ht[exome_ht.s.split("_")[1]]
         )
-        logger.info(f"Total number of samples in the exome data: {exome_ht.count()}...")
+        summarize_mt(mt)
 
-        # Check for samples that are in exome file but not in array file or vice versa
-        s_exome_not_in_map = exome_ht.filter(
-            hl.is_missing(exome_ht.ukbb_app_26041_id)
-        ).select()
-        s_map_not_in_exomes = sample_map_ht.anti_join(
-            exome_ht.key_by(array_ID=exome_ht.s.split("_")[1])
-        )
-        logger.info(
-            f"Total number of IDs in the sample map that are not in the exome data: {s_map_not_in_exomes.count()}..."
-        )
-        s_map_not_in_exomes.show(s_map_not_in_exomes.count())
-        logger.info(
-            f"Total number of IDs in the exome data that are not in the sample map: {s_exome_not_in_map.count()}..."
-        )
-        s_exome_not_in_map.show(s_exome_not_in_map.count())
+        logger.info("Checking for sample discrepancies between MatrixTable and linking file...")
+        sample_map_ht = hl.read_table(array_sample_map_ht_path(data_source, freeze))
+        samples_ht = mt.cols()
+        samples_ht = samples_ht.key_by(array_ID=samples_ht.s.split("_")[1])
+        sample_check(samples_ht, sample_map_ht)
 
 
 if __name__ == "__main__":
