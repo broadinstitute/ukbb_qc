@@ -1,5 +1,5 @@
 from gnomad.utils.slack import try_slack
-from ukbb_qc.resources.basics import capture_ht_path
+from ukbb_qc.resources.basics import array_sample_map_ht_path, capture_ht_path
 from ukbb_qc.load_data.utils import (
     import_array_exome_id_map_ht,
     import_capture_intervals,
@@ -22,6 +22,7 @@ def main(args):
     data_source = args.data_source
     freeze = args.freeze
 
+    # Args that load data
     if args.load_exome_array_id_map:
     	logger.info("Loading array-exome sample ID map...")
         sample_map_ht = import_array_exome_id_map_ht(freeze)
@@ -50,6 +51,37 @@ def main(args):
             args.overwrite,
             args.header_path,
         )
+
+    # Sanity check MT arg
+    if args.sanity_check_raw_mt:
+
+    	logger.info(
+            "Checking for sample discrepancies between MatrixTable and linking file..."
+        )
+        sample_map_ht = hl.read_table(array_sample_map_ht_path(data_source, freeze))
+        exome_ht = get_ukbb_data(
+            data_source, freeze, raw=True, split=False, key_by_locus_and_alleles=True
+        ).cols()
+        exome_ht = exome_ht.annotate(
+            **sample_map_ht[exome_ht.s.split("_")[1]]
+        )
+        logger.info(f"Total number of samples in the exome data: {exome_ht.count()}...")
+
+        # Check for samples that are in exome file but not in array file or vice versa
+        s_exome_not_in_map = exome_ht.filter(
+            hl.is_missing(exome_ht.ukbb_app_26041_id)
+        ).select()
+        s_map_not_in_exomes = sample_map_ht.anti_join(
+            exome_ht.key_by(array_ID=exome_ht.s.split("_")[1])
+        )
+        logger.info(
+            f"Total number of IDs in the sample map that are not in the exome data: {s_map_not_in_exomes.count()}..."
+        )
+        s_map_not_in_exomes.show(s_map_not_in_exomes.count())
+        logger.info(
+            f"Total number of IDs in the exome data that are not in the sample map: {s_exome_not_in_map.count()}..."
+        )
+        s_exome_not_in_map.show(s_exome_not_in_map.count())
 
 
 if __name__ == "__main__":
@@ -114,6 +146,11 @@ if __name__ == "__main__":
         help="Optional path to a header file to use for importing VQSR VCF",
     )
 
+    parser.add_argument(
+        "--sanity_check_raw_mt",
+        help="Sanity check raw MatrixTable",
+        action="store_true",
+    )
     parser.add_argument(
         "-o",
         "--overwrite",
