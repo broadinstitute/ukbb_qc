@@ -99,7 +99,8 @@ def get_ukbb_data(
         withdrawn_ht = hl.import_table(
             excluded_samples_path(freeze), no_header=True, impute=True,
         )
-        mt = mt.annotate_cols(withdrawn=hl.is_defined(withdrawn_ht[mt.s.split("_")[1]]))
+        mt_samples = mt.cols()
+        mt_samples = mt_samples.key_by(s_id=mt.s.split("_")[1])
 
     if ukbb_samples_only:
         mt = mt.filter_cols(mt.s.contains("UKB"))
