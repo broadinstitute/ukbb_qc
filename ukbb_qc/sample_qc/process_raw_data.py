@@ -5,7 +5,11 @@ from gnomad.utils.generic import filter_to_autosomes
 from gnomad.utils.gnomad_functions import filter_to_adj
 from gnomad.utils.sample_qc import get_qc_mt
 from gnomad.utils.sparse_mt import compute_last_ref_block_end, densify_sites
-from ukbb_qc.resources.basics import array_sample_map_ht_path, get_checkpoint_path, get_ukbb_data
+from ukbb_qc.resources.basics import (
+    array_sample_map_ht_path,
+    get_checkpoint_path,
+    get_ukbb_data,
+)
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import (
     callrate_mt_path,
@@ -29,11 +33,6 @@ def main(args):
 
     data_source = args.data_source
     freeze = args.freeze
-
-    if args.compute_last_END_positions:
-        mt = get_ukbb_data(data_source, freeze, raw=True, adj=False, split=False)
-        last_END_positions_ht = compute_last_ref_block_end(mt)
-        last_END_positions_ht.write(last_END_positions_ht_path(data_source, freeze))
 
     if args.apply_hard_filters:
 
@@ -170,7 +169,7 @@ def main(args):
             sample_qc=qc_ht.sample_qc.annotate(
                 dp_mean=qc_ht.sample_qc.dp_stats.mean,
                 dp_stdev=qc_ht.sample_qc.dp_stats.stdev,
-                ).select("call_rate", "dp_mean", "dp_stdev")
+            ).select("call_rate", "dp_mean", "dp_stdev")
         )
         qc_ht.write(qc_ht_path(data_source, freeze), overwrite=args.overwrite)
 
@@ -209,23 +208,20 @@ if __name__ == "__main__":
         default="broad",
     )
     parser.add_argument(
-        "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
+        "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int,
     )
-
     parser.add_argument(
-        "--compute_last_END_positions",
-        help="Compute last END position for each line in sparse matrix table",
+        "--apply_hard_filters".help="Apply hard filters to samples",
         action="store_true",
-    )
-    parser.add_argument(
-        "--apply_hard_filters".help="Apply hard filters to samples", action="store_true"
     )
     parser.add_argument(
         "--compute_callrate_mt",
         help="Computes an interval by sample mt of callrate and depth that will be for hard filtering samples",
         action="store_true",
     )
-    parser.add_argument("--min-dp", help="Minimum depth", default=20.0, type=float)
+    parser.add_argument(
+        "--min-dp", help="Minimum depth", default=20.0, type=float,
+    )
     parser.add_argument(
         "--compute_qc_mt",
         help="Compute matrix to be used in sample qc",
@@ -282,7 +278,7 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--slack_channel", help="Slack channel to post results and notifications to."
+        "--slack_channel", help="Slack channel to post results and notifications to.",
     )
 
     args = parser.parse_args()
