@@ -38,7 +38,7 @@ def main(args):
             aaf_expr="AF",
             gt_expr="LGT",
         )
-        sex_ht = sex_ht.checkpoint(sex_ht_path(data_source, freeze), overwrite=True)
+        sex_ht.write(sex_ht_path(data_source, freeze), overwrite=True)
     # NOTE: check distributions here before continuing with hardcalls
 
     if args.write_hardcalls:
