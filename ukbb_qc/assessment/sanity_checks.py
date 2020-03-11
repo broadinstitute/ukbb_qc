@@ -55,7 +55,7 @@ def check_adj(mt: hl.MatrixTable, mt_adj: hl.MatrixTable) -> bool:
 
 
 def sample_check(
-    ht: hl.Table, exp_ht: hl.Table, sample_qc_path: str, show_mismatch: bool = True,
+    ht: hl.Table, exp_ht: hl.Table, show_mismatch: bool = True,
 ) -> Tuple[bool, bool]:
     """
     Checks for sample mismatch between samples in two Tables.
@@ -64,7 +64,6 @@ def sample_check(
 
     :param Table ht: Table containing samples to be checked
     :param Table exp_ht: Table with one column containing expected samples
-    :param str sample_qc_path: Path to output sample_qc bucket (for output txts)
     :param bool show_mismatch: Boolean whether to print sample mismatches to stdout. Default is True
     :return: Tuple of bools [whether there were missing samples, whethere there were extra samples]
     :rtype: Tuple[bool, bool]
@@ -89,9 +88,7 @@ def sample_check(
 
     if n_extra_samples > 0:
         extra = True
-        logger.info(
-            f"Total number of extra IDs in the sample HT: {n_extra_samples}..."
-        )
+        logger.info(f"Total number of extra IDs in the sample HT: {n_extra_samples}...")
         if show_mismatch:
             extra_samples.show(n_extra_samples)
 
