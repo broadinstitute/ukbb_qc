@@ -2,9 +2,14 @@ import argparse
 import hail as hl
 import logging
 from gnomad.utils.slack import try_slack
-from gnomad.utils.gnomad_functions import adjust_sex_ploidy, annotate_adj, add_variant_type
+from gnomad.utils.gnomad_functions import (
+    adjust_sex_ploidy,
+    annotate_adj,
+    add_variant_type,
+)
 from gnomad.utils.sample_qc import default_annotate_sex
-from ukbb_qc.resources.basics import CURRENT_FREEZE, get_ukbb_data, get_ukbb_data_path, capture_ht_path
+from ukbb_qc.resources.basics import get_ukbb_data, get_ukbb_data_path, capture_ht_path
+from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import f_stat_sites_path, sex_ht_path
 from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 
@@ -23,13 +28,13 @@ def main(args):
     if args.impute_sex:
         logger.info("Imputing sex...")
         mt = get_ukbb_data(
-            data_source, freeze, split=False, raw=True, key_by_locus_and_alleles=True
+            data_source, freeze, split=False, raw=True, key_by_locus_and_alleles=True,
         )
 
         sex_ht = default_annotate_sex(
             mt,
             included_intervals=hl.read_table(capture_ht_path(data_source)),
-            sites_ht=hl.read_table(f_stats_sites_path()),
+            sites_ht=hl.read_table(f_stat_sites_path()),
             aaf_expr="AF",
             gt_expr="LGT",
         )
@@ -39,7 +44,7 @@ def main(args):
     if args.write_hardcalls:
         logger.info("Generating split hardcalls...")
         mt = get_ukbb_data(
-            data_source, freeze, split=False, raw=True, key_by_locus_and_alleles=True
+            data_source, freeze, split=False, raw=True, key_by_locus_and_alleles=True,
         )
         sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
 
@@ -53,7 +58,10 @@ def main(args):
 
         # Split mt, add adj annotation, and adjust sex ploidies
         mt = hl.experimental.sparse_split_multi(mt)
-        mt = annotate_adj(mt.select_cols(sex_karyotype=ht[mt.col_key].sex_karyotype))
+        mt = annotate_adj(
+            mt.select_cols(sex_karyotype=sex_ht[mt.col_key].sex_karyotype),
+            haploid_adj_dp=5,
+        )
         mt = mt.select_entries(
             GT=mt.GT, adj=mt.adj
         )  # Note: this is different from gnomAD hardcalls file because no PGT or PID
@@ -86,28 +94,6 @@ def main(args):
             var_annotations_ht_path(data_source, freeze, "allele_data"), args.overwrite
         )
 
-    if args.write_nonrefs:
-        logger.info("Creating split sparse MT with only non-ref genotypes...")
-        mt = get_ukbb_data(
-            data_source, freeze, split=False, raw=True, key_by_locus_and_alleles=True
-        ).select_cols()
-        mt = mt.drop("gvcf_info")
-        mt = mt.annotate_entries(is_missing=hl.is_missing(mt.LGT))
-        mt = mt.filter_entries(mt.is_missing | mt.LGT.is_non_ref())
-
-        if data_source == "regeneron":
-            mt = mt.drop(
-                "PL"
-            )  # Note: I guess we need to check if PL has issues rather than just always dropping
-        mt = hl.experimental.sparse_split_multi(mt)
-        mt = mt.filter_entries(mt.is_missing | mt.GT.is_non_ref())
-        mt = annotate_adj(mt)
-        mt = mt.naive_coalesce(args.n_partitions)
-        mt.write(
-            get_ukbb_data_path(data_source, freeze, split=True, non_refs_only=True),
-            args.overwrite,
-        )
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -119,29 +105,22 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--slack_channel", help="Slack channel to post results and notifications to."
+        "--slack_channel", help="Slack channel to post results and notifications to.",
     )
     parser.add_argument(
-        "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
+        "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int,
     )
     parser.add_argument(
-        "--n_partitions", help="Desired number of partitions for output", type=int
+        "--n_partitions", help="Desired number of partitions for output", type=int,
     )
-
     parser.add_argument(
         "--impute_sex",
         help="Impute sex on raw MT (prerequisite for creating hardcalls)",
         action="store_true",
     )
     parser.add_argument(
-        "--write_hardcalls", help="Creates a split hardcalls mt", action="store_true"
+        "--write_hardcalls", help="Creates a split hardcalls mt", action="store_true",
     )
-    parser.add_argument(
-        "--write_nonrefs",
-        help="Creates a split sparse mt with only non-ref genotypes",
-        action="store_true",
-    )
-
     args = parser.parse_args()
 
     if args.slack_channel:
