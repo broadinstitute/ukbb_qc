@@ -1,6 +1,11 @@
 from gnomad.utils.slack import try_slack
+from gnomad.utils.sparse_mt import compute_last_ref_block_end
 from ukbb_qc.assessment.sanity_checks import sample_check, summarize_mt
-from ukbb_qc.resources.basics import array_sample_map_ht_path, capture_ht_path
+from ukbb_qc.resources.basics import (
+    array_sample_map_ht_path,
+    capture_ht_path,
+    last_END_positions_ht_path,
+)
 from ukbb_qc.load_data.utils import (
     import_array_exome_id_map_ht,
     import_capture_intervals,
@@ -23,26 +28,25 @@ def main(args):
     data_source = args.data_source
     freeze = args.freeze
 
-    # Args that load data
     if args.load_exome_array_id_map:
-    	logger.info("Loading array-exome sample ID map...")
+        logger.info("Loading array-exome sample ID map...")
         sample_map_ht = import_array_exome_id_map_ht(freeze)
         sample_map_ht.write(
             array_sample_map_ht_path(data_source, freeze), overwrite=args.overwrite
         )
 
     if args.load_phenotypes:
-    	logger.info("Importing phenotype data...")
+        logger.info("Importing phenotype data...")
         import_phenotype_ht()
 
     if args.load_capture_intervals:
-    	logger.info("Importing capture intervals...")
+        logger.info("Importing capture intervals...")
         import_capture_intervals(
             args.intervals, capture_ht_path(data_source), args.header, args.overwrite
         )
 
     if args.load_vqsr:
-    	logger.info("Loading VQSR VCF...")
+        logger.info("Loading VQSR VCF...")
         import_vqsr(
             data_source,
             freeze,
@@ -53,20 +57,26 @@ def main(args):
             args.header_path,
         )
 
-    # Sanity check MT arg
     if args.sanity_check_raw_mt:
 
-    	logger.info("Reading in raw MT and summarizing variants...")
-    	mt = get_ukbb_data(
+        logger.info("Reading in raw MT and summarizing variants...")
+        mt = get_ukbb_data(
             data_source, freeze, raw=True, split=False, key_by_locus_and_alleles=True
         )
         summarize_mt(mt)
 
-        logger.info("Checking for sample discrepancies between MatrixTable and linking file...")
+        logger.info(
+            "Checking for sample discrepancies between MatrixTable and linking file..."
+        )
         sample_map_ht = hl.read_table(array_sample_map_ht_path(data_source, freeze))
         samples_ht = mt.cols()
         samples_ht = samples_ht.key_by(array_ID=samples_ht.s.split("_")[1])
         sample_check(samples_ht, sample_map_ht)
+
+    if args.compute_last_END_positions:
+        mt = get_ukbb_data(data_source, freeze, raw=True, adj=False, split=False)
+        last_END_positions_ht = compute_last_ref_block_end(mt)
+        last_END_positions_ht.write(last_END_positions_ht_path(data_source, freeze))
 
 
 if __name__ == "__main__":
@@ -134,6 +144,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--sanity_check_raw_mt",
         help="Sanity check raw MatrixTable",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--compute_last_END_positions",
+        help="Compute last END position for each line in sparse matrix table",
         action="store_true",
     )
     parser.add_argument(
