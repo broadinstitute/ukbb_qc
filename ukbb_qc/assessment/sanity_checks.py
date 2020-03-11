@@ -1,5 +1,6 @@
 import logging
 import hail as hl
+from typing import Tuple
 
 
 logging.basicConfig(
@@ -55,7 +56,7 @@ def check_adj(mt: hl.MatrixTable, mt_adj: hl.MatrixTable) -> bool:
 
 def sample_check(
     ht: hl.Table, exp_ht: hl.Table, sample_qc_path: str, show_mismatch: bool = True,
-) -> bool:
+) -> Tuple[bool, bool]:
     """
     Checks for sample mismatch between samples in two Tables.
     If there is a sample mismatch, writes unique samples to output txt file
@@ -65,10 +66,13 @@ def sample_check(
     :param Table exp_ht: Table with one column containing expected samples
     :param str sample_qc_path: Path to output sample_qc bucket (for output txts)
     :param bool show_mismatch: Boolean whether to print sample mismatches to stdout. Default is True
-    :return: Bool for whether there was a sample_mismatch
-    :rtype: bool
+    :return: Tuple of bools [whether there were missing samples, whethere there were extra samples]
+    :rtype: Tuple[bool, bool]
     """
-    sample_mismatch = False
+    # bool to store whether there are samples missing from ht
+    missing = False
+    # bool to store whether ht contains samples not in exp_ht
+    extra = False
 
     missing_samples = exp_ht.anti_join(ht).select()
     n_missing_samples = missing_samples.count()
@@ -76,19 +80,19 @@ def sample_check(
     n_extra_samples = extra_samples.count()
 
     if n_missing_samples > 0:
-        sample_mismatch = True
+        missing = True
         logger.info(
-            f"Total number of expected IDs that are not in the sample HT: {n_missing_samples}..."
+            f"Total number of IDs that are not in the sample HT: {n_missing_samples}..."
         )
         if show_mismatch:
             missing_samples.show(n_missing_samples)
 
     if n_extra_samples > 0:
-        sample_mismatch = True
+        extra = True
         logger.info(
-            f"Total number of extra IDs that were not in the expected HT: {n_extra_samples}..."
+            f"Total number of extra IDs in the sample HT: {n_extra_samples}..."
         )
         if show_mismatch:
             extra_samples.show(n_extra_samples)
 
-    return sample_mismatch
+    return (missing, extra)
