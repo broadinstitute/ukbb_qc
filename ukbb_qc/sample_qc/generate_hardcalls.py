@@ -17,7 +17,7 @@ logger.setLevel(logging.INFO)
 def main(args):
     hl.init(log="/generate_hardcalls.log", default_reference="GRCh38")
 
-    data_source = args.data_source
+    data_source = "broad"
     freeze = args.freeze
 
     if args.impute_sex:
@@ -25,10 +25,6 @@ def main(args):
         mt = get_ukbb_data(
             data_source, freeze, split=False, raw=True, key_by_locus_and_alleles=True
         )
-
-        # NOTE: Broad callset does not have filter annotations
-        if data_source == "regeneron":
-            mt = mt.filter_rows(hl.is_missing(mt.filters))
 
         sex_ht = default_annotate_sex(
             mt,
@@ -124,13 +120,6 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--slack_channel", help="Slack channel to post results and notifications to."
-    )
-    parser.add_argument(
-        "-s",
-        "--data_source",
-        help="Data source",
-        choices=["regeneron", "broad"],
-        default="broad",
     )
     parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
