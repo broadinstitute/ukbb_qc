@@ -227,7 +227,7 @@ def get_checkpoint_path(
 
 
 # Sparse MatrixTable resources
-def last_END_positions_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+def last_END_positions_ht_path(data_source: str = "broad", freeze: int = CURRENT_FREEZE) -> str:
     """
     Retrieves path to Table with last END positions annotation
 
