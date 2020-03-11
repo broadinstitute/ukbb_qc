@@ -274,7 +274,7 @@ def array_sample_map_path(freeze: int = CURRENT_FREEZE) -> str:
 
 
 def array_sample_map_ht_path(
-    data_source: str, freeze: int = CURRENT_FREEZE
+    data_source: str, freeze: int = CURRENT_FREEZE,
 ) -> hl.Table:
     """
     Returns array sample map Table.
@@ -284,7 +284,7 @@ def array_sample_map_ht_path(
     :return: array sample map Table
     :rtype: hl.Table
     """
-    if freeze == 5:
+    if freeze <= 5:
         f"gs://broad-ukbb/{data_source}.freeze_{freeze}/array_sample_map.ht"
     return f"gs://broad-ukbb/{data_source}.freeze_{freeze}/array/array_sample_map.ht"
 
