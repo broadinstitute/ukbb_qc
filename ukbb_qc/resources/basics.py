@@ -4,6 +4,7 @@ from gnomad.utils.generic import file_exists
 from gnomad.resources.resource_utils import DataException
 from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES, CURRENT_HAIL_VERSION
 from .sample_qc import meta_ht_path
+from ukbb_qc.assessment.sanity_checks import sample_check
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -101,6 +102,16 @@ def get_ukbb_data(
         )
         mt_samples = mt.cols()
         mt_samples = mt_samples.key_by(s_id=mt.s.split("_")[1])
+
+        # Call sample_check function
+        # If withdrawn_ids_missing is False, then some samples with withdrawn consents are still present in MT
+        withdrawn_ids_missing, extra_mt_ids = sample_check(mt_samples, withdrawn_ht, show_mismatch=False)
+        if not withdrawn_ids_missing:
+            raise DataException(
+                "Withdrawn samples present in MT. Double check sample filtration"
+            )
+        else:
+            logger.info("No withdrawn samples found in MT")
 
     if ukbb_samples_only:
         mt = mt.filter_cols(mt.s.contains("UKB"))
