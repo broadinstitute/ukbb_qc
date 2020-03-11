@@ -6,6 +6,11 @@ from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES, CURRENT_HAIL_
 from .sample_qc import meta_ht_path
 
 
+logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
+logger = logging.getLogger("basics")
+logger.setLevel(logging.INFO)
+
+
 broad_calling_intervals_path = (
     "gs://broad-ukbb/resources/broad_exome_calling.interval_list"
 )
@@ -89,6 +94,12 @@ def get_ukbb_data(
         )
         mt = mt.filter_cols(~mt.withdrawn_consent)
         mt = mt.drop("withdrawn_consent")
+
+        # Double check all withdrawn samples were actually excluded
+        withdrawn_ht = hl.import_table(
+            excluded_samples_path(freeze), no_header=True, impute=True,
+        )
+        mt = mt.annotate_cols(withdrawn=hl.is_defined(withdrawn_ht[mt.s.split("_")[1]]))
 
     if ukbb_samples_only:
         mt = mt.filter_cols(mt.s.contains("UKB"))
