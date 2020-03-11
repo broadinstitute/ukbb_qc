@@ -349,7 +349,7 @@ def release_mt_path(data_source: str, freeze: int, temp=False) -> str:
     :rtype: str
     """
     tag = ".temp" if temp else ""
-    return f"{get_release_path(data_source, freeze)}/mt/nested{tag}.mt"
+    return f"{get_release_path(data_source, freeze)}/mt/{data_source}.freeze_{freeze}.nested{tag}.mt"
 
 
 def release_ht_path(data_source: str, freeze: int) -> str:
@@ -361,7 +361,7 @@ def release_ht_path(data_source: str, freeze: int) -> str:
     :return: Filepath for release Table
     :rtype: str
     """
-    return f"{get_release_path(data_source, freeze)}/ht/release.sites.ht"
+    return f"{get_release_path(data_source, freeze)}/ht/{data_source}.freeze_{freeze}.release.sites.ht"
 
 
 def release_var_hist_path(data_source: str, freeze: int) -> str:
@@ -373,7 +373,7 @@ def release_var_hist_path(data_source: str, freeze: int) -> str:
     :return: Filepath for release jsons
     :rtype: str
     """
-    return f"{get_release_path(data_source, freeze)}/json/ukbb.json"
+    return f"{get_release_path(data_source, freeze)}/json/{data_source}.freeze_{freeze}.json"
 
 
 def release_vcf_path(data_source: str, freeze: int, contig: str = None) -> str:
@@ -387,6 +387,7 @@ def release_vcf_path(data_source: str, freeze: int, contig: str = None) -> str:
     :rtype: str
     """
     if contig:
-        return f"{get_release_path(data_source, freeze)}/vcf/{contig}.vcf.bgz"
+        return f"{get_release_path(data_source, freeze)}/vcf/{data_source}.freeze_{freeze}.{contig}.vcf.bgz"
     else:
-        return f"{get_release_path(data_source, freeze)}/vcf/sharded_vcf/ukbb_freeze_{freeze}_release.vcf.bgz"
+        # if contig is None, return path to sharded vcf bucket
+        return f"{get_release_path(data_source, freeze)}/vcf/sharded_vcf/{data_source}.freeze_{freeze}"
