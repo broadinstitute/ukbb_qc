@@ -103,7 +103,9 @@ def get_ukbb_data(
 
         # Call sample_check function
         # If withdrawn_ids_missing is False, then some samples with withdrawn consents are still present in MT
-        withdrawn_ids_missing, extra_mt_ids = sample_check(mt_samples, withdrawn_ht, show_mismatch=False)
+        withdrawn_ids_missing, extra_mt_ids = sample_check(
+            mt_samples, withdrawn_ht, show_mismatch=False
+        )
         if not withdrawn_ids_missing:
             raise DataException(
                 "Withdrawn samples present in MT. Double check sample filtration"
@@ -164,7 +166,7 @@ def array_mt_path(liftover: bool = False, checkpoint: bool = False) -> str:
 def raw_mt_path(
     data_source: str,
     freeze: int = CURRENT_FREEZE,
-    is_temp = False,
+    is_temp=False,
     densified: bool = False,
 ) -> str:
     """
@@ -193,9 +195,7 @@ def raw_mt_path(
             return f"{dsp_prefix}/{raw_mt_names[freeze]}"
 
 
-def hardcalls_mt_path(
-    data_source: str, freeze: int = CURRENT_FREEZE,
-) -> str:
+def hardcalls_mt_path(data_source: str, freeze: int = CURRENT_FREEZE,) -> str:
     """
     Returns path to hardcalls MatrixTable.
 
@@ -225,7 +225,9 @@ def get_checkpoint_path(
 
 
 # Sparse MatrixTable resources
-def last_END_positions_ht_path(data_source: str = "broad", freeze: int = CURRENT_FREEZE) -> str:
+def last_END_positions_ht_path(
+    data_source: str = "broad", freeze: int = CURRENT_FREEZE
+) -> str:
     """
     Retrieves path to Table with last END positions annotation
 
