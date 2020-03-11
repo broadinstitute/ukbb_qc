@@ -27,6 +27,8 @@ def main(args):
 
     if args.impute_sex:
         logger.info("Imputing sex...")
+        # NOTE: Remove key_by_locus_and_alleles when MTs are keyed by locus and alleles by default
+        # currently only keyed by locus
         mt = get_ukbb_data(
             data_source, freeze, split=False, raw=True, key_by_locus_and_alleles=True,
         )
