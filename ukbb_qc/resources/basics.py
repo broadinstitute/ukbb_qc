@@ -143,7 +143,7 @@ def get_ukbb_data_path(
     if data_source not in DATA_SOURCES:
         raise DataException("This data_source is currently not present")
     if hardcalls:
-        return hardcalls_mt_path(data_source, freeze, split)
+        return hardcalls_mt_path(data_source, freeze)
     else:
         return raw_mt_path(data_source, freeze)
 
@@ -166,7 +166,7 @@ def array_mt_path(liftover: bool = False, checkpoint: bool = False) -> str:
 def raw_mt_path(
     data_source: str,
     freeze: int = CURRENT_FREEZE,
-    is_temp=False,
+    is_temp = False,
     densified: bool = False,
 ) -> str:
     """
@@ -196,7 +196,7 @@ def raw_mt_path(
 
 
 def hardcalls_mt_path(
-    data_source: str, freeze: int = CURRENT_FREEZE, split: bool = True
+    data_source: str, freeze: int = CURRENT_FREEZE,
 ) -> str:
     """
     Returns path to hardcalls MatrixTable.
@@ -207,7 +207,7 @@ def hardcalls_mt_path(
     :return: Path to chosen hardcalls MatrixTable
     :rtype: str
     """
-    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/hardcalls/hardcalls{".split" if split else ""}.mt'
+    return f"gs://broad-ukbb/{data_source}.freeze_{freeze}/hardcalls/hardcalls.mt"
 
 
 def get_checkpoint_path(
