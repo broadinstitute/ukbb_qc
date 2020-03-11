@@ -21,16 +21,14 @@ ukbb_calling_intervals_summary = (
 
 
 # UKBB data resources
-def excluded_samples_path(freeze: int = CURRENT_FREEZE) -> str:
+def excluded_samples_path() -> str:
     """
     Returns path to list of samples to exclude from QC due to withdrawn consents
 
-    :param int freeze: One of data freezes
     :return: Path to excluded samples list
     :rtype: str
     """
-    consent_file_name = {6: "w26041_20200204.csv"}
-    return f"gs://broad-ukbb/resources/withdrawn_consents/{consent_file_name.get(freeze)}"
+    return f"gs://broad-ukbb/resources/withdrawn_consents/w26041_20200204.csv"
 
 
 def get_ukbb_data(
