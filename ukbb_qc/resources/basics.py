@@ -34,7 +34,6 @@ def get_ukbb_data(
     adj: bool = False,
     split: bool = True,
     raw: bool = False,
-    non_refs_only: bool = False,
     ukbb_samples_only: bool = True,
     meta_root: Optional[str] = None,
 ) -> hl.MatrixTable:
@@ -47,7 +46,6 @@ def get_ukbb_data(
     :param bool adj: Whether the returned data should be filtered to adj genotypes
     :param bool split: Whether the dataset should be split (only applies to raw=False)
     :param bool raw: Whether to return the raw data (not recommended: unsplit, and no special consideration on sex chromosomes)
-    :param bool non_refs_only: Whether to return the non-ref-genotype only MT (warning: no special consideration on sex chromosomes)
     :param bool ukbb_samples_only: Whether to return only UKBB samples (exclude control samples). Default is True.
     :param str meta_root: Root annotation name for metadata (e.g., 'meta')
     :return: hardcalls dataset
@@ -62,16 +60,9 @@ def get_ukbb_data(
             "No unsplit hardcalls. Use of split hardcalls is recommended."
         )
 
-    if non_refs_only:
-        mt = hl.read_matrix_table(
-            get_ukbb_data_path(
-                data_source, freeze, split=split, non_refs_only=non_refs_only
-            )
-        )
-    else:
-        mt = hl.read_matrix_table(
-            get_ukbb_data_path(data_source, freeze, hardcalls=not raw, split=split)
-        )
+    mt = hl.read_matrix_table(
+        get_ukbb_data_path(data_source, freeze, hardcalls=not raw, split=split)
+    )
 
     if adj:
         mt = filter_to_adj(mt)
@@ -115,7 +106,6 @@ def get_ukbb_data_path(
     freeze: int = CURRENT_FREEZE,
     hardcalls: bool = False,
     split: bool = True,
-    non_refs_only: bool = False,
 ) -> str:
     """
     Wrapper function to get paths to UKBB data.
@@ -123,19 +113,14 @@ def get_ukbb_data_path(
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
     :param bool hardcalls: Whether to return hardcalls
-    :param bool split: Whether the dataset should be split (applies to hardcalls and non_refs_only)
-    :param bool non_refs_only: Whether non-ref-genotype only MatrixTable should be returned
+    :param bool split: Whether the dataset should be split (applies to hardcalls only)
     :return: Path to chosen MatrixTable
     :rtype: str
     """
-    if hardcalls and non_refs_only:
-        raise DataException("No dataset with hardcalls and non_refs_only")
     if data_source not in DATA_SOURCES:
         raise DataException("This data_source is currently not present")
     if hardcalls:
         return hardcalls_mt_path(data_source, freeze, split)
-    elif non_refs_only:
-        return non_refs_only_mt_path(data_source, freeze, split)
     else:
         return raw_mt_path(data_source, freeze)
 
@@ -200,21 +185,6 @@ def hardcalls_mt_path(
     :rtype: str
     """
     return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/hardcalls/hardcalls{".split" if split else ""}.mt'
-
-
-def non_refs_only_mt_path(
-    data_source: str, freeze: int = CURRENT_FREEZE, split: bool = True
-) -> str:
-    """
-    Returns path to non-reference genotypes only MatrixTable
-
-    :param str data_source: One of 'regeneron' or 'broad'
-    :param int freeze: One of data freezes
-    :param bool split: Whether the dataset should be split
-    :return: Path to non-ref only MatrixTable
-    :rtype: str
-    """
-    return f'gs://broad-ukbb/{data_source}.freeze_{freeze}/non_refs_only/non_refs_only{".split" if split else ""}.mt'
 
 
 def get_checkpoint_path(
