@@ -21,7 +21,6 @@ def import_array_exome_id_map_ht(freeze: int = CURRENT_FREEZE) -> hl.Table:
     """
     Imports file linking array IDs to exome IDs into Table
 
-    :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes. Default is CURRENT_FREEZE.
     :return: Table with array IDs mapped to exome IDs
     :rtype: hl.Table
