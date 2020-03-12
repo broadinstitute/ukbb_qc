@@ -25,7 +25,7 @@ logger.setLevel(logging.INFO)
 def main(args):
     hl.init(log="/load_data.log", default_reference="GRCh38")
 
-    data_source = args.data_source
+    data_source = "broad"
     freeze = args.freeze
 
     if args.load_exome_array_id_map:
@@ -82,13 +82,6 @@ def main(args):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-s",
-        "--data_source",
-        help="Data source",
-        choices=["regeneron", "broad"],
-        default="broad",
-    )
     parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int,
     )
