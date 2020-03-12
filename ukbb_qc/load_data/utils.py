@@ -5,6 +5,7 @@ from gnomad.utils.generic import file_exists
 from ukbb_qc.resources.basics import (
     array_sample_map_path,
     excluded_samples_path,
+    phenotype_ht_path,
     ukbb_phenotype_path,
 )
 from ukbb_qc.resources.variant_qc import var_annotations_ht_path
