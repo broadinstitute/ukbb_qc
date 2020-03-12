@@ -22,30 +22,33 @@ def summarize_mt(mt: hl.MatrixTable) -> hl.Struct:
     """
 
     var_summary = hl.summarize_variants(mt, show=False)
-    logger.info("Dataset has {} variants".format(var_summary.n_variants))
+    logger.info(f"Dataset has {var_summary.n_variants} variants")
 
     # check that all contigs have variant calls
     for contig in var_summary.contigs:
         if var_summary.contigs[contig] == 0:
-            logger.info("{} has no variants called".format(contig))
+            logger.warning(f"{contig} has no variants called")
 
     return var_summary
 
 
-def check_adj(mt: hl.MatrixTable, mt_adj: hl.MatrixTable) -> bool:
+def check_adj(
+    mt: hl.MatrixTable, mt_adj: hl.MatrixTable, gt_expr: hl.expr.CallExpression
+) -> bool:
     """
     Checks if MatrixTable has been filtered using adj criteria by checking allele counts pre and post adj filtration
 
     :param MatrixTable mt: MatrixTable to be checked
     :param MatrixTable mt_adj: MatrixTable filtered using adj criteria
+    :param hl.expr.CallExpression gt_expr: Field containing genotype information 
     :return: Bool of whether MatrixTable has been adj filtered
     :rtype: bool
     """
 
-    pre = mt.aggregate_entries(hl.agg.counter(mt.GT.n_alt_alleles()))
-    logger.info("\nAllele distribution pre adj filtration: {}".format(pre))
-    post = mt_adj.aggregate_entries(hl.agg.counter(mt_adj.GT.n_alt_alleles()))
-    logger.info("\nAllele distribution post adj filtration: {}".format(post))
+    pre = mt.aggregate_entries(hl.agg.counter(mt[gt_expr].n_alt_alleles()))
+    logger.info(f"\nAllele distribution pre adj filtration: {pre}")
+    post = mt_adj.aggregate_entries(hl.agg.counter(mt_adj[gt_expr].n_alt_alleles()))
+    logger.info(f"\nAllele distribution post adj filtration: {post}")
 
     adj = False
     if sum(pre.values()) != sum(post.values()):
@@ -65,7 +68,7 @@ def sample_check(
     :param Table ht: Table containing samples to be checked
     :param Table exp_ht: Table with one column containing expected samples
     :param bool show_mismatch: Boolean whether to print sample mismatches to stdout. Default is True
-    :return: Tuple of bools [whether there were missing samples, whethere there were extra samples]
+    :return: Tuple of bools [whether there were missing samples, whether there were extra samples]
     :rtype: Tuple[bool, bool]
     """
     # bool to store whether there are samples missing from ht
