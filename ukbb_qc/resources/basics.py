@@ -381,4 +381,5 @@ def release_vcf_path(data_source: str, freeze: int, contig: str = None) -> str:
         return f"{get_release_path(data_source, freeze)}/vcf/{data_source}.freeze_{freeze}.{contig}.vcf.bgz"
     else:
         # if contig is None, return path to sharded vcf bucket
-        return f"{get_release_path(data_source, freeze)}/vcf/sharded_vcf/{data_source}.freeze_{freeze}"
+        # NOTE: need to add .bgz or else hail will not bgzip shards
+        return f"{get_release_path(data_source, freeze)}/vcf/sharded_vcf/{data_source}.freeze_{freeze}.bgz"
