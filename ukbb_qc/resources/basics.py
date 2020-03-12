@@ -1,4 +1,5 @@
 import hail as hl
+import logging
 from typing import Optional
 from gnomad.utils.generic import file_exists
 from gnomad.resources.resource_utils import DataException
@@ -10,14 +11,6 @@ from ukbb_qc.assessment.sanity_checks import sample_check
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("basics")
 logger.setLevel(logging.INFO)
-
-
-broad_calling_intervals_path = (
-    "gs://broad-ukbb/resources/broad_exome_calling.interval_list"
-)
-ukbb_calling_intervals_summary = (
-    "gs://broad-ukbb/resources/ukbb_exome_calling_intervals.summary.txt"
-)
 
 
 # UKBB data resources
@@ -80,14 +73,13 @@ def get_ukbb_data(
             hl.ir.MatrixKeyRowsBy(mt._mir, ["locus", "alleles"], is_sorted=True)
         )  # taken from v3 qc
 
+    if not file_exists(f"{array_sample_map_ht_path(data_source, freeze)}_SUCCESS"):
+        raise DataException(f"Need to import array sample map ht for freeze {freeze}!")
+    else:
+        sample_map_ht = hl.read_table(array_sample_map_ht_path(data_source, freeze))
+
     # Remove any samples with withdrawn consents if file with excluded samples exists
-    if file_exists(excluded_samples_path(freeze)):
-        if not file_exists(f"{array_sample_map_ht_path(data_source, freeze)}_SUCCESS"):
-            raise DataException(
-                f"Need to import array sample map ht for freeze {freeze}!"
-            )
-        else:
-            sample_map_ht = hl.read_table(array_sample_map_ht_path(data_source, freeze))
+    if file_exists(excluded_samples_path()):
         mt = mt.annotate_cols(
             withdrawn_consent=sample_map_ht[mt.s.split("_")[1]].withdrawn_consent
         )
@@ -96,7 +88,7 @@ def get_ukbb_data(
 
         # Double check all withdrawn samples were actually excluded
         withdrawn_ht = hl.import_table(
-            excluded_samples_path(freeze), no_header=True, impute=True,
+            excluded_samples_path(), no_header=True, impute=True,
         )
         mt_samples = mt.cols()
         mt_samples = mt_samples.key_by(s_id=mt.s.split("_")[1])
@@ -114,7 +106,7 @@ def get_ukbb_data(
             logger.info("No withdrawn samples found in MT")
 
     if ukbb_samples_only:
-        mt = mt.filter_cols(mt.s.contains("UKB"))
+        mt = mt.filter_cols(hl.is_defined(sample_map_ht[mt.s.split("_")[1]]))
 
     gt_expr = mt.GT if split else mt.LGT
     mt = mt.filter_rows(
@@ -180,6 +172,10 @@ def raw_mt_path(
     :rtype: str
     """
     tempstr = ".temp" if is_temp else ""
+
+    if densified and freeze != 5:
+        raise DataException("Densified parameter only applies to freeze 5")
+
     if data_source == "regeneron":
         return f"gs://broad-ukbb/{data_source}.freeze_{freeze}/data/{data_source}.freeze_{freeze}.nf.mt"
     elif data_source == "broad":
@@ -195,13 +191,12 @@ def raw_mt_path(
             return f"{dsp_prefix}/{raw_mt_names[freeze]}"
 
 
-def hardcalls_mt_path(data_source: str, freeze: int = CURRENT_FREEZE,) -> str:
+def hardcalls_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
     Returns path to hardcalls MatrixTable.
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
-    :param bool split: Whether the dataset should be split
     :return: Path to chosen hardcalls MatrixTable
     :rtype: str
     """
@@ -273,9 +268,7 @@ def array_sample_map_path(freeze: int = CURRENT_FREEZE) -> str:
     return f"gs://broad-ukbb/resources/array/{array_map_names[freeze]}"
 
 
-def array_sample_map_ht_path(
-    data_source: str, freeze: int = CURRENT_FREEZE,
-) -> hl.Table:
+def array_sample_map_ht_path(freeze: int = CURRENT_FREEZE) -> hl.Table:
     """
     Returns array sample map Table.
 
@@ -284,9 +277,7 @@ def array_sample_map_ht_path(
     :return: array sample map Table
     :rtype: hl.Table
     """
-    if freeze <= 5:
-        f"gs://broad-ukbb/{data_source}.freeze_{freeze}/array_sample_map.ht"
-    return f"gs://broad-ukbb/{data_source}.freeze_{freeze}/array/array_sample_map.ht"
+    return f"gs://broad-ukbb/resources/array/array_sample_map_freeze_{freeze}.ht"
 
 
 # Capture intervals
@@ -337,7 +328,7 @@ def get_release_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f"gs://broad-ukbb/{data_source}.freeze_{freeze}/release"
 
 
-def release_mt_path(data_source: str, freeze: int, temp=False) -> str:
+def release_mt_path(data_source: str, freeze: int, temp: bool = False) -> str:
     """
     Fetch filepath for release Hail MatrixTables
 
