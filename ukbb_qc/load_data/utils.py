@@ -4,6 +4,8 @@ from typing import Optional
 from gnomad.utils.generic import file_exists
 from ukbb_qc.resources.basics import (
     array_sample_map_path,
+    array_sample_map_ht_path,
+    capture_ht_path,
     excluded_samples_path,
     phenotype_ht_path,
     ukbb_phenotype_path,
@@ -18,14 +20,20 @@ logger.setLevel(logging.INFO)
 
 
 # Sample resources
-def import_array_exome_id_map_ht(freeze: int = CURRENT_FREEZE) -> hl.Table:
+def import_array_exome_id_map_ht(
+    freeze: int = CURRENT_FREEZE, overwrite: bool = True
+) -> None:
     """
-    Imports file linking array IDs to exome IDs into Table
+    Imports file linking array IDs to exome IDs into Table.
+    Writes Table with array IDs mapped to exome IDs.
 
     :param int freeze: One of the data freezes. Default is CURRENT_FREEZE.
-    :return: Table with array IDs mapped to exome IDs
-    :rtype: hl.Table
+    :param bool overwrite: Whether to overwrite existing data. Default is True
+    :return: None
+    :rtype: None
     """
+    data_source = "broad"
+
     sample_map_ht = hl.import_table(
         array_sample_map_path(freeze), delimiter=",", quote='"'
     )
@@ -40,9 +48,7 @@ def import_array_exome_id_map_ht(freeze: int = CURRENT_FREEZE) -> hl.Table:
     )
 
     if file_exists(excluded_samples_path()):
-        excluded_samples_ht = hl.import_table(
-            excluded_samples_path(), no_header=True
-        )
+        excluded_samples_ht = hl.import_table(excluded_samples_path(), no_header=True)
         excluded_samples = hl.literal(ht.aggregate(hl.agg.collect_as_set(ht.f0)))
         logger.info(
             f"Total number of samples to exclude: {hl.eval(hl.len(excluded_samples))}"
@@ -56,10 +62,12 @@ def import_array_exome_id_map_ht(freeze: int = CURRENT_FREEZE) -> hl.Table:
         logger.info(
             f"Total number of IDs with withdrawn consents in sample map ht: {withdrawn_ids}"
         )
-    return sample_map_ht
+    sample_map_ht.write(
+        array_sample_map_ht_path(data_source, freeze), overwrite=overwrite,
+    )
 
 
-def import_phenotype_ht() -> hl.Table:
+def import_phenotype_ht() -> None:
     """
     Imports UKBB phenotype file as a Table.
 
@@ -72,9 +80,7 @@ def import_phenotype_ht() -> hl.Table:
 
 
 # Interval resources
-def import_capture_intervals(
-    interval_path: str, output_path: str, header: bool, overwrite: bool
-) -> None:
+def import_capture_intervals(interval_path: str, header: bool, overwrite: bool) -> None:
     """
     Imports capture intervals text file into Table and writes Table at specified path
 
@@ -85,6 +91,8 @@ def import_capture_intervals(
     :return: None
     :rtype: None
     """
+    data_source = "broad"
+
     logger.info("Importing capture table")
     capture_ht = hl.import_table(
         interval_path, no_header=not header, impute=True, min_partitions=10
@@ -101,13 +109,12 @@ def import_capture_intervals(
 
     capture_ht.describe()
     logger.info("Writing capture ht")
-    capture_ht.write(output_path, overwrite=overwrite)
+    capture_ht.write(capture_ht_path(data_source), overwrite=overwrite)
 
 
 def import_vqsr(
-    data_source: str,
     freeze: int,
-    vqsr_path_regex: str,
+    vqsr_path: str,
     vqsr_type: str = "AS",
     num_partitions: int = 5000,
     overwrite: bool = False,
@@ -116,18 +123,19 @@ def import_vqsr(
     """
     Imports vqsr site vcf into a HT
 
-    :param data_source: One of 'regeneron' or 'broad'
     :param freeze: One of the data freezes. Default is CURRENT_FREEZE.
-    :param vqsr_path_regex: Path to input vqsr site vcf, can include regex
+    :param vqsr_path: Path to input vqsr site vcf. This can be specified as Hadoop glob patterns
     :param vqsr_type: One of `AS` (allele specific) or `AS_TS` (allele specific with transmitted singletons)
     :param num_partitions: Number of partitions to use for the VQSR HT
     :param overwrite: Whether to overwrite imported VQSR HT
     :param import_header_path: Optional path to a header file to use for import
     :return: None
     """
+    data_source = "broad"
+
     logger.info(f"Importing VQSR annotations for {vqsr_type} VQSR...")
     mt = hl.import_vcf(
-        vqsr_path_regex,
+        vqsr_path,
         force_bgz=True,
         reference_genome="GRCh38",
         header_file=import_header_path,
