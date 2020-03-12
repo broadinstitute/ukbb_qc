@@ -1,3 +1,6 @@
+import argparse
+import hail as hl
+import logging
 from gnomad.utils.slack import try_slack
 from gnomad.utils.sparse_mt import compute_last_ref_block_end
 from ukbb_qc.assessment.sanity_checks import sample_check, summarize_mt
@@ -12,9 +15,6 @@ from ukbb_qc.load_data.utils import (
     import_phenotype_ht,
     import_vqsr,
 )
-import argparse
-import hail as hl
-import logging
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -58,12 +58,12 @@ def main(args):
         )
 
     if args.sanity_check_raw_mt:
-
         logger.info("Reading in raw MT and summarizing variants...")
         mt = get_ukbb_data(
             data_source, freeze, raw=True, split=False, key_by_locus_and_alleles=True
         )
-        summarize_mt(mt)
+        var_summary = summarize_mt(mt)
+        logger.info(f"Variant summary struct: {var_summary}")
 
         logger.info(
             "Checking for sample discrepancies between MatrixTable and linking file..."
@@ -121,7 +121,10 @@ if __name__ == "__main__":
     )
     vqsr.add_argument("--vqsr_vcf_path", help="Path to VQSR VCF")
     vqsr.add_argument(
-        "--vqsr_type", help="Path to VQSR VCF", choices=["AS", "AS_TS"], default="AS",
+        "--vqsr_type",
+        help="Path to VQSR VCF. Can be specified as Hadoop glob patterns",
+        choices=["AS", "AS_TS"],
+        default="AS",
     )
     vqsr.add_argument(
         "--n_partitions",
