@@ -30,10 +30,7 @@ def main(args):
 
     if args.load_exome_array_id_map:
         logger.info("Loading array-exome sample ID map...")
-        sample_map_ht = import_array_exome_id_map_ht(freeze)
-        sample_map_ht.write(
-            array_sample_map_ht_path(data_source, freeze), overwrite=args.overwrite
-        )
+        import_array_exome_id_map_ht(freeze, args.overwrite)
 
     if args.load_phenotypes:
         logger.info("Importing phenotype data...")
@@ -42,7 +39,7 @@ def main(args):
     if args.load_capture_intervals:
         logger.info("Importing capture intervals...")
         import_capture_intervals(
-            args.intervals, capture_ht_path(data_source), args.header, args.overwrite
+            args.intervals, args.header, args.overwrite,
         )
 
     if args.load_vqsr:
