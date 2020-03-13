@@ -20,21 +20,21 @@ logger.setLevel(logging.INFO)
 
 def interval_qc(
     target_mt: hl.MatrixTable,
-    target_coverage: List = [10, 20],
-    coverage_levels: List = [10, 15, 20, 25, 30],
+    target_pct_gt_cov: List = [10, 20],
+    pct_sample_cov: List = [10, 15, 20, 25, 30],
     split_by_sex: bool = False,
     n_partitions: int = 100,
 ) -> hl.Table:
     """
     Determines the percent of samples reaching mean coverage at specified levels in each interval.
-    Assumes that the field for target_coverage exists in the input MatrixTable,
+    Assumes that the field for target_pct_gt_cov exists in the input MatrixTable,
 
     :param MatrixTable target_mt: Input MatrixTable for interval QC, output by compute_callrate_dp_mt. Annotated with interval. 
-    :param int target_coverage: Coverage levels to check for each target. Default is 10 and 20. This field must be in target_mt!
-    :param List coverage_levels: Desired coverage levels at which to check sample coverage. Default 10x, 15x, 20x, 25x, 30x.
+    :param int target_pct_gt_cov: Coverage levels to check for each target. Default is 10 and 20. This field must be in target_mt!
+    :param List pct_sample_cov: Desired coverage levels at which to check sample coverage. Default 10x, 15x, 20x, 25x, 30x.
     :param bool split_by_sex: Whether the interval QC should be stratified by sex. if True, mt must be annotated with sex_karyotype.
     :param int n_partitions: Number of desired partitions for output Table.
-    :return: Table with mean DP and percent samples with coverage at coverage_levels across target.
+    :return: Table with mean DP and percent samples with coverage at pct_sample_cov across target.
     :rtype: Table
     """
     if split_by_sex:
@@ -49,13 +49,13 @@ def interval_qc(
                 f"target_pct_gt_{cov}x": hl.agg.group_by(
                     target_mt.sex_karyotype, hl.agg.mean(target_mt[f"pct_gt_{cov}x"]),
                 )
-                for cov in target_coverage
+                for cov in target_pct_gt_cov
             },
             **{
                 f"pct_samples_{cov}x": hl.agg.group_by(
                     target_mt.sex_karyotype, hl.agg.fraction(target_mt.mean_dp >= cov)
                 )
-                for cov in coverage_levels
+                for cov in pct_sample_cov
             },
         )
     else:
@@ -65,11 +65,11 @@ def interval_qc(
             ),
             **{
                 f"target_pct_gt_{cov}x": hl.agg.mean(target_mt[f"pct_gt_{cov}x"])
-                for cov in target_coverage
+                for cov in target_pct_gt_cov
             },
             **{
                 f"pct_samples_{cov}x": hl.agg.fraction(target_mt.mean_dp >= cov)
-                for cov in coverage_levels
+                for cov in pct_sample_cov
             },
         )
 
@@ -86,8 +86,8 @@ def main(args):
 
     data_source = "broad"
     freeze = args.freeze
-    target_coverage = list(map(int, args.target_cov.split(",")))
-    coverage_levels = list(map(int, args.cov_levels.split(",")))
+    target_pct_gt_cov = list(map(int, args.target_cov.split(",")))
+    pct_sample_cov = list(map(int, args.cov_levels.split(",")))
     n_partitions = args.n_partitions
 
     if args.compute_callrate_mt:
@@ -109,7 +109,7 @@ def main(args):
             mt,
             capture_ht,
             autosomes_only=False,
-            target_coverage=target_coverage,
+            target_pct_gt_cov=target_pct_gt_cov,
         )
 
     logger.info("Reading in call rate MT...")
@@ -123,8 +123,8 @@ def main(args):
         logger.info("Starting interval QC...")
         target_ht = interval_qc(
             mt,
-            target_coverage=target_coverage,
-            coverage_levels=coverage_levels,
+            target_pct_gt_cov=target_pct_gt_cov,
+            pct_sample_cov=pct_sample_cov,
             split_by_sex=False,
             n_partitions=n_partitions,
         )
@@ -151,8 +151,8 @@ def main(args):
         logger.info("Starting interval QC...")
         target_ht = interval_qc(
             mt,
-            target_coverage=target_coverage,
-            coverage_levels=coverage_levels,
+            target_pct_gt_cov=target_pct_gt_cov,
+            pct_sample_cov=pct_sample_cov,
             split_by_sex=True,
             n_partitions=n_partitions,
         )
