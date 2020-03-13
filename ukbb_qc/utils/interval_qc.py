@@ -105,7 +105,12 @@ def main(args):
         )
         capture_ht = hl.read_table(capture_ht_path(data_source))
         compute_callrate_dp_mt(
-            data_source, freeze, mt, capture_ht, autosomes_only=False,
+            data_source,
+            freeze,
+            mt,
+            capture_ht,
+            autosomes_only=False,
+            target_coverage=target_coverage,
         )
 
     logger.info("Reading in call rate MT...")
