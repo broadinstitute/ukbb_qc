@@ -16,11 +16,11 @@ def compute_callrate_dp_mt(
     bi_allelic_only: bool = True,
     autosomes_only: bool = True,
     match: bool = True,
-    target_coverage: List = [10, 20],
+    target_pct_gt_cov: List = [10, 20],
 ) -> None:
     """
     Computes sample metrics (n_defined, total, mean_dp, pct_gt_20x, pct_dp_defined) per interval. 
-    Mean depth, pct_gt_{target_coverage}x, and pct_dp_defined annotations are used during interval QC.
+    Mean depth, pct_gt_{target_pct_gt_cov}x, and pct_dp_defined annotations are used during interval QC.
     Mean depth and callrate annotations (mean_dp, n_defined, total) are used during hard filtering.
     Callrate annotations (n_defined, total) are also used during platform PCA.
     Writes call rate mt (aggregated MatrixTable) keyed by intervals row-wise and samples column-wise.
@@ -33,7 +33,7 @@ def compute_callrate_dp_mt(
     :param bi_allelic_only: If set, only bi-allelic sites are used for the computation.
     :param autosomes_only: If set, only autosomal intervals are used.
     :param matches: If set, returns all intervals in interval_ht that overlap the locus in the input MT.
-    :param List target_coverage: Coverage levels to check for each target. Default is [10, 20].
+    :param List target_pct_gt_cov: Coverage levels to check for each target. Default is [10, 20].
     :return: None
     """
     logger.warning(
