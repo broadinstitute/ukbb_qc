@@ -158,7 +158,7 @@ def array_mt_path(liftover: bool = False, checkpoint: bool = False) -> str:
 def raw_mt_path(
     data_source: str,
     freeze: int = CURRENT_FREEZE,
-    is_temp=False,
+    is_temp: bool = False,
     densified: bool = False,
 ) -> str:
     """
@@ -298,7 +298,14 @@ def capture_ht_path(data_source: str) -> str:
 
 
 # Phenotype resources
-ukbb_phenotype_path = "gs://broad-ukbb/resources/ukb24295.phenotypes.txt"
+def ukbb_phenotype_path() -> str:
+    """
+    Returns path to phenotype text file.
+
+    :return: Path to phenotypes.txt
+    :rtype: str
+    """
+    return "gs://broad-ukbb/resources/ukb24295.phenotypes.txt"
 
 
 def phenotype_ht_path() -> str:
