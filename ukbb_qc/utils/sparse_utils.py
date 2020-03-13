@@ -16,7 +16,7 @@ def compute_callrate_dp_mt(
     bi_allelic_only: bool = True,
     autosomes_only: bool = True,
     match: bool = True,
-    target_coverage: List[int, int] = [10, 20],
+    target_coverage: List = [10, 20],
 ) -> None:
     """
     Computes sample metrics (n_defined, total, mean_dp, pct_gt_20x, pct_dp_defined) per interval. 
