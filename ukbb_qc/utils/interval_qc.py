@@ -9,7 +9,7 @@ from ukbb_qc.resources.basics import (
     get_ukbb_data,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
-from ukbb_qc.resources.sample_qc import interval_qc_path, sex_ht_path
+from ukbb_qc.resources.sample_qc import callrate_mt_path, interval_qc_path, sex_ht_path
 from ukbb_qc.utils.sparse_utils import compute_callrate_dp_mt
 
 
@@ -19,15 +19,18 @@ logger.setLevel(logging.INFO)
 
 
 def interval_qc(
-    target_mt: hl.MatrixTable, split_by_sex: bool = False, ht_n_partitions: int = 100,
+    target_mt: hl.MatrixTable, target_coverage: int = 20, coverage_levels: List = [10, 15, 20, 25, 30], split_by_sex: bool = False, n_partitions: int = 100,
 ) -> hl.Table:
     """
-    Determines the percent of samples reaching 10x, 15x, 20x, 25x, and 30x mean coverage in each interval
+    Determines the percent of samples reaching mean coverage at specified levels in each interval.
+    Assumes that the field for target_coverage exists in the input MatrixTable,
 
     :param MatrixTable target_mt: Input MatrixTable for interval QC, output by compute_callrate_dp_mt. Annotated with interval. 
+    :param int target_coverage: Coverage level to check for each target. Default is 20. This field must be in target_mt!
+    :param List coverage_levels: Desired coverage levels at which to check sample coverage. Default 10x, 15x, 20x, 25x, 30x.
     :param bool split_by_sex: Whether the interval QC should be stratified by sex. if True, mt must be annotated with sex_karyotype.
-    :param int ht_n_partitions: Number of desired partitions for output Table
-    :return: Table with mean DP and percent samples with coverage at 10x, 15x, 20x, 25x, 30x across target.
+    :param int n_partitions: Number of desired partitions for output Table.
+    :return: Table with mean DP and percent samples with coverage at coverage_levels across target.
     :rtype: Table
     """
     if split_by_sex:
@@ -38,41 +41,31 @@ def interval_qc(
                     ~hl.is_nan(target_mt.mean_dp), hl.agg.mean(target_mt.mean_dp)
                 ),
             ),
-            target_pct_gt_20x=hl.agg.group_by(
-                target_mt.sex_karyotype, hl.agg.mean(target_mt.pct_gt_20x)
-            ),
-            pct_samples_10x=hl.agg.group_by(
-                target_mt.sex_karyotype, hl.agg.fraction(target_mt.mean_dp >= 10)
-            ),
-            pct_samples_15x=hl.agg.group_by(
-                target_mt.sex_karyotype, hl.agg.fraction(target_mt.mean_dp >= 15)
-            ),
-            pct_samples_20x=hl.agg.group_by(
-                target_mt.sex_karyotype, hl.agg.fraction(target_mt.mean_dp >= 20)
-            ),
-            pct_samples_25x=hl.agg.group_by(
-                target_mt.sex_karyotype, hl.agg.fraction(target_mt.mean_dp >= 25)
-            ),
-            pct_samples_30x=hl.agg.group_by(
-                target_mt.sex_karyotype, hl.agg.fraction(target_mt.mean_dp >= 30)
-            ),
+            **{f"target_pct_gt_{target_coverage}x": hl.agg.group_by(
+                target_mt.sex_karyotype, 
+                hl.agg.mean(target_mt[f"pct_gt_{target_coverage}x"])
+                )
+            },
+            **{f"pct_samples_{cov}x": hl.agg.group_by(
+                target_mt.sex_karyotype, hl.agg.fraction(target_mt.mean_dp >= cov)
+                ) for cov in coverage_levels
+            },
         )
     else:
         target_mt = target_mt.annotate_rows(
             target_mean_dp=hl.agg.filter(
                 ~hl.is_nan(target_mt.mean_dp), hl.agg.mean(target_mt.mean_dp)
             ),
-            target_pct_gt_20x=hl.agg.mean(target_mt.pct_gt_20x),
-            pct_samples_10x=hl.agg.fraction(target_mt.mean_dp >= 10),
-            pct_samples_15x=hl.agg.fraction(target_mt.mean_dp >= 15),
-            pct_samples_20x=hl.agg.fraction(target_mt.mean_dp >= 20),
-            pct_samples_25x=hl.agg.fraction(target_mt.mean_dp >= 25),
-            pct_samples_30x=hl.agg.fraction(target_mt.mean_dp >= 30),
+            **{f"target_pct_gt_{target_coverage}x": 
+                hl.agg.mean(target_mt[f"pct_gt_{target_coverage}x"])
+            },
+            **{f"pct_samples_{cov}x": hl.agg.fraction(target_mt.mean_dp >= cov)
+                for cov in coverage_levels
+            },
         )
 
     target_ht = target_mt.rows()
-    target_ht = target_ht.naive_coalesce(ht_n_partitions)
-    target_ht.describe()
+    target_ht = target_ht.naive_coalesce(n_partitions)
     return target_ht
 
 
@@ -84,9 +77,14 @@ def main(args):
 
     data_source = "broad"
     freeze = args.freeze
+    target_coverage = args.target_cov
+    coverage_levels = args.cov_levels.split(",")
 
-    # NOTE: this function will densify
     if args.compute_callrate_mt:
+        logger.warning(
+            "Computing the call rate MT requires a densify!\n"
+            "Make sure you are using an autoscaling policy."
+        )
         logger.info("Reading in raw MT...")
         mt = get_ukbb_data(
             data_source, freeze, raw=True, split=False, key_by_locus_and_alleles=True,
@@ -108,7 +106,9 @@ def main(args):
         mt = filter_to_autosomes(mt)
 
         logger.info("Starting interval QC...")
-        target_ht = interval_qc(mt)
+        target_ht = interval_qc(
+            mt, target_coverage=target_coverage, coverage_levels=coverage_levels, split_by_sex=False, n_partitions=args.n_partitions,
+        )
         target_ht.write(
             interval_qc_path(data_source, freeze, "autosomes"),
             overwrite=args.overwrite,
@@ -130,7 +130,9 @@ def main(args):
         mt = mt.filter_cols((mt.sex_karyotype == "XX") | (mt.sex_karyotype == "XY"))
 
         logger.info("Starting interval QC...")
-        target_ht = interval_qc(mt, split_by_sex=True)
+        target_ht = interval_qc(
+            mt, target_coverage=target_coverage, coverage_levels=coverage_levels, split_by_sex=True, n_partitions=args.n_partitions,
+        )
         target_ht.write(
             interval_qc_path(data_source, freeze, "sex_chr"), overwrite=args.overwrite,
         )
@@ -142,17 +144,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int,
     )
-
     parser.add_argument(
         "--n_partitions", help="Desired number of partitions for output", type=int,
     )
-
     parser.add_argument(
         "--autosomes",
         action="store_true",
         help="If set it will only run the autosomes",
     )
-
     parser.add_argument(
         "--sex_chr",
         action="store_true",
@@ -162,6 +161,17 @@ if __name__ == "__main__":
         "--compute_callrate_mt",
         help="Computes an interval by sample mt of callrate and depth",
         action="store_true",
+    )
+    parser.add_argument(
+        "--target_cov",
+        help="Coverage level to check per target. Default is 20x",
+        default=20,
+        type=int,
+    )
+    parser.add_argument(
+        "--cov_levels",
+        help="Comma separated list of desired coverage levels at which to check sample coverage. Default is 10, 15, 20, 25, 30",
+        default="10,15,20,25,30",
     )
     parser.add_argument(
         "-o",
