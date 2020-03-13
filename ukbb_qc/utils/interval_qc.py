@@ -1,7 +1,6 @@
 import argparse
 import hail as hl
 import logging
-from typing import Union
 from gnomad.utils.generic import filter_to_autosomes
 from gnomad.utils.slack import try_slack
 from ukbb_qc.resources.basics import (
@@ -21,7 +20,7 @@ logger.setLevel(logging.INFO)
 
 def interval_qc(
     target_mt: hl.MatrixTable,
-    target_coverage: Union[List, int],
+    target_coverage: List = [10, 20],
     coverage_levels: List = [10, 15, 20, 25, 30],
     split_by_sex: bool = False,
     n_partitions: int = 100,
