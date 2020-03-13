@@ -81,7 +81,7 @@ def get_ukbb_data(
     # Remove any samples with withdrawn consents if file with excluded samples exists
     if file_exists(excluded_samples_path()):
         mt = mt.annotate_cols(
-            withdrawn_consent=sample_map_ht[mt.s.split("_")[1]].withdrawn_consent
+            withdrawn_consent=sample_map_ht[mt.col_key].withdrawn_consent
         )
         mt = mt.filter_cols(~mt.withdrawn_consent)
         mt = mt.drop("withdrawn_consent")
@@ -91,7 +91,7 @@ def get_ukbb_data(
             excluded_samples_path(), no_header=True, impute=True,
         )
         mt_samples = mt.cols()
-        mt_samples = mt_samples.key_by(s_id=mt.s.split("_")[1])
+        mt_samples = mt_samples.key_by(s_id=mt.col_key)
 
         # Call sample_check function
         # If withdrawn_ids_missing is False, then some samples with withdrawn consents are still present in MT
@@ -106,7 +106,7 @@ def get_ukbb_data(
             logger.info("No withdrawn samples found in MT")
 
     if ukbb_samples_only:
-        mt = mt.filter_cols(hl.is_defined(sample_map_ht[mt.s.split("_")[1]]))
+        mt = mt.filter_cols(hl.is_defined(sample_map_ht[mt.col_key]))
 
     gt_expr = mt.GT if split else mt.LGT
     mt = mt.filter_rows(
