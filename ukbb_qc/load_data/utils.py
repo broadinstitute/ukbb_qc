@@ -4,7 +4,6 @@ from typing import Optional
 from gnomad.utils.generic import file_exists
 from ukbb_qc.resources.basics import (
     array_sample_map_path,
-    array_sample_map_ht_path,
     capture_ht_path,
     excluded_samples_path,
     phenotype_ht_path,
@@ -20,24 +19,21 @@ logger.setLevel(logging.INFO)
 
 
 # Sample resources
-def import_array_exome_id_map_ht(
-    freeze: int = CURRENT_FREEZE, overwrite: bool = True
-) -> None:
+def import_array_exome_id_map_ht(freeze: int = CURRENT_FREEZE) -> hl.Table:
     """
     Imports file linking array IDs to exome IDs into Table.
     Writes Table with array IDs mapped to exome IDs.
 
     :param int freeze: One of the data freezes. Default is CURRENT_FREEZE.
-    :param bool overwrite: Whether to overwrite existing data. Default is True
-    :return: None
-    :rtype: None
+    :return: Table with array IDs mapped to exome IDs
+    :rtype: hl.Table
     """
     data_source = "broad"
 
     sample_map_ht = hl.import_table(
         array_sample_map_path(freeze), delimiter=",", quote='"'
     )
-    sample_map_ht = sample_map_ht.key_by(s=sample_map_ht.eid_sample)
+    sample_map_ht = sample_map_ht.key_by("eid_sample")
     sample_map_ht = sample_map_ht.transmute(
         batch_num=sample_map_ht.batch,
         batch=sample_map_ht["batch.c"],
@@ -62,9 +58,7 @@ def import_array_exome_id_map_ht(
         logger.info(
             f"Total number of IDs with withdrawn consents in sample map ht: {withdrawn_ids}"
         )
-    sample_map_ht.write(
-        array_sample_map_ht_path(data_source, freeze), overwrite=overwrite,
-    )
+    return sample_map_ht
 
 
 def import_phenotype_ht() -> None:
