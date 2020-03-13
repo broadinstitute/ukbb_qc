@@ -1,6 +1,7 @@
 import argparse
 import hail as hl
 import logging
+from typing import Union
 from gnomad.utils.generic import filter_to_autosomes
 from gnomad.utils.slack import try_slack
 from ukbb_qc.resources.basics import (
@@ -20,7 +21,7 @@ logger.setLevel(logging.INFO)
 
 def interval_qc(
     target_mt: hl.MatrixTable,
-    target_coverage: int = 20,
+    target_coverage: Union[List, int],
     coverage_levels: List = [10, 15, 20, 25, 30],
     split_by_sex: bool = False,
     n_partitions: int = 100,
@@ -30,7 +31,7 @@ def interval_qc(
     Assumes that the field for target_coverage exists in the input MatrixTable,
 
     :param MatrixTable target_mt: Input MatrixTable for interval QC, output by compute_callrate_dp_mt. Annotated with interval. 
-    :param int target_coverage: Coverage level to check for each target. Default is 20. This field must be in target_mt!
+    :param int target_coverage: Coverage levels to check for each target. Default is 10 and 20. This field must be in target_mt!
     :param List coverage_levels: Desired coverage levels at which to check sample coverage. Default 10x, 15x, 20x, 25x, 30x.
     :param bool split_by_sex: Whether the interval QC should be stratified by sex. if True, mt must be annotated with sex_karyotype.
     :param int n_partitions: Number of desired partitions for output Table.
@@ -46,10 +47,10 @@ def interval_qc(
                 ),
             ),
             **{
-                f"target_pct_gt_{target_coverage}x": hl.agg.group_by(
-                    target_mt.sex_karyotype,
-                    hl.agg.mean(target_mt[f"pct_gt_{target_coverage}x"]),
+                f"target_pct_gt_{cov}x": hl.agg.group_by(
+                    target_mt.sex_karyotype, hl.agg.mean(target_mt[f"pct_gt_{cov}x"]),
                 )
+                for cov in target_coverage
             },
             **{
                 f"pct_samples_{cov}x": hl.agg.group_by(
@@ -64,9 +65,8 @@ def interval_qc(
                 ~hl.is_nan(target_mt.mean_dp), hl.agg.mean(target_mt.mean_dp)
             ),
             **{
-                f"target_pct_gt_{target_coverage}x": hl.agg.mean(
-                    target_mt[f"pct_gt_{target_coverage}x"]
-                )
+                f"target_pct_gt_{cov}x": hl.agg.mean(target_mt[f"pct_gt_{cov}x"])
+                for cov in target_coverage
             },
             **{
                 f"pct_samples_{cov}x": hl.agg.fraction(target_mt.mean_dp >= cov)
@@ -87,8 +87,8 @@ def main(args):
 
     data_source = "broad"
     freeze = args.freeze
-    target_coverage = args.target_cov
-    coverage_levels = args.cov_levels.split(",")
+    target_coverage = list(map(int, args.target_cov.split(",")))
+    coverage_levels = list(map(int, args.cov_levels.split(",")))
     n_partitions = args.n_partitions
 
     if args.compute_callrate_mt:
@@ -188,9 +188,8 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--target_cov",
-        help="Coverage level to check per target. Default is 20x",
-        default=20,
-        type=int,
+        help="Coverage levels to check per target. Default is 10x and 20x (10x to account for sex chromosomes)",
+        default="10,20",
     )
     parser.add_argument(
         "--cov_levels",
