@@ -16,7 +16,7 @@ def compute_callrate_dp_mt(
     bi_allelic_only: bool = True,
     autosomes_only: bool = True,
     match: bool = True,
-    target_coverage: int = 20,
+    target_coverage: List[int, int] = [10, 20],
 ) -> None:
     """
     Computes sample metrics (n_defined, total, mean_dp, pct_gt_20x, pct_dp_defined) per interval. 
@@ -33,7 +33,7 @@ def compute_callrate_dp_mt(
     :param bi_allelic_only: If set, only bi-allelic sites are used for the computation.
     :param autosomes_only: If set, only autosomal intervals are used.
     :param matches: If set, returns all intervals in interval_ht that overlap the locus in the input MT.
-    :param int target_coverage: Coverage level to check for each target. Default is 20.
+    :param List target_coverage: Coverage levels to check for each target. Default is [10, 20].
     :return: None
     """
     logger.warning(
@@ -82,7 +82,7 @@ def compute_callrate_dp_mt(
         total=hl.agg.count(),
         dp_sum=hl.agg.sum(mt.DP),
         mean_dp=hl.agg.mean(mt.DP),
-        **{f"pct_gt_{target_coverage}x": hl.agg.fraction(mt.DP >= target_coverage)},
+        **{f"pct_gt_{cov}x": hl.agg.fraction(mt.DP >= cov) for cov in target_cov},
         pct_dp_defined=hl.agg.count_where(mt.DP > 0) / hl.agg.count(),
     )
     mt.write(callrate_mt_path(data_source, freeze, interval_filtered=False))
