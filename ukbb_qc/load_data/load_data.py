@@ -32,12 +32,15 @@ def main(args):
         logger.info("Loading array-exome sample ID map...")
         sample_map_ht = import_array_exome_id_map_ht(freeze)
 
-        logger.info("Loading raw MT (to get exome IDs)...")
-        exome_ht = get_ukbb_data(data_source, freeze, raw=True, split=False,).cols()
-        exome_ht = exome_ht.annotate(
-            eid_sample=sample_map_ht[exome_ht.s.split("_")[1]].eid_sample,
-            **sample_map_ht[exome_ht.s.split("_")[1]],
-        )
+        logger.info("Loading raw MatrixTable (to get exome IDs)...")
+        exome_ht = get_ukbb_data(data_source, freeze, raw=True, split=False).cols()
+
+        logger.info("Checking for sample discrepancies between MT and linking file...")
+        exome_ht = exome_ht.key_by(eid_sample=samples_ht.s.split("_")[1])
+        sample_check(samples_ht, sample_map_ht)
+
+        exome_ht = exome_ht.annotate(**sample_map_ht[exome_ht.eid_sample])
+        exome_ht = exome_ht.key_by("s")
         exome_ht.write(array_sample_map_ht_path(freeze), overwrite=args.overwrite)
 
     if args.load_phenotypes:
@@ -69,14 +72,6 @@ def main(args):
         )
         var_summary = summarize_mt(mt)
         logger.info(f"Variant summary struct: {var_summary}")
-
-        logger.info(
-            "Checking for sample discrepancies between MatrixTable and linking file..."
-        )
-        sample_map_ht = hl.read_table(array_sample_map_ht_path(data_source, freeze))
-        samples_ht = mt.cols()
-        samples_ht = samples_ht.key_by(array_ID=samples_ht.s.split("_")[1])
-        sample_check(samples_ht, sample_map_ht)
 
     if args.compute_last_END_positions:
         mt = get_ukbb_data(data_source, freeze, raw=True, adj=False, split=False)
