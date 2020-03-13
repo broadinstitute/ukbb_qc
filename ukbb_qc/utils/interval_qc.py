@@ -19,7 +19,11 @@ logger.setLevel(logging.INFO)
 
 
 def interval_qc(
-    target_mt: hl.MatrixTable, target_coverage: int = 20, coverage_levels: List = [10, 15, 20, 25, 30], split_by_sex: bool = False, n_partitions: int = 100,
+    target_mt: hl.MatrixTable,
+    target_coverage: int = 20,
+    coverage_levels: List = [10, 15, 20, 25, 30],
+    split_by_sex: bool = False,
+    n_partitions: int = 100,
 ) -> hl.Table:
     """
     Determines the percent of samples reaching mean coverage at specified levels in each interval.
@@ -41,14 +45,17 @@ def interval_qc(
                     ~hl.is_nan(target_mt.mean_dp), hl.agg.mean(target_mt.mean_dp)
                 ),
             ),
-            **{f"target_pct_gt_{target_coverage}x": hl.agg.group_by(
-                target_mt.sex_karyotype, 
-                hl.agg.mean(target_mt[f"pct_gt_{target_coverage}x"])
+            **{
+                f"target_pct_gt_{target_coverage}x": hl.agg.group_by(
+                    target_mt.sex_karyotype,
+                    hl.agg.mean(target_mt[f"pct_gt_{target_coverage}x"]),
                 )
             },
-            **{f"pct_samples_{cov}x": hl.agg.group_by(
-                target_mt.sex_karyotype, hl.agg.fraction(target_mt.mean_dp >= cov)
-                ) for cov in coverage_levels
+            **{
+                f"pct_samples_{cov}x": hl.agg.group_by(
+                    target_mt.sex_karyotype, hl.agg.fraction(target_mt.mean_dp >= cov)
+                )
+                for cov in coverage_levels
             },
         )
     else:
@@ -56,10 +63,13 @@ def interval_qc(
             target_mean_dp=hl.agg.filter(
                 ~hl.is_nan(target_mt.mean_dp), hl.agg.mean(target_mt.mean_dp)
             ),
-            **{f"target_pct_gt_{target_coverage}x": 
-                hl.agg.mean(target_mt[f"pct_gt_{target_coverage}x"])
+            **{
+                f"target_pct_gt_{target_coverage}x": hl.agg.mean(
+                    target_mt[f"pct_gt_{target_coverage}x"]
+                )
             },
-            **{f"pct_samples_{cov}x": hl.agg.fraction(target_mt.mean_dp >= cov)
+            **{
+                f"pct_samples_{cov}x": hl.agg.fraction(target_mt.mean_dp >= cov)
                 for cov in coverage_levels
             },
         )
@@ -79,6 +89,7 @@ def main(args):
     freeze = args.freeze
     target_coverage = args.target_cov
     coverage_levels = args.cov_levels.split(",")
+    n_partitions = args.n_partitions
 
     if args.compute_callrate_mt:
         logger.warning(
@@ -107,7 +118,11 @@ def main(args):
 
         logger.info("Starting interval QC...")
         target_ht = interval_qc(
-            mt, target_coverage=target_coverage, coverage_levels=coverage_levels, split_by_sex=False, n_partitions=args.n_partitions,
+            mt,
+            target_coverage=target_coverage,
+            coverage_levels=coverage_levels,
+            split_by_sex=False,
+            n_partitions=n_partitions,
         )
         target_ht.write(
             interval_qc_path(data_source, freeze, "autosomes"),
@@ -131,7 +146,11 @@ def main(args):
 
         logger.info("Starting interval QC...")
         target_ht = interval_qc(
-            mt, target_coverage=target_coverage, coverage_levels=coverage_levels, split_by_sex=True, n_partitions=args.n_partitions,
+            mt,
+            target_coverage=target_coverage,
+            coverage_levels=coverage_levels,
+            split_by_sex=True,
+            n_partitions=n_partitions,
         )
         target_ht.write(
             interval_qc_path(data_source, freeze, "sex_chr"), overwrite=args.overwrite,
