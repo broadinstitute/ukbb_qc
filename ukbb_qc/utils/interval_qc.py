@@ -21,7 +21,7 @@ logger.setLevel(logging.INFO)
 def interval_qc(
     target_mt: hl.MatrixTable,
     target_pct_gt_cov: List = [10, 20],
-    pct_sample_cov: List = [10, 15, 20, 25, 30],
+    pct_sample_cov: List = [10, 20],
     split_by_sex: bool = False,
     n_partitions: int = 100,
 ) -> hl.Table:
@@ -193,7 +193,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--cov_levels",
         help="Comma separated list of desired coverage levels at which to check sample coverage. Default is 10, 15, 20, 25, 30",
-        default="10,15,20,25,30",
+        default="10,20",
     )
     parser.add_argument(
         "-o",
