@@ -30,7 +30,15 @@ def main(args):
 
     if args.load_exome_array_id_map:
         logger.info("Loading array-exome sample ID map...")
-        import_array_exome_id_map_ht(freeze, args.overwrite)
+        sample_map_ht = import_array_exome_id_map_ht(freeze)
+
+        logger.info("Loading raw MT (to get exome IDs)...")
+        exome_ht = get_ukbb_data(data_source, freeze, raw=True, split=False,).cols()
+        exome_ht = exome_ht.annotate(
+            eid_sample=sample_map_ht[exome_ht.s.split("_")[1]].eid_sample,
+            **sample_map_ht[exome_ht.s.split("_")[1]],
+        )
+        exome_ht.write(array_sample_map_ht_path(freeze), overwrite=args.overwrite)
 
     if args.load_phenotypes:
         logger.info("Importing phenotype data...")
