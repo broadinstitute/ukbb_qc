@@ -76,7 +76,7 @@ def main(args):
     if args.compute_last_END_positions:
         mt = get_ukbb_data(data_source, freeze, raw=True, adj=False, split=False)
         last_END_positions_ht = compute_last_ref_block_end(mt)
-        last_END_positions_ht.write(last_END_positions_ht_path(data_source, freeze))
+        last_END_positions_ht.write(last_END_positions_ht_path(freeze))
 
 
 if __name__ == "__main__":
