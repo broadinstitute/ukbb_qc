@@ -110,7 +110,7 @@ def get_ukbb_data(
 
     gt_expr = mt.GT if split else mt.LGT
     mt = mt.filter_rows(
-        hl.agg.any(gt_expr.is_non_ref()) | hl.agg.any(hl.is_defined(mt.END))
+        hl.agg.any(gt_expr.is_non_ref()) | hl.is_defined(mt.END)
     )
 
     return mt
