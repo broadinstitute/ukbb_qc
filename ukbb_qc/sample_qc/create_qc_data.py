@@ -34,11 +34,9 @@ def main(args):
         mt = get_ukbb_data(
             data_source, freeze, split=False, raw=True, key_by_locus_and_alleles=True,
         )
+        mt = mt.select_entries("LGT", "GQ", "DP", "LAD", "LA")
         logger.info(
             f"Total number of variants in raw unsplit matrix table: {mt.count_rows()}"
-        )
-        mt = mt.select_entries(
-            "DP", GT=mt.LGT, adj=get_adj_expr(mt.LGT, mt.GQ, mt.DP, mt.LAD)
         )
 
         logger.info("Reading in QC MT sites from tranche 2/freeze 5...")
@@ -74,10 +72,9 @@ def main(args):
                 mt.alleles, mt.info.QUALapprox, indel_phred_het_prior=40,
             )
         )
-        mt = filter_to_adj(mt)
-
-        logger.info("Converting LGT to GT...")
         mt = hl.experimental.lgt_to_gt(mt.LGT, mt.LA)
+        mt = mt.select_entries("GT", adj=get_adj_expr(mt.GT, mt.GQ, mt.DP, mt.LAD))
+        mt = filter_to_adj(mt)
 
         logger.info("Checkpointing MT...")
         mt = mt.checkpoint(
