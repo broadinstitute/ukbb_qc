@@ -5,7 +5,6 @@ from gnomad.utils.generic import file_exists
 from gnomad.resources.resource_utils import DataException
 from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES, CURRENT_HAIL_VERSION
 from .sample_qc import meta_ht_path
-from ukbb_qc.assessment.sanity_checks import sample_check
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -92,13 +91,11 @@ def get_ukbb_data(
         )
         mt_samples = mt.cols()
         mt_samples = mt_samples.key_by(s_id=mt.col_key)
+        withdrawn_samples_in_mt = mt_samples.filter(
+            hl.is_defined(withdrawn_ht.index(mt_samples["s_id"]))
+        ).count()
 
-        # Call sample_check function
-        # If withdrawn_ids_missing is False, then some samples with withdrawn consents are still present in MT
-        withdrawn_ids_missing, extra_mt_ids = sample_check(
-            mt_samples, withdrawn_ht, show_mismatch=False
-        )
-        if not withdrawn_ids_missing:
+        if withdrawn_samples_in_mt > 0:
             raise DataException(
                 "Withdrawn samples present in MT. Double check sample filtration"
             )
@@ -109,18 +106,13 @@ def get_ukbb_data(
         mt = mt.filter_cols(hl.is_defined(sample_map_ht[mt.col_key]))
 
     gt_expr = mt.GT if split else mt.LGT
-    mt = mt.filter_rows(
-        hl.agg.any(gt_expr.is_non_ref()) | hl.is_defined(mt.END)
-    )
+    mt = mt.filter_rows(hl.agg.any(gt_expr.is_non_ref() | hl.is_defined(mt.END)))
 
     return mt
 
 
 def get_ukbb_data_path(
-    data_source: str,
-    freeze: int = CURRENT_FREEZE,
-    hardcalls: bool = False,
-    split: bool = True,
+    data_source: str, freeze: int = CURRENT_FREEZE, hardcalls: bool = False,
 ) -> str:
     """
     Wrapper function to get paths to UKBB data.
@@ -220,9 +212,7 @@ def get_checkpoint_path(
 
 
 # Sparse MatrixTable resources
-def last_END_positions_ht_path(
-    data_source: str = "broad", freeze: int = CURRENT_FREEZE
-) -> str:
+def last_END_positions_ht_path(freeze: int = CURRENT_FREEZE) -> str:
     """
     Retrieves path to Table with last END positions annotation
 
@@ -231,6 +221,7 @@ def last_END_positions_ht_path(
     :return: Path to Table with last_END_position annotation
     :rtype: str
     """
+    data_source = "broad"
     return f"gs://broad-ukbb/{data_source}.freeze_{freeze}/sparse_resources/last_END_positions.ht"
 
 
