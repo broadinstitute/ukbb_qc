@@ -45,7 +45,7 @@ def main(args):
         qc_sites_ht = hl.read_table(qc_sites_path())
 
         logger.info("Densifying sites...")
-        last_END_ht = hl.read_table(last_END_positions_ht_path(data_source, freeze))
+        last_END_ht = hl.read_table(last_END_positions_ht_path(freeze))
         mt = densify_sites(mt, qc_sites_ht, last_END_ht)
 
         logger.info("Checkpointing densified MT")
