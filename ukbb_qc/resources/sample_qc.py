@@ -51,7 +51,7 @@ def f_stat_sites_path() -> str:
     """
     data_source = "broad"
     freeze = 5
-    return f"{qc_temp_data_prefix(data_source, freeze)}f_stat_sites.ht"
+    return f"{sample_qc_path(data_source, freeze)}f_stat_sites.ht"
 
 
 def qc_sites_path() -> str:
