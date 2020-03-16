@@ -11,6 +11,7 @@ from ukbb_qc.resources.sample_qc import (
     f_stat_sites_path,
     interval_qc_path,
     hard_filters_ht_path,
+    qc_mt_path,
     qc_sites_path,
 )
 
@@ -62,19 +63,20 @@ def remove_hard_filter_samples(
     data_source: str,
     freeze: int,
     t: Union[hl.MatrixTable, hl.Table],
-    gt_expr: Optional[hl.expr.CallExpression],
     non_refs_only: bool = True,
+    gt_expr: Optional[hl.expr.CallExpression] = "LGT",
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Removes samples that failed hard filters from MatrixTable or Table. 
     Assumes MatrixTable's col key/Table's row key is sample.
+    If non_refs_only is False, assumes input MatrixTable is sparse!
 
     :param str data_source: 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
     :param MatrixTable/Table t: Input MatrixTable or Table
-    :param hl.expr.CallExpression gt_expr: Field containing genotype. Relevant only if non_refs_only is set.
     :param bool non_refs_only: Whether to filter to non_reference sites only. Relevant only if input is a MatrixTable.
-    :return: MatrixTable or Table with samples removed
+    :param hl.expr.CallExpression gt_expr: Field containing genotype. Default is GT.
+    :return: MatrixTable or Table with samples (and their variants, if non_refs_only is set) removed
     :rtype: MatrixTable or Table
     """
 
@@ -94,8 +96,12 @@ def remove_hard_filter_samples(
         t = t.filter_cols(hl.is_defined(ht[t.col_key]))
         if non_refs_only:
             t = t.filter_rows(hl.agg.any(t[gt_expr].is_non_ref()))
+        else:
+            t = t.filter_rows(
+                hl.agg.any(t[gt_expr].is_non_ref()) | hl.is_defined(t.END)
+            )
     else:
-        t.filter((hl.len(ht[t.key].hard_filters) == 0))
+        t = t.filter(hl.is_defined(ht[t.key]))
     return t
 
 
@@ -105,7 +111,7 @@ def annotate_interval_qc_filter(
     freeze: int,
     t: Union[hl.MatrixTable, hl.Table],
     cov_filter_field: str = "pct_samples_20x",
-    XY_cov_filter_field: str = "pct_samples_10x",
+    xy_cov_filter_field: str = "pct_samples_10x",
     pct_samples: float = 0.85,
     autosomes_only: bool = False,
 ) -> Union[hl.MatrixTable, hl.Table]:
@@ -116,11 +122,16 @@ def annotate_interval_qc_filter(
     :param int freeze: One of the data freezes
     :param MatrixTable/able t: Input MatrixTable or Table
     :param float cov_filter_field: Coverage field to use for filtering of autosomes/sex chr par/female X
-    :param float XY_cov_filter_field: Coverage field to use for filtering of male X and Y
+    :param float xy_cov_filter_field: Coverage field to use for filtering of male X and Y
     :param float pct_samples: Percent of samples with coverage greater than `cov_filter_field` over the interval for filtering
-    :return: MatrixTable or Table with samples removed
+    :param bool autosomes_only: Whether to annotate autosomes only. Default is False
+    :return: MatrixTable or Table with variants within intervals excluded by coverage cutoffs removed
     :rtype: MatrixTable or Table
     """
+    logger.warning(
+        "This function looks only at variant position (doesn't check END fields)!\n"
+        "That means this function only works on dense or non_ref only data."
+    )
     interval_qc_ht = hl.read_table(interval_qc_path(data_source, freeze, "autosomes"))
     good_intervals_ht = interval_qc_ht.filter(
         interval_qc_ht[cov_filter_field] > pct_samples
@@ -171,7 +182,7 @@ def get_sites(
     Returns a Table of sites that meet af_cutoff from the 200K (tranche 2/freeze 5) callset. 
     
     :param float af_cutoff: Desired AF cutoff
-    :param float callrate_cutoff: Desired callrate cutoff
+    :param float call_rate_cutoff: Desired callrate cutoff
     :param bool greater: Whether to return variants with AFs higher than the cutoff.
     :param bool pass_interval_qc: Whether to only return sites that pass interval QC. 
     :param bool autosomes_only: Whether to return autosomal sites only. Also sets interval QC flag.
@@ -202,7 +213,7 @@ def get_sites(
     return ht
 
 
-def calculate_fstat_sites() -> None:
+def calculate_fstat_sites(call_rate: float = 0.99, af_cutoff: float = 0.001) -> None:
     """
     Writes a Table with high callrate, common, biallelic SNPs in regions that pass interval QC on chromosome X.
     This Table is designed to be used as an interval filter in sex imputation.
@@ -232,11 +243,11 @@ def calculate_fstat_sites() -> None:
     mt = mt.transmute_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
     mt = hl.variant_qc(mt)
     mt = mt.filter_rows(
-        (hl.agg.fraction(hl.is_defined(mt.GT)) > 0.99) & (mt.variant_qc.AF[1] > 0.001)
+        (mt.variant_qc.call_rate > call_rate) & (mt.variant_qc.AF[1] > af_cutoff)
     )
     ht = mt.rows()
     ht = ht.transmute(AF=ht.variant_qc.AF[1])
-    ht = ht.write(f_stat_sites_path())
+    ht.write(f_stat_sites_path())
 
 
 def get_qc_mt_sites() -> None:
