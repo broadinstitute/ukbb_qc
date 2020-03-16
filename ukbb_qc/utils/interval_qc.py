@@ -27,7 +27,7 @@ def interval_qc(
 ) -> hl.Table:
     """
     Determines the percent of samples reaching mean coverage at specified levels in each interval.
-    Assumes that the field for target_pct_gt_cov exists in the input MatrixTable,
+    Assumes that the field for target_pct_gt_cov exists in the input MatrixTable.
 
     :param MatrixTable target_mt: Input MatrixTable for interval QC, output by compute_callrate_dp_mt. Annotated with interval. 
     :param int target_pct_gt_cov: Coverage levels to check for each target. Default is 10 and 20. This field must be in target_mt!
@@ -87,7 +87,7 @@ def main(args):
     data_source = "broad"
     freeze = args.freeze
     target_pct_gt_cov = list(map(int, args.target_cov.split(",")))
-    pct_sample_cov = list(map(int, args.cov_levels.split(",")))
+    pct_sample_cov = list(map(int, args.sample_cov.split(",")))
     n_partitions = args.n_partitions
 
     if args.compute_callrate_mt:
@@ -191,8 +191,8 @@ if __name__ == "__main__":
         default="10,20",
     )
     parser.add_argument(
-        "--cov_levels",
-        help="Comma separated list of desired coverage levels at which to check sample coverage. Default is 10, 15, 20, 25, 30",
+        "--sample_cov",
+        help="Comma separated list of desired coverage levels at which to check sample coverage. Default is 10x and 20x",
         default="10,20",
     )
     parser.add_argument(
