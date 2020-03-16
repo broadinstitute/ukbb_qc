@@ -81,7 +81,7 @@ def meta_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
 
 
 def qc_mt_path(
-    data_source: str, freeze: int = CURRENT_FREEZE, ld_pruned: bool = False
+    data_source: str, freeze: int = CURRENT_FREEZE, ld_pruned: bool = True
 ) -> str:
     """
     Returns path to MatrixTable filtered to high callrate, common, biallelc snps for sample QC purposes
@@ -94,7 +94,7 @@ def qc_mt_path(
     """
     if not ld_pruned and freeze > 5:
         raise DataException(
-            "Only one version of QC MT stored for tranches after tranche 2 (created using tranche 2 sites)"
+            "Only one version of QC MT stored for tranches after tranche 2 (created using ld pruned tranche 2 sites)"
         )
     ld_pruned = ".pruned" if ld_pruned else ""
     return f"{sample_qc_path(data_source, freeze)}/qc_data/high_callrate_common_biallelic_snps{ld_pruned}.mt"
@@ -117,7 +117,9 @@ def get_qc_mt(
     return mt
 
 
-def qc_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+def qc_ht_path(
+    data_source: str, freeze: int = CURRENT_FREEZE, ld_pruned: bool = True
+) -> str:
     """
     Returns path to Table for sample QC purposes (specifically, relatedness checks)
 
@@ -126,7 +128,8 @@ def qc_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     :return: Path to Table for sample QC purposes
     :rtype: str
     """
-    return f"{sample_qc_path(data_source, freeze)}/qc_data/high_callrate_common_biallelic_snps.ht"
+    ld_pruned = ".pruned" if ld_pruned else ""
+    return f"{sample_qc_path(data_source, freeze)}/qc_data/high_callrate_common_biallelic_snps{ld_pruned}.ht"
 
 
 # Hard filters resources (including sex imputation resources)
@@ -191,7 +194,7 @@ def array_concordance_results_path(
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
-    :param bool sample: Whether to return sample concordance results. If not set, returns variant results. Default is True.
+    :param bool sample: Whether to return sample concordance results. If not set, returns variant results. Default is False.
     :return: Path to array sample concordance Table
     :rtype: str
     """
