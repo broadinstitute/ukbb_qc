@@ -1,28 +1,30 @@
 import argparse
 import hail as hl
 import logging
+from gnomad.utils.annotations import get_lowqual_expr
 from gnomad.utils.generic import filter_to_autosomes
-from gnomad.utils.gnomad_functions import filter_to_adj
+from gnomad.utils.gnomad_functions import filter_to_adj, get_adj_expr
 from gnomad.utils.sample_qc import get_qc_mt
-from gnomad.utils.sparse_mt import densify_sites
+from gnomad.utils.slack import try_slack
+from gnomad.utils.sparse_mt import densify_sites, get_site_info_expr
 from ukbb_qc.resources.basics import (
     get_checkpoint_path,
     get_ukbb_data,
     last_END_positions_ht_path,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
-from ukbb_qc.resources.sample_qc import qc_mt_path
+from ukbb_qc.resources.sample_qc import qc_ht_path, qc_mt_path, qc_sites_path
 from ukbb_qc.resources.variant_qc import get_truth_sample_info
 from ukbb_qc.utils.utils import get_qc_mt_sites
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
-logger = logging.getLogger("process_raw_data")
+logger = logging.getLogger("create_qc_data")
 logger.setLevel(logging.INFO)
 
 
 def main(args):
-    hl.init(log="/process_raw_data.log", default_reference="GRCh38")
+    hl.init(log="/create_qc_data.log", default_reference="GRCh38")
 
     data_source = "broad"
     freeze = args.freeze
@@ -30,13 +32,13 @@ def main(args):
     if args.compute_qc_mt:
         logger.info("Reading in raw MT...")
         mt = get_ukbb_data(
-            data_source, freeze, raw=True, adj=False, key_by_locus_and_alleles=True,
-        )
-        mt = mt.select_entries(
-            "DP", GT=mt.LGT, adj=get_adj_expr(mt.LGT, mt.GQ, mt.DP, mt.LAD)
+            data_source, freeze, split=False, raw=True, key_by_locus_and_alleles=True,
         )
         logger.info(
             f"Total number of variants in raw unsplit matrix table: {mt.count_rows()}"
+        )
+        mt = mt.select_entries(
+            "DP", GT=mt.LGT, adj=get_adj_expr(mt.LGT, mt.GQ, mt.DP, mt.LAD)
         )
 
         logger.info("Reading in QC MT sites from tranche 2/freeze 5...")
@@ -50,7 +52,7 @@ def main(args):
 
         logger.info("Checkpointing densified MT")
         mt = mt.checkpoint(
-            get_checkpoint_path(data_source, freeze, name="dense", mt=True,),
+            get_checkpoint_path(data_source, freeze, name="dense", mt=True),
             overwrite=True,
         )
 
@@ -73,6 +75,9 @@ def main(args):
             )
         )
         mt = filter_to_adj(mt)
+
+        logger.info("Converting LGT to GT...")
+        mt = hl.experimental.lgt_to_gt(mt.LGT, mt.LA)
 
         logger.info("Checkpointing MT...")
         mt = mt.checkpoint(
@@ -104,7 +109,7 @@ def main(args):
         )
 
     if args.compute_sample_qc_ht:
-        qc_mt = hl.read_matrix_table(qc_mt_path(data_source, freeze))
+        qc_mt = hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned=True))
         qc_mt = filter_to_autosomes(qc_mt)
         qc_ht = hl.sample_qc(qc_mt).cols().select("sample_qc")
         qc_ht = qc_ht.transmute(
@@ -113,30 +118,9 @@ def main(args):
                 dp_stdev=qc_ht.sample_qc.dp_stats.stdev,
             ).select("call_rate", "dp_mean", "dp_stdev")
         )
-        qc_ht.write(qc_ht_path(data_source, freeze), overwrite=args.overwrite)
-
-    if args.extract_truth_samples:
-        mt = get_ukbb_data(data_source, freeze, raw=True, adj=False, split=False,)
-        truth_samples = get_truth_sample_info(data_source, freeze)
-        samples = [s["s"] for s in truth_samples.values()]
-        mt = mt.filter_cols(hl.literal(samples).contains(mt.s))
-        logger.info(f"Extracting {mt.count_cols()} truth samples.")
-        mt.checkpoint(
-            get_mt_checkpoint_path(data_source, freeze, "truth_samples"),
-            overwrite=args.overwrite,
+        qc_ht.write(
+            qc_ht_path(data_source, freeze, ld_pruned=True), overwrite=args.overwrite
         )
-
-        for truth_sample in get_truth_sample_info(data_source, freeze):
-            mt = hl.read_matrix_table(
-                get_mt_checkpoint_path(data_source, freeze, "truth_samples")
-            )
-            mt = mt.filter_cols(mt.s == truth_samples[truth_sample]["s"])
-            mt = mt.key_rows_by("locus", "alleles")
-            mt = hl.experimental.sparse_split_multi(mt)
-            mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
-            mt.naive_coalesce(args.n_partitions).write(
-                truth_samples[truth_sample]["mt"], overwrite=args.overwrite,
-            )
 
 
 if __name__ == "__main__":
@@ -165,11 +149,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--compute_sample_qc_ht",
         help="Compute sample qc on qc matrix table",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--extract_truth_samples",
-        help="Extract truth samples from matrix table",
         action="store_true",
     )
     parser.add_argument(
