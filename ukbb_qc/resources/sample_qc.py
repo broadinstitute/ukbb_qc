@@ -29,8 +29,8 @@ def interval_qc_path(
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
-    :param str chrom: Chromosome of interest
-    :param bool ht: Whether to return path to Table
+    :param str chrom: Chromosome of interest, 'autosomes', or 'sex_chr'
+    :param bool ht: Whether to return path to Table. If not set, will return a text file. Default is True
     :return: Path to interval QC results
     :rtype: str
     """
@@ -44,7 +44,7 @@ def interval_qc_path(
 def f_stat_sites_path() -> str:
     """
     Returns path to Table with high callrate, common, pass interval QC, biallelic SNP positions on chromosome X used in sex imputation.
-    NOTE: The sites came from freeze 5 (the last dataset with AF).
+    NOTE: The sites came from tranche 2/freeze 5 (first 200K samples and the last dataset with AF).
 
     :return: Path to Table with sites for sex imputation
     :rtype: str
@@ -92,7 +92,7 @@ def qc_mt_path(
     :return: Path MatrixTable for sample QC purposes
     :rtype: str
     """
-    if ld_pruned and freeze > 5:
+    if not ld_pruned and freeze > 5:
         raise DataException(
             "Only one version of QC MT stored for tranches after tranche 2 (created using tranche 2 sites)"
         )
@@ -113,11 +113,6 @@ def get_qc_mt(
     :rtype: hl.MatrixTable
     """
     mt = hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned))
-    mt = mt.annotate_rows(
-        lowqual=get_lowqual_expr(
-            mt.alleles, mt.info.QUALapprox, indel_phred_het_prior=40
-        )
-    )
     mt = mt.filter_rows(~mt.lowqual)
     return mt
 
@@ -187,34 +182,20 @@ def array_concordance_sites_path() -> str:
     """
     return "gs://broad-ukbb/broad.freeze_5/temp/sites_for_array_concordance.ht"
 
-def array_sample_concordance_path(
-    data_source: str, freeze: int = CURRENT_FREEZE
+
+def array_concordance_results_path(
+    data_source: str, freeze: int = CURRENT_FREEZE, sample: bool = False,
 ) -> str:
     """
     Returns path to Table with array sample concordance status
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
+    :param bool sample: Whether to return sample concordance results. If not set, returns variant results. Default is True.
     :return: Path to array sample concordance Table
     :rtype: str
     """
-    return (
-        f"{sample_qc_path(data_source, freeze)}/array_concordance/sample_concordance.ht"
-    )
-
-
-def array_variant_concordance_path(
-    data_source: str, freeze: int = CURRENT_FREEZE
-) -> str:
-    """
-    Returns path to Table with array variant concordance status
-
-    :param str data_source: One of 'regeneron' or 'broad'
-    :param int freeze: One of data freezes
-    :return: Path to array variant concordance Table
-    :rtype: str
-    """
-    return f"{sample_qc_path(data_source, freeze)}/array_concordance/variant_concordance.ht"
+    return f"{sample_qc_path(data_source, freeze)}/array_concordance/{'sample' if sample else 'variant'}_concordance.ht"
 
 
 # Platform PCA resources
@@ -325,6 +306,7 @@ def duplicates_ht_path(
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
+    :param bool dup_sets: Whether to return path to duplicate set Table
     :param str method: Method of inferring relatedness. Default: hail's pc_relate
     :return: Path to duplicates Table
     :rtype: str
@@ -367,51 +349,13 @@ def related_drop_path(
     return f"{sample_qc_path(data_source, freeze)}/relatedness/related_samples_to_drop{method}.ht"
 
 
-# Broad-Regneron relatedness comparison resources (only relevant for freeze 4)
-def get_regeneron_relatedness_path(
-    freeze: int = CURRENT_FREEZE, relationship: str = None
-) -> str:
-    """
-    Returns path to regeneron relatedness inference files
-
-    :param int freeze: One of data freezes
-    :param str relationship: relatedness relationship, need to be 2nd-degree, full-sibling, or parent-child
-    :return: Output relatedness file path
-    :rtype: str
-    """
-    if freeze != 4:
-        raise DataException("Regeneron relatedness only exists for tranche 1/freeze 4")
-    if relationship not in ["2nd-degree", "full-sibling", "parent-child"]:
-        raise DataException("This regeneron relationship file not present")
-    freeze_str = "Four"
-    return f"gs://broad-ukbb/regeneron.freeze_{freeze}/data/pharma_relatedness_analysis/UKB_Freeze_{freeze_str}.NF.pVCF_{relationship}_relationships.genome"
-
-
-def get_regeneron_broad_relatedness_path(
-    data_source: str, freeze: int = CURRENT_FREEZE
-) -> str:
-    """
-    Returns path to Table with both Broad and Regeneron inferred relationships
-
-    :param str data_source: One of 'regeneron' or 'broad'
-    :param int freeze: One of data freezes
-    :return: Path to Table with Broad and Regeneron inferred relationships
-    :rtype: str
-    """
-    if freeze != 4:
-        raise DataException(
-            "Broad-Regeneron relatedness comparisons only exists for tranche 1/freeze 4"
-        )
-    return f"{sample_qc_path(data_source, freeze)}/relatedness/regeneron_joint_relatedness.ht"
-
-
 # Population inference resources
 def gnomad_ancestry_loadings_liftover_path(checkpoint: bool = False):
     """
     Returns path to gnomAD ancestry loadings lifted to build 38
 
     :param bool checkpoint: Whether to return path to temporary Table
-    :return: Path to gnomAD ancestry loadings Tablee
+    :return: Path to gnomAD ancestry loadings Table
     :rtype: str
     """
     if checkpoint:
@@ -446,46 +390,25 @@ def ancestry_pca_loadings_ht_path(
     return f"{sample_qc_path(data_source, freeze)}/population_pca/pca_loadings.ht"
 
 
-def ancestry_cluster_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+def ancestry_cluster_ht_path(
+    data_type: str, data_source: str, freeze: int = CURRENT_FREEZE
+) -> str:
     """
     Returns path to Table with ancestry PCA cluster assignments using exome data
 
+    :param str data_type: Data type used in ancestry PCA. One of 'exome', 'array', or 'joint'
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
     :return: Path to ancestry cluster assignments Table
     :rtype: str
     """
-    return (
-        f"{sample_qc_path(data_source, freeze)}/population_pca/cluster_assignments.ht"
-    )
-
-
-def ancestry_cluster_array_ht_path(
-    data_source: str, freeze: int = CURRENT_FREEZE
-) -> str:
-    """
-    Returns path to Table with ancestry PCA cluster assignments using array data
-
-    :param str data_source: One of 'regeneron' or 'broad'
-    :param int freeze: One of data freezes
-    :return: Path to ancestry cluster assingments Table using array data
-    :rtype: str
-    """
-    return f"{sample_qc_path(data_source, freeze)}/population_pca/array_cluster_assignments.ht"
-
-
-def ancestry_cluster_joint_scratch_array_ht_path(
-    data_source: str, freeze: int = CURRENT_FREEZE
-) -> str:
-    """
-    Returns path to Table with ancestry PCA cluster assignments using exome and array data
-
-    :param str data_source: One of 'regeneron' or 'broad'
-    :param int freeze: One of data freezes
-    :return: Path to ancestry cluster assingments Table using exome and array data
-    :rtype: str
-    """
-    return f"{sample_qc_path(data_source, freeze)}/population_pca/joint_scratch_array_cluster_assignments.ht"
+    if data_type == "exome":
+        name = ""
+    elif data_type == "array":
+        name = "array_"
+    elif data_type == "joint":
+        name = "joint_scratch_array_"
+    return f"{sample_qc_path(data_source, freeze)}/population_pca/{name}cluster_assignments.ht"
 
 
 def ancestry_pc_project_scores_ht_path(
@@ -497,7 +420,7 @@ def ancestry_pc_project_scores_ht_path(
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
     :param str data_type: either None for UKBB only or joint for merged UKBB and gnomAD
-    :return: Path to Table
+    :return: Path to Table with ancestry PC project scores
     :rtype: str
     """
     data_type = f".{data_type}" if data_type else ""
@@ -536,7 +459,6 @@ def get_regeneron_ancestry_path(freeze: int = CURRENT_FREEZE) -> str:
     Returns path to Regeneron relatedness inference files
 
     :param int freeze: One of data freezes
-    :param str relationship: relatedness relationship, need to be 2nd-degree, full-sibling, or parent-child
     :return: Output relatedness file path
     :rtype: str
     """
@@ -567,7 +489,6 @@ def get_joint_regeneron_ancestry_path(
 def qc_temp_data_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
     Returns path to temporary sample QC data. 
-    Used to store outlier detection data.
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
@@ -578,7 +499,9 @@ def qc_temp_data_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
 
 
 def platform_pop_outlier_ht_path(
-    data_source: str, freeze: int = CURRENT_FREEZE, pop_assignment_method: str = None
+    data_source: str,
+    freeze: int = CURRENT_FREEZE,
+    pop_assignment_method: str = "hybrid_pop",
 ) -> str:
     """
     Returns path to Table containing samples flagged for outlier sample QC metrics
@@ -589,5 +512,4 @@ def platform_pop_outlier_ht_path(
     :return: Path to Table with outlier samples flagged
     :rtype: str
     """
-    pop_assignment_method = f".{pop_assignment_method}" if pop_assignment_method else ""
-    return f"{sample_qc_path(data_source, freeze)}/outlier_detection/outlier_detection{pop_assignment_method}.ht"
+    return f"{sample_qc_path(data_source, freeze)}/outlier_detection/outlier_detection.{pop_assignment_method}.ht"
