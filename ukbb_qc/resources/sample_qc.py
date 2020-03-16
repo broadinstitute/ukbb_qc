@@ -57,7 +57,9 @@ def f_stat_sites_path() -> str:
 def qc_sites_path() -> str:
     """
     Returns path to Table with sites to use in QC MatrixTable generation.
-    NOTE: Sites were generated using QC MT from tranche 2/freeze 5.
+    NOTE: Sites were generated using QC MT from tranche 2/freeze 5. 
+    Chose high callrate (>0.99), high coverage (85% samples > 20x), and common (AF > 0.001) bi-allelic SNPs outside of LCR intervals.
+
 
     :return: Path to QC MT sites Table
     :rtype: str
@@ -121,7 +123,8 @@ def qc_ht_path(
     data_source: str, freeze: int = CURRENT_FREEZE, ld_pruned: bool = True
 ) -> str:
     """
-    Returns path to Table for sample QC purposes (specifically, relatedness checks)
+    Returns path to Table for sample QC purposes (specifically, relatedness checks).
+    This is a Table keyed by sample with metrics from hail's sample QC.
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
@@ -145,9 +148,7 @@ def ploidy_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     if data_source == "broad" and freeze >= 5:
         return f"{sample_qc_path(data_source, freeze)}/sex_check/ploidy.ht"
     else:
-        raise DataException(
-            "No ploidy file specified for this data source and freeze yet"
-        )
+        raise DataException("No ploidy file specified for this data source and freeze")
 
 
 def sex_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
@@ -178,7 +179,8 @@ def hard_filters_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
 def array_concordance_sites_path() -> str:
     """
     Returns path to Table with sites to use when calculating array concordance
-    Sites are from the 200K (tranche 2/freeze 5)
+    All sites are autosomal sites from 200K (tranche 2/freeze 5)
+    Chose high callrate (>0.95), high coverage (>85% samples at 20x), common (AF > 0.0001) sites
 
     :return: Path to sites Table
     :rtype: Table
@@ -187,15 +189,15 @@ def array_concordance_sites_path() -> str:
 
 
 def array_concordance_results_path(
-    data_source: str, freeze: int = CURRENT_FREEZE, sample: bool = False,
+    data_source: str, freeze: int = CURRENT_FREEZE, sample: bool = True,
 ) -> str:
     """
     Returns path to Table with array sample concordance status
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
-    :param bool sample: Whether to return sample concordance results. If not set, returns variant results. Default is False.
-    :return: Path to array sample concordance Table
+    :param bool sample: Whether to return sample concordance results. If not set, returns variant results. Default is True.
+    :return: Path to Table with array concordance results (sample or variant)
     :rtype: str
     """
     return f"{sample_qc_path(data_source, freeze)}/array_concordance/{'sample' if sample else 'variant'}_concordance.ht"
@@ -211,7 +213,7 @@ def callrate_mt_path(
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
     :param bool interval_filtered: Whether data was filtered to high coverage intervals
-    :return: Path to array variant concordance Table
+    :return: Path to callrate MatrixTable
     :rtype: str
     """
     filtered = ".interval_filtered." if interval_filtered else ""
@@ -305,7 +307,10 @@ def duplicates_ht_path(
     method: str = "pc_relate",
 ) -> str:
     """
-    Returns path to Table with inferred duplicates
+    Returns path to Table with inferred duplicates.
+    Each row in duplicate sample sets (dup_sets) HT is indexed by the sample that is kept and contains the set of duplicate samples that should be filtered.
+    The duplicate HT is created by exploding the dup_sets Table. 
+    Each row in the duplicate HT is indexed by sample and has an annotation (`dup_filtered`) indicating which sample from the duplicate pair was kept
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
@@ -457,7 +462,7 @@ def get_ukbb_self_reported_ancestry_path(freeze: int = CURRENT_FREEZE) -> str:
 
 
 # Broad-Regeneron ancestry comparison resources (relevant for freeze 4 only)
-def get_regeneron_ancestry_path(freeze: int = CURRENT_FREEZE) -> str:
+def get_regeneron_ancestry_path() -> str:
     """
     Returns path to Regeneron relatedness inference files
 
@@ -465,16 +470,12 @@ def get_regeneron_ancestry_path(freeze: int = CURRENT_FREEZE) -> str:
     :return: Output relatedness file path
     :rtype: str
     """
-
-    if freeze != 4:
-        raise DataException("Regeneron ancestry only exists for tranche 1/freeze 4")
+    freeze = 4
     freeze_str = "Four"
     return f"gs://broad-ukbb/regeneron.freeze_{freeze}/data/pharma_relatedness_analysis/UKB_Freeze_{freeze_str}.NF.splitmulti.commonsnps_samples_ancestries.txt"
 
 
-def get_joint_regeneron_ancestry_path(
-    data_source: str, freeze: int = CURRENT_FREEZE
-) -> str:
+def get_joint_regeneron_ancestry_path(data_source: str) -> str:
     """
     Returns path to Table with both Broad and Regeneron inferred ancestries
 
@@ -483,8 +484,7 @@ def get_joint_regeneron_ancestry_path(
     :return: Path to Table with Broad and Regeneron inferred ancestries
     :rtype: str
     """
-    if freeze != 4:
-        raise DataException("Regeneron ancestry only exists for tranche 1/freeze 4")
+    freeze = 4
     return f"{sample_qc_path(data_source, freeze)}/population_pca/regeneron_ukb_joint_ancestry.ht"
 
 
