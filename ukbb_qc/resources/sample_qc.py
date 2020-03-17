@@ -103,7 +103,7 @@ def qc_mt_path(
 
 
 def get_qc_mt(
-    data_source: str, freeze: int = CURRENT_FREEZE, ld_pruned: bool = False
+    data_source: str, freeze: int = CURRENT_FREEZE, ld_pruned: bool = True
 ) -> hl.MatrixTable:
     """
     Returns MatrixTable filtered to high callrate, common, biallelc snps for sample QC purposes
@@ -252,7 +252,7 @@ def platform_pca_loadings_ht_path(
     return f"{sample_qc_path(data_source, freeze)}/platform_pca/platform_pca_loadings{filtered}.ht"
 
 
-def platform_pca_results_ht_path(
+def platform_pca_assignments_ht_path(
     data_source: str, freeze: int = CURRENT_FREEZE, interval_filtered: bool = False
 ) -> str:
     """
