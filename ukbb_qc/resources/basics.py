@@ -56,6 +56,10 @@ def get_ukbb_data(
             "No unsplit hardcalls. Use of split hardcalls is recommended."
         )
 
+    # Check for array sample map -- this is loaded first in the pipeline, before the MT is loaded/processed
+    if not file_exists(f"{array_sample_map_ht_path(data_source, freeze)}_SUCCESS"):
+        raise DataException(f"Need to import array sample map ht for freeze {freeze}!")
+
     mt = hl.read_matrix_table(
         get_ukbb_data_path(data_source, freeze, hardcalls=not raw, split=split)
     )
@@ -72,38 +76,41 @@ def get_ukbb_data(
             hl.ir.MatrixKeyRowsBy(mt._mir, ["locus", "alleles"], is_sorted=True)
         )  # taken from v3 qc
 
-    if not file_exists(f"{array_sample_map_ht_path(data_source, freeze)}_SUCCESS"):
-        raise DataException(f"Need to import array sample map ht for freeze {freeze}!")
-    else:
+    # Add warning that no samples will be removed if excluded samples file doesn't exist
+    if not file_exists(excluded_samples_path()):
+        logger.warning(
+            "No excluded samples file found. No samples will be removed from MT"
+        )
+
+    if file_exists(excluded_samples_path()) or ukbb_samples_only:
+
+        # Read in array sample map HT
         sample_map_ht = hl.read_table(array_sample_map_ht_path(data_source, freeze))
 
-    # Remove any samples with withdrawn consents if file with excluded samples exists
-    if file_exists(excluded_samples_path()):
-        mt = mt.annotate_cols(
-            withdrawn_consent=sample_map_ht[mt.col_key].withdrawn_consent
-        )
-        mt = mt.filter_cols(~mt.withdrawn_consent)
-        mt = mt.drop("withdrawn_consent")
+        # Filter to UKBB samples if specified
+        if ukbb_samples_only:
+            mt = mt.filter_cols(hl.is_defined(sample_map_ht[mt.col_key]))
 
-        # Double check all withdrawn samples were actually excluded
-        withdrawn_ht = hl.import_table(
-            excluded_samples_path(), no_header=True, impute=True,
-        )
-        mt_samples = mt.cols()
-        mt_samples = mt_samples.key_by(s_id=mt.col_key)
-        withdrawn_samples_in_mt = mt_samples.filter(
-            hl.is_defined(withdrawn_ht.index(mt_samples["s_id"]))
-        ).count()
-
-        if withdrawn_samples_in_mt > 0:
-            raise DataException(
-                "Withdrawn samples present in MT. Double check sample filtration"
-            )
+        # Otherwise, remove any samples with withdrawn consents
         else:
-            logger.info("No withdrawn samples found in MT")
+            mt = mt.filter_cols(~sample_map_ht[mt.col_key].withdrawn_consent)
 
-    if ukbb_samples_only:
-        mt = mt.filter_cols(hl.is_defined(sample_map_ht[mt.col_key]))
+            # Double check all withdrawn samples were actually excluded
+            withdrawn_ht = hl.import_table(
+                excluded_samples_path(), no_header=True, impute=True,
+            )
+            mt_samples = mt.cols()
+            mt_samples = mt_samples.key_by(s_id=mt.col_key)
+            withdrawn_samples_in_mt = mt_samples.filter(
+                hl.is_defined(withdrawn_ht.index(mt_samples["s_id"]))
+            ).count()
+
+            if withdrawn_samples_in_mt > 0:
+                raise DataException(
+                    "Withdrawn samples present in MT. Double check sample filtration"
+                )
+            else:
+                logger.info("No withdrawn samples found in MT")
 
     gt_expr = mt.GT if split else mt.LGT
     mt = mt.filter_rows(hl.agg.any(gt_expr.is_non_ref() | hl.is_defined(mt.END)))
@@ -192,6 +199,7 @@ def hardcalls_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     :return: Path to chosen hardcalls MatrixTable
     :rtype: str
     """
+    logger.warning("No unsplit hardcalls -- make sure you are expecting a split MT")
     return f"gs://broad-ukbb/{data_source}.freeze_{freeze}/hardcalls/hardcalls.mt"
 
 
