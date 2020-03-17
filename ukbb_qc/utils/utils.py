@@ -22,19 +22,19 @@ logger.setLevel(logging.INFO)
 
 
 # Generic
-def compare_samples(ht1: hl.Table, ht2: hl.Table) -> bool:
+def compare_row_counts(ht1: hl.Table, ht2: hl.Table) -> bool:
     """
-    Checks if sample counts in two Tables are the same
+    Checks if row counts in two Tables are the same
 
     :param Table ht1: First Table to be checked
     :param Table ht2: Second Table to be checked
-    :return: Whether the sample counts are the same
+    :return: Whether the row counts are the same
     :rtype: bool
     """
-    s_count1 = ht1.count()
-    s_count2 = ht2.count()
-    logger.info(f"{s_count1} samples in left table; {s_count2} samples in right table")
-    return s_count1 == s_count2
+    r_count1 = ht1.count()
+    r_count2 = ht2.count()
+    logger.info(f"{r_count1} rowsin left table; {r_count2} rows in right table")
+    return r_count1 == r_count2
 
 
 def join_tables(
@@ -75,22 +75,14 @@ def remove_hard_filter_samples(
     :param int freeze: One of the data freezes
     :param MatrixTable/Table t: Input MatrixTable or Table
     :param bool non_refs_only: Whether to filter to non_reference sites only. Relevant only if input is a MatrixTable.
-    :param hl.expr.CallExpression gt_expr: Field containing genotype. Default is GT.
+    :param hl.expr.CallExpression gt_expr: Field containing genotype. Default is LGT.
     :return: MatrixTable or Table with samples (and their variants, if non_refs_only is set) removed
     :rtype: MatrixTable or Table
     """
-
-    # read in hard filters ht
-    ht = hl.read_table(hard_filters_ht_path(data_source, freeze))
-
-    # remove unnecessary fields from hard filters ht
-    ht = ht.select("hard_filters")
-
-    # get number of hard filtered samples
+    ht = hl.read_table(hard_filters_ht_path(data_source, freeze)).select("hard_filters")
     hf_samples = ht.aggregate(hl.agg.count_where(ht.hard_filters.hard_filtered))
-    logger.info(f"Removing {hf_samples} samples that failed hard filters")
 
-    # remove hard filtered samples
+    logger.info(f"Removing {hf_samples} samples that failed hard filters")
     ht = ht.filter(~ht.hard_filters.hard_filtered)
     if isinstance(t, hl.MatrixTable):
         t = t.filter_cols(hl.is_defined(ht[t.col_key]))
@@ -150,11 +142,13 @@ def annotate_interval_qc_filter(
             )
             | (
                 (interval_qc_sex_ht.interval.start.contig == "chrX")
+                & (interval_qc_sex_ht.interval.start.in_x_nonpar())
                 & (interval_qc_sex_ht[cov_filter_field]["XX"] > pct_samples)
                 & (interval_qc_sex_ht[XY_cov_filter_field]["XY"] > pct_samples)
             )
             | (
                 (interval_qc_sex_ht.interval.start.contig == "chrY")
+                & (interval_qc_sex_ht.interval.start.in_y_nonpar())
                 & (interval_qc_sex_ht[XY_cov_filter_field]["XY"] > pct_samples)
             )
         )
@@ -204,7 +198,7 @@ def get_sites(
     mt = hl.variant_qc(mt)
     mt = mt.filter_rows(mt.variant_qc.call_rate > call_rate_cutoff)
     if greater:
-        mt = mt.filter_rows(mt.variant_qc.AF[1] > af_cutoff)
+        mt = mt.filter_rows(mt.variant_qc.AF[1] >= af_cutoff)
     else:
         mt = mt.filter_rows(mt.variant_qc.AF[1] < af_cutoff)
 
