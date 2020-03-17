@@ -30,7 +30,7 @@ def interval_qc_path(
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
     :param str chrom: Chromosome of interest, 'autosomes', or 'sex_chr'
-    :param bool ht: Whether to return path to Table. If not set, will return a text file. Default is True
+    :param bool ht: Whether to return path to Table. If False, will return a text file. Default is True
     :return: Path to interval QC results
     :rtype: str
     """
@@ -44,6 +44,7 @@ def interval_qc_path(
 def f_stat_sites_path() -> str:
     """
     Returns path to Table with high callrate, common, pass interval QC, biallelic SNP positions on chromosome X used in sex imputation.
+
     NOTE: The sites came from tranche 2/freeze 5 (first 200K samples and the last dataset with AF).
 
     :return: Path to Table with sites for sex imputation
@@ -51,15 +52,15 @@ def f_stat_sites_path() -> str:
     """
     data_source = "broad"
     freeze = 5
-    return f"{sample_qc_path(data_source, freeze)}f_stat_sites.ht"
+    return f"{sample_qc_path(data_source, freeze)}/f_stat_sites.ht"
 
 
 def qc_sites_path() -> str:
     """
     Returns path to Table with sites to use in QC MatrixTable generation.
+
     NOTE: Sites were generated using QC MT from tranche 2/freeze 5. 
     Chose high callrate (>0.99), high coverage (85% samples > 20x), and common (AF > 0.001) bi-allelic SNPs outside of LCR intervals.
-
 
     :return: Path to QC MT sites Table
     :rtype: str
@@ -124,6 +125,7 @@ def qc_ht_path(
 ) -> str:
     """
     Returns path to Table for sample QC purposes (specifically, relatedness checks).
+
     This is a Table keyed by sample with metrics from hail's sample QC.
 
     :param str data_source: One of 'regeneron' or 'broad'
@@ -179,6 +181,7 @@ def hard_filters_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
 def array_concordance_sites_path() -> str:
     """
     Returns path to Table with sites to use when calculating array concordance
+
     All sites are autosomal sites from 200K (tranche 2/freeze 5)
     Chose high callrate (>0.95), high coverage (>85% samples at 20x), common (AF > 0.0001) sites
 
@@ -196,7 +199,7 @@ def array_concordance_results_path(
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
-    :param bool sample: Whether to return sample concordance results. If not set, returns variant results. Default is True.
+    :param bool sample: Whether to return sample concordance results. If False, returns variant results. Default is True.
     :return: Path to Table with array concordance results (sample or variant)
     :rtype: str
     """
@@ -212,7 +215,7 @@ def callrate_mt_path(
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
-    :param bool interval_filtered: Whether data was filtered to high coverage intervals
+    :param bool interval_filtered: Whether data was filtered to high coverage intervals. Default is False
     :return: Path to callrate MatrixTable
     :rtype: str
     """
@@ -228,7 +231,7 @@ def platform_pca_scores_ht_path(
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
-    :param bool interval_filtered: Whether data was filtered to high coverage intervals
+    :param bool interval_filtered: Whether data was filtered to high coverage intervals. Default is False
     :return: Path to platform PCA scores Table
     :rtype: str
     """
@@ -244,7 +247,7 @@ def platform_pca_loadings_ht_path(
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
-    :param bool interval_filtered: Whether data was filtered to high coverage intervals
+    :param bool interval_filtered: Whether data was filtered to high coverage intervals. Default is False
     :return: Path to platform PCA loadings Table
     :rtype: str
     """
@@ -260,7 +263,7 @@ def platform_pca_assignments_ht_path(
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
-    :param bool interval_filtered: Whether data was filtered to high coverage intervals
+    :param bool interval_filtered: Whether data was filtered to high coverage intervals. Default is False
     :return: Path to platform PCA results Table
     :rtype: str
     """
@@ -308,13 +311,14 @@ def duplicates_ht_path(
 ) -> str:
     """
     Returns path to Table with inferred duplicates.
+
     Each row in duplicate sample sets (dup_sets) HT is indexed by the sample that is kept and contains the set of duplicate samples that should be filtered.
     The duplicate HT is created by exploding the dup_sets Table. 
     Each row in the duplicate HT is indexed by sample and has an annotation (`dup_filtered`) indicating which sample from the duplicate pair was kept
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
-    :param bool dup_sets: Whether to return path to duplicate set Table
+    :param bool dup_sets: Whether to return path to duplicate set Table. Default is False
     :param str method: Method of inferring relatedness. Default: hail's pc_relate
     :return: Path to duplicates Table
     :rtype: str
