@@ -4,43 +4,69 @@ from .resource_utils import CURRENT_FREEZE, CURRENT_HAIL_VERSION, DATA_SOURCES, 
 from typing import Any, Dict, Optional, Union
 
 
-def get_truth_sample_info(
-    data_source: str, freeze: int = CURRENT_FREEZE
-) -> Dict[str, Dict[str, Union[str, Any]]]:
+def get_truth_sample_data(
+    data_source: str,
+    freeze: int = CURRENT_FREEZE,
+    truth_sample: str = None,
+    data_type: str = None,
+) -> Union[str, hl.Table, hl.MatrixTable]:
     """
-    Returns information about truth samples as a Dict keyed by sample name
+    Returns relevant data for truth samples. 
 
-    The following information is included for each truth sample in the Dict:
+    Current truth samples available are syndip and na12878.
+
+    The following information is available for each truth sample:
     - s: sample name in the callset
     - truth_mt: truth sample MatrixTable
     - hc_intervals: high confidence interval Table in truth sample
-    - mt: callset truth sample MatrixTable
-
-    Current truth samples keys in the returned Dict are syndip and na12878
+    - mt: truth sample MatrixTable (subset from callset)
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param str freeze: One of the data freezes
-    :return: Dict of truth sample information
-    :rtype: Dict[str, Dict[str, Union[str, Any]]]
+    :param str truth_sample: Name of the truth sample. One of 'syndip' or 'na12878'
+    :param str data_type: Truth sample data type. One of's', 'truth_mt', 'hc_intervals', or 'callset_truth_mt'. 
+        Must be specified if truth sample is specified.
+    :return: Sample name, Matrix Table, or Table of requested truth sample data
+    :rtype: Union[str, hl.Table, hl.MatrixTable]
     """
     truth_samples = {
         "syndip": {
             "s": "CHMI_CHMI3_Nex1",
             "truth_mt": grch38.syndip.mt(),
-            "mt": hl.read_matrix_table(
-                truth_sample_mt_path(data_source, freeze, "syndip")
-            ),
-            "bed": grch38.syndip_hc_intervals.ht(),
+            "hc_intervals": grch38.syndip_hc_intervals.ht(),
         },
         "na12878": {
             "s": "Coriell_NA12878_NA12878",
             "truth_mt": grch38.na12878_giab.mt(),
-            "mt": hl.read_matrix_table(
-                truth_sample_mt_path(data_source, freeze, "na12878")
-            ),
-            "bed": grch38.na12878_giab_hc_intervals.ht(),
+            "hc_intervals": grch38.na12878_giab_hc_intervals.ht(),
         },
     }
+
+    if truth_sample:
+        if truth_sample not in truth_samples:
+            raise DataException("This truth sample is not present")
+
+        truth_samples_info = truth_samples[truth_sample]
+        if data_type:
+            if (data_type not in truth_samples_info) or (
+                data_type == "callset_truth_mt"
+                and not file_exists(
+                    f"{truth_sample_mt_path(data_source, freeze, truth_sample)}_SUCCESS"
+                )
+            ):
+                raise DataException(
+                    f"This data type is not present for truth sample: {truth_sample}"
+                )
+
+            if data_type == "callset_truth_mt":
+                return hl.read_matrix_table(
+                    truth_sample_mt_path(data_source, freeze, truth_sample)
+                )
+            else:
+                return truth_samples_info[data_type]
+        else:
+            raise DataException(f"Must specify desired data type for {truth_sample}")
+
     return truth_samples
 
 
