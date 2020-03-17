@@ -43,6 +43,7 @@ def main(args):
         if not hl.utils.hadoop_exists(f"{qc_sites_path()}/_SUCCESS"):
             get_qc_mt_sites()
         qc_sites_ht = hl.read_table(qc_sites_path())
+        logger.info(f"Number of QC sites: {qc_sites_ht.count()}")
 
         logger.info("Densifying sites...")
         last_END_ht = hl.read_table(last_END_positions_ht_path(freeze))
@@ -50,7 +51,7 @@ def main(args):
 
         logger.info("Checkpointing densified MT")
         mt = mt.checkpoint(
-            get_checkpoint_path(data_source, freeze, name="dense", mt=True),
+            get_checkpoint_path(data_source, freeze, name="dense_qc_mt_v2_sites", mt=True),
             overwrite=True,
         )
 
@@ -58,7 +59,7 @@ def main(args):
         mt = mt.naive_coalesce(args.n_partitions)
         mt = mt.checkpoint(
             get_checkpoint_path(
-                data_source, freeze, name="dense.repartitioned", mt=True,
+                data_source, freeze, name="dense_qc_mt_v2_sites.repartitioned", mt=True,
             ),
             overwrite=True,
         )
@@ -67,13 +68,14 @@ def main(args):
         info_expr = get_site_info_expr(mt)
         info_expr = info_expr.annotate(**get_as_info_expr(mt))
         mt = mt.annotate_rows(info=info_expr)
+        # NOTE: not using default indel_phred_het_prior to make sure lowqual values match with standard pre-VQSR lowqual values
         mt = mt.annotate_rows(
             lowqual=get_lowqual_expr(
                 mt.alleles, mt.info.QUALapprox, indel_phred_het_prior=40,
             )
         )
-        mt = hl.experimental.lgt_to_gt(mt.LGT, mt.LA)
-        mt = mt.select_entries("GT", adj=get_adj_expr(mt.GT, mt.GQ, mt.DP, mt.LAD))
+        mt = mt.annotate_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
+        mt = mt.select_entries("GT", adj=get_adj_expr(mt.LGT, mt.GQ, mt.DP, mt.LAD))
         mt = filter_to_adj(mt)
 
         logger.info("Checkpointing MT...")
@@ -99,14 +101,14 @@ def main(args):
             filter_segdup=False,
         )
         qc_mt = qc_mt.checkpoint(
-            qc_mt_path(data_source, freeze, ld_pruned=True), overwrite=args.overwrite,
+            qc_mt_path(data_source, freeze), overwrite=args.overwrite,
         )
         logger.info(
             f"Total number of bi-allelic, high-callrate, common SNPs for sample QC: {qc_mt.count_rows()}"
         )
 
     if args.compute_sample_qc_ht:
-        qc_mt = hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned=True))
+        qc_mt = hl.read_matrix_table(qc_mt_path(data_source, freeze))
         qc_mt = filter_to_autosomes(qc_mt)
         qc_ht = hl.sample_qc(qc_mt).cols().select("sample_qc")
         qc_ht = qc_ht.transmute(
@@ -116,7 +118,7 @@ def main(args):
             ).select("call_rate", "dp_mean", "dp_stdev")
         )
         qc_ht.write(
-            qc_ht_path(data_source, freeze, ld_pruned=True), overwrite=args.overwrite
+            qc_ht_path(data_source, freeze), overwrite=args.overwrite
         )
 
 
