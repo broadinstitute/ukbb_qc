@@ -8,7 +8,15 @@ def get_truth_sample_info(
     data_source: str, freeze: int = CURRENT_FREEZE
 ) -> Dict[str, Dict[str, Union[str, Any]]]:
     """
-    Returns information about truth samples as a Dict
+    Returns information about truth samples as a Dict keyed by sample name
+
+    The following information is included for each truth sample in the Dict:
+    - s: sample name in the callset
+    - truth_mt: truth sample MatrixTable
+    - hc_intervals: high confidence interval Table in truth sample
+    - mt: callset truth sample MatrixTable
+
+    Current truth samples keys in the returned Dict are syndip and na12878
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param str freeze: One of the data freezes
@@ -18,15 +26,19 @@ def get_truth_sample_info(
     truth_samples = {
         "syndip": {
             "s": "CHMI_CHMI3_Nex1",
-            "truth_mt": grch38.syndip,
-            "mt": truth_sample_mt_path(data_source, freeze, "syndip"),
-            "bed": grch38.syndip_hc_intervals,
+            "truth_mt": grch38.syndip.mt(),
+            "mt": hl.read_matrix_table(
+                truth_sample_mt_path(data_source, freeze, "syndip")
+            ),
+            "bed": grch38.syndip_hc_intervals.ht(),
         },
         "na12878": {
             "s": "Coriell_NA12878_NA12878",
-            "truth_mt": grch38.na12878_giab,
-            "mt": truth_sample_mt_path(data_source, freeze, "na12878"),
-            "bed": grch38.na12878_giab_hc_intervals,
+            "truth_mt": grch38.na12878_giab.mt(),
+            "mt": hl.read_matrix_table(
+                truth_sample_mt_path(data_source, freeze, "na12878")
+            ),
+            "bed": grch38.na12878_giab_hc_intervals.ht(),
         },
     }
     return truth_samples
