@@ -25,7 +25,6 @@ def get_truth_sample_data(
     :param str freeze: One of the data freezes
     :param str truth_sample: Name of the truth sample. One of 'syndip' or 'na12878'
     :param str data_type: Truth sample data type. One of 's', 'truth_mt', 'hc_intervals', or 'callset_truth_mt'. 
-        Must be specified if truth sample is specified.
     :return: Sample name, Matrix Table, or Table of requested truth sample data
     :rtype: Union[str, hl.Table, hl.MatrixTable]
     """
@@ -42,32 +41,29 @@ def get_truth_sample_data(
         },
     }
 
-    if truth_sample:
-        if truth_sample not in truth_samples:
-            raise DataException("This truth sample is not present")
+    if not truth_sample or not data_type:
+        raise DataException("Must specify both truth_sample and desired data_type")
 
-        truth_samples_info = truth_samples[truth_sample]
-        if data_type:
-            if (data_type not in truth_samples_info) or (
-                data_type == "callset_truth_mt"
-                and not file_exists(
-                    f"{truth_sample_mt_path(data_source, freeze, truth_sample)}_SUCCESS"
-                )
-            ):
-                raise DataException(
-                    f"This data type is not present for truth sample: {truth_sample}"
-                )
+    if truth_sample not in truth_samples:
+        raise DataException("This truth sample is not present")
 
-            if data_type == "callset_truth_mt":
-                return hl.read_matrix_table(
-                    truth_sample_mt_path(data_source, freeze, truth_sample)
-                )
-            else:
-                return truth_samples_info[data_type]
-        else:
-            raise DataException(f"Must specify desired data type for {truth_sample}")
+    truth_samples_info = truth_samples[truth_sample]
+    if (data_type not in truth_samples_info) or (
+        data_type == "callset_truth_mt"
+        and not file_exists(
+            f"{truth_sample_mt_path(data_source, freeze, truth_sample)}_SUCCESS"
+        )
+    ):
+        raise DataException(
+            f"This data type is not present for truth sample: {truth_sample}"
+        )
 
-    return truth_samples
+    if data_type == "callset_truth_mt":
+        return hl.read_matrix_table(
+            truth_sample_mt_path(data_source, freeze, truth_sample)
+        )
+    else:
+        return truth_samples_info[data_type]
 
 
 def variant_qc_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
