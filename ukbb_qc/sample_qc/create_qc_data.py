@@ -51,7 +51,9 @@ def main(args):
 
         logger.info("Checkpointing densified MT")
         mt = mt.checkpoint(
-            get_checkpoint_path(data_source, freeze, name="dense_qc_mt_v2_sites", mt=True),
+            get_checkpoint_path(
+                data_source, freeze, name="dense_qc_mt_v2_sites", mt=True
+            ),
             overwrite=True,
         )
 
@@ -117,9 +119,7 @@ def main(args):
                 dp_stdev=qc_ht.sample_qc.dp_stats.stdev,
             ).select("call_rate", "dp_mean", "dp_stdev")
         )
-        qc_ht.write(
-            qc_ht_path(data_source, freeze), overwrite=args.overwrite
-        )
+        qc_ht.write(qc_ht_path(data_source, freeze), overwrite=args.overwrite)
 
 
 if __name__ == "__main__":
