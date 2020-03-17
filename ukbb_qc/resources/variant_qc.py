@@ -19,12 +19,12 @@ def get_truth_sample_data(
     - s: sample name in the callset
     - truth_mt: truth sample MatrixTable
     - hc_intervals: high confidence interval Table in truth sample
-    - mt: truth sample MatrixTable (subset from callset)
+    - callset_truth_mt: truth sample MatrixTable (subset from callset)
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param str freeze: One of the data freezes
     :param str truth_sample: Name of the truth sample. One of 'syndip' or 'na12878'
-    :param str data_type: Truth sample data type. One of's', 'truth_mt', 'hc_intervals', or 'callset_truth_mt'. 
+    :param str data_type: Truth sample data type. One of 's', 'truth_mt', 'hc_intervals', or 'callset_truth_mt'. 
         Must be specified if truth sample is specified.
     :return: Sample name, Matrix Table, or Table of requested truth sample data
     :rtype: Union[str, hl.Table, hl.MatrixTable]
@@ -148,9 +148,9 @@ def rf_annotated_path(
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
     :param bool adj: Whether to load 'adj' or 'raw'
-    :return:
+    :return: Table with RF annotations
+    :rtype: Table
     """
-
     return f'{variant_qc_prefix(data_source, freeze)}/rf/rf_annotated.{"adj" if adj else "raw"}.ht'
 
 
