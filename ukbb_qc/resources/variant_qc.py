@@ -25,7 +25,7 @@ def get_truth_sample_data(
     :param str freeze: One of the data freezes
     :param str truth_sample: Name of the truth sample. One of 'syndip' or 'na12878'
     :param str data_type: Truth sample data type. One of 's', 'truth_mt', 'hc_intervals', or 'callset_truth_mt'. 
-    :return: Sample name, Matrix Table, or Table of requested truth sample data
+    :return: Sample name, Table, or MatrixTable of requested truth sample data
     :rtype: Union[str, hl.Table, hl.MatrixTable]
     """
     truth_samples = {
