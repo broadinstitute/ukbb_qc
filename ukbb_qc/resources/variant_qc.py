@@ -1,7 +1,7 @@
+from typing import Any, Dict, Optional, Union
 from gnomad.resources.resource_utils import DataException
 import gnomad.resources.grch38 as grch38
 from .resource_utils import CURRENT_FREEZE, CURRENT_HAIL_VERSION, DATA_SOURCES, FREEZES
-from typing import Any, Dict, Optional, Union
 
 
 def get_truth_sample_data(
@@ -83,7 +83,9 @@ def variant_qc_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f"gs://broad-ukbb/{data_source}.freeze_{freeze}/variant_qc"
 
 
-def var_annotations_ht_path(data_source: str, freeze: int, annotation_type: str) -> str:
+def var_annotations_ht_path(
+    data_source: str, freeze: int = CURRENT_FREEZE, annotation_type: str
+) -> str:
     """
     Get variant-level annotations
 
@@ -96,7 +98,9 @@ def var_annotations_ht_path(data_source: str, freeze: int, annotation_type: str)
     return f"{variant_qc_prefix(data_source, freeze)}/variant_annotations/{annotation_type}.ht"
 
 
-def info_ht_path(data_source: str, freeze: int, split: bool = True) -> str:
+def info_ht_path(
+    data_source: str, freeze: int = CURRENT_FREEZE, split: bool = True
+) -> str:
     """
     Get variant-level annotations
 
@@ -109,7 +113,9 @@ def info_ht_path(data_source: str, freeze: int, split: bool = True) -> str:
     return f'{variant_qc_prefix(data_source, freeze)}/variant_annotations/info{"_split" if split else ""}.ht'
 
 
-def truth_sample_mt_path(data_source: str, freeze: int, truth_sample: str) -> str:
+def truth_sample_mt_path(
+    data_source: str, freeze: int = CURRENT_FREEZE, truth_sample: str
+) -> str:
     """
     Get path to the truth sample MT that is subset from the full callset
 
@@ -177,7 +183,7 @@ def rf_path(
 
 
 def score_ranking_path(
-    data_source: str, freeze: int, data: str, binned: bool = False,
+    data_source: str, freeze: int = CURRENT_FREEZE, data: str, binned: bool = False,
 ) -> str:
     """
     Returns the path to non-RF metrics score rankings Tables, e.g.: vqsr
@@ -194,7 +200,7 @@ def score_ranking_path(
 
 
 def binned_concordance_path(
-    data_source: str, freeze: int, truth_sample: str, metric: str
+    data_source: str, freeze: int = CURRENT_FREEZE, truth_sample: str, metric: str
 ):
     """
     :param str data_source: One of 'regeneron' or 'broad' 
