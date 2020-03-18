@@ -182,21 +182,24 @@ def rf_path(
     return f"{variant_qc_prefix(data_source, freeze)}/rf/{run_hash}/{data}.{extension}"
 
 
-def score_ranking_path(
-    data_source: str, freeze: int = CURRENT_FREEZE, data: str, binned: bool = False,
+def score_quantile_bin_path(
+    data_source: str,
+    freeze: int = CURRENT_FREEZE,
+    metric: str,
+    aggregated: bool = False,
 ) -> str:
     """
-    Returns the path to non-RF metrics score rankings Tables, e.g.: vqsr
+    Returns the path to a Table containing RF or VQSR scores and annotated with a bin based on quantiles of the metric scores.
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
-    :param data: The score data to return
-    :param binned: Whether to get the binned data
+    :param str metric: The score data (RF hash or VQSR) to return
+    :param bool aggregated: Whether to get the binned data
     :return: Path to desired hail Table
     :rtype: str
     """
 
-    return f'{variant_qc_prefix(data_source, freeze)}/score_rankings/{data}{"_binned" if binned else ""}.ht'
+    return f'{variant_qc_prefix(data_source, freeze)}/score_rankings/{metric}{"_aggregated" if aggregated else ""}.ht'
 
 
 def binned_concordance_path(
@@ -206,7 +209,7 @@ def binned_concordance_path(
     :param str data_source: One of 'regeneron' or 'broad' 
     :param int freeze: One of the data freezes
     :param str truth_sample: Which truth sample concordance to analyze (e.g., "NA12878" or "syndip")
-    :param str metric: One of the evaluation metrics (or a RF hash)
+    :param str metric: One of the evaluation metrics (RF hash or vqsr)
     :return: Path to binned truth data concordance Hail Table
     :rtype: str
     """
