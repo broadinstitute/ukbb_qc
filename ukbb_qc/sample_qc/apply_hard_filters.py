@@ -1,9 +1,8 @@
 import argparse
 import hail as hl
 import logging
-from gnomad.utils.sparse_mt import densify_sites
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
-from ukbb_qc.resources.basics import get_ukbb_data
+from ukbb_qc.resources.basics import capture_ht_path, get_checkpoint_path, get_ukbb_data
 from ukbb_qc.resources.sample_qc import (
     callrate_mt_path,
     hard_filters_ht_path,
@@ -25,8 +24,8 @@ def apply_hard_filters_expr(
     callrate_expr: hl.expr.Float64Expression,
     dp_expr: hl.expr.Float64Expression,
     sex_expr: hl.expr.StringExpression,
-    min_callrate: float,
-    min_depth: float,
+    min_callrate: float = 0.99,
+    min_depth: float = 20.0,
 ) -> hl.expr.StructExpression:
     """
     Creates hard filters expression.
@@ -40,15 +39,15 @@ def apply_hard_filters_expr(
     :rtype: hl.expr.StructExpression
     """
 
-    # the default coverage/depth cutoffs were set visually using plots:
+    # The default coverage/depth cutoffs were set (tranche 2/freeze 5) visually using plots:
     # p = hl.plot.histogram(mt.sample_qc.dp_stats.mean, range=(10,120), legend="Mean Sample DP")
     # p = hl.plot.histogram(mt.sample_qc.call_rate, range=(0.991, 0.997), legend="Mean Sample Callrate")
 
-    logger.info("Callrate cutoff for hard filters: {}".format(min_callrate))
-    logger.info("Depth cutoff for hard filters: {}".format(min_depth))
+    logger.info(f"Callrate cutoff for hard filters: {min_callrate}")
+    logger.info(f"Depth cutoff for hard filters: {min_depth}")
 
     hard_filters = hl.struct(
-        # we don"t have contamination/chimera for regeneron vcf
+        # we don't have contamination/chimera for broad mt
         # "contamination": ht.freemix > 0.05,
         # "chimera": ht.pct_chimeras > 0.05,
         low_callrate=callrate_expr < min_callrate,
@@ -67,13 +66,16 @@ def hard_filter_samples(
     mt: hl.MatrixTable,
     interval_qc_ht: hl.Table,
     sex_ht: hl.Table,
-    min_callrate: float,
-    min_depth: float,
+    min_callrate: float = 0.99,
+    min_depth: float = 20.0,
 ) -> hl.Table:
     """
     Applys hard filters to samples and returns Table with samples and their hard filter status.
 
-    :param data_source: One of 'regeneron' or 'broad'
+    This function expects the input MT to be annotated with the fields n_defined, total, and dp_sum.
+    These are calculated using compute_callrate_dp_mt.
+
+    :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
     :param MatrixTable mt: Input MatrixTable with samples to be filtered
     :param Table interval_qc_ht: Table with high coverage intervals
@@ -181,7 +183,7 @@ if __name__ == "__main__":
         "--min_callrate", help="Minimum variant callrate", default=0.99, type=float,
     )
     parser.add_argument(
-        "--min-dp", help="Minimum depth", default=20.0, type=float,
+        "--min_dp", help="Minimum depth", default=20.0, type=float,
     )
     parser.add_argument(
         "--cov_filter_field",
@@ -189,8 +191,8 @@ if __name__ == "__main__":
         default="pct_samples_20x",
     )
     parser.add_argument(
-        "--pct_samples_20x",
-        help="Percent samples at 20X to filter intervals",
+        "--pct_samples",
+        help="Percent samples at specified coverage to filter intervals",
         default=0.85,
         type=float,
     )
