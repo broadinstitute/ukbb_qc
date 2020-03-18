@@ -72,12 +72,6 @@ def main(args):
         info_expr = get_site_info_expr(mt)
         info_expr = info_expr.annotate(**get_as_info_expr(mt))
         mt = mt.annotate_rows(info=info_expr)
-        # NOTE: not using default indel_phred_het_prior to make sure lowqual values match with standard pre-VQSR lowqual values
-        mt = mt.annotate_rows(
-            lowqual=get_lowqual_expr(
-                mt.alleles, mt.info.AS_QUALapprox, indel_phred_het_prior=40,
-            )
-        )
         mt = mt.annotate_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
         mt = mt.select_entries("GT", adj=get_adj_expr(mt.LGT, mt.GQ, mt.DP, mt.LAD))
         mt = filter_to_adj(mt)
@@ -103,6 +97,12 @@ def main(args):
             filter_lcr=False,
             filter_decoy=False,
             filter_segdup=False,
+        )
+        # NOTE: not using default indel_phred_het_prior to make sure lowqual values match with standard pre-VQSR lowqual values
+        mt = mt.annotate_rows(
+            lowqual=get_lowqual_expr(
+                mt.alleles, mt.info.AS_QUALapprox[1], indel_phred_het_prior=40,
+            )
         )
         qc_mt = qc_mt.checkpoint(
             qc_mt_path(data_source, freeze), overwrite=args.overwrite,
