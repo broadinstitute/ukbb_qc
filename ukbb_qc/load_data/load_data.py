@@ -39,8 +39,8 @@ def main(args):
         exome_ht = hl.read_matrix_table(raw_mt_path(data_source, freeze)).cols()
 
         logger.info("Checking for sample discrepancies between MT and linking file...")
-        exome_ht = exome_ht.key_by(eid_sample=sample_map_ht.s.split("_")[1])
-        sample_check(samples_ht, sample_map_ht)
+        exome_ht = exome_ht.key_by(eid_sample=exome_ht.s.split("_")[1])
+        sample_check(exome_ht, sample_map_ht)
 
         exome_ht = exome_ht.annotate(**sample_map_ht[exome_ht.eid_sample])
         exome_ht = exome_ht.key_by("s")
