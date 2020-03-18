@@ -10,7 +10,7 @@ logger = logging.getLogger("sparse_utils")
 logger.setLevel(logging.INFO)
 
 
-def compute_callrate_dp_mt(
+def compute_interval_callrate_dp_mt(
     data_source: str,
     freeze: int,
     mt: hl.MatrixTable,
@@ -27,6 +27,7 @@ def compute_callrate_dp_mt(
     Mean depth and callrate annotations (mean_dp, n_defined, total) are used during hard filtering.
     Callrate annotations (n_defined, total) are also used during platform PCA.
     Writes call rate mt (aggregated MatrixTable) keyed by intervals row-wise and samples column-wise.
+    Assumes that all overlapping intervals in intervals_ht are merged.
     NOTE: This function requires a densify! Please use an autoscaling cluster.
 
     :param str data_source: One of 'regeneron' or 'broad'
@@ -57,10 +58,12 @@ def compute_callrate_dp_mt(
     logger.info(
         "Filtering out lines that are only reference or not covered in capture intervals"
     )
+    logger.warning(
+        "Assumes that overlapping intervals in capture intervals are merged!"
+    )
     mt = mt.filter_rows(hl.len(mt.alleles) > 1)
-    intervals_ht = intervals_ht.annotate_rows(interval_label=intervals_ht.interval)
     mt = mt.annotate_rows(
-        interval=intervals_ht.index(mt.locus, all_matches=match).interval_label
+        interval=intervals_ht.index(mt.locus, all_matches=match).interval
     )
     mt = mt.filter_rows(hl.is_defined(mt.interval))
 
