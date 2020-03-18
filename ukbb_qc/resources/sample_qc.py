@@ -267,8 +267,9 @@ def platform_pca_assignments_ht_path(
     :return: Path to platform PCA results Table
     :rtype: str
     """
+    # NOTE: for tranche 1 and 2, this table was named "platform_pca_results"
     filtered = ".interval_filtered." if interval_filtered else ""
-    return f"{sample_qc_path(data_source, freeze)}/platform_pca/platform_pca_results{filtered}.ht"
+    return f"{sample_qc_path(data_source, freeze)}/platform_pca/platform_pca_assignments{filtered}.ht"
 
 
 # Relatedness inference resources
