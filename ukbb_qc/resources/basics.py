@@ -61,7 +61,7 @@ def get_ukbb_data(
         raise DataException(f"Need to import array sample map ht for freeze {freeze}!")
 
     mt = hl.read_matrix_table(
-        get_ukbb_data_path(data_source, freeze, hardcalls=not raw, split=split)
+        get_ukbb_data_path(data_source, freeze, hardcalls=not raw)
     )
 
     if adj:
