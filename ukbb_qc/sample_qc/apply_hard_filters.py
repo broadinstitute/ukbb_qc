@@ -9,7 +9,7 @@ from ukbb_qc.resources.sample_qc import (
     interval_qc_path,
     sex_ht_path,
 )
-from ukbb_qc.utils.sparse_utils import compute_callrate_dp_mt
+from ukbb_qc.utils.sparse_utils import compute_interval_callrate_dp_mt
 
 
 logging.basicConfig(
@@ -73,7 +73,7 @@ def hard_filter_samples(
     Applys hard filters to samples and returns Table with samples and their hard filter status.
 
     This function expects the input MT to be annotated with the fields n_defined, total, and dp_sum.
-    These are calculated using compute_callrate_dp_mt.
+    These are calculated using compute_interval_callrate_dp_mt.
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
@@ -87,6 +87,7 @@ def hard_filter_samples(
     """
     logger.info("Computing callrate and mean DP over high coverage intervals...")
     mt = mt.filter_rows(hl.is_defined(interval_qc_ht[mt.row_key]))
+    mt = mt.checkpoint(callrate_mt_path(data_source, freeze, interval_filtered=True))
     ht = mt.annotate_cols(
         call_rate=hl.agg.sum(mt.n_defined) / hl.agg.sum(mt.total),
         mean_dp=hl.agg.sum(mt.dp_sum) / hl.agg.sum(mt.total),
@@ -126,7 +127,7 @@ def main(args):
     freeze = args.freeze
 
     # NOTE: this function will densify
-    if args.compute_callrate_mt:
+    if args.compute_interval_callrate_mt:
         logger.info("Reading in raw MT...")
         mt = get_ukbb_data(
             data_source, freeze, split=False, raw=True, key_by_locus_and_alleles=True,
@@ -135,7 +136,7 @@ def main(args):
             f"Total number of variants in raw unsplit matrix table: {mt.count_rows()}"
         )
         capture_ht = hl.read_table(capture_ht_path(data_source))
-        compute_callrate_dp_mt(data_source, freeze, mt, capture_ht)
+        compute_interval_callrate_dp_mt(data_source, freeze, mt, capture_ht)
 
     logger.info("Reading in callrate MT, sex ht, interval qc HT...")
     callrate_mt = hl.read_matrix_table(
@@ -175,7 +176,7 @@ if __name__ == "__main__":
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int,
     )
     parser.add_argument(
-        "--compute_callrate_mt",
+        "--compute_interval_callrate_mt",
         help="Computes an interval by sample mt of callrate and depth that will be for hard filtering samples",
         action="store_true",
     )
