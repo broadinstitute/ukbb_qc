@@ -22,6 +22,7 @@ def compute_callrate_dp_mt(
 ) -> None:
     """
     Computes sample metrics (n_defined, total, mean_dp, pct_gt_20x, pct_dp_defined) per interval. 
+    
     Mean depth, pct_gt_{target_pct_gt_cov}x, and pct_dp_defined annotations are used during interval QC.
     Mean depth and callrate annotations (mean_dp, n_defined, total) are used during hard filtering.
     Callrate annotations (n_defined, total) are also used during platform PCA.
