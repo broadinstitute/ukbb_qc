@@ -6,7 +6,7 @@ from gnomad.utils.generic import filter_to_autosomes
 from gnomad.utils.gnomad_functions import filter_to_adj, get_adj_expr
 from gnomad.utils.sample_qc import get_qc_mt
 from gnomad.utils.slack import try_slack
-from gnomad.utils.sparse_mt import densify_sites, get_site_info_expr
+from gnomad.utils.sparse_mt import densify_sites, get_as_info_expr, get_site_info_expr
 from ukbb_qc.resources.basics import (
     get_checkpoint_path,
     get_ukbb_data,
