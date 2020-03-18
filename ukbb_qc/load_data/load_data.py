@@ -7,8 +7,10 @@ from ukbb_qc.assessment.sanity_checks import sample_check, summarize_mt
 from ukbb_qc.resources.basics import (
     array_sample_map_ht_path,
     capture_ht_path,
+    get_ukbb_data,
     last_END_positions_ht_path,
 )
+from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.load_data.utils import (
     import_array_exome_id_map_ht,
     import_capture_intervals,
@@ -95,7 +97,7 @@ if __name__ == "__main__":
         "--load_phenotypes", help="Load phenotype file into Table", action="store_true",
     )
 
-    parser.add_argument_group(
+    capture_intervals = parser.add_argument_group(
         "capture_intervals",
         description="Arguments relevant to loading capture intervals",
     )
@@ -113,7 +115,7 @@ if __name__ == "__main__":
         action="store_true",
     )
 
-    parser.add_argument_group(
+    vqsr = parser.add_argument_group(
         "vqsr", description="Arguments relevant to loading VQSR",
     )
     vqsr.add_argument(
