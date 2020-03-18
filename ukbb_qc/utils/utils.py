@@ -65,7 +65,7 @@ def remove_hard_filter_samples(
     freeze: int,
     t: Union[hl.MatrixTable, hl.Table],
     non_refs_only: bool = True,
-    gt_field: Optional[str] = "LGT",
+    gt_field: str = "LGT",
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Removes samples that failed hard filters from MatrixTable or Table. 
