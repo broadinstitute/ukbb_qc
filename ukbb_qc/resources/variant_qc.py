@@ -172,7 +172,7 @@ def rf_path(
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
-    :param str data: One of 'pre_rf', 'training', 'model' or 'rf_result' (default)
+    :param str data: One of 'training', 'model' or 'rf_result' (default)
     :param str run_hash: Hash of RF run to load
     :return: Path to desired RF data
     :rtype: str
