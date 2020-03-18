@@ -42,6 +42,7 @@ def join_tables(
 ) -> hl.Table:
     """
     Joins left and right tables using specified keys and join types and returns result.
+    
     Also prints warning if sample counts are not the same.
 
     :param Table left_ht: Left Table to be joined
@@ -68,10 +69,11 @@ def remove_hard_filter_samples(
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Removes samples that failed hard filters from MatrixTable or Table. 
+
     Assumes MatrixTable's col key/Table's row key is sample.
     If non_refs_only is False, assumes input MatrixTable is sparse!
 
-    :param str data_source: 'regeneron' or 'broad'
+    :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
     :param MatrixTable/Table t: Input MatrixTable or Table
     :param bool non_refs_only: Whether to filter to non_reference sites only. Relevant only if input is a MatrixTable.
@@ -90,7 +92,7 @@ def remove_hard_filter_samples(
             t = t.filter_rows(hl.agg.any(t[gt_expr].is_non_ref()))
         else:
             t = t.filter_rows(
-                hl.agg.any(t[gt_expr].is_non_ref()) | hl.is_defined(t.END)
+                hl.agg.any(t[gt_expr].is_non_ref() | hl.is_defined(t.END))
             )
     else:
         t = t.filter(hl.is_defined(ht[t.key]))
@@ -144,12 +146,12 @@ def annotate_interval_qc_filter(
                 (interval_qc_sex_ht.interval.start.contig == "chrX")
                 & (interval_qc_sex_ht.interval.start.in_x_nonpar())
                 & (interval_qc_sex_ht[cov_filter_field]["XX"] > pct_samples)
-                & (interval_qc_sex_ht[XY_cov_filter_field]["XY"] > pct_samples)
+                & (interval_qc_sex_ht[xy_cov_filter_field]["XY"] > pct_samples)
             )
             | (
                 (interval_qc_sex_ht.interval.start.contig == "chrY")
                 & (interval_qc_sex_ht.interval.start.in_y_nonpar())
-                & (interval_qc_sex_ht[XY_cov_filter_field]["XY"] > pct_samples)
+                & (interval_qc_sex_ht[xy_cov_filter_field]["XY"] > pct_samples)
             )
         )
         good_intervals_ht = good_intervals_ht.select().union(
@@ -210,9 +212,12 @@ def get_sites(
 def calculate_fstat_sites(call_rate: float = 0.99, af_cutoff: float = 0.001) -> None:
     """
     Writes a Table with high callrate, common, biallelic SNPs in regions that pass interval QC on chromosome X.
+
     This Table is designed to be used as an interval filter in sex imputation.
     NOTE: This function generates sites only for tranche 2/freeze 5, which is the last dataset that contains AF.
 
+    :param float call_rate: Call rate cutoff used to filter sites
+    :param float af_cutoff: Alternate allele frequency cutoff used to filter sites
     :return: None
     :rtype: None
     """
@@ -247,6 +252,7 @@ def calculate_fstat_sites(call_rate: float = 0.99, af_cutoff: float = 0.001) -> 
 def get_qc_mt_sites() -> None:
     """
     Writes a Table with sites to use in QC MatrixTable generation. 
+
     Table includes the fields 'locus', 'alleles', and 'info'. 
     NOTE: This function generates sites based on the tranche 2/freeze 5 QC MatrixTable.
 
