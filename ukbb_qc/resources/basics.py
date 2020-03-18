@@ -91,8 +91,8 @@ def get_ukbb_data(
         if ukbb_samples_only:
             mt = mt.filter_cols(hl.is_defined(sample_map_ht[mt.col_key]))
 
-        # Otherwise, remove any samples with withdrawn consents
-        else:
+        # Remove any samples with withdrawn consents
+        if file_exists(excluded_samples_path()):
             mt = mt.filter_cols(~sample_map_ht[mt.col_key].withdrawn_consent)
 
             # Double check all withdrawn samples were actually excluded
