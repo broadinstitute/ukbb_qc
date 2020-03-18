@@ -65,15 +65,17 @@ def main(args):
             ),
             overwrite=True,
         )
-        logger.info("Adding info and low QUAL annotations and filtering to adj...")
+
         # NOTE: Need MQ, QD, FS for hard filters
+        logger.info("Adding info and low QUAL annotations and filtering to adj...")
+        mt = mt.transmute_entries(**mt.gvcf_info)
         info_expr = get_site_info_expr(mt)
         info_expr = info_expr.annotate(**get_as_info_expr(mt))
         mt = mt.annotate_rows(info=info_expr)
         # NOTE: not using default indel_phred_het_prior to make sure lowqual values match with standard pre-VQSR lowqual values
         mt = mt.annotate_rows(
             lowqual=get_lowqual_expr(
-                mt.alleles, mt.info.QUALapprox, indel_phred_het_prior=40,
+                mt.alleles, mt.info.AS_QUALapprox, indel_phred_het_prior=40,
             )
         )
         mt = mt.annotate_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
