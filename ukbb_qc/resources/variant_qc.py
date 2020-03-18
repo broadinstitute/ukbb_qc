@@ -84,14 +84,14 @@ def variant_qc_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
 
 
 def var_annotations_ht_path(
-    data_source: str, freeze: int = CURRENT_FREEZE, annotation_type: str
+    annotation_type: str, data_source: str, freeze: int = CURRENT_FREEZE
 ) -> str:
     """
     Get variant-level annotations
 
+    :param str annotation_type: Tag describing variant-level annotations in HT, e.g., "vep", "qc_stats", "call_stats", "vqsr"
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
-    :param str annotation_type: Tag describing variant-level annotations in HT, e.g., "vep", "qc_stats", "call_stats", "vqsr"
     :return: Path to annotations Table
     :rtype: str
     """
@@ -114,14 +114,14 @@ def info_ht_path(
 
 
 def truth_sample_mt_path(
-    data_source: str, freeze: int = CURRENT_FREEZE, truth_sample: str
+    truth_sample: str, data_source: str, freeze: int = CURRENT_FREEZE
 ) -> str:
     """
     Get path to the truth sample MT that is subset from the full callset
 
+    :param str truth_sample: Name of the truth sample
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
-    :param str truth_sample: Name of the truth sample
     :return: Path to callset truth sample MT
     :rtype: str
     """
@@ -194,7 +194,8 @@ def score_quantile_bin_path(
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
     :param str metric: The score data (RF hash or VQSR) to return
-    :param bool aggregated: Whether to get the binned data
+    :param bool aggregated: Whether to get the aggregated data.
+         If True, will return the path to Table grouped by quantile bin that contains aggregated variant counts per bin.
     :return: Path to desired hail Table
     :rtype: str
     """
@@ -203,13 +204,15 @@ def score_quantile_bin_path(
 
 
 def binned_concordance_path(
-    data_source: str, freeze: int = CURRENT_FREEZE, truth_sample: str, metric: str
+    truth_sample: str, metric: str, data_source: str, freeze: int = CURRENT_FREEZE
 ):
     """
-    :param str data_source: One of 'regeneron' or 'broad' 
-    :param int freeze: One of the data freezes
+    Returns the path to a truth sample concordance Table (containing TP, FP, FN) between a truth sample within the callset and the samples truth data grouped by quantile bins of a metric (RF or VQSR scores)
+    
     :param str truth_sample: Which truth sample concordance to analyze (e.g., "NA12878" or "syndip")
     :param str metric: One of the evaluation metrics (RF hash or vqsr)
+    :param str data_source: One of 'regeneron' or 'broad' 
+    :param int freeze: One of the data freezes
     :return: Path to binned truth data concordance Hail Table
     :rtype: str
     """
