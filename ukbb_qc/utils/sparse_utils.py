@@ -17,7 +17,6 @@ def compute_interval_callrate_dp_mt(
     intervals_ht: hl.Table,
     bi_allelic_only: bool = True,
     autosomes_only: bool = True,
-    match: bool = True,
     target_pct_gt_cov: List = [10, 20],
 ) -> None:
     """
@@ -36,7 +35,6 @@ def compute_interval_callrate_dp_mt(
     :param Table intervals_ht: Table with capture intervals relevant to input MatrixTable.
     :param bool bi_allelic_only: If set, only bi-allelic sites are used for the computation.
     :param bool autosomes_only: If set, only autosomal intervals are used.
-    :param bool match: If set, returns all intervals in interval_ht that overlap the locus in the input MT.
     :param List target_pct_gt_cov: Coverage levels to check for each target. Default is [10, 20].
     :return: None
     """
@@ -51,7 +49,6 @@ def compute_interval_callrate_dp_mt(
             f"Call rate matrix computation expects `intervals_ht` with a key of type Interval. Found: {intervals_ht.key}"
         )
     logger.info("Densifying...")
-    mt = mt.annotate_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
     mt = mt.drop("gvcf_info")
     mt = hl.experimental.densify(mt)
 
@@ -63,9 +60,7 @@ def compute_interval_callrate_dp_mt(
     )
     mt = mt.filter_rows(hl.len(mt.alleles) > 1)
     intervals_ht = intervals_ht.annotate_rows(interval_label=intervals_ht.interval)
-    mt = mt.annotate_rows(
-        interval=intervals_ht.index(mt.locus, all_matches=match).interval_label
-    )
+    mt = mt.annotate_rows(interval=intervals_ht.index(mt.locus).interval_label)
     mt = mt.filter_rows(hl.is_defined(mt.interval))
 
     if autosomes_only:
@@ -74,12 +69,10 @@ def compute_interval_callrate_dp_mt(
     if bi_allelic_only:
         mt = mt.filter_rows(bi_allelic_expr(mt))
 
-    if match:
-        mt = mt.explode_rows("interval")
-
     logger.info(
         "Grouping MT by interval and calculating n_defined, total, and mean_dp..."
     )
+    mt = mt.annotate_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
     mt = mt.select_entries(
         GT=hl.or_missing(hl.is_defined(mt.GT), hl.struct()),
         DP=hl.if_else(hl.is_defined(mt.DP), mt.DP, 0),
