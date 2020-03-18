@@ -7,6 +7,7 @@ from ukbb_qc.assessment.sanity_checks import sample_check, summarize_mt
 from ukbb_qc.resources.basics import (
     array_sample_map_ht_path,
     capture_ht_path,
+    get_ukbb_data,
     last_END_positions_ht_path,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
