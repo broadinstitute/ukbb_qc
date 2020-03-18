@@ -1,3 +1,4 @@
+import hail as hl
 from typing import Any, Dict, Optional, Union
 from gnomad.resources.resource_utils import DataException
 import gnomad.resources.grch38 as grch38
@@ -183,17 +184,17 @@ def rf_path(
 
 
 def score_quantile_bin_path(
+    metric: str,
     data_source: str,
     freeze: int = CURRENT_FREEZE,
-    metric: str,
     aggregated: bool = False,
 ) -> str:
     """
     Returns the path to a Table containing RF or VQSR scores and annotated with a bin based on quantiles of the metric scores.
 
+    :param str metric: The score data (RF hash or VQSR) to return
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
-    :param str metric: The score data (RF hash or VQSR) to return
     :param bool aggregated: Whether to get the aggregated data.
          If True, will return the path to Table grouped by quantile bin that contains aggregated variant counts per bin.
     :return: Path to desired hail Table
