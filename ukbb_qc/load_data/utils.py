@@ -45,7 +45,7 @@ def import_array_exome_id_map_ht(freeze: int = CURRENT_FREEZE) -> hl.Table:
 
     if file_exists(excluded_samples_path()):
         excluded_samples_ht = hl.import_table(excluded_samples_path(), no_header=True)
-        excluded_samples = hl.literal(ht.aggregate(hl.agg.collect_as_set(ht.f0)))
+        excluded_samples = hl.literal(excluded_samples_ht.aggregate(hl.agg.collect_as_set(excluded_samples_ht.f0)))
         logger.info(
             f"Total number of samples to exclude: {hl.eval(hl.len(excluded_samples))}"
         )
