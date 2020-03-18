@@ -33,7 +33,7 @@ def compare_row_counts(ht1: hl.Table, ht2: hl.Table) -> bool:
     """
     r_count1 = ht1.count()
     r_count2 = ht2.count()
-    logger.info(f"{r_count1} rowsin left table; {r_count2} rows in right table")
+    logger.info(f"{r_count1} rows in left table; {r_count2} rows in right table")
     return r_count1 == r_count2
 
 
