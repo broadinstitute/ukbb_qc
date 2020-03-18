@@ -65,7 +65,7 @@ def remove_hard_filter_samples(
     freeze: int,
     t: Union[hl.MatrixTable, hl.Table],
     non_refs_only: bool = True,
-    gt_expr: Optional[hl.expr.CallExpression] = "LGT",
+    gt_field: Optional[str] = "LGT",
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Removes samples that failed hard filters from MatrixTable or Table. 
@@ -77,7 +77,7 @@ def remove_hard_filter_samples(
     :param int freeze: One of the data freezes
     :param MatrixTable/Table t: Input MatrixTable or Table
     :param bool non_refs_only: Whether to filter to non_reference sites only. Relevant only if input is a MatrixTable.
-    :param hl.expr.CallExpression gt_expr: Field containing genotype. Default is LGT.
+    :param str gt_field: Field containing genotype. Default is LGT.
     :return: MatrixTable or Table with samples (and their variants, if non_refs_only is set) removed
     :rtype: MatrixTable or Table
     """
