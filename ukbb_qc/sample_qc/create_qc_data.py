@@ -1,6 +1,6 @@
 import argparse
-import hail as hl
 import logging
+import hail as hl
 from gnomad.utils.annotations import get_lowqual_expr
 from gnomad.utils.generic import filter_to_autosomes
 from gnomad.utils.gnomad_functions import filter_to_adj, get_adj_expr
@@ -14,7 +14,6 @@ from ukbb_qc.resources.basics import (
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import qc_ht_path, qc_mt_path, qc_sites_path
-from ukbb_qc.resources.variant_qc import get_truth_sample_info
 from ukbb_qc.utils.utils import get_qc_mt_sites
 
 
@@ -68,7 +67,6 @@ def main(args):
 
         # NOTE: Need MQ, QD, FS for hard filters
         logger.info("Adding info and low QUAL annotations and filtering to adj...")
-        mt = mt.transmute_entries(**mt.gvcf_info)
         info_expr = get_site_info_expr(mt)
         info_expr = info_expr.annotate(**get_as_info_expr(mt))
         mt = mt.annotate_rows(info=info_expr)
