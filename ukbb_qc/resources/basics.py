@@ -31,6 +31,7 @@ def get_ukbb_data(
     split: bool = True,
     ukbb_samples_only: bool = True,
     raw: bool = False,
+    repartition: bool = False,
     n_partitions: int = 30000,
     meta_root: Optional[str] = None,
 ) -> hl.MatrixTable:
@@ -44,6 +45,7 @@ def get_ukbb_data(
     :param bool split: Whether the dataset should be split (only applies to raw=False)
     :param bool ukbb_samples_only: Whether to return only UKBB samples (exclude control samples). Default is True.
     :param bool raw: Whether to return the raw data (not recommended: unsplit, and no special consideration on sex chromosomes)
+    :param bool repartition: Whether to repartition the MatrixTable. Required if raw is True. Default is False
     :param int n_partitions: Number of desired partitions for MatrixTable. Required if raw is True. Default is 30000
     :param str meta_root: Root annotation name for metadata (e.g., 'meta')
     :return: hardcalls dataset
@@ -62,7 +64,7 @@ def get_ukbb_data(
     if not file_exists(f"{array_sample_map_ht_path(freeze)}"):
         raise DataException(f"Need to import array sample map ht for freeze {freeze}!")
 
-    if raw:
+    if raw and repartition:
         mt = rep_on_read(
             get_ukbb_data_path(data_source, freeze, hardcalls=not raw), n_partitions
         )
