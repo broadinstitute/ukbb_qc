@@ -121,6 +121,7 @@ def get_qc_mt(
     mt = hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned))
 
     if filter_lowqual:
+        logger.info("Removing low QUAL variants...")
         mt = mt.filter_rows(~mt.lowqual)
 
     return mt
