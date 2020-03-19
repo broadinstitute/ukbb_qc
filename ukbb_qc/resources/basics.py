@@ -1,9 +1,9 @@
-import hail as hl
 import logging
 from typing import Optional
+import hail as hl
 from gnomad.utils.generic import file_exists
 from gnomad.resources.resource_utils import DataException
-from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES, CURRENT_HAIL_VERSION
+from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES
 from .sample_qc import meta_ht_path
 
 
@@ -57,11 +57,11 @@ def get_ukbb_data(
         )
 
     # Check for array sample map -- this is loaded first in the pipeline, before the MT is loaded/processed
-    if not file_exists(f"{array_sample_map_ht_path(freeze)}_SUCCESS"):
+    if not file_exists(f"{array_sample_map_ht_path(freeze)}"):
         raise DataException(f"Need to import array sample map ht for freeze {freeze}!")
 
     mt = hl.read_matrix_table(
-        get_ukbb_data_path(data_source, freeze, hardcalls=not raw, split=split)
+        get_ukbb_data_path(data_source, freeze, hardcalls=not raw)
     )
 
     if adj:
@@ -97,12 +97,12 @@ def get_ukbb_data(
 
             # Double check all withdrawn samples were actually excluded
             withdrawn_ht = hl.import_table(
-                excluded_samples_path(), no_header=True, impute=True,
-            )
+                excluded_samples_path(), no_header=True,
+            ).key_by("f0")
             mt_samples = mt.cols()
-            mt_samples = mt_samples.key_by(s_id=mt.col_key)
+            mt_samples = mt_samples.key_by(s_id=mt_samples.key)
             withdrawn_samples_in_mt = mt_samples.filter(
-                hl.is_defined(withdrawn_ht.index(mt_samples["s_id"]))
+                hl.is_defined(withdrawn_ht[mt_samples["s_id"]])
             ).count()
 
             if withdrawn_samples_in_mt > 0:
