@@ -99,10 +99,12 @@ def get_ukbb_data(
             withdrawn_ht = hl.import_table(
                 excluded_samples_path(), no_header=True,
             ).key_by("f0")
-            mt_samples = mt.cols()
-            mt_samples = mt_samples.key_by(s_id=mt_samples.key)
+            mt_samples = mt.annotate_cols(
+                ukbb_app_26041_id=sample_map_ht[mt.col_key].ukbb_app_26041_id
+            ).cols()
+            mt_samples = mt_samples.key_by("ukbb_app_26041_id")
             withdrawn_samples_in_mt = mt_samples.filter(
-                hl.is_defined(withdrawn_ht[mt_samples["s_id"]])
+                hl.is_defined(withdrawn_ht[mt_samples.ukbb_app_26041_id])
             ).count()
 
             if withdrawn_samples_in_mt > 0:
