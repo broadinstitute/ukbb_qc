@@ -1,7 +1,8 @@
 import argparse
-import hail as hl
 import logging
-from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
+import hail as hl
+from gnomad.utils.slack import try_slack
+from ukbb_qc.resources.resource_utils import CURRENT_FREEZE, DataException
 from ukbb_qc.resources.basics import capture_ht_path, get_checkpoint_path, get_ukbb_data
 from ukbb_qc.resources.sample_qc import (
     callrate_mt_path,
@@ -138,35 +139,43 @@ def main(args):
         capture_ht = hl.read_table(capture_ht_path(data_source))
         compute_interval_callrate_dp_mt(data_source, freeze, mt, capture_ht)
 
-    logger.info("Reading in callrate MT, sex ht, interval qc HT...")
-    callrate_mt = hl.read_matrix_table(
-        callrate_mt_path(data_source, freeze, interval_filtered=False)
-    )
-    sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
-    interval_qc_ht = hl.read_table(interval_qc_path(data_source, freeze, "autosomes"))
-    interval_qc_ht = interval_qc_ht.filter(
-        interval_qc_ht[args.cov_filter_field] > args.pct_samples
-    )
+    if args.apply_hard_filters:
+        if not file_exists(
+            callrate_mt_path(data_source, freeze, interval_filtered=False)
+        ):
+            raise DataException("Need to compute interval callrate MT!")
 
-    logger.info("Hard filtering samples...")
-    hard_filters_ht = hard_filter_samples(
-        data_source,
-        freeze,
-        callrate_mt,
-        interval_qc_ht,
-        sex_ht,
-        args.min_callrate,
-        args.min_dp,
-    )
-    ht = ht.naive_coalesce(args.n_partitions)
-    ht = ht.checkpoint(
-        hard_filters_ht_path(data_source, freeze), overwrite=args.overwrite,
-    )
-    logger.info("Checking number of samples flagged with hard filters...")
-    ht = ht.explode(ht.hard_filters)
-    filters = ht.aggregate(hl.agg.counter(ht.hard_filters))
-    for filt in filters:
-        logger.info(f"Samples flagged due to {filt}: {filters[filt]}")
+        logger.info("Reading in callrate MT, sex ht, interval qc HT...")
+        callrate_mt = hl.read_matrix_table(
+            callrate_mt_path(data_source, freeze, interval_filtered=False)
+        )
+        sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
+        interval_qc_ht = hl.read_table(
+            interval_qc_path(data_source, freeze, "autosomes")
+        )
+        interval_qc_ht = interval_qc_ht.filter(
+            interval_qc_ht[args.cov_filter_field] > args.pct_samples
+        )
+
+        logger.info("Hard filtering samples...")
+        hard_filters_ht = hard_filter_samples(
+            data_source,
+            freeze,
+            callrate_mt,
+            interval_qc_ht,
+            sex_ht,
+            args.min_callrate,
+            args.min_dp,
+        )
+        ht = ht.naive_coalesce(args.n_partitions)
+        ht = ht.checkpoint(
+            hard_filters_ht_path(data_source, freeze), overwrite=args.overwrite,
+        )
+        logger.info("Checking number of samples flagged with hard filters...")
+        ht = ht.explode(ht.hard_filters)
+        filters = ht.aggregate(hl.agg.counter(ht.hard_filters))
+        for filt in filters:
+            logger.info(f"Samples flagged due to {filt}: {filters[filt]}")
 
 
 if __name__ == "__main__":
@@ -185,6 +194,11 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--min_dp", help="Minimum depth", default=20.0, type=float,
+    )
+    parser.add_argument(
+        "--apply_hard_filters",
+        help="Applies hard filters to samples in MatrixTable",
+        action="store_true",
     )
     parser.add_argument(
         "--cov_filter_field",
