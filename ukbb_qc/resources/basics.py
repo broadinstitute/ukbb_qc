@@ -1,9 +1,9 @@
-import hail as hl
 import logging
 from typing import Optional
+import hail as hl
 from gnomad.utils.generic import file_exists
 from gnomad.resources.resource_utils import DataException
-from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES, CURRENT_HAIL_VERSION
+from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES
 from .sample_qc import meta_ht_path
 
 
@@ -97,12 +97,12 @@ def get_ukbb_data(
 
             # Double check all withdrawn samples were actually excluded
             withdrawn_ht = hl.import_table(
-                excluded_samples_path(), no_header=True, impute=True,
-            )
+                excluded_samples_path(), no_header=True,
+            ).key_by("f0")
             mt_samples = mt.cols()
-            mt_samples = mt_samples.key_by(s_id=mt.col_key)
+            mt_samples = mt_samples.key_by(s_id=mt_samples.key)
             withdrawn_samples_in_mt = mt_samples.filter(
-                hl.is_defined(withdrawn_ht.index(mt_samples["s_id"]))
+                hl.is_defined(withdrawn_ht[mt_samples["s_id"]])
             ).count()
 
             if withdrawn_samples_in_mt > 0:
