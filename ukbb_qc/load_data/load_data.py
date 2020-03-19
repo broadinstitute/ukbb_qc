@@ -9,6 +9,7 @@ from ukbb_qc.resources.basics import (
     capture_ht_path,
     get_ukbb_data,
     last_END_positions_ht_path,
+    raw_mt_path,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.load_data.utils import (
@@ -35,11 +36,11 @@ def main(args):
         sample_map_ht = import_array_exome_id_map_ht(freeze)
 
         logger.info("Loading raw MatrixTable (to get exome IDs)...")
-        exome_ht = get_ukbb_data(data_source, freeze, raw=True, split=False).cols()
+        exome_ht = hl.read_matrix_table(raw_mt_path(data_source, freeze)).cols()
 
         logger.info("Checking for sample discrepancies between MT and linking file...")
-        exome_ht = exome_ht.key_by(eid_sample=samples_ht.s.split("_")[1])
-        sample_check(samples_ht, sample_map_ht)
+        exome_ht = exome_ht.key_by(eid_sample=exome_ht.s.split("_")[1])
+        sample_check(exome_ht, sample_map_ht)
 
         exome_ht = exome_ht.annotate(**sample_map_ht[exome_ht.eid_sample])
         exome_ht = exome_ht.key_by("s")
