@@ -57,7 +57,7 @@ def get_ukbb_data(
         )
 
     # Check for array sample map -- this is loaded first in the pipeline, before the MT is loaded/processed
-    if not file_exists(f"{array_sample_map_ht_path(freeze)}_SUCCESS"):
+    if not file_exists(f"{array_sample_map_ht_path(freeze)}"):
         raise DataException(f"Need to import array sample map ht for freeze {freeze}!")
 
     mt = hl.read_matrix_table(
