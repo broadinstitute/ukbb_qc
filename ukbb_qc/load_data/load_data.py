@@ -76,7 +76,20 @@ def main(args):
         var_summary = summarize_mt(mt)
         logger.info(f"Variant summary struct: {var_summary}")
 
+        logger.info("Checking for duplicate samples...")
+        s_list = mt.aggregate_cols(hl.agg.collect(mt.s))
+        s_set = mt.aggregate_cols(hl.agg.collect_as_set(mt.s))
+
+        if len(s_set) != len(s_list):
+            logger.warning("There are duplicate sample IDs in the raw MT!")
+            dups = []
+            for s in s_set:
+                if s_list.count(s) > 1:
+                    dups.append(s)
+            logger.warning(f"Duplicate list: {dups}")
+
     if args.compute_last_END_positions:
+        logger.info("Computing last END position HT...")
         mt = get_ukbb_data(data_source, freeze, raw=True, adj=False, split=False)
         last_END_positions_ht = compute_last_ref_block_end(mt)
         last_END_positions_ht.write(last_END_positions_ht_path(freeze))
