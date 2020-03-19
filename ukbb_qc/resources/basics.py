@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 import hail as hl
-from gnomad.utils.generic import file_exists
+from gnomad.utils.generic import file_exists, rep_on_read
 from gnomad.resources.resource_utils import DataException
 from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES
 from .sample_qc import meta_ht_path
@@ -29,8 +29,9 @@ def get_ukbb_data(
     key_by_locus_and_alleles: bool = False,
     adj: bool = False,
     split: bool = True,
-    raw: bool = False,
     ukbb_samples_only: bool = True,
+    raw: bool = False,
+    n_partitions: int = 30000,
     meta_root: Optional[str] = None,
 ) -> hl.MatrixTable:
     """
@@ -41,8 +42,9 @@ def get_ukbb_data(
     :param bool key_by_locus_and_alleles: Whether to key the MatrixTable by locus and alleles
     :param bool adj: Whether the returned data should be filtered to adj genotypes
     :param bool split: Whether the dataset should be split (only applies to raw=False)
-    :param bool raw: Whether to return the raw data (not recommended: unsplit, and no special consideration on sex chromosomes)
     :param bool ukbb_samples_only: Whether to return only UKBB samples (exclude control samples). Default is True.
+    :param bool raw: Whether to return the raw data (not recommended: unsplit, and no special consideration on sex chromosomes)
+    :param int n_partitions: Number of desired partitions for MatrixTable. Required if raw is True. Default is 30000
     :param str meta_root: Root annotation name for metadata (e.g., 'meta')
     :return: hardcalls dataset
     :rtype: MatrixTable
@@ -60,9 +62,12 @@ def get_ukbb_data(
     if not file_exists(f"{array_sample_map_ht_path(freeze)}"):
         raise DataException(f"Need to import array sample map ht for freeze {freeze}!")
 
-    mt = hl.read_matrix_table(
-        get_ukbb_data_path(data_source, freeze, hardcalls=not raw)
-    )
+    if raw:
+        mt = rep_on_read(get_ukbb_data_path(data_source, freeze, hardcalls=not raw), n_partitions)
+    else:
+        mt = hl.read_matrix_table(
+            get_ukbb_data_path(data_source, freeze, hardcalls=not raw)
+        )
 
     if adj:
         mt = filter_to_adj(mt)
