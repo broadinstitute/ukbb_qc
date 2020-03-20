@@ -1,12 +1,11 @@
 import argparse
-import hail as hl
 import logging
+import hail as hl
 from gnomad.utils.slack import try_slack
 from gnomad.utils.sparse_mt import compute_last_ref_block_end
 from ukbb_qc.assessment.sanity_checks import sample_check, summarize_mt
 from ukbb_qc.resources.basics import (
     array_sample_map_ht_path,
-    capture_ht_path,
     get_ukbb_data,
     last_END_positions_ht_path,
     raw_mt_path,
@@ -76,7 +75,14 @@ def main(args):
         var_summary = summarize_mt(mt)
         logger.info(f"Variant summary struct: {var_summary}")
 
+        logger.info("Checking for duplicate samples...")
+        sample_counts = mt.aggregate_cols(hl.agg.counter(mt.s))
+        for s, n in sample_counts.items():
+            if n > 1:
+                logger.warning(f"{s}: found {n} times")
+
     if args.compute_last_END_positions:
+        logger.info("Computing last END position HT...")
         mt = get_ukbb_data(data_source, freeze, raw=True, adj=False, split=False)
         last_END_positions_ht = compute_last_ref_block_end(mt)
         last_END_positions_ht.write(last_END_positions_ht_path(freeze))
