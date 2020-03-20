@@ -1,7 +1,7 @@
 import argparse
-import hail as hl
 import hdbscan
 import logging
+import hail as hl
 import numpy as np
 from gnomad.utils.generic import filter_to_autosomes
 from gnomad.utils.sample_qc import (
@@ -29,7 +29,7 @@ logger.setLevel(logging.INFO)
 def main(args):
     hl.init(log="/platform_pca.log", default_reference="GRCh38")
 
-    data_source = args.data_source
+    data_source = "broad"
     freeze = args.freeze
 
     callrate_mt = hl.read_matrix_table(
