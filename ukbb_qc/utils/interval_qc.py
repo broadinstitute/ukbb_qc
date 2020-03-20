@@ -1,6 +1,7 @@
 import argparse
-import hail as hl
 import logging
+import hail as hl
+from typing import List
 from gnomad.utils.generic import filter_to_autosomes
 from gnomad.utils.slack import try_slack
 from ukbb_qc.resources.basics import (
@@ -10,7 +11,7 @@ from ukbb_qc.resources.basics import (
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import callrate_mt_path, interval_qc_path, sex_ht_path
-from ukbb_qc.utils.sparse_utils import compute_callrate_dp_mt
+from ukbb_qc.utils.sparse_utils import compute_interval_callrate_dp_mt
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -90,7 +91,7 @@ def main(args):
     pct_sample_cov = list(map(int, args.sample_cov.split(",")))
     n_partitions = args.n_partitions
 
-    if args.compute_callrate_mt:
+    if args.compute_interval_callrate_mt:
         logger.warning(
             "Computing the call rate MT requires a densify!\n"
             "Make sure you are using an autoscaling policy."
@@ -103,7 +104,7 @@ def main(args):
             f"Total number of variants in raw unsplit matrix table: {mt.count_rows()}"
         )
         capture_ht = hl.read_table(capture_ht_path(data_source))
-        compute_callrate_dp_mt(
+        compute_interval_callrate_dp_mt(
             data_source,
             freeze,
             mt,
@@ -181,7 +182,7 @@ if __name__ == "__main__":
         help="If set it will only run the sex chromosomes",
     )
     parser.add_argument(
-        "--compute_callrate_mt",
+        "--compute_interval_callrate_mt",
         help="Computes an interval by sample mt of callrate and depth",
         action="store_true",
     )
