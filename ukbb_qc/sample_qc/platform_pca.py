@@ -2,22 +2,19 @@ import argparse
 import hdbscan
 import logging
 import hail as hl
-import numpy as np
-from gnomad.utils.generic import filter_to_autosomes
 from gnomad.utils.sample_qc import (
     assign_platform_from_pcs,
-    compute_callrate_mt,
     run_platform_pca,
 )
 from gnomad.utils.slack import try_slack
-from ukbb_qc.resources.basics import capture_ht_path, get_ukbb_data
 from ukbb_qc.resources.sample_qc import (
     callrate_mt_path,
     interval_qc_path,
     platform_pca_loadings_ht_path,
-    platform_pca_results_ht_path,
+    platform_pca_assignments_ht_path,
     platform_pca_scores_ht_path,
 )
+from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.utils.utils import remove_hard_filter_samples
 
 
@@ -32,21 +29,16 @@ def main(args):
     data_source = "broad"
     freeze = args.freeze
 
-    callrate_mt = hl.read_matrix_table(
-            callrate_mt_path(data_source, freeze, interval_filtered=args.apply_interval_qc_filter)
-    )
-
-    logger.info("Removing hard filtered samples...")
-    mt = remove_hard_filter_samples(data_source, freeze, mt)
-    logger.info(f"Count after removing hard filtered samples: {mt.count()}")
-
     if args.run_platform_pca:
         logger.info("Running platform PCA...")
-        callrate_mt = hl.read_matrix_table(
-            callrate_mt_path(
-                data_source, freeze, interval_filtered=args.apply_interval_qc_filter
+            callrate_mt = hl.read_matrix_table(
+                callrate_mt_path(data_source, freeze, interval_filtered=args.apply_interval_qc_filter)
             )
-        )
+
+        logger.info("Removing hard filtered samples...")
+        callrate_mt = remove_hard_filter_samples(data_source, freeze, callrate_mt, filter_rows=False)
+        logger.info(f"Count after removing hard filtered samples: {callrate_mt.count()}")
+
         # NOTE: added None binarization_threshold parameter to make sure we things the same way as before parameter existed
         eigenvalues, scores_ht, loadings_ht = run_platform_pca(callrate_mt, None)
         scores_ht.write(
@@ -62,7 +54,6 @@ def main(args):
             ),
             overwrite=args.overwrite,
         )
-        # Regeneron freeze 4 Eigenvalues: [26489244.935849957, 2039950.6985898241, 1407875.3058482022, 1082106.1507608977, 373810.0800184624, 361301.2291929654, 324435.7483132424, 205912.4810229146, 196196.71017912056, 159808.25367132248]
 
     if args.assign_platforms:
         logger.info("Assigning platforms based on platform PCA clustering")
@@ -77,7 +68,7 @@ def main(args):
             hdbscan_min_samples=args.hdbscan_min_samples,
         )
         platform_ht = platform_ht.checkpoint(
-            platform_pca_results_ht_path(
+            platform_pca_assignments_ht_path(
                 data_source, freeze, interval_filtered=args.apply_interval_qc_filter
             ),
             overwrite=args.overwrite,
