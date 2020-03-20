@@ -1,6 +1,6 @@
-import hail as hl
 import logging
-from typing import Optional, Union
+from typing import Union
+import hail as hl
 from gnomad.utils.generic import (
     filter_to_autosomes,
     get_reference_genome,
@@ -64,6 +64,7 @@ def remove_hard_filter_samples(
     data_source: str,
     freeze: int,
     t: Union[hl.MatrixTable, hl.Table],
+    filter_rows: bool = True,
     non_refs_only: bool = True,
     gt_field: str = "LGT",
 ) -> Union[hl.MatrixTable, hl.Table]:
@@ -76,8 +77,11 @@ def remove_hard_filter_samples(
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
     :param MatrixTable/Table t: Input MatrixTable or Table
-    :param bool non_refs_only: Whether to filter to non_reference sites only. Relevant only if input is a MatrixTable.
-    :param str gt_field: Field containing genotype. Default is LGT.
+    :param bool filter_rows: Whether to filter rows. Relevant only if input is a MatrixTable. Default is True
+    :param bool non_refs_only: Whether to filter to non_reference sites only. 
+        Relevant only if filter_rows is True and input is a MatrixTable.
+    :param str gt_field: Field containing genotype. Relevant only if filter_rows is True.
+        Default is LGT.
     :return: MatrixTable or Table with samples (and their variants, if non_refs_only is set) removed
     :rtype: MatrixTable or Table
     """
@@ -88,12 +92,13 @@ def remove_hard_filter_samples(
     ht = ht.filter(~ht.hard_filters.hard_filtered)
     if isinstance(t, hl.MatrixTable):
         t = t.filter_cols(hl.is_defined(ht[t.col_key]))
-        if non_refs_only:
-            t = t.filter_rows(hl.agg.any(t[gt_expr].is_non_ref()))
-        else:
-            t = t.filter_rows(
-                hl.agg.any(t[gt_expr].is_non_ref() | hl.is_defined(t.END))
-            )
+        if filter_rows:
+            if non_refs_only:
+                t = t.filter_rows(hl.agg.any(t[gt_field].is_non_ref()))
+            else:
+                t = t.filter_rows(
+                    hl.agg.any(t[gt_field].is_non_ref() | hl.is_defined(t.END))
+                )
     else:
         t = t.filter(hl.is_defined(ht[t.key]))
     return t
