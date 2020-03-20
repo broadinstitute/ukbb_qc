@@ -1,8 +1,14 @@
 import argparse
-import hail as hl
 import logging
 from typing import Tuple
+import hail as hl
 from gnomad.utils.generic import file_exists
+from gnomad.utils.liftover import (
+    get_liftover_genome,
+    lift_data,
+    annotate_snp_mismatch,
+)
+from gnomad.utils.slack import try_slack
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.basics import (
     array_mt_path,
@@ -16,17 +22,11 @@ from ukbb_qc.resources.sample_qc import (
     array_sample_concordance_path,
     array_concordance_sites_path
 )
-from gnomad.utils.slack import try_slack
-from gnomad.utils.liftover import (
-    get_liftover_genome,
-    lift_data,
-    annotate_snp_mismatch,
-)
 from ukbb_qc.utils.utils import remove_hard_filter_samples, get_sites, annotate_interval_qc_filter
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
-logger = logging.getLogger("load_array_data")
+logger = logging.getLogger("array_concordance")
 logger.setLevel(logging.INFO)
 
 
@@ -39,8 +39,9 @@ def prepare_array_and_exome_mt(
         af_cutoff: float,
 ) -> Tuple[hl.MatrixTable, hl.MatrixTable]:
     """
-    Prepares array and exome MatrixTables for concordance. 
-    Maps array to exome IDs and filters to high callrate, common sites.
+    Prepares array and exome MatrixTables for calculating concordance using `get_array_exome_concordance`.
+
+    Maps array to exome IDs and filters both matrix tables to overlapping samples and high callrate, common sites.
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
@@ -52,17 +53,15 @@ def prepare_array_and_exome_mt(
     :rtype: hl.MatrixTable, hl.MatrixTable
     """
     logger.info("Mapping array sample names to exome sample names...")
-    sample_map = hl.read_table(array_sample_map_ht_path(data_source, freeze))
-    exome_mt = exome_mt.annotate_cols(**sample_map[exome_mt.col_key.split("_")[1]])
-    exome_mt = exome_mt.filter_cols(hl.is_defined(exome_mt.ukbb_app_26041_id))
-
-    sample_map = sample_map.key_by(exome_s=sample_map.ukbb_app_26041_id)
-    array_mt = array_mt.key_cols_by(s=sample_map[array_mt.s].s)
-    array_mt = array_mt.filter_cols(hl.is_defined(array_mt.s))
+    sample_map = hl.read_table(array_sample_map_ht_path(freeze))
+    exome_mt = exome_mt.annotate_cols(ukbb_app_26041_id=sample_map[exome_mt.col_key].ukbb_app_26041_id)
+    exome_mt = exome_mt.key_cols_by("ukbb_app_26041_id")
+    exome_mt = exome_mt.semi_join_cols(array_mt)
+    array_mt = array_mt.semi_join_cols(exome_mt)
 
     exome_array_count = array_mt.count_cols()
     logger.info(
-        f"Total number of IDs in the sample map that are also in the array data: {exome_array_count}..."
+        f"Total number of IDs in the exome data that are also in the array data: {exome_array_count}..."
     )
 
     logger.info("Filtering sparse exome MT to non ref sites...")
@@ -71,28 +70,27 @@ def prepare_array_and_exome_mt(
     logger.info(
         "Getting high callrate, common sites in autosomes only from tranche 2/freeze 5..."
     )
-    # NOTE: This is filtered to autosomes because of adjusted sex ploidies in hardcalls mt (hail throws ploidy 0 error)
-    if not file_exists(f"{array_concordance_sites_path()}_SUCCESS"):
+    if not file_exists(array_concordance_sites_path()):
         sites_ht = get_sites(af_cutoff, call_rate_cutoff)
     else:
         sites_ht = array_concordance_sites_path()
-    sites_ht = sites_ht.key_by("locus")
 
     logger.info("Filtering exome and array MT to tranche 2 sites...")
-    exome_mt = exome_mt.filter_rows(hl.is_defined(sites_ht[exome_mt.locus]))
+    exome_mt = exome_mt.filter_rows(hl.is_defined(sites_ht[exome_mt.row_key]))
     exome_mt = exome_mt.annotate_entries(
         GT=hl.experimental.lgt_to_gt(exome_mt.LGT, exome_mt.LA)
     )
-    array_mt = array_mt.filter_rows(hl.is_defined(sites_ht[array_mt.locus]))
+    array_mt = array_mt.filter_rows(hl.is_defined(sites_ht[array_mt.row_key]))
     return array_mt, exome_mt
 
 
 def get_array_exome_concordance(
     array_mt: hl.MatrixTable,
-        exome_mt: hl.MatrixTable
+    exome_mt: hl.MatrixTable
 ) -> Tuple[hl.Table, hl.Table]:
     """
     Runs concordance on input array and exome MatrixTables.
+
     Returns both sample and variant concordance Tables.
 
     :param array_mt: Array MatrixTable
@@ -103,6 +101,8 @@ def get_array_exome_concordance(
     variants = variants.annotate(
         num_gt_con_non_ref=(variants.concordance[3][3] + variants.concordance[4][4]),
         # NOTE: no homref calls in sparse (only check index 3 and higher in second matrix)
+        # Confirmed that concordance calculated using only sparse MT has high correlation with concordance
+        # calculated on dense MT using tranche 2/freeze 5/200K
         num_gt_non_ref=(
             hl.sum(variants.concordance[2][3:])
             + hl.sum(variants.concordance[3][3:])
@@ -198,17 +198,22 @@ def main(args):
         array_mt = hl.read_matrix_table(array_mt_path(liftover=True))
         exome_mt = get_ukbb_data(data_source, freeze, adj=True, split=True)
 
-        exome_mt = remove_hard_filter_samples(data_source, freeze, exome_mt)
+        logger.info("Removing hard filtered samples...")
+        exome_mt = remove_hard_filter_samples(data_source, freeze, exome_mt, gt_field="GT")
         logger.info(f"Count after removing hard filtered samples: {exome_mt.count()}")
 
         if args.interval_qc_filter:
+            logger.info(
+                f"Filtering exome MT to intervals with at least {args.pct_samples * 100}% of samples"
+                f"for coverage field {args.cov_filter_field}"
+            )
             exome_mt = annotate_interval_qc_filter(
                 data_source,
                 freeze,
                 exome_mt,
-                cov_filter_field="pct_samples_20x",
-                XY_cov_filter_field="pct_samples_10x",
-                pct_samples=args.pct_samples_20x,
+                cov_filter_field=args.cov_filter_field,
+                pct_samples=args.pct_samples,
+                autosomes_only=True,
             )
             exome_mt = exome_mt.filter_rows(exome_mt.interval_qc_pass)
 
@@ -309,8 +314,13 @@ if __name__ == "__main__":
         action="store_true",
     )
     concordance.add_argument(
-        "--pct_samples_20x",
-        help="Percent samples at 20X to filter intervals",
+        "--cov_filter_field",
+        help="Field used to filter intervals",
+        default="pct_samples_20x",
+    )
+    concordance.add_argument(
+        "--pct_samples",
+        help="Percent samples at specified coverage field to filter intervals",
         default=0.85,
         type=float,
     )
