@@ -59,7 +59,7 @@ def compute_interval_callrate_dp_mt(
         "Assumes that overlapping intervals in capture intervals are merged!"
     )
     mt = mt.filter_rows(hl.len(mt.alleles) > 1)
-    intervals_ht = intervals_ht.annotate_rows(interval_label=intervals_ht.interval)
+    intervals_ht = intervals_ht.annotate(interval_label=intervals_ht.interval)
     mt = mt.annotate_rows(interval=intervals_ht.index(mt.locus).interval_label)
     mt = mt.filter_rows(hl.is_defined(mt.interval))
 
