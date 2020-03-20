@@ -1,6 +1,6 @@
 import argparse
-import hdbscan
 import logging
+import hdbscan
 import hail as hl
 from gnomad.utils.sample_qc import (
     assign_platform_from_pcs,
@@ -9,7 +9,6 @@ from gnomad.utils.sample_qc import (
 from gnomad.utils.slack import try_slack
 from ukbb_qc.resources.sample_qc import (
     callrate_mt_path,
-    interval_qc_path,
     platform_pca_loadings_ht_path,
     platform_pca_assignments_ht_path,
     platform_pca_scores_ht_path,
@@ -31,13 +30,19 @@ def main(args):
 
     if args.run_platform_pca:
         logger.info("Running platform PCA...")
-            callrate_mt = hl.read_matrix_table(
-                callrate_mt_path(data_source, freeze, interval_filtered=args.apply_interval_qc_filter)
+        callrate_mt = hl.read_matrix_table(
+            callrate_mt_path(
+                data_source, freeze, interval_filtered=args.apply_interval_qc_filter
             )
+        )
 
         logger.info("Removing hard filtered samples...")
-        callrate_mt = remove_hard_filter_samples(data_source, freeze, callrate_mt, filter_rows=False)
-        logger.info(f"Count after removing hard filtered samples: {callrate_mt.count()}")
+        callrate_mt = remove_hard_filter_samples(
+            data_source, freeze, callrate_mt, filter_rows=False
+        )
+        logger.info(
+            f"Count after removing hard filtered samples: {callrate_mt.count()}"
+        )
 
         # NOTE: added None binarization_threshold parameter to make sure we things the same way as before parameter existed
         eigenvalues, scores_ht, loadings_ht = run_platform_pca(callrate_mt, None)
@@ -66,6 +71,11 @@ def main(args):
             scores_ht,
             hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
             hdbscan_min_samples=args.hdbscan_min_samples,
+        )
+        platform_ht = platform_ht.annotate_globals(
+            hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
+            hdbscan_min_samples=args.hdbscan_min_samples,
+            interval_filtered=args.apply_interval_qc_filter,
         )
         platform_ht = platform_ht.checkpoint(
             platform_pca_assignments_ht_path(
