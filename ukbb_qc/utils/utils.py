@@ -80,7 +80,7 @@ def remove_hard_filter_samples(
     :param bool filter_rows: Whether to filter rows. Relevant only if input is a MatrixTable. Default is True
     :param bool non_refs_only: Whether to filter to non_reference sites only. 
         Relevant only if filter_rows is True and input is a MatrixTable.
-    :param str gt_field: Field containing genotype. Relevant only if filter_rows and non_refs_only are True.
+    :param str gt_field: Field containing genotype. Relevant only if filter_rows is True.
         Default is LGT.
     :return: MatrixTable or Table with samples (and their variants, if non_refs_only is set) removed
     :rtype: MatrixTable or Table
