@@ -20,9 +20,13 @@ from ukbb_qc.resources.basics import (
 from ukbb_qc.resources.sample_qc import (
     array_variant_concordance_path,
     array_sample_concordance_path,
-    array_concordance_sites_path
+    array_concordance_sites_path,
 )
-from ukbb_qc.utils.utils import remove_hard_filter_samples, get_sites, annotate_interval_qc_filter
+from ukbb_qc.utils.utils import (
+    remove_hard_filter_samples,
+    get_sites,
+    annotate_interval_qc_filter,
+)
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -31,12 +35,12 @@ logger.setLevel(logging.INFO)
 
 
 def prepare_array_and_exome_mt(
-        data_source: str,
-        freeze: int,
-        array_mt: hl.MatrixTable,
-        exome_mt: hl.MatrixTable,
-        call_rate_cutoff: float,
-        af_cutoff: float,
+    data_source: str,
+    freeze: int,
+    array_mt: hl.MatrixTable,
+    exome_mt: hl.MatrixTable,
+    call_rate_cutoff: float,
+    af_cutoff: float,
 ) -> Tuple[hl.MatrixTable, hl.MatrixTable]:
     """
     Prepares array and exome MatrixTables for calculating concordance using `get_array_exome_concordance`.
@@ -54,7 +58,9 @@ def prepare_array_and_exome_mt(
     """
     logger.info("Mapping array sample names to exome sample names...")
     sample_map = hl.read_table(array_sample_map_ht_path(freeze))
-    exome_mt = exome_mt.annotate_cols(ukbb_app_26041_id=sample_map[exome_mt.col_key].ukbb_app_26041_id)
+    exome_mt = exome_mt.annotate_cols(
+        ukbb_app_26041_id=sample_map[exome_mt.col_key].ukbb_app_26041_id
+    )
     exome_mt = exome_mt.key_cols_by("ukbb_app_26041_id")
     exome_mt = exome_mt.semi_join_cols(array_mt)
     array_mt = array_mt.semi_join_cols(exome_mt)
@@ -85,8 +91,7 @@ def prepare_array_and_exome_mt(
 
 
 def get_array_exome_concordance(
-    array_mt: hl.MatrixTable,
-    exome_mt: hl.MatrixTable
+    array_mt: hl.MatrixTable, exome_mt: hl.MatrixTable
 ) -> Tuple[hl.Table, hl.Table]:
     """
     Runs concordance on input array and exome MatrixTables.
@@ -199,7 +204,9 @@ def main(args):
         exome_mt = get_ukbb_data(data_source, freeze, adj=True, split=True)
 
         logger.info("Removing hard filtered samples...")
-        exome_mt = remove_hard_filter_samples(data_source, freeze, exome_mt, gt_field="GT")
+        exome_mt = remove_hard_filter_samples(
+            data_source, freeze, exome_mt, gt_field="GT"
+        )
         logger.info(f"Count after removing hard filtered samples: {exome_mt.count()}")
 
         if args.interval_qc_filter:
