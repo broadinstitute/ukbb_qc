@@ -98,7 +98,12 @@ def main(args):
         )
         logger.info("Reading in raw MT...")
         mt = get_ukbb_data(
-            data_source, freeze, raw=True, split=False, key_by_locus_and_alleles=True,
+            data_source,
+            freeze,
+            split=False,
+            key_by_locus_and_alleles=True,
+            raw=True,
+            repartition=True,
         )
         capture_ht = hl.read_table(capture_ht_path(data_source))
         compute_interval_callrate_dp_mt(
