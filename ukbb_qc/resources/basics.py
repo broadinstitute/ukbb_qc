@@ -402,3 +402,16 @@ def release_vcf_path(data_source: str, freeze: int, contig: str = None) -> str:
         # if contig is None, return path to sharded vcf bucket
         # NOTE: need to add .bgz or else hail will not bgzip shards
         return f"{get_release_path(data_source, freeze)}/vcf/sharded_vcf/{data_source}.freeze_{freeze}.bgz"
+
+
+# logging path
+def logging_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Returns path to bucket that stores hail logs
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :return: Path to bucket with hail logs
+    :rtype: str
+    """
+    return f"gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/logs/"
