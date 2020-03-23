@@ -64,6 +64,7 @@ def main(args):
                 split=False,
                 raw=True,
                 repartition=args.repartition,
+                n_partitions=args.n_partitions,
             )
             sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
 
@@ -140,7 +141,9 @@ if __name__ == "__main__":
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int,
     )
     parser.add_argument(
-        "--n_partitions", help="Desired number of partitions for output", type=int,
+        "--n_partitions",
+        help="Desired number of partitions for output. Also used to repartition raw MT on read (necessary only for tranche 3/freeze 6/300K!",
+        type=int,
     )
     parser.add_argument(
         "--impute_sex",
