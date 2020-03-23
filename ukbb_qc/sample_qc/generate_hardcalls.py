@@ -41,7 +41,7 @@ def main(args):
                 key_by_locus_and_alleles=True,
                 split=False,
                 raw=True,
-                repartition=True,
+                repartition=args.repartition,
             )
 
             sex_ht = default_annotate_sex(
@@ -62,7 +62,7 @@ def main(args):
                 key_by_locus_and_alleles=True,
                 split=False,
                 raw=True,
-                repartition=True,
+                repartition=args.repartition,
             )
             sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
 
@@ -129,6 +129,11 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--slack_channel", help="Slack channel to post results and notifications to.",
+    )
+    parser.add_argument(
+        "--repartition",
+        help="Repartition raw MT on read. Needs to be true for tranche 3/freeze 6/300K",
+        action="store_true",
     )
     parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int,
