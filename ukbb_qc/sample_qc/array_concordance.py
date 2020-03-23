@@ -83,9 +83,6 @@ def prepare_array_and_exome_mt(
 
     logger.info("Filtering exome and array MT to tranche 2 sites...")
     exome_mt = exome_mt.filter_rows(hl.is_defined(sites_ht[exome_mt.row_key]))
-    exome_mt = exome_mt.annotate_entries(
-        GT=hl.experimental.lgt_to_gt(exome_mt.LGT, exome_mt.LA)
-    )
     array_mt = array_mt.filter_rows(hl.is_defined(sites_ht[array_mt.row_key]))
     return array_mt, exome_mt
 
