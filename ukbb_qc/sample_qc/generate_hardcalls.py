@@ -38,9 +38,10 @@ def main(args):
             mt = get_ukbb_data(
                 data_source,
                 freeze,
+                key_by_locus_and_alleles=True,
                 split=False,
                 raw=True,
-                key_by_locus_and_alleles=True,
+                repartition=True,
             )
 
             sex_ht = default_annotate_sex(
@@ -58,9 +59,10 @@ def main(args):
             mt = get_ukbb_data(
                 data_source,
                 freeze,
+                key_by_locus_and_alleles=True,
                 split=False,
                 raw=True,
-                key_by_locus_and_alleles=True,
+                repartition=True,
             )
             sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
 
@@ -88,8 +90,7 @@ def main(args):
             # Filter out star alleles and checkpoint
             mt = mt.filter_rows(mt.alleles[1] != "*")
             mt = mt.checkpoint(
-                get_ukbb_data_path(data_source, freeze, hardcalls=True, split=False),
-                args.overwrite,
+                get_ukbb_data_path(data_source, freeze, hardcalls=True), args.overwrite,
             )
 
             # Finish generating allele data
