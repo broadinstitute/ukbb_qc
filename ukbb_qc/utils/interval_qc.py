@@ -1,13 +1,13 @@
 import argparse
 import logging
-import hail as hl
 from typing import List
+import hail as hl
 from gnomad.utils.generic import filter_to_autosomes
 from gnomad.utils.slack import try_slack
 from ukbb_qc.resources.basics import (
     capture_ht_path,
-    get_checkpoint_path,
     get_ukbb_data,
+    logging_path,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import callrate_mt_path, interval_qc_path, sex_ht_path
@@ -80,88 +80,97 @@ def interval_qc(
 
 
 def main(args):
-    hl.init(log="/interval_qc.log")
 
-    if not args.autosomes and not args.sex_chr:
-        logger.warning("Must choose one of autosomes or sex_chr options")
+    try:
+        hl.init(log="/interval_qc.log")
 
-    data_source = "broad"
-    freeze = args.freeze
-    target_pct_gt_cov = list(map(int, args.target_cov.split(",")))
-    pct_sample_cov = list(map(int, args.sample_cov.split(",")))
-    n_partitions = args.n_partitions
+        if not args.autosomes and not args.sex_chr:
+            logger.warning("Must choose one of autosomes or sex_chr options")
 
-    if args.compute_interval_callrate_mt:
-        logger.warning(
-            "Computing the call rate MT requires a densify!\n"
-            "Make sure you are using an autoscaling policy."
-        )
-        logger.info("Reading in raw MT...")
-        mt = get_ukbb_data(
-            data_source,
-            freeze,
-            split=False,
-            key_by_locus_and_alleles=True,
-            raw=True,
-            repartition=True,
-        )
-        capture_ht = hl.read_table(capture_ht_path(data_source))
-        compute_interval_callrate_dp_mt(
-            data_source,
-            freeze,
-            mt,
-            capture_ht,
-            autosomes_only=False,
-            target_pct_gt_cov=target_pct_gt_cov,
-        )
+        data_source = "broad"
+        freeze = args.freeze
+        target_pct_gt_cov = list(map(int, args.target_cov.split(",")))
+        pct_sample_cov = list(map(int, args.sample_cov.split(",")))
+        n_partitions = args.n_partitions
 
-    logger.info("Reading in call rate MT...")
-    mt = hl.read_matrix_table(
-        callrate_mt_path(data_source, freeze, interval_filtered=False)
-    )
-    if args.autosomes:
-        logger.info("Filtering to autosomes...")
-        mt = filter_to_autosomes(mt)
+        if args.compute_interval_callrate_mt:
+            logger.warning(
+                "Computing the call rate MT requires a densify!\n"
+                "Make sure you are using an autoscaling policy."
+            )
+            logger.info("Reading in raw MT...")
+            mt = get_ukbb_data(
+                data_source,
+                freeze,
+                split=False,
+                key_by_locus_and_alleles=True,
+                raw=True,
+                repartition=True,
+            )
+            capture_ht = hl.read_table(capture_ht_path(data_source))
+            compute_interval_callrate_dp_mt(
+                data_source,
+                freeze,
+                mt,
+                capture_ht,
+                autosomes_only=False,
+                target_pct_gt_cov=target_pct_gt_cov,
+            )
 
-        logger.info("Starting interval QC...")
-        target_ht = interval_qc(
-            mt,
-            target_pct_gt_cov=target_pct_gt_cov,
-            pct_sample_cov=pct_sample_cov,
-            split_by_sex=False,
-            n_partitions=n_partitions,
+        logger.info("Reading in call rate MT...")
+        mt = hl.read_matrix_table(
+            callrate_mt_path(data_source, freeze, interval_filtered=False)
         )
-        target_ht.write(
-            interval_qc_path(data_source, freeze, "autosomes"),
-            overwrite=args.overwrite,
-        )
+        if args.autosomes:
+            logger.info("Filtering to autosomes...")
+            mt = filter_to_autosomes(mt)
 
-    if args.sex_chr:
-        logger.info("Filtering to sex chromosomes...")
-        mt = hl.filter_intervals(
-            mt,
-            [
-                hl.parse_locus_interval("chrX", reference_genome="GRCh38"),
-                hl.parse_locus_interval("chrY", reference_genome="GRCh38"),
-            ],
-        )
+            logger.info("Starting interval QC...")
+            target_ht = interval_qc(
+                mt,
+                target_pct_gt_cov=target_pct_gt_cov,
+                pct_sample_cov=pct_sample_cov,
+                split_by_sex=False,
+                n_partitions=n_partitions,
+            )
+            target_ht.write(
+                interval_qc_path(data_source, freeze, "autosomes"),
+                overwrite=args.overwrite,
+            )
 
-        logger.info("Filtering to XX and XY samples...")
-        sex_ht = hl.read_table(sex_ht_path(data_source, freeze)).select("sex_karyotype")
-        mt = mt.annotate_cols(**sex_ht[mt.col_key])
-        mt = mt.filter_cols((mt.sex_karyotype == "XX") | (mt.sex_karyotype == "XY"))
+        if args.sex_chr:
+            logger.info("Filtering to sex chromosomes...")
+            mt = hl.filter_intervals(
+                mt,
+                [
+                    hl.parse_locus_interval("chrX", reference_genome="GRCh38"),
+                    hl.parse_locus_interval("chrY", reference_genome="GRCh38"),
+                ],
+            )
 
-        logger.info("Starting interval QC...")
-        target_ht = interval_qc(
-            mt,
-            target_pct_gt_cov=target_pct_gt_cov,
-            pct_sample_cov=pct_sample_cov,
-            split_by_sex=True,
-            n_partitions=n_partitions,
-        )
-        target_ht.write(
-            interval_qc_path(data_source, freeze, "sex_chr"), overwrite=args.overwrite,
-        )
+            logger.info("Filtering to XX and XY samples...")
+            sex_ht = hl.read_table(sex_ht_path(data_source, freeze)).select(
+                "sex_karyotype"
+            )
+            mt = mt.annotate_cols(**sex_ht[mt.col_key])
+            mt = mt.filter_cols((mt.sex_karyotype == "XX") | (mt.sex_karyotype == "XY"))
+
+            logger.info("Starting interval QC...")
+            target_ht = interval_qc(
+                mt,
+                target_pct_gt_cov=target_pct_gt_cov,
+                pct_sample_cov=pct_sample_cov,
+                split_by_sex=True,
+                n_partitions=n_partitions,
+            )
+            target_ht.write(
+                interval_qc_path(data_source, freeze, "sex_chr"),
+                overwrite=args.overwrite,
+            )
+
+    finally:
+        logger.info("Copying log to logging bucket...")
+        hl.copy_log(logging_path(data_source, freeze))
 
 
 if __name__ == "__main__":
