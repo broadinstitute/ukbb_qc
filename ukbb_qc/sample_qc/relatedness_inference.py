@@ -1,7 +1,7 @@
 import argparse
-import hail as hl
 import logging
 from typing import Tuple
+import hail as hl
 from gnomad.utils.slack import try_slack
 from gnomad.utils.relatedness import (
     explode_duplicate_samples_ht,
@@ -10,7 +10,8 @@ from gnomad.utils.relatedness import (
     get_relationship_expr,
     infer_families,
 )
-from ukbb_qc.resources.basics import get_checkpoint_path
+from ukbb_qc.resources.basics import get_checkpoint_path, logging_path
+from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import (
     related_drop_path,
     relatedness_ht_path,
@@ -32,7 +33,10 @@ logger.setLevel(logging.INFO)
 # Note: Will need to change this to work with gnomAD, we will want to default to gnomAD ranking, unless tied pair is gnomAD, UKBB pair
 def rank_related_samples(
     relatedness_ht: hl.Table, qc_ht: hl.Table
-) -> Tuple[hl.Table, Callable[[hl.expr.Expression, hl.expr.Expression], hl.expr.NumericExpression]]:
+) -> Tuple[
+    hl.Table,
+    Callable[[hl.expr.Expression, hl.expr.Expression], hl.expr.NumericExpression],
+]:
     """
     Rank related samples based on their mean depths. 
     Ranking is used when determining which sample to filter from a  pair of related samples.
@@ -67,7 +71,6 @@ def rank_related_samples(
 def filter_related_samples(
     relatedness_ht: hl.Table,
     qc_ht: hl.Table,
-    data_source: str,
     freeze: int,
     kinship_cutoff: float,
 ) -> hl.Table:
@@ -76,7 +79,6 @@ def filter_related_samples(
 
     :param Table relatedness_ht: Table of samples with relatedness results from pc_relate.
     :param Table qc_ht: Table of samples and their sample QC metrics, including mean depth.
-    :param str data_source: One of "regeneron" or "broad"
     :param int freeze: One of the data freezes
     :param float kinship_cutoff: Kinship cutoff for related samples.
     :return: Filtered Table of samples with kinship above input cutoff
@@ -108,132 +110,141 @@ def main(args):
         tmp_dir="hdfs:///pc_relate.tmp/",
     )
 
-    data_source = args.data_source
+    data_source = "broad"
     freeze = args.freeze
 
-    if not args.skip_pc_relate:
-        logger.info("Running PCA for PC-Relate...")
-        pruned_qc_mt = remove_hard_filter_samples(
-            data_source,
-            freeze,
-            hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned=True)),
-        ).unfilter_entries()
-        eig, scores, _ = hl.hwe_normalized_pca(
-            pruned_qc_mt.GT, k=10, compute_loadings=False
-        )
-        scores.write(
-            relatedness_pca_scores_ht_path(data_source, freeze), args.overwrite
-        )
-
-        logger.info("Running PC-Relate...")
-        # NOTE: This needs SSDs on your workers (for the temp files) and no preemptible workers while the BlockMatrix writes
-        relatedness_ht = hl.pc_relate(
-            pruned_qc_mt.GT,
-            min_individual_maf=args.min_individual_maf,
-            scores_expr=scores[pruned_qc_mt.col_key].scores,
-            block_size=4096,
-            min_kinship=args.min_emission_kinship,
-            statistics="all",
-        )
-        relatedness_ht = relatedness_ht.checkpoint(
-            get_checkpoint_path(data_source, freeze, name="pc_relate_temp")
-        )
-
-        logger.info("Annotating PC relate results with relationships...")
-        relatedness_ht = relatedness_ht.annotate(
-            relationship=get_relationship_expr(
-                kin=relatedness_ht.kin,
-                ibd0_expr=relatedness_ht.ibd0,
-                ibd1_expr=relatedness_ht.ibd1,
-                ibd2_expr=relatedness_ht.ibd2,
-                first_degree_kin_cutoff=args.first_degree_kin_cutoff,
-                second_degree_min_kin=args.second_degree_min_kin,
-                ibd0_0_max=args.ibd0_0_max,
+    try:
+        if not args.skip_pc_relate:
+            logger.info("Running PCA for PC-Relate...")
+            pruned_qc_mt = remove_hard_filter_samples(
+                data_source,
+                freeze,
+                hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned=True)),
+            ).unfilter_entries()
+            eig, scores, _ = hl.hwe_normalized_pca(
+                pruned_qc_mt.GT, k=10, compute_loadings=False
             )
-        )
-        relatedness_ht.write(relatedness_ht_path(data_source, freeze), args.overwrite)
+            scores.write(
+                relatedness_pca_scores_ht_path(data_source, freeze), args.overwrite
+            )
 
-    if not args.skip_filter_dups:
-        logger.info("Filtering duplicate samples...")
-        sample_qc_ht = remove_hard_filter_samples(
-            data_source, freeze, hl.read_table(qc_ht_path(data_source, freeze))
-        )
-        samples_rankings_ht = sample_qc_ht.select(
-            rank=(-1 * sample_qc_ht.sample_qc.dp_stats.mean)
-        )
-        relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
-        if len(get_duplicated_samples(relatedness_ht)) > 0:
-            dups_ht = get_duplicate_samples_ht(relatedness_ht, samples_rankings_ht)
+            logger.info("Running PC-Relate...")
+            # NOTE: This needs SSDs on your workers (for the temp files) and no preemptible workers while the BlockMatrix writes
+            relatedness_ht = hl.pc_relate(
+                pruned_qc_mt.GT,
+                min_individual_maf=args.min_individual_maf,
+                scores_expr=scores[pruned_qc_mt.col_key].scores,
+                block_size=4096,
+                min_kinship=args.min_emission_kinship,
+                statistics="all",
+            )
+            relatedness_ht = relatedness_ht.checkpoint(
+                get_checkpoint_path(data_source, freeze, name="pc_relate_temp")
+            )
+
+            logger.info("Annotating PC relate results with relationships...")
+            relatedness_ht = relatedness_ht.annotate(
+                relationship=get_relationship_expr(
+                    kin=relatedness_ht.kin,
+                    ibd0_expr=relatedness_ht.ibd0,
+                    ibd1_expr=relatedness_ht.ibd1,
+                    ibd2_expr=relatedness_ht.ibd2,
+                    first_degree_kin_cutoff=args.first_degree_kin_cutoff,
+                    second_degree_min_kin=args.second_degree_min_kin,
+                    ibd0_0_max=args.ibd0_0_max,
+                )
+            )
+            relatedness_ht.write(
+                relatedness_ht_path(data_source, freeze), args.overwrite
+            )
+
+        if not args.skip_filter_dups:
+            logger.info("Filtering duplicate samples...")
+            sample_qc_ht = remove_hard_filter_samples(
+                data_source, freeze, hl.read_table(qc_ht_path(data_source, freeze))
+            )
+            samples_rankings_ht = sample_qc_ht.select(
+                rank=(-1 * sample_qc_ht.sample_qc.dp_stats.mean)
+            )
+            relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
+            if len(get_duplicated_samples(relatedness_ht)) > 0:
+                dups_ht = get_duplicate_samples_ht(relatedness_ht, samples_rankings_ht)
+                dups_ht.write(
+                    duplicates_ht_path(data_source, freeze, dup_sets=True),
+                    overwrite=args.overwrite,
+                )
+                dups_ht = explode_duplicate_samples_ht(dups_ht)
+                dups_ht = sample_qc_ht.select(
+                    duplicate=hl.is_defined(dups_ht[sample_qc_ht.key].dup_filtered)
+                    & dups_ht[sample_qc_ht.key].dup_filtered,
+                )
+            else:
+                dups_ht = sample_qc_ht.select(duplicate=False)
             dups_ht.write(
-                duplicates_ht_path(data_source, freeze, dup_sets=True),
-                overwrite=args.overwrite,
+                duplicates_ht_path(data_source, freeze), overwrite=args.overwrite
             )
-            dups_ht = explode_duplicate_samples_ht(dups_ht)
-            dups_ht = sample_qc_ht.select(
-                duplicate=hl.is_defined(dups_ht[sample_qc_ht.key].dup_filtered)
-                & dups_ht[sample_qc_ht.key].dup_filtered,
+
+        if not args.skip_infer_families:
+            logger.info("Inferring families...")
+            dups_ht = hl.read_table(duplicates_ht_path(data_source, freeze))
+            if dups_ht.aggregate(hl.agg.count_where(dups_ht.duplicate)) == 0:
+                dups_ht = None
+            ped = infer_families(
+                hl.read_table(relatedness_ht_path(data_source, freeze)),
+                hl.read_table(sex_ht_path(data_source, freeze)),
+                dups_ht,
             )
-        else:
-            dups_ht = sample_qc_ht.select(duplicate=False)
-        dups_ht.write(duplicates_ht_path(data_source, freeze), overwrite=args.overwrite)
+            ped.write(inferred_ped_path(data_source, freeze))
 
-    if not args.skip_infer_families:
-        logger.info("Inferring families...")
-        dups_ht = hl.read_table(duplicates_ht_path(data_source, freeze))
-        if dups_ht.aggregate(hl.agg.count_where(dups_ht.duplicate)) == 0:
-            dups_ht = None
-        ped = infer_families(
-            hl.read_table(relatedness_ht_path(data_source, freeze)),
-            hl.read_table(sex_ht_path(data_source, freeze)),
-            dups_ht,
-        )
-        ped.write(inferred_ped_path(data_source, freeze))
+        if not args.skip_filter_related_samples:
+            logger.info("Filtering related samples...")
+            relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
+            qc_ht = hl.read_table(qc_ht_path(data_source, freeze))
 
-    if not args.skip_filter_related_samples:
-        logger.info("Filtering related samples...")
-        relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
-        qc_ht = hl.read_table(qc_ht_path(data_source, freeze))
+            # Filter second degree samples
+            related_samples_to_drop_second_deg_ht = filter_related_samples(
+                relatedness_ht, qc_ht, data_source, freeze, args.second_degree_min_kin
+            )
 
-        # Filter second degree samples
-        related_samples_to_drop_second_deg_ht = filter_related_samples(
-            relatedness_ht, qc_ht, data_source, freeze, args.second_degree_min_kin
-        )
+            # Filter duplicate samples
+            related_samples_to_drop_dup_ht = filter_related_samples(
+                relatedness_ht, qc_ht, data_source, freeze, args.dup_kinship_cutoff
+            )
 
-        # Filter duplicate samples
-        related_samples_to_drop_dup_ht = filter_related_samples(
-            relatedness_ht, qc_ht, data_source, freeze, args.dup_kinship_cutoff
-        )
+            # Filter first degree samples
+            related_samples_to_drop_first_deg_ht = filter_related_samples(
+                relatedness_ht, qc_ht, data_source, freeze, args.first_degree_kin_cutoff
+            )
 
-        # Filter first degree samples
-        related_samples_to_drop_first_deg_ht = filter_related_samples(
-            relatedness_ht, qc_ht, data_source, freeze, args.first_degree_kin_cutoff
-        )
+            # Combine first, second, and duplicate sample tables and annotate cutoffs
+            related_samples_to_drop_ht = related_samples_to_drop_second_deg_ht.union(
+                related_samples_to_drop_dup_ht, related_samples_to_drop_first_deg_ht
+            )
+            related_samples_to_drop_ht = related_samples_to_drop_ht.annotate_globals(
+                second_degree_kin_cutoff=args.second_degree_min_kin,
+                first_degree_kin_cutoff=args.first_degree_kin_cutoff,
+                dup_kin_cutoff=args.dup_kinship_cutoff,
+            )
 
-        # Combine first, second, and duplicate sample tables and annotate cutoffs
-        related_samples_to_drop_ht = related_samples_to_drop_second_deg_ht.union(
-            related_samples_to_drop_dup_ht, related_samples_to_drop_first_deg_ht
-        )
-        related_samples_to_drop_ht = related_samples_to_drop_ht.annotate_globals(
-            second_degree_kin_cutoff=args.second_degree_min_kin,
-            first_degree_kin_cutoff=args.first_degree_kin_cutoff,
-            dup_kin_cutoff=args.dup_kinship_cutoff,
-        )
+            related_samples_to_drop_ht = related_samples_to_drop_ht.checkpoint(
+                related_drop_path(data_source, freeze), overwrite=args.overwrite
+            )
+            logger.info(
+                f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == 'second-degree').count()}"
+                "second degree samples flagged in callset using maximal independent set"
+            )
+            logger.info(
+                f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == 'first-degree').count()}"
+                "first degree samples flagged in callset using maximal independent set"
+            )
+            logger.info(
+                f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == 'duplicate').count()}"
+                "duplicate samples flagged in callset using maximal independent set"
+            )
 
-        related_samples_to_drop_ht = related_samples_to_drop_ht.checkpoint(
-            related_drop_path(data_source, freeze), overwrite=args.overwrite
-        )
-        logger.info(
-            f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == 'second-degree').count()}"
-            "second degree samples flagged in callset using maximal independent set"
-        )
-        logger.info(
-            f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == 'first-degree').count()}"
-            "first degree samples flagged in callset using maximal independent set"
-        )
-        logger.info(
-            f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == 'duplicate').count()}"
-            "duplicate samples flagged in callset using maximal independent set"
-        )
+    finally:
+        logger.info("Copying hail log to logging bucket...")
+        hl.copy_log(logging_path(data_source, freeze))
 
 
 if __name__ == "__main__":
