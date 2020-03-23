@@ -5,7 +5,7 @@ import hail as hl
 from gnomad.utils.slack import try_slack
 from gnomad.utils.relatedness import (
     explode_duplicate_samples_ht,
-    get_duplicate_samples_ht,
+    get_duplicated_samples_ht,
     get_duplicated_samples,
     get_relationship_expr,
     infer_families,
@@ -13,14 +13,15 @@ from gnomad.utils.relatedness import (
 from ukbb_qc.resources.basics import get_checkpoint_path, logging_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import (
+    duplicates_ht_path,
+    inferred_ped_path,
     related_drop_path,
     relatedness_ht_path,
     relatedness_pca_scores_ht_path,
     qc_ht_path,
+    qc_mt_path,
 )
 from ukbb_qc.utils.utils import (
-    duplicates_ht_path,
-    inferred_ped_path,
     remove_hard_filter_samples,
 )
 
@@ -39,6 +40,7 @@ def rank_related_samples(
 ]:
     """
     Rank related samples based on their mean depths. 
+
     Ranking is used when determining which sample to filter from a  pair of related samples.
 
     :param Table relatedness_ht: Table of samples with relatedness results from pc_relate.
@@ -46,8 +48,17 @@ def rank_related_samples(
     :return: Tuple of the relatedness table, annotated with ranking, and a tie breaker 
     :rtype: Tuple[hl.Table, Callable[[hl.expr.Expression, hl.expr.Expression], hl.expr.NumericExpression]]
     """
-
     def annotate_related_pairs(related_pairs: hl.Table, index_col: str) -> hl.Table:
+        """
+        Annotates each sample in a related pair with mean depth
+
+        Returns Table with mean depth annotation and unkeys Table
+
+        :param Table related_pairs: Table of samples with relatedness results from pc_relate
+        :param str index_col: Name of column containing samples to be annotated
+        :return: Table annotated with sample mean depth
+        :rtype: hl.Table
+        """
         related_pairs = related_pairs.key_by(**related_pairs[index_col])
         return related_pairs.annotate(
             **{
@@ -71,7 +82,6 @@ def rank_related_samples(
 def filter_related_samples(
     relatedness_ht: hl.Table,
     qc_ht: hl.Table,
-    freeze: int,
     kinship_cutoff: float,
 ) -> hl.Table:
     """
@@ -79,7 +89,6 @@ def filter_related_samples(
 
     :param Table relatedness_ht: Table of samples with relatedness results from pc_relate.
     :param Table qc_ht: Table of samples and their sample QC metrics, including mean depth.
-    :param int freeze: One of the data freezes
     :param float kinship_cutoff: Kinship cutoff for related samples.
     :return: Filtered Table of samples with kinship above input cutoff
     :rtype: hl.Table
@@ -107,7 +116,6 @@ def main(args):
     hl.init(
         log="/relatedness.log",
         default_reference="GRCh38",
-        tmp_dir="hdfs:///pc_relate.tmp/",
     )
 
     data_source = "broad"
@@ -120,6 +128,7 @@ def main(args):
                 data_source,
                 freeze,
                 hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned=True)),
+                gt_field="GT",
             ).unfilter_entries()
             eig, scores, _ = hl.hwe_normalized_pca(
                 pruned_qc_mt.GT, k=10, compute_loadings=False
@@ -149,10 +158,17 @@ def main(args):
                     ibd0_expr=relatedness_ht.ibd0,
                     ibd1_expr=relatedness_ht.ibd1,
                     ibd2_expr=relatedness_ht.ibd2,
-                    first_degree_kin_cutoff=args.first_degree_kin_cutoff,
-                    second_degree_min_kin=args.second_degree_min_kin,
+                    first_degree_kin_cutoff=args.first_degree_kin_thresholds,
+                    second_degree_kin_cutoff=args.second_degree_kin_cutoff,
                     ibd0_0_max=args.ibd0_0_max,
                 )
+            )
+            relatedness_ht = relatedness_ht.annotate_globals(
+                min_individual_maf=args.min_individual_maf,
+                min_emission_kinship=args.min_emission_kinship,
+                ibd0_0_max=args.ibd0_0_max,
+                second_degree_kin_cutoff=args.second_degree_kin_cutoff,
+                first_degree_kin_thresholds=args.first_degree_kin_thresholds,
             )
             relatedness_ht.write(
                 relatedness_ht_path(data_source, freeze), args.overwrite
@@ -168,7 +184,7 @@ def main(args):
             )
             relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
             if len(get_duplicated_samples(relatedness_ht)) > 0:
-                dups_ht = get_duplicate_samples_ht(relatedness_ht, samples_rankings_ht)
+                dups_ht = get_duplicated_samples_ht(relatedness_ht, samples_rankings_ht)
                 dups_ht.write(
                     duplicates_ht_path(data_source, freeze, dup_sets=True),
                     overwrite=args.overwrite,
@@ -203,17 +219,17 @@ def main(args):
 
             # Filter second degree samples
             related_samples_to_drop_second_deg_ht = filter_related_samples(
-                relatedness_ht, qc_ht, data_source, freeze, args.second_degree_min_kin
+                relatedness_ht, qc_ht, args.second_degree_kin_cutoff
             )
 
             # Filter duplicate samples
             related_samples_to_drop_dup_ht = filter_related_samples(
-                relatedness_ht, qc_ht, data_source, freeze, args.dup_kinship_cutoff
+                relatedness_ht, qc_ht, args.dup_kin_cutoff
             )
 
             # Filter first degree samples
             related_samples_to_drop_first_deg_ht = filter_related_samples(
-                relatedness_ht, qc_ht, data_source, freeze, args.first_degree_kin_cutoff
+                relatedness_ht, qc_ht, args.first_degree_kin_thresholds
             )
 
             # Combine first, second, and duplicate sample tables and annotate cutoffs
@@ -221,16 +237,16 @@ def main(args):
                 related_samples_to_drop_dup_ht, related_samples_to_drop_first_deg_ht
             )
             related_samples_to_drop_ht = related_samples_to_drop_ht.annotate_globals(
-                second_degree_kin_cutoff=args.second_degree_min_kin,
-                first_degree_kin_cutoff=args.first_degree_kin_cutoff,
-                dup_kin_cutoff=args.dup_kinship_cutoff,
+                second_degree_kin_cutoff=args.second_degree_kin_cutoff,
+                first_degree_kin_thresholds=args.first_degree_kin_thresholds,
+                dup_kin_cutoff=args.dup_kin_cutoff,
             )
 
             related_samples_to_drop_ht = related_samples_to_drop_ht.checkpoint(
                 related_drop_path(data_source, freeze), overwrite=args.overwrite
             )
             logger.info(
-                f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == 'second-degree').count()}"
+                f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == '2nd degree relatives').count()}"
                 "second degree samples flagged in callset using maximal independent set"
             )
             logger.info(
@@ -282,14 +298,13 @@ if __name__ == "__main__":
         type=float,
     )
     parser.add_argument(
-        "--first_degree_kin_cutoff",
+        "--first_degree_kin_thresholds",
         help="First degree kinship threshold for filtering a pair of samples with a first degree relationship. \
-        (Default = 0.1767767; 1st degree relatives)",
-        default=0.1767767,
-        type=float,
+        (Default = (0.1767767, 0.4); 1st degree relatives)",
+        default="0.1767767,0.4",
     )
     parser.add_argument(
-        "--second_degree_min_kin",
+        "--second_degree_kin_cutoff",
         help="Minimum kinship threshold for filtering a pair of samples \
         in PC relate and filtering related individuals. (Default = 0.08838835; 2nd degree relatives)",
         default=0.08838835,
@@ -314,11 +329,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--skip_filter_related_samples",
         help="Skip Filter related samples \
-        (based on the pairs present from the --run_pc_relate and using the --second_degree_min_kin value for that run)",
+        (based on the pairs present from the --run_pc_relate and using the --second_degree_kin_cutoff value for that run)",
         action="store_true",
     )
     parser.add_argument(
-        "--dup_kinship_cutoff",
+        "--dup_kin_cutoff",
         help="Kinship threshold for filtering a pair of duplicate samples. (Default = 0.4)",
         default=0.4,
         type=float,
