@@ -42,6 +42,7 @@ def main(args):
                 split=False,
                 raw=True,
                 repartition=args.repartition,
+                n_partitions=args.n_partitions,
             )
 
             sex_ht = default_annotate_sex(
