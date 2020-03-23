@@ -47,6 +47,8 @@ def prepare_array_and_exome_mt(
 
     Maps array to exome IDs and filters both matrix tables to overlapping samples and high callrate, common sites.
 
+    NOTE: Assumes input exome MatrixTable is split (hl.experimental.sparse_split_multi)
+    
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
     :param MatrixTable array_mt: Array MatrixTable
