@@ -38,9 +38,11 @@ def main(args):
             mt = get_ukbb_data(
                 data_source,
                 freeze,
+                key_by_locus_and_alleles=True,
                 split=False,
                 raw=True,
-                key_by_locus_and_alleles=True,
+                repartition=args.repartition,
+                n_partitions=args.n_partitions,
             )
 
             sex_ht = default_annotate_sex(
@@ -58,9 +60,11 @@ def main(args):
             mt = get_ukbb_data(
                 data_source,
                 freeze,
+                key_by_locus_and_alleles=True,
                 split=False,
                 raw=True,
-                key_by_locus_and_alleles=True,
+                repartition=args.repartition,
+                n_partitions=args.n_partitions,
             )
             sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
 
@@ -88,8 +92,7 @@ def main(args):
             # Filter out star alleles and checkpoint
             mt = mt.filter_rows(mt.alleles[1] != "*")
             mt = mt.checkpoint(
-                get_ukbb_data_path(data_source, freeze, hardcalls=True, split=False),
-                args.overwrite,
+                get_ukbb_data_path(data_source, freeze, hardcalls=True), args.overwrite,
             )
 
             # Finish generating allele data
@@ -130,10 +133,17 @@ if __name__ == "__main__":
         "--slack_channel", help="Slack channel to post results and notifications to.",
     )
     parser.add_argument(
+        "--repartition",
+        help="Repartition raw MT on read. Needs to be true for tranche 3/freeze 6/300K",
+        action="store_true",
+    )
+    parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int,
     )
     parser.add_argument(
-        "--n_partitions", help="Desired number of partitions for output", type=int,
+        "--n_partitions",
+        help="Desired number of partitions for output. Also used to repartition raw MT on read (necessary only for tranche 3/freeze 6/300K!",
+        type=int,
     )
     parser.add_argument(
         "--impute_sex",
