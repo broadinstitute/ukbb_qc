@@ -94,9 +94,7 @@ def main(args):
         n_partitions = args.n_partitions
 
         if args.compute_interval_callrate_mt:
-            logger.warning(
-                "Computing the call rate MT requires a densify!\n"
-            )
+            logger.warning("Computing the call rate MT requires a densify!\n")
             logger.info("Reading in raw MT...")
             mt = get_ukbb_data(
                 data_source,
@@ -105,6 +103,7 @@ def main(args):
                 key_by_locus_and_alleles=True,
                 raw=True,
                 repartition=args.repartition,
+                n_partitions=n_partitions,
             )
             capture_ht = hl.read_table(capture_ht_path(data_source))
             compute_interval_callrate_dp_mt(
