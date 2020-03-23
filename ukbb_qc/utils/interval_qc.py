@@ -96,7 +96,6 @@ def main(args):
         if args.compute_interval_callrate_mt:
             logger.warning(
                 "Computing the call rate MT requires a densify!\n"
-                "Make sure you are using an autoscaling policy."
             )
             logger.info("Reading in raw MT...")
             mt = get_ukbb_data(
