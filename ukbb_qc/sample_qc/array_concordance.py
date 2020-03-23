@@ -16,6 +16,7 @@ from ukbb_qc.resources.basics import (
     get_array_data_path,
     get_checkpoint_path,
     get_ukbb_data,
+    logging_path,
 )
 from ukbb_qc.resources.sample_qc import (
     array_variant_concordance_path,
@@ -134,133 +135,142 @@ def get_array_exome_concordance(
 def main(args):
 
     hl.init(log="/array_concordance.log", default_reference="GRCh38")
-    data_source = args.data_source
+    data_source = "broad"
     freeze = args.freeze
     call_rate_cutoff = args.call_rate_cutoff
     af_cutoff = args.af_cutoff
     overwrite = args.overwrite
 
-    if args.import_arrays:
-        logger.info("Importing array data (autosomes only) into hail Matrix Table...")
-
-        array_files = [
-            (
-                get_array_data_path("bed", f"chr{chrom}"),
-                get_array_data_path("bim", f"chr{chrom}"),
-            )
-            for chrom in range(1, 23)
-        ]
-
-        mts = [
-            hl.import_plink(
-                bed=f[0],
-                bim=f[1],
-                fam=get_array_data_path("fam", "chr22"),
-                reference_genome="GRCh37",
-                a2_reference=False,
-                skip_invalid_loci=True,
-            )
-            for f in array_files
-        ]
-
-        array_mt = mts[0].union_rows(*mts[1:])
-        array_mt = array_mt.checkpoint(array_mt_path(), overwrite=overwrite)
-        array_variants, array_samples = array_mt.count()
-        logger.info(
-            f"{array_variants} variants and {array_samples} samples found in array data"
-        )
-
-    if args.liftover_arrays:
-        logger.info("Lifting over array data from GRCh37 to GRCh38...")
-        array_mt = hl.read_matrix_table(array_mt_path())
-
-        logger.info("Preparing reference genomes for liftover")
-        source, target = get_liftover_genome(array_mt)
-
-        logger.info(f"Lifting data to {target.name}")
-        array_mt = lift_data(
-            array_mt,
-            gnomad=False,
-            data_type=None,
-            path=array_mt_path(liftover=True, checkpoint=True),
-            rg=target,
-            overwrite=overwrite,
-        )
-
-        logger.info("Checking SNPs for reference mismatches")
-        array_mt = annotate_snp_mismatch(array_mt, data_type=None, rg=target)
-        array_mt = array_mt.checkpoint(
-            array_mt_path(liftover=True), overwrite=overwrite
-        )
-        array_variants, array_samples = array_mt.count()
-        logger.info(
-            f"{array_variants} variants and {array_samples} samples found in liftover array data"
-        )
-
-    if args.array_concordance:
-        logger.info("Checking concordance between exome and array data...")
-        array_mt = hl.read_matrix_table(array_mt_path(liftover=True))
-        exome_mt = get_ukbb_data(data_source, freeze, adj=True, split=True)
-
-        logger.info("Removing hard filtered samples...")
-        exome_mt = remove_hard_filter_samples(
-            data_source, freeze, exome_mt, gt_field="GT"
-        )
-        logger.info(f"Count after removing hard filtered samples: {exome_mt.count()}")
-
-        if args.interval_qc_filter:
+    try:
+        if args.import_arrays:
             logger.info(
-                f"Filtering exome MT to intervals with at least {args.pct_samples * 100}% of samples"
-                f"for coverage field {args.cov_filter_field}"
+                "Importing array data (autosomes only) into hail Matrix Table..."
             )
-            exome_mt = annotate_interval_qc_filter(
-                data_source,
-                freeze,
-                exome_mt,
-                cov_filter_field=args.cov_filter_field,
-                pct_samples=args.pct_samples,
-                autosomes_only=True,
+
+            array_files = [
+                (
+                    get_array_data_path("bed", f"chr{chrom}"),
+                    get_array_data_path("bim", f"chr{chrom}"),
+                )
+                for chrom in range(1, 23)
+            ]
+
+            mts = [
+                hl.import_plink(
+                    bed=f[0],
+                    bim=f[1],
+                    fam=get_array_data_path("fam", "chr22"),
+                    reference_genome="GRCh37",
+                    a2_reference=False,
+                    skip_invalid_loci=True,
+                )
+                for f in array_files
+            ]
+
+            array_mt = mts[0].union_rows(*mts[1:])
+            array_mt = array_mt.checkpoint(array_mt_path(), overwrite=overwrite)
+            array_variants, array_samples = array_mt.count()
+            logger.info(
+                f"{array_variants} variants and {array_samples} samples found in array data"
             )
-            exome_mt = exome_mt.filter_rows(exome_mt.interval_qc_pass)
 
-        array_mt, exome_mt = prepare_array_and_exome_mt(
-            data_source, freeze, array_mt, exome_mt, call_rate_cutoff, af_cutoff
-        )
+        if args.liftover_arrays:
+            logger.info("Lifting over array data from GRCh37 to GRCh38...")
+            array_mt = hl.read_matrix_table(array_mt_path())
 
-        exome_mt = exome_mt.checkpoint(
-            get_checkpoint_path(
-                data_source,
-                freeze,
-                name=f"exome_subset_concordance_callrate_{call_rate_cutoff}_af_{af_cutoff}",
-                mt=True,
-            ),
-            overwrite=overwrite,
-        )
-        array_mt = array_mt.checkpoint(
-            get_checkpoint_path(
-                data_source,
-                freeze,
-                name=f"array_subset_concordance_callrate_{call_rate_cutoff}_af_{af_cutoff}",
-                mt=True,
-            ),
-            overwrite=overwrite,
-        )
+            logger.info("Preparing reference genomes for liftover")
+            source, target = get_liftover_genome(array_mt)
 
-        samples, variants = get_array_exome_concordance(array_mt, exome_mt)
+            logger.info(f"Lifting data to {target.name}")
+            array_mt = lift_data(
+                array_mt,
+                gnomad=False,
+                data_type=None,
+                path=array_mt_path(liftover=True, checkpoint=True),
+                rg=target,
+                overwrite=overwrite,
+            )
 
-        variants = variants.annotate_globals(
-            callrate_cutoff=call_rate_cutoff, af_cutoff=af_cutoff
-        )
-        samples = samples.annotate_globals(
-            callrate_cutoff=call_rate_cutoff, af_cutoff=af_cutoff
-        )
+            logger.info("Checking SNPs for reference mismatches")
+            array_mt = annotate_snp_mismatch(array_mt, data_type=None, rg=target)
+            array_mt = array_mt.checkpoint(
+                array_mt_path(liftover=True), overwrite=overwrite
+            )
+            array_variants, array_samples = array_mt.count()
+            logger.info(
+                f"{array_variants} variants and {array_samples} samples found in liftover array data"
+            )
 
-        variants.write(
-            array_variant_concordance_path(data_source, freeze), overwrite=overwrite
-        )
-        samples.write(
-            array_sample_concordance_path(data_source, freeze), overwrite=overwrite
-        )
+        if args.array_concordance:
+            logger.info("Checking concordance between exome and array data...")
+            array_mt = hl.read_matrix_table(array_mt_path(liftover=True))
+            exome_mt = get_ukbb_data(data_source, freeze, adj=True, split=True)
+
+            logger.info("Removing hard filtered samples...")
+            exome_mt = remove_hard_filter_samples(
+                data_source, freeze, exome_mt, gt_field="GT"
+            )
+            logger.info(
+                f"Count after removing hard filtered samples: {exome_mt.count()}"
+            )
+
+            if args.interval_qc_filter:
+                logger.info(
+                    f"Filtering exome MT to intervals with at least {args.pct_samples * 100}% of samples"
+                    f"for coverage field {args.cov_filter_field}"
+                )
+                exome_mt = annotate_interval_qc_filter(
+                    data_source,
+                    freeze,
+                    exome_mt,
+                    cov_filter_field=args.cov_filter_field,
+                    pct_samples=args.pct_samples,
+                    autosomes_only=True,
+                )
+                exome_mt = exome_mt.filter_rows(exome_mt.interval_qc_pass)
+
+            array_mt, exome_mt = prepare_array_and_exome_mt(
+                data_source, freeze, array_mt, exome_mt, call_rate_cutoff, af_cutoff
+            )
+
+            exome_mt = exome_mt.checkpoint(
+                get_checkpoint_path(
+                    data_source,
+                    freeze,
+                    name=f"exome_subset_concordance_callrate_{call_rate_cutoff}_af_{af_cutoff}",
+                    mt=True,
+                ),
+                overwrite=overwrite,
+            )
+            array_mt = array_mt.checkpoint(
+                get_checkpoint_path(
+                    data_source,
+                    freeze,
+                    name=f"array_subset_concordance_callrate_{call_rate_cutoff}_af_{af_cutoff}",
+                    mt=True,
+                ),
+                overwrite=overwrite,
+            )
+
+            samples, variants = get_array_exome_concordance(array_mt, exome_mt)
+
+            variants = variants.annotate_globals(
+                callrate_cutoff=call_rate_cutoff, af_cutoff=af_cutoff
+            )
+            samples = samples.annotate_globals(
+                callrate_cutoff=call_rate_cutoff, af_cutoff=af_cutoff
+            )
+
+            variants.write(
+                array_variant_concordance_path(data_source, freeze), overwrite=overwrite
+            )
+            samples.write(
+                array_sample_concordance_path(data_source, freeze), overwrite=overwrite
+            )
+
+    finally:
+        logger.info("Copying log to logging bucket...")
+        hl.copy_log(logging_path(data_source, freeze))
 
 
 if __name__ == "__main__":
@@ -289,13 +299,6 @@ if __name__ == "__main__":
     )
 
     concordance = parser.add_argument_group("Compute array concordance with exomes")
-    concordance.add_argument(
-        "-s",
-        "--data_source",
-        help="Data source",
-        choices=["regeneron", "broad"],
-        default="broad",
-    )
     concordance.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
     )
