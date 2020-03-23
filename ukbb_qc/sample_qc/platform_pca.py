@@ -1,12 +1,13 @@
 import argparse
 import logging
-import hdbscan
 import hail as hl
+import hdbscan
 from gnomad.utils.sample_qc import (
     assign_platform_from_pcs,
     run_platform_pca,
 )
 from gnomad.utils.slack import try_slack
+from ukbb_qc.resources.basics import logging_path
 from ukbb_qc.resources.sample_qc import (
     callrate_mt_path,
     platform_pca_loadings_ht_path,
@@ -28,62 +29,69 @@ def main(args):
     data_source = "broad"
     freeze = args.freeze
 
-    if args.run_platform_pca:
-        logger.info("Running platform PCA...")
-        callrate_mt = hl.read_matrix_table(
-            callrate_mt_path(
-                data_source, freeze, interval_filtered=args.apply_interval_qc_filter
+    try:
+        if args.run_platform_pca:
+            logger.info("Running platform PCA...")
+            callrate_mt = hl.read_matrix_table(
+                callrate_mt_path(
+                    data_source, freeze, interval_filtered=args.apply_interval_qc_filter
+                )
             )
-        )
 
-        logger.info("Removing hard filtered samples...")
-        callrate_mt = remove_hard_filter_samples(
-            data_source, freeze, callrate_mt, filter_rows=False
-        )
-        logger.info(
-            f"Count after removing hard filtered samples: {callrate_mt.count()}"
-        )
-
-        # NOTE: added None binarization_threshold parameter to make sure we things the same way as before parameter existed
-        eigenvalues, scores_ht, loadings_ht = run_platform_pca(callrate_mt, None)
-        scores_ht.write(
-            platform_pca_scores_ht_path(
-                data_source, freeze, interval_filtered=args.apply_interval_qc_filter
-            ),
-            overwrite=args.overwrite,
-        )
-        logger.info(f"Scores Table count: {scores_ht.count()}")
-        loadings_ht.write(
-            platform_pca_loadings_ht_path(
-                data_source, freeze, interval_filtered=args.apply_interval_qc_filter
-            ),
-            overwrite=args.overwrite,
-        )
-
-    if args.assign_platforms:
-        logger.info("Assigning platforms based on platform PCA clustering")
-        scores_ht = hl.read_table(
-            platform_pca_scores_ht_path(
-                data_source, freeze, interval_filtered=args.apply_interval_qc_filter
+            logger.info("Removing hard filtered samples...")
+            callrate_mt = remove_hard_filter_samples(
+                data_source, freeze, callrate_mt, filter_rows=False
             )
-        )
-        platform_ht = assign_platform_from_pcs(
-            scores_ht,
-            hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
-            hdbscan_min_samples=args.hdbscan_min_samples,
-        )
-        platform_ht = platform_ht.annotate_globals(
-            hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
-            hdbscan_min_samples=args.hdbscan_min_samples,
-            interval_filtered=args.apply_interval_qc_filter,
-        )
-        platform_ht = platform_ht.checkpoint(
-            platform_pca_assignments_ht_path(
-                data_source, freeze, interval_filtered=args.apply_interval_qc_filter
-            ),
-            overwrite=args.overwrite,
-        )
-        logger.info(f"Platform PCA Table count: {platform_ht.count()}")
+            logger.info(
+                f"Count after removing hard filtered samples: {callrate_mt.count_cols()}"
+            )
+
+            # NOTE: added None binarization_threshold parameter to make sure we things the same way as before parameter existed
+            eigenvalues, scores_ht, loadings_ht = run_platform_pca(
+                callrate_mt, binarization_threshold=None
+            )
+            scores_ht.write(
+                platform_pca_scores_ht_path(
+                    data_source, freeze, interval_filtered=args.apply_interval_qc_filter
+                ),
+                overwrite=args.overwrite,
+            )
+            logger.info(f"Scores Table count: {scores_ht.count()}")
+            loadings_ht.write(
+                platform_pca_loadings_ht_path(
+                    data_source, freeze, interval_filtered=args.apply_interval_qc_filter
+                ),
+                overwrite=args.overwrite,
+            )
+
+        if args.assign_platforms:
+            logger.info("Assigning platforms based on platform PCA clustering")
+            scores_ht = hl.read_table(
+                platform_pca_scores_ht_path(
+                    data_source, freeze, interval_filtered=args.apply_interval_qc_filter
+                )
+            )
+            platform_ht = assign_platform_from_pcs(
+                scores_ht,
+                hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
+                hdbscan_min_samples=args.hdbscan_min_samples,
+            )
+            platform_ht = platform_ht.annotate_globals(
+                hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
+                hdbscan_min_samples=args.hdbscan_min_samples,
+                interval_filtered=args.apply_interval_qc_filter,
+            )
+            platform_ht = platform_ht.checkpoint(
+                platform_pca_assignments_ht_path(
+                    data_source, freeze, interval_filtered=args.apply_interval_qc_filter
+                ),
+                overwrite=args.overwrite,
+            )
+            logger.info(f"Platform PCA Table count: {platform_ht.count()}")
+
+    finally:
+        logger.info("Copying log to logging bucket...")
+        hl.copy_log(logging_path(data_source, freeze))
 
 
 if __name__ == "__main__":
