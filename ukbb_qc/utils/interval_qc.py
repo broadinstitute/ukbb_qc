@@ -81,14 +81,14 @@ def interval_qc(
 
 def main(args):
 
+    hl.init(log="/interval_qc.log")
+    data_source = "broad"
+    freeze = args.freeze
+    
     try:
-        hl.init(log="/interval_qc.log")
-
         if not args.autosomes and not args.sex_chr:
             logger.warning("Must choose one of autosomes or sex_chr options")
 
-        data_source = "broad"
-        freeze = args.freeze
         target_pct_gt_cov = list(map(int, args.target_cov.split(",")))
         pct_sample_cov = list(map(int, args.sample_cov.split(",")))
         n_partitions = args.n_partitions
