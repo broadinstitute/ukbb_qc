@@ -31,7 +31,7 @@ def get_ukbb_data(
     split: bool = True,
     ukbb_samples_only: bool = True,
     raw: bool = False,
-    repartition: bool = False,
+    repartition: bool = True,
     n_partitions: int = 30000,
     meta_root: Optional[str] = None,
 ) -> hl.MatrixTable:
@@ -46,7 +46,7 @@ def get_ukbb_data(
     :param bool ukbb_samples_only: Whether to return only UKBB samples (exclude control samples). Default is True.
     :param bool raw: Whether to return the raw data (not recommended: unsplit, and no special consideration on sex chromosomes)
     :param bool repartition: Whether to repartition the MatrixTable. 
-        Required if raw is True for tranche 3/freeze 6. Default is False
+        Required if raw is True for tranche 3/freeze 6. Default is True
     :param int n_partitions: Number of desired partitions for MatrixTable. Applies only to raw MT.
         Required if raw is True for tranche 3/freeze 6. Default is 30000
     :param str meta_root: Root annotation name for metadata (e.g., 'meta')
