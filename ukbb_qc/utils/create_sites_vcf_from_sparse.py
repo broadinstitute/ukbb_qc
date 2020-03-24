@@ -50,7 +50,8 @@ def main(args):
         vcf_mt = ht_to_vcf_mt(info_ht)
         hl.export_vcf(
             vcf_mt,
-            f"{get_release_path(data_source, freeze)}/{data_source}.freeze_{freeze}.sites_for_vqsr.vcf.bgz",
+            f"{get_release_path(data_source, freeze)}/vqsr/{data_source}.freeze_{freeze}.sites_for_vqsr.vcf.bgz",
+            parallel='separate_header',
         )
 
     finally:
