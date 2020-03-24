@@ -34,10 +34,8 @@ def main(args):
             repartition=args.repartition,
             n_partitions=args.raw_partitions,
         )
-        logger.info(f"Sparse MT count: {mt.count()}")
         logger.info("Filtering out ref blocks")
         mt = mt.filter_rows(hl.len(mt.alleles) > 1)
-        logger.info(f"MT count after filtration: {mt.count()}")
 
         if args.test:
             logger.info("Trimming to chr20...")
