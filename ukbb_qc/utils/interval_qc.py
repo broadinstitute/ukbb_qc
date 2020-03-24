@@ -83,9 +83,14 @@ def main(args):
 
     data_source = "broad"
     freeze = args.freeze
+    log = (
+        "interval_qc_callrate_mt.log"
+        if args.compute_interval_callrate_mt
+        else "interval_qc.log"
+    )
+    hl.init(log=f"/{log}", default_reference="GRCh38")
 
     try:
-        hl.init(log="/interval_qc_callrate_mt.log")
         if not args.autosomes and not args.sex_chr:
             logger.warning("Must choose one of autosomes or sex_chr options")
 
@@ -131,7 +136,6 @@ def main(args):
         mt = mt.key_rows_by("locus")
 
         if args.autosomes:
-            hl.init(log="/interval_qc_autosomes.log")
             logger.info("Filtering to autosomes...")
             mt = filter_to_autosomes(mt)
             mt = mt.key_rows_by("interval").drop("locus")
@@ -150,7 +154,6 @@ def main(args):
             )
 
         if args.sex_chr:
-            hl.init(log="/interval_qc_sex_chr.log")
             logger.info("Filtering to sex chromosomes...")
             mt = hl.filter_intervals(
                 mt,
