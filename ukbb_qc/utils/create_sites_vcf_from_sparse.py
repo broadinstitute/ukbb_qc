@@ -31,7 +31,7 @@ def main(args):
             key_by_locus_and_alleles=True,
             split=False,
             raw=True,
-            repartition=True,
+            repartition=args.repartition,
             n_partitions=args.raw_partitions,
         )
         logger.info(f"Sparse MT count: {mt.count()}")
@@ -65,6 +65,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
+    )
+    parser.add_argument(
+        "--repartition",
+        help="Repartition raw MT on read. Required for 300K",
+        action="store_true",
     )
     parser.add_argument(
         "--raw_partitions",
