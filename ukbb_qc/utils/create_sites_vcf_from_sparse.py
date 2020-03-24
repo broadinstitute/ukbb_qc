@@ -46,7 +46,7 @@ def main(args):
 
         logger.info("Getting info HT...")
         info_ht = default_compute_info(
-            mt, site_Annotations=True, n_partitions=args.partitions
+            mt, site_annotations=True, n_partitions=args.partitions
         )
 
         vcf_mt = ht_to_vcf_mt(info_ht)
