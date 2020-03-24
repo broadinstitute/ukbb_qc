@@ -127,12 +127,12 @@ def main(args):
         mt = hl.read_matrix_table(
             callrate_mt_path(data_source, freeze, interval_filtered=False)
         )
+        mt = mt.annotate_rows(locus=mt.interval.start)
+        mt = mt.key_rows_by("locus")
 
         if args.autosomes:
             hl.init(log="/interval_qc_autosomes.log")
             logger.info("Filtering to autosomes...")
-            mt = mt.annotate_rows(locus=mt.interval.start)
-            mt = mt.key_rows_by("locus")
             mt = filter_to_autosomes(mt)
             mt = mt.key_rows_by("interval").drop("locus")
 
@@ -152,7 +152,6 @@ def main(args):
         if args.sex_chr:
             hl.init(log="/interval_qc_sex_chr.log")
             logger.info("Filtering to sex chromosomes...")
-            mt = mt.key_rows_by("locus")
             mt = hl.filter_intervals(
                 mt,
                 [
