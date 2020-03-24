@@ -92,10 +92,14 @@ def main(args):
         target_pct_gt_cov = list(map(int, args.target_cov.split(",")))
         pct_sample_cov = list(map(int, args.sample_cov.split(",")))
         n_partitions = args.n_partitions
-        logger.warning(
-            "n_partitions arg will be used for both callrate MT and interval QC"
-            "if args.compute_interval_callrate_mt and any interval QC args are set!"
-        )
+
+        if (args.compute_interval_callrate_mt and args.autosomes) or (
+            args.compute_interval_callrate_mt and args.sex_chr
+        ):
+            logger.warning(
+                "n_partitions arg will be used for both callrate MT and interval QC"
+                "if args.compute_interval_callrate_mt and any interval QC args are set!"
+            )
 
         if args.compute_interval_callrate_mt:
             logger.warning("Computing the call rate MT requires a densify!\n")
