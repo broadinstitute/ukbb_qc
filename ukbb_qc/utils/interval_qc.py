@@ -119,6 +119,7 @@ def main(args):
         mt = hl.read_matrix_table(
             callrate_mt_path(data_source, freeze, interval_filtered=False)
         )
+
         if args.autosomes:
             hl.init(log="/interval_qc_autosomes.log")
             logger.info("Filtering to autosomes...")
