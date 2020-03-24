@@ -81,11 +81,11 @@ def interval_qc(
 
 def main(args):
 
-    hl.init(log="/interval_qc.log")
     data_source = "broad"
     freeze = args.freeze
 
     try:
+        hl.init(log="/interval_qc_callrate_mt.log")
         if not args.autosomes and not args.sex_chr:
             logger.warning("Must choose one of autosomes or sex_chr options")
 
@@ -120,8 +120,12 @@ def main(args):
             callrate_mt_path(data_source, freeze, interval_filtered=False)
         )
         if args.autosomes:
+            hl.init(log="/interval_qc_autosomes.log")
             logger.info("Filtering to autosomes...")
+            mt = mt.annotate_rows(locus=mt.interval.start)
+            mt = mt.key_rows_by("locus")
             mt = filter_to_autosomes(mt)
+            mt = mt.key_rows_by("interval").drop("locus")
 
             logger.info("Starting interval QC...")
             target_ht = interval_qc(
@@ -137,7 +141,9 @@ def main(args):
             )
 
         if args.sex_chr:
+            hl.init(log="/interval_qc_sex_chr.log")
             logger.info("Filtering to sex chromosomes...")
+            mt = mt.key_rows_by("locus")
             mt = hl.filter_intervals(
                 mt,
                 [
@@ -145,6 +151,7 @@ def main(args):
                     hl.parse_locus_interval("chrY", reference_genome="GRCh38"),
                 ],
             )
+            mt = mt.key_rows_by("interval").drop("locus")
 
             logger.info("Filtering to XX and XY samples...")
             sex_ht = hl.read_table(sex_ht_path(data_source, freeze)).select(
