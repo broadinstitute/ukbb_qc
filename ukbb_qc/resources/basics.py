@@ -404,6 +404,18 @@ def release_vcf_path(data_source: str, freeze: int, contig: str = None) -> str:
         return f"{get_release_path(data_source, freeze)}/vcf/sharded_vcf/{data_source}.freeze_{freeze}.bgz"
 
 
+def vqsr_vcf_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Fetch bucket for sites VCF (input to VQSR)
+
+    :param str data_source: 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :return: Path to VQSR VCF bucket
+    :rtype: str
+    """
+    return f"{get_release_path(data_source, freeze)}/vqsr/{data_source}.freeze_{freeze}.sites_for_vqsr.vcf.bgz"
+
+
 # logging path
 def logging_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
