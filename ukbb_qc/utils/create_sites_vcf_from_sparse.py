@@ -4,7 +4,7 @@ import hail as hl
 from gnomad.utils.generic import ht_to_vcf_mt
 from gnomad.utils.slack import try_slack
 from gnomad.utils.sparse_mt import default_compute_info
-from ukbb_qc.resources.basics import get_release_path, get_ukbb_data, logging_path
+from ukbb_qc.resources.basics import get_ukbb_data, logging_path, vqsr_sites_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 
 
@@ -47,10 +47,14 @@ def main(args):
             mt, site_annotations=True, n_partitions=args.partitions
         )
 
+        info_ht = info_ht.checkpoint(
+            f"{vqsr_sites_path(data_source, freeze)}/{data_source}.freeze_{freeze}.sites_for_vqsr.ht",
+            overwrite=args.overwrite,
+        )
         vcf_mt = ht_to_vcf_mt(info_ht)
         hl.export_vcf(
             vcf_mt,
-            f"{get_release_path(data_source, freeze)}/vqsr/{data_source}.freeze_{freeze}.sites_for_vqsr.vcf.bgz",
+            f"{vqsr_sites_path(data_source, freeze)}/{data_source}.freeze_{freeze}.sites_for_vqsr.vcf.bgz",
             parallel='separate_header',
         )
 
@@ -64,6 +68,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
+    )
+    parser.add_argument(
+        "--overwrite",
+        help="Overwrite data",
+        action="store_true",
     )
     parser.add_argument(
         "--repartition",
