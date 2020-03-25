@@ -55,7 +55,7 @@ def main(args):
         hl.export_vcf(
             vcf_mt,
             f"{vqsr_sites_path(data_source, freeze)}/{data_source}.freeze_{freeze}.sites_for_vqsr.vcf.bgz",
-            parallel='separate_header',
+            parallel="separate_header",
         )
 
     finally:
@@ -70,9 +70,7 @@ if __name__ == "__main__":
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
     )
     parser.add_argument(
-        "--overwrite",
-        help="Overwrite data",
-        action="store_true",
+        "--overwrite", help="Overwrite data", action="store_true",
     )
     parser.add_argument(
         "--repartition",
@@ -81,7 +79,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--raw_partitions",
-        help="Number of desired partitions for the raw MT. Necessary only for 300K",
+        help="Number of desired partitions for the raw MT. Necessary only for 300K. Used only if --repartition is also specified",
         default=30000,
         type=int,
     )
