@@ -88,7 +88,7 @@ def main(args):
             mt = mt.select_cols().naive_coalesce(args.n_partitions)
 
             # Filter out star alleles and checkpoint
-            mt = mt.filter_rows(mt.alleles[1] != "*")
+            mt = mt.filter_rows((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
             mt = mt.checkpoint(
                 get_ukbb_data_path(data_source, freeze, hardcalls=True), args.overwrite,
             )
