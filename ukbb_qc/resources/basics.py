@@ -217,7 +217,6 @@ def hardcalls_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     :return: Path to chosen hardcalls MatrixTable
     :rtype: str
     """
-    logger.warning("No unsplit hardcalls -- make sure you are expecting a split MT")
     return f"gs://broad-ukbb/{data_source}.freeze_{freeze}/hardcalls/hardcalls.mt"
 
 
