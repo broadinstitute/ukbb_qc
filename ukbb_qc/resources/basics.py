@@ -29,7 +29,7 @@ def get_ukbb_data(
     key_by_locus_and_alleles: bool = False,
     adj: bool = False,
     split: bool = True,
-    ukbb_samples_only: bool = True,
+    ukbb_samples_only: bool = False,
     raw: bool = False,
     repartition: bool = False,
     n_partitions: int = 30000,
@@ -43,7 +43,8 @@ def get_ukbb_data(
     :param bool key_by_locus_and_alleles: Whether to key the MatrixTable by locus and alleles
     :param bool adj: Whether the returned data should be filtered to adj genotypes
     :param bool split: Whether the dataset should be split (only applies to raw=False)
-    :param bool ukbb_samples_only: Whether to return only UKBB samples (exclude control samples). Default is True.
+    :param bool ukbb_samples_only: Whether to return only UKBB samples (exclude control samples). Default is False.
+        Relevant only when running release code.
     :param bool raw: Whether to return the raw data (not recommended: unsplit, and no special consideration on sex chromosomes)
     :param bool repartition: Whether to repartition the MatrixTable. 
         Required if raw is True for tranche 3/freeze 6. Default is False
@@ -103,8 +104,12 @@ def get_ukbb_data(
             mt = mt.filter_cols(hl.is_defined(sample_map_ht[mt.col_key]))
 
         # Remove any samples with withdrawn consents
+        # NOTE: Keeping samples with missing consents to avoid filtering any samples present in MT but not in sample map HT
         if file_exists(excluded_samples_path()):
-            mt = mt.filter_cols(~sample_map_ht[mt.col_key].withdrawn_consent)
+            mt = mt.filter_cols(
+                (~sample_map_ht[mt.col_key].withdrawn_consent)
+                | (hl.is_missing(sample_map_ht[mt.col_key].withdrawn_consent))
+            )
 
             # Double check all withdrawn samples were actually excluded
             withdrawn_ht = hl.import_table(
