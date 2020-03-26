@@ -31,7 +31,13 @@ def main(args):
     if args.compute_qc_mt:
         logger.info("Reading in raw MT...")
         mt = get_ukbb_data(
-            data_source, freeze, split=False, raw=True, key_by_locus_and_alleles=True,
+            data_source,
+            freeze,
+            key_by_locus_and_alleles=True,
+            split=False,
+            raw=True,
+            repartition=args.repartition,
+            n_partitions=args.raw_partitions,
         )
         mt = mt.select_entries("LGT", "GQ", "DP", "LAD", "LA")
         logger.info(
@@ -127,6 +133,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int,
+    )
+    parser.add_argument(
+        "--repartition",
+        help="Repartition raw MT on read. Required for freeze 6 (300K)",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--raw_partitions",
+        help="Number of desired partitions for raw MT. Required if --repartition is used and for freeze 6",
+        default=30000,
+        type=int,
     )
     parser.add_argument(
         "--compute_qc_mt",
