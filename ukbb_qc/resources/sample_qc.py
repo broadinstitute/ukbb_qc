@@ -37,7 +37,15 @@ def interval_qc_path(
         chrom = ""
     else:
         chrom = f".{chrom}"
-    return f'{sample_qc_path(data_source, freeze)}/interval_qc/coverage_by_target{chrom}{".ht" if ht else ".txt"}'
+
+    interval_qc_results = f'{sample_qc_path(data_source, freeze)}/interval_qc/coverage_by_target{chrom}{".ht" if ht else ".txt"}'
+    if not file_exists(interval_qc_results):
+        logger.warning(
+            f"Requested data for freeze {freeze}, but interval QC for that freeze does not exist. Returning interval QC results from freeze 5 (200K)"
+        )
+        return f'{sample_qc_path(data_source, 5)}/interval_qc/coverage_by_target{chrom}{".ht" if ht else ".txt"}'
+    else:
+        return f'{sample_qc_path(data_source, freeze)}/interval_qc/coverage_by_target{chrom}{".ht" if ht else ".txt"}'
 
 
 def f_stat_sites_path() -> str:
