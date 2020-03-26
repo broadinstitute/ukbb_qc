@@ -11,7 +11,6 @@ from gnomad.utils.sample_qc import default_annotate_sex
 from ukbb_qc.resources.basics import (
     get_ukbb_data,
     get_ukbb_data_path,
-    capture_ht_path,
     logging_path,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
@@ -47,7 +46,6 @@ def main(args):
 
             sex_ht = default_annotate_sex(
                 mt,
-                included_intervals=hl.read_table(capture_ht_path(data_source)),
                 sites_ht=hl.read_table(f_stat_sites_path()),
                 aaf_expr="AF",
                 gt_expr="LGT",
@@ -90,7 +88,7 @@ def main(args):
             mt = mt.select_cols().naive_coalesce(args.n_partitions)
 
             # Filter out star alleles and checkpoint
-            mt = mt.filter_rows(mt.alleles[1] != "*")
+            mt = mt.filter_rows((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
             mt = mt.checkpoint(
                 get_ukbb_data_path(data_source, freeze, hardcalls=True), args.overwrite,
             )
@@ -111,8 +109,7 @@ def main(args):
                 )
             )
             ht.write(
-                var_annotations_ht_path(data_source, freeze, "allele_data"),
-                args.overwrite,
+                var_annotations_ht_path("allele_data", data_source), args.overwrite,
             )
 
     finally:
