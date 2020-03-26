@@ -109,8 +109,7 @@ def main(args):
                 )
             )
             ht.write(
-                var_annotations_ht_path(data_source, freeze, "allele_data"),
-                args.overwrite,
+                var_annotations_ht_path("allele_data", data_source), args.overwrite,
             )
 
     finally:
