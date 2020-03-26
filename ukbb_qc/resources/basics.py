@@ -87,6 +87,7 @@ def get_ukbb_data(
         mt = hl.MatrixTable(
             hl.ir.MatrixKeyRowsBy(mt._mir, ["locus", "alleles"], is_sorted=True)
         )  # taken from v3 qc
+    logger.info(f"Number of samples in MT: {mt.count_cols()}")
 
     # Add warning that no samples will be removed if excluded samples file doesn't exist
     if not file_exists(excluded_samples_path()):
@@ -129,10 +130,10 @@ def get_ukbb_data(
                 )
             else:
                 logger.info("No withdrawn samples found in MT")
+    logger.info(f"Sample count post-filtration: {mt.count_cols()}")
 
     gt_expr = mt.GT if split else mt.LGT
     mt = mt.filter_rows(hl.agg.any(gt_expr.is_non_ref() | hl.is_defined(mt.END)))
-
     return mt
 
 
