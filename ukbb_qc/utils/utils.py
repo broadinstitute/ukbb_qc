@@ -273,11 +273,4 @@ def get_qc_mt_sites() -> None:
     logger.info("Removing LCR intervals from QC sites")
     lcr = lcr_intervals.ht()
     ht = ht.filter(hl.is_missing(lcr[ht.locus]))
-
-    logger.info("Adding info annotations to QC sites HT")
-    # NOTE: info ht is hard coded from tranche 2/freeze 5
-    info_ht = hl.read_matrix_table(
-        "gs://broad-ukbb/broad.freeze_5/temp/broad.freeze_5.sites.ht"
-    )
-    ht = ht.annotate(info=info_ht[ht.key].info)
     ht.write(qc_sites_path())
