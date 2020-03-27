@@ -40,9 +40,6 @@ def main(args):
             n_partitions=args.raw_partitions,
         )
         mt = mt.select_entries("LGT", "GQ", "DP", "LAD", "LA", "END")
-        logger.info(
-            f"Total number of variants in raw unsplit matrix table: {mt.count_rows()}"
-        )
 
         logger.info("Reading in QC MT sites from tranche 2/freeze 5...")
         if not hl.utils.hadoop_exists(f"{qc_sites_path()}/_SUCCESS"):
