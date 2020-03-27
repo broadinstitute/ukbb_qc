@@ -48,13 +48,12 @@ def main(args):
         )
 
         info_ht = info_ht.checkpoint(
-            f"{vqsr_sites_path(data_source, freeze)}/{data_source}.freeze_{freeze}.sites_for_vqsr.ht",
-            overwrite=args.overwrite,
+            f"{vqsr_sites_path(data_source, freeze)}", overwrite=args.overwrite,
         )
         vcf_mt = ht_to_vcf_mt(info_ht)
         hl.export_vcf(
             vcf_mt,
-            f"{vqsr_sites_path(data_source, freeze)}/{data_source}.freeze_{freeze}.sites_for_vqsr.vcf.bgz",
+            f"{vqsr_sites_path(data_source, freeze, ht=False)}",
             parallel="separate_header",
         )
 
