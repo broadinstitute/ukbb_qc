@@ -45,6 +45,7 @@ def main(args):
         if not hl.utils.hadoop_exists(f"{qc_sites_path()}/_SUCCESS"):
             get_qc_mt_sites()
         qc_sites_ht = hl.read_table(qc_sites_path())
+        logger.info(f"Number of QC sites: {qc_sites_ht.count()}")
 
         logger.info("Densifying sites...")
         last_END_ht = hl.read_table(last_END_positions_ht_path(freeze))
