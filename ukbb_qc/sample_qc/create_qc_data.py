@@ -39,7 +39,7 @@ def main(args):
             repartition=args.repartition,
             n_partitions=args.raw_partitions,
         )
-        mt = mt.select_entries("LGT", "GQ", "DP", "LAD", "LA")
+        mt = mt.select_entries("LGT", "GQ", "DP", "LAD", "LA", "END")
         logger.info(
             f"Total number of variants in raw unsplit matrix table: {mt.count_rows()}"
         )
