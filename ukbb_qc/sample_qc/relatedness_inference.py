@@ -21,9 +21,7 @@ from ukbb_qc.resources.sample_qc import (
     qc_ht_path,
     qc_mt_path,
 )
-from ukbb_qc.utils.utils import (
-    remove_hard_filter_samples,
-)
+from ukbb_qc.utils.utils import remove_hard_filter_samples
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -48,6 +46,7 @@ def rank_related_samples(
     :return: Tuple of the relatedness table, annotated with ranking, and a tie breaker 
     :rtype: Tuple[hl.Table, Callable[[hl.expr.Expression, hl.expr.Expression], hl.expr.NumericExpression]]
     """
+
     def annotate_related_pairs(related_pairs: hl.Table, index_col: str) -> hl.Table:
         """
         Annotates each sample in a related pair with mean depth
@@ -73,18 +72,33 @@ def rank_related_samples(
     relatedness_ht = annotate_related_pairs(relatedness_ht, "i")
     relatedness_ht = annotate_related_pairs(relatedness_ht, "j")
 
-    def tie_breaker(l, r):
-        # NOTE: this needs to be r - l (instead of l -r ) because maximal independent set removes the largest node
-        # we want to keep sample with highest depth, so we want to make the sample with lower depth the larger node
+    def tie_breaker(
+        l: hl.expr.Float64Expression, r: hl.expr.Float64Expression
+    ) -> hl.expr.Float64Expression:
+        """
+        Tie breaker given to maximal independent set (MIS) that determines which related sample to remove.
+
+        NOTE: This tie breaker is r - l (instead of l - r) because we want to keep the sample with the greater depth.
+        MIS removes the largest node.
+        MIS removes the right node when the tie breaker returns a negative value.
+        MIS removes the left node when the tie breaker returns a positive value.
+        By using r - l, we make the sample with the smaller depth the larger node.
+        This removes the sample with lower depth.
+
+        :param hl.expr.Float64Expression l: Mean depth of a sample (left) in the related pair
+        :param hl.expr.Float64Expression r: Mean depth of the second sample (right) in the related pair
+        :return: The result of subtracting the left depth from the right depth.
+            Returns a negative number with l > r. This mean MIS will remove the right (smaller) node.
+            Returns a positive number when l < r. This means MIS will remove the left (smaller) node.
+        :rtype: hl.expr.Float64Expression
+        """
         return r.dp_mean - l.dp_mean
 
     return relatedness_ht, tie_breaker
 
 
 def filter_related_samples(
-    relatedness_ht: hl.Table,
-    qc_ht: hl.Table,
-    kinship_cutoff: float,
+    relatedness_ht: hl.Table, qc_ht: hl.Table, kinship_cutoff: float,
 ) -> hl.Table:
     """
     Filters samples based on input kinship cutoff.
@@ -116,8 +130,7 @@ def filter_related_samples(
 
 def main(args):
     hl.init(
-        log="/relatedness.log",
-        default_reference="GRCh38",
+        log="/relatedness.log", default_reference="GRCh38",
     )
 
     data_source = "broad"
@@ -307,8 +320,8 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--second_degree_kin_cutoff",
-        help="Minimum kinship threshold for filtering a pair of samples \
-        in PC relate and filtering related individuals. (Default = 0.08838835; 2nd degree relatives)",
+        help="Minimum kinship threshold for filtering a pair of samples with a second degree relationship\
+        in PC relate and filtering related individuals. (Default = 0.08838835)",
         default=0.08838835,
         type=float,
     )
@@ -331,7 +344,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--skip_filter_related_samples",
         help="Skip Filter related samples \
-        (based on the pairs present from the --run_pc_relate and using the --second_degree_kin_cutoff value for that run)",
+        (based on the pairs present from running pc_relate and using the --second_degree_kin_cutoff value for that run)",
         action="store_true",
     )
     parser.add_argument(
