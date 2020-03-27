@@ -74,7 +74,9 @@ def rank_related_samples(
     relatedness_ht = annotate_related_pairs(relatedness_ht, "j")
 
     def tie_breaker(l, r):
-        return l.dp_mean - r.dp_mean
+        # NOTE: this needs to be r - l (instead of l -r ) because maximal independent set removes the largest node
+        # we want to keep sample with highest depth, so we want to make the sample with lower depth the larger node
+        return r.dp_mean - l.dp_mean
 
     return relatedness_ht, tie_breaker
 
