@@ -203,12 +203,13 @@ if __name__ == "__main__":
         help="Repartition raw MT on read. Needs to be true for tranche 3/freeze 6/300K.",
         action="store_true",
     )
-    parser.add_argument(
+    qc_type = parser.add_mutually_exclusive_group()
+    qc_type.add_argument(
         "--autosomes",
         action="store_true",
         help="If set it will only run the autosomes",
     )
-    parser.add_argument(
+    qc_type.add_argument(
         "--sex_chr",
         action="store_true",
         help="If set it will only run the sex chromosomes",
