@@ -137,34 +137,6 @@ def assign_cluster_from_pcs(
     return ht
 
 
-def load_ukbb_array_pcs(data_source: str, freeze: int, n_pcs: int = 16):
-    """
-    Imports UKBB genotype array sample QC information into a Table and extracts the ancestry PCs.
-
-    :param str data_source: One of 'regeneron' or 'broad'
-    :param int freeze: One of data freezes
-    :param int n_pcs: The number of PCs to save in the Table
-    :return: array ancestry PCs Table
-    :rtype: Table
-    """
-    sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze))
-    array_pcs = hl.import_table(
-        "gs://broad-ukbb/resources/array/ukb_sqc_v2_ukb26041.txt",
-        impute=True,
-        delimiter="\t",
-        no_header=True,
-    )
-
-    sample_map_ht = sample_map_ht.key_by("ukbb_app_26041_id")
-    array_pcs = array_pcs.key_by(s=sample_map_ht[hl.str(array_pcs.f1)].s)
-    array_pcs = array_pcs.filter(hl.is_defined(array_pcs.s))
-    array_pcs = array_pcs.annotate(
-        scores=hl.array([array_pcs[f"f{i+26}"] for i in range(0, n_pcs)])
-    )
-
-    return array_pcs
-
-
 def get_array_pcs_mapped_to_exome_ids(freeze: int, n_pcs: int):
     """
     Map UKBB genotype array PC file to exome IDs
