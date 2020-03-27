@@ -395,7 +395,7 @@ def release_vcf_path(data_source: str, freeze: int, contig: str = None) -> str:
     """
     Fetch bucket for release (variant-only) VCFs
 
-    :param str data_source: 'regeneron' or 'broad'
+    :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
     :param str contig: String containing the name of the desired reference contig
     :return: Filepath for the desired VCF
@@ -409,16 +409,21 @@ def release_vcf_path(data_source: str, freeze: int, contig: str = None) -> str:
         return f"{get_release_path(data_source, freeze)}/vcf/sharded_vcf/{data_source}.freeze_{freeze}.bgz"
 
 
-def vqsr_sites_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+def vqsr_sites_path(
+    data_source: str, freeze: int = CURRENT_FREEZE, ht: bool = True
+) -> str:
     """
     Fetch bucket for sites HT or VCF (input to VQSR)
 
-    :param str data_source: 'regeneron' or 'broad'
+    :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
-    :return: Path to VQSR sites bucket
+    :param bool ht: Will return path to Table if True, otherwise will return path to sharded VCF directory. Default is True
+        Sharded VCF directory needs to have '.bgz' extension or the VCF shards it contains will NOT be bgzipped.
+    :return: Path to VQSR sites Table or VCFs
     :rtype: str
     """
-    return f"{get_release_path(data_source, freeze)}/vqsr"
+    suffix = "ht" if ht else "vcf.bgz"
+    return f"{get_release_path(data_source, freeze)}/vqsr/{data_source}.freeze_{freeze}.sites_for_vqsr.{suffix}"
 
 
 # logging path
