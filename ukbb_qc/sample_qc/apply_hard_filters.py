@@ -71,7 +71,7 @@ def hard_filter_samples(
     min_depth: float = 20.0,
 ) -> hl.Table:
     """
-    Applys hard filters to samples and returns Table with samples and their hard filter status.
+    Applies hard filters to samples and returns Table with samples and their hard filter status.
 
     This function expects the input MT to be annotated with the fields n_defined, total, and dp_sum.
     These are calculated using compute_interval_callrate_dp_mt.
