@@ -1,9 +1,10 @@
 import argparse
 import logging
 import hail as hl
+from gnomad.utils.generic import file_exists
 from gnomad.utils.slack import try_slack
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE, DataException
-from ukbb_qc.resources.basics import capture_ht_path, get_checkpoint_path, get_ukbb_data
+from ukbb_qc.resources.basics import get_checkpoint_path
 from ukbb_qc.resources.sample_qc import (
     callrate_mt_path,
     hard_filters_ht_path,
@@ -51,9 +52,9 @@ def apply_hard_filters_expr(
         # "contamination": ht.freemix > 0.05,
         # "chimera": ht.pct_chimeras > 0.05,
         low_callrate=callrate_expr < min_callrate,
-        ambiguous_sex=sex_expr == "Ambiguous",
+        ambiguous_sex=sex_expr == "ambiguous",
         sex_aneuploidy=(
-            (sex_expr != "Ambiguous") & (sex_expr != "XX") & (sex_expr != "XY")
+            (sex_expr != "ambiguous") & (sex_expr != "XX") & (sex_expr != "XY")
         ),
         low_coverage=dp_expr < min_depth,
     )
