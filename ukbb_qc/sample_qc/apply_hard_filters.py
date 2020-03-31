@@ -10,7 +10,6 @@ from ukbb_qc.resources.sample_qc import (
     interval_qc_path,
     sex_ht_path,
 )
-from ukbb_qc.utils.sparse_utils import compute_interval_callrate_dp_mt
 
 
 logging.basicConfig(
@@ -127,55 +126,38 @@ def main(args):
     data_source = "broad"
     freeze = args.freeze
 
-    # NOTE: this function will densify
-    if args.compute_interval_callrate_mt:
-        logger.info("Reading in raw MT...")
-        mt = get_ukbb_data(
-            data_source, freeze, split=False, raw=True, key_by_locus_and_alleles=True,
-        )
-        logger.info(
-            f"Total number of variants in raw unsplit matrix table: {mt.count_rows()}"
-        )
-        capture_ht = hl.read_table(capture_ht_path(data_source))
-        compute_interval_callrate_dp_mt(data_source, freeze, mt, capture_ht)
+    if not file_exists(callrate_mt_path(data_source, freeze, interval_filtered=False)):
+        raise DataException("Need to compute interval callrate MT!")
 
-    if args.apply_hard_filters:
-        if not file_exists(
-            callrate_mt_path(data_source, freeze, interval_filtered=False)
-        ):
-            raise DataException("Need to compute interval callrate MT!")
+    logger.info("Reading in callrate MT, sex ht, interval qc HT...")
+    callrate_mt = hl.read_matrix_table(
+        callrate_mt_path(data_source, freeze, interval_filtered=False)
+    )
+    sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
+    interval_qc_ht = hl.read_table(interval_qc_path(data_source, freeze, "autosomes"))
+    interval_qc_ht = interval_qc_ht.filter(
+        interval_qc_ht[args.cov_filter_field] > args.pct_samples
+    )
 
-        logger.info("Reading in callrate MT, sex ht, interval qc HT...")
-        callrate_mt = hl.read_matrix_table(
-            callrate_mt_path(data_source, freeze, interval_filtered=False)
-        )
-        sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
-        interval_qc_ht = hl.read_table(
-            interval_qc_path(data_source, freeze, "autosomes")
-        )
-        interval_qc_ht = interval_qc_ht.filter(
-            interval_qc_ht[args.cov_filter_field] > args.pct_samples
-        )
-
-        logger.info("Hard filtering samples...")
-        hard_filters_ht = hard_filter_samples(
-            data_source,
-            freeze,
-            callrate_mt,
-            interval_qc_ht,
-            sex_ht,
-            args.min_callrate,
-            args.min_dp,
-        )
-        ht = ht.naive_coalesce(args.n_partitions)
-        ht = ht.checkpoint(
-            hard_filters_ht_path(data_source, freeze), overwrite=args.overwrite,
-        )
-        logger.info("Checking number of samples flagged with hard filters...")
-        ht = ht.explode(ht.hard_filters)
-        filters = ht.aggregate(hl.agg.counter(ht.hard_filters))
-        for filt in filters:
-            logger.info(f"Samples flagged due to {filt}: {filters[filt]}")
+    logger.info("Hard filtering samples...")
+    hard_filters_ht = hard_filter_samples(
+        data_source,
+        freeze,
+        callrate_mt,
+        interval_qc_ht,
+        sex_ht,
+        args.min_callrate,
+        args.min_dp,
+    )
+    ht = ht.naive_coalesce(args.n_partitions)
+    ht = ht.checkpoint(
+        hard_filters_ht_path(data_source, freeze), overwrite=args.overwrite,
+    )
+    logger.info("Checking number of samples flagged with hard filters...")
+    ht = ht.explode(ht.hard_filters)
+    filters = ht.aggregate(hl.agg.counter(ht.hard_filters))
+    for filt in filters:
+        logger.info(f"Samples flagged due to {filt}: {filters[filt]}")
 
 
 if __name__ == "__main__":
@@ -185,20 +167,10 @@ if __name__ == "__main__":
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int,
     )
     parser.add_argument(
-        "--compute_interval_callrate_mt",
-        help="Computes an interval by sample mt of callrate and depth that will be for hard filtering samples",
-        action="store_true",
-    )
-    parser.add_argument(
         "--min_callrate", help="Minimum variant callrate", default=0.99, type=float,
     )
     parser.add_argument(
         "--min_dp", help="Minimum depth", default=20.0, type=float,
-    )
-    parser.add_argument(
-        "--apply_hard_filters",
-        help="Applies hard filters to samples in MatrixTable",
-        action="store_true",
     )
     parser.add_argument(
         "--cov_filter_field",
