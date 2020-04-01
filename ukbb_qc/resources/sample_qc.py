@@ -1,6 +1,12 @@
+import logging
 import hail as hl
 from gnomad.resources.resource_utils import DataException
 from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES
+
+
+logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
+logger = logging.getLogger("sample_qc_resources")
+logger.setLevel(logging.INFO)
 
 
 def sample_qc_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
@@ -37,7 +43,15 @@ def interval_qc_path(
         chrom = ""
     else:
         chrom = f".{chrom}"
-    return f'{sample_qc_path(data_source, freeze)}/interval_qc/coverage_by_target{chrom}{".ht" if ht else ".txt"}'
+
+    interval_qc_results = f'{sample_qc_path(data_source, freeze)}/interval_qc/coverage_by_target{chrom}{".ht" if ht else ".txt"}'
+    if not file_exists(interval_qc_results):
+        logger.warning(
+            f"Requested data for freeze {freeze}, but interval QC for that freeze does not exist. Returning interval QC results from freeze 5 (200K)"
+        )
+        return f'{sample_qc_path(data_source, 5)}/interval_qc/coverage_by_target{chrom}{".ht" if ht else ".txt"}'
+    else:
+        return f'{sample_qc_path(data_source, freeze)}/interval_qc/coverage_by_target{chrom}{".ht" if ht else ".txt"}'
 
 
 def f_stat_sites_path() -> str:
@@ -411,14 +425,14 @@ def ancestry_pca_loadings_ht_path(
 
 
 def ancestry_cluster_ht_path(
-    data_type: str, data_source: str, freeze: int = CURRENT_FREEZE
+    data_source: str, freeze: int = CURRENT_FREEZE, data_type: str = "exome"
 ) -> str:
     """
     Returns path to Table with ancestry PCA cluster assignments using exome data
 
-    :param str data_type: Data type used in ancestry PCA. One of 'exome', 'array', or 'joint'
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
+    :param str data_type: Data type used in ancestry PCA. One of 'exome', 'array', or 'joint'
     :return: Path to ancestry cluster assignments Table
     :rtype: str
     """
