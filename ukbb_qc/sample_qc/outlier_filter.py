@@ -93,7 +93,7 @@ def main(args):
         )
         strata["qc_pop"] = sample_qc_ht.qc_pop
     else:
-        pop_assignment_method = ""
+        pop_assignment_method = "no_pop"
 
     if args.platform_filter:
         logger.info("Annotating inferred platform assignments...")
