@@ -13,10 +13,10 @@ from ukbb_qc.resources.basics import (
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.load_data.utils import (
     import_array_exome_id_map_ht,
-    load_ukbb_array_pcs,
     import_capture_intervals,
     import_phenotype_ht,
     import_vqsr,
+    load_ukbb_array_pcs,
 )
 
 
