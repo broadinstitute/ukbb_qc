@@ -12,6 +12,7 @@ from ukbb_qc.resources.basics import array_sample_map_ht_path, get_ukbb_data
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import (
     ancestry_hybrid_ht_path,
+    platform_pca_assignments_ht_path,
     platform_pop_outlier_ht_path,
     qc_temp_data_prefix,
 )
@@ -53,10 +54,17 @@ def main(args):
 
     if args.run_mini_qc:
         # NOTE: we run outlier detection without adj filtration to get better separation between high and low quality samples
-        # this is per Julia'ss discussion with Konrad in #ukbb_qc
+        # this is per Julia's discussion with Konrad in #ukbb_qc
         # Need all workers for the mini qc
-        mt = get_ukbb_data(data_source, freeze, split=True, adj=False)
-        mt = annotate_interval_qc_filter(data_source, freeze, mt, autosomes_only=True)
+        mt = get_ukbb_data(data_source, freeze, adj=False)
+        mt = annotate_interval_qc_filter(
+            data_source,
+            freeze,
+            mt,
+            cov_filter_field=args.cov_filter_field,
+            pct_samples=args.pct_samples,
+            autosomes_only=True,
+        )
         mt = mt.filter_rows(mt.interval_qc_pass)
 
         logger.info("Filtering samples that fail hard filters...")
@@ -77,13 +85,6 @@ def main(args):
     )
     strata = {}
 
-    logger.info("Annotating platform assignments...")
-    # NOTE using tranche as a proxy for platform in freeze 5
-    # platform_ht = hl.read_table(platform_pca_results_ht_path(data_source, freeze))
-    # sample_qc_ht = sample_qc_ht.annotate(qc_platform=platform_ht[sample_qc_ht.key].qc_platform)
-    sample_map_ht = hl.read_table(array_sample_map_ht_path(data_source, freeze))
-    sample_qc_ht = sample_qc_ht.annotate(batch=sample_map_ht[sample_qc_ht.key].batch)
-
     if args.population_filter:
         logger.info("Annotating population assignments...")
         pop_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
@@ -94,12 +95,26 @@ def main(args):
     else:
         pop_assignment_method = ""
 
-    if args.platform_filter or args.batch_filter:
-        logger.info("Annotating platform assignments...")
-        if args.platform_filter:
-            strata["qc_platform"] = sample_qc_ht.qc_platform
-        if args.batch_filter:
-            strata["qc_platform"] = sample_qc_ht.batch
+    if args.platform_filter:
+        logger.info("Annotating inferred platform assignments...")
+        platform_ht = hl.read_table(
+            platform_pca_assignments_ht_path(
+                data_source, freeze, interval_filtered=args.interval_filtered
+            )
+        )
+        sample_qc_ht = sample_qc_ht.annotate(
+            qc_platform=platform_ht[sample_qc_ht.key].qc_platform
+        )
+        strata["qc_platform"] = sample_qc_ht.qc_platform
+
+    if args.batch_filter:
+        # NOTE: used tranche as a proxy for platform in tranche 2/freeze 5/200K
+        logger.info("Annotating with batch (tranche) as a proxy for platform...")
+        sample_map_ht = hl.read_table(array_sample_map_ht_path(data_source, freeze))
+        sample_qc_ht = sample_qc_ht.annotate(
+            batch=sample_map_ht[sample_qc_ht.key].batch
+        )
+        strata["qc_platform"] = sample_qc_ht.batch
 
     # Make qc_metrics a dict (needs to be dict for compute_stratified_metrics_filter)
     metrics = args.filtering_qc_metrics.split(",")
@@ -146,6 +161,17 @@ if __name__ == "__main__":
         help="Run mini sample qc needed for outlier filtering",
         action="store_true",
     )
+    parser.add_argument(
+        "--cov_filter_field",
+        help="Coverage field to use to filter high coverage intervals",
+        default="pct_samples_20x",
+    )
+    parser.add_argument(
+        "--pct_samples",
+        help="Percent samples at specified coverage to filter intervals",
+        default=0.85,
+        type=float,
+    )
     platform_group = parser.add_mutually_exclusive_group()
     platform_group.add_argument(
         "--platform_filter",
@@ -155,6 +181,11 @@ if __name__ == "__main__":
     platform_group.add_argument(
         "--batch_filter",
         help="Include batch (tranche) as proxy for platform in outlier filtering",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--interval_filtered",
+        help="Whether to return platform PCA results created using high coverage intervals",
         action="store_true",
     )
     parser.add_argument(
