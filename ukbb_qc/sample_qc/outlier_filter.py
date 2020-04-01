@@ -1,8 +1,6 @@
 import argparse
-import hail as hl
 import logging
-from typing import Union
-from gnomad.resources.grch38.intervals import lcr
+import hail as hl
 from gnomad.utils.generic import (
     bi_allelic_expr,
     filter_low_conf_regions,
@@ -25,38 +23,6 @@ logger = logging.getLogger("outlier_filter")
 logger.setLevel(logging.INFO)
 
 
-def filter_low_conf_regions(
-    t: Union[hl.MatrixTable, hl.Table], filter_lcr: bool = True
-) -> Union[hl.MatrixTable, hl.Table]:
-    """
-    Filters low-confidence regions
-
-    :param MatrixTable or Table mt: MatrixTable or Table to filter
-    :param bool filter_lcr: Whether to filter LCR regions
-    :param bool filter_decoy: Whether to filter decoy regions
-    :param bool filter_segdup: Whether to filter Segdup regions
-    :param bool filter_exome_low_coverage_regions: Whether to filter exome low confidence regions
-    :param list of str high_conf_regions: Paths to set of high confidence regions to restrict to (union of regions)
-    :return: MatrixTable or Table with low confidence regions removed
-    :rtype: MatrixTable or Table
-    """
-    criteria = []
-    if filter_lcr:
-        lcr_intervals = lcr.ht()
-        lcr = hl.import_locus_intervals(lcr_intervals_path, reference_genome="GRCh38")
-        criteria.append(hl.is_missing(lcr[t.locus]))
-
-    if criteria:
-        filter_criteria = functools.reduce(operator.iand, criteria)
-        t = (
-            t.filter_rows(filter_criteria)
-            if isinstance(t, hl.MatrixTable)
-            else t.filter(filter_criteria)
-        )
-
-    return t
-
-
 def run_sample_qc(mt: hl.MatrixTable) -> hl.MatrixTable:
     """
     Filter input MatrixTable to bi-allelic sites, removes problematic intervals, and computes sample QC metrics
@@ -67,20 +33,13 @@ def run_sample_qc(mt: hl.MatrixTable) -> hl.MatrixTable:
     """
     # Filtering to bi-allelic sites outside of low confidence regions
     mt = filter_to_autosomes(mt)
-    mt = filter_low_conf_regions(mt)
+    mt = filter_low_conf_regions(
+        mt, filter_lcr=True, filter_decoy=False, filter_segdup=False
+    )
     mt = mt.filter_rows(bi_allelic_expr(mt))
 
     logger.info("Starting sample QC...")
     mt = hl.sample_qc(mt)
-    mt = mt.annotate_rows(
-        variant_qc=hl.struct(af=hl.agg.mean(mt.GT.n_alt_alleles()) / 2)
-    )
-    mt = mt.annotate_cols(
-        sample_qc=mt.sample_qc.annotate(
-            f_inbreeding=hl.agg.inbreeding(mt.GT, mt.variant_qc.af)
-        )
-    )
-
     return mt.cols().select("sample_qc")
 
 
@@ -88,23 +47,21 @@ def main(args):
 
     hl.init(log="/outlier_detection.log", default_reference="GRCh38")
 
-    data_source = args.data_source
+    data_source = "broad"
     freeze = args.freeze
     pop_assignment_method = args.pop_assignment_method
 
     if args.run_mini_qc:
         # NOTE: we run outlier detection without adj filtration to get better separation between high and low quality samples
-        # this is per Julia"s discussion with Konrad in #ukbb_qc
+        # this is per Julia'ss discussion with Konrad in #ukbb_qc
         # Need all workers for the mini qc
         mt = get_ukbb_data(data_source, freeze, split=True, adj=False)
-        logger.info(f"Split hardcalls count: {mt.count()}")
         mt = annotate_interval_qc_filter(data_source, freeze, mt, autosomes_only=True)
         mt = mt.filter_rows(mt.interval_qc_pass)
-        logger.info(f"mt count post interval filtering: {mt.count()}")
 
         logger.info("Filtering samples that fail hard filters...")
-        mt = remove_hard_filter_samples(data_source, freeze, mt)
-        logger.info(f"mt count post filtering: {mt.count()}")
+        mt = remove_hard_filter_samples(data_source, freeze, mt, gt_field="GT")
+        logger.info(f"Sample count post filtering: {mt.count_cols()}")
 
         logger.info(
             "Running mini sample QC for platform- and population-specific filtering..."
@@ -125,20 +82,24 @@ def main(args):
     # platform_ht = hl.read_table(platform_pca_results_ht_path(data_source, freeze))
     # sample_qc_ht = sample_qc_ht.annotate(qc_platform=platform_ht[sample_qc_ht.key].qc_platform)
     sample_map_ht = hl.read_table(array_sample_map_ht_path(data_source, freeze))
+    sample_qc_ht = sample_qc_ht.annotate(batch=sample_map_ht[sample_qc_ht.key].batch)
 
-    logger.info("Annotating population assignments...")
-    pop_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
-    sample_qc_ht = sample_qc_ht.annotate(
-        qc_pop=pop_ht[sample_qc_ht.key][pop_assignment_method]
-    )
-
-    if not args.skip_platform_filter:
+    if args.population_filter:
+        logger.info("Annotating population assignments...")
+        pop_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
+        sample_qc_ht = sample_qc_ht.annotate(
+            qc_pop=pop_ht[sample_qc_ht.key][pop_assignment_method]
+        )
         strata["qc_pop"] = sample_qc_ht.qc_pop
-    if not args.skip_population_filter:
-        # strata["qc_platform"] = sample_qc_ht.qc_platform
-        strata["qc_platform"] = sample_qc_ht.batch
     else:
-        pop_assignment_method = None
+        pop_assignment_method = ""
+
+    if args.platform_filter or args.batch_filter:
+        logger.info("Annotating platform assignments...")
+        if args.platform_filter:
+            strata["qc_platform"] = sample_qc_ht.qc_platform
+        if args.batch_filter:
+            strata["qc_platform"] = sample_qc_ht.batch
 
     # Make qc_metrics a dict (needs to be dict for compute_stratified_metrics_filter)
     metrics = args.filtering_qc_metrics.split(",")
@@ -177,13 +138,6 @@ if __name__ == "__main__":
         "--slack_channel", help="Slack channel to post results and notifications to."
     )
     parser.add_argument(
-        "-s",
-        "--data_source",
-        help="Data source",
-        choices=["regeneron", "broad"],
-        default="broad",
-    )
-    parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
     )
 
@@ -192,14 +146,20 @@ if __name__ == "__main__":
         help="Run mini sample qc needed for outlier filtering",
         action="store_true",
     )
-    parser.add_argument(
-        "--skip_platform_filter",
-        help="Skip including platforms in outlier filtering",
+    platform_group = parser.add_mutually_exclusive_group()
+    platform_group.add_argument(
+        "--platform_filter",
+        help="Include inferred platforms in outlier filtering",
+        action="store_true",
+    )
+    platform_group.add_argument(
+        "--batch_filter",
+        help="Include batch (tranche) as proxy for platform in outlier filtering",
         action="store_true",
     )
     parser.add_argument(
-        "--skip_population_filter",
-        help="Skip including population in outlier filtering",
+        "--population_filter",
+        help="Included inferred population in outlier filtering",
         action="store_true",
     )
     parser.add_argument(
