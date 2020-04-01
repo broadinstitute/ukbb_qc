@@ -227,6 +227,26 @@ def array_concordance_results_path(
     return f"{sample_qc_path(data_source, freeze)}/array_concordance/{'sample' if sample else 'variant'}_concordance.ht"
 
 
+def get_ukbb_array_pcs_path() -> str:
+    """
+    Returns path to text file with UKBB array PCs
+
+    :return: Path to text file with PCs
+    :rtype: str
+    """
+    return "gs://broad-ukbb/resources/array/ukb_sqc_v2_ukb26041.txt"
+
+
+def get_ukbb_array_pcs_ht_path() -> str:
+    """
+    Returns path to Table with UKBB array PCs
+
+    :return: Path to Table with PCs
+    :rtype: str
+    """
+    return "gs://broad-ukbb/resources/array/ukb24295.pcs.ht"
+
+
 # Platform PCA resources
 def callrate_mt_path(
     data_source: str, freeze: int = CURRENT_FREEZE, interval_filtered: bool = False
@@ -432,7 +452,7 @@ def ancestry_cluster_ht_path(
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
-    :param str data_type: Data type used in ancestry PCA. One of 'exome', 'array', or 'joint'
+    :param str data_type: Data type used in ancestry PCA. One of 'exome', 'array', or 'joint'. Default is exome
     :return: Path to ancestry cluster assignments Table
     :rtype: str
     """
