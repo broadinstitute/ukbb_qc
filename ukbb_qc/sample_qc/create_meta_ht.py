@@ -1,6 +1,6 @@
 import argparse
-import hail as hl
 import logging
+import hail as hl
 from gnomad.utils.generic import file_exists
 from ukbb_qc.load_data.utils import import_phenotype_ht
 from ukbb_qc.resources.basics import array_sample_map_ht_path, phenotype_ht_path,  get_checkpoint_path
