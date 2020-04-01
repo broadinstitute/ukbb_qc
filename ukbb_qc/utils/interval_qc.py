@@ -81,10 +81,15 @@ def interval_qc(
 
 def main(args):
 
-    hl.init(log="/interval_qc.log")
     data_source = "broad"
     freeze = args.freeze
-    
+    log = (
+        "interval_qc_callrate_mt.log"
+        if args.compute_interval_callrate_mt
+        else "interval_qc.log"
+    )
+    hl.init(log=f"/{log}", default_reference="GRCh38")
+
     try:
         if not args.autosomes and not args.sex_chr:
             logger.warning("Must choose one of autosomes or sex_chr options")
@@ -93,11 +98,16 @@ def main(args):
         pct_sample_cov = list(map(int, args.sample_cov.split(",")))
         n_partitions = args.n_partitions
 
-        if args.compute_interval_callrate_mt:
+        if (args.compute_interval_callrate_mt and args.autosomes) or (
+            args.compute_interval_callrate_mt and args.sex_chr
+        ):
             logger.warning(
-                "Computing the call rate MT requires a densify!\n"
-                "Make sure you are using an autoscaling policy."
+                "n_partitions arg will be used for both callrate MT and interval QC"
+                "if args.compute_interval_callrate_mt and any interval QC args are set!"
             )
+
+        if args.compute_interval_callrate_mt:
+            logger.warning("Computing the call rate MT requires a densify!\n")
             logger.info("Reading in raw MT...")
             mt = get_ukbb_data(
                 data_source,
@@ -105,7 +115,8 @@ def main(args):
                 split=False,
                 key_by_locus_and_alleles=True,
                 raw=True,
-                repartition=True,
+                repartition=args.repartition,
+                n_partitions=n_partitions,
             )
             capture_ht = hl.read_table(capture_ht_path(data_source))
             compute_interval_callrate_dp_mt(
@@ -121,9 +132,13 @@ def main(args):
         mt = hl.read_matrix_table(
             callrate_mt_path(data_source, freeze, interval_filtered=False)
         )
+        mt = mt.annotate_rows(locus=mt.interval.start)
+        mt = mt.key_rows_by("locus")
+
         if args.autosomes:
             logger.info("Filtering to autosomes...")
             mt = filter_to_autosomes(mt)
+            mt = mt.key_rows_by("interval").drop("locus")
 
             logger.info("Starting interval QC...")
             target_ht = interval_qc(
@@ -147,6 +162,7 @@ def main(args):
                     hl.parse_locus_interval("chrY", reference_genome="GRCh38"),
                 ],
             )
+            mt = mt.key_rows_by("interval").drop("locus")
 
             logger.info("Filtering to XX and XY samples...")
             sex_ht = hl.read_table(sex_ht_path(data_source, freeze)).select(
@@ -183,11 +199,17 @@ if __name__ == "__main__":
         "--n_partitions", help="Desired number of partitions for output", type=int,
     )
     parser.add_argument(
+        "--repartition",
+        help="Repartition raw MT on read. Needs to be true for tranche 3/freeze 6/300K.",
+        action="store_true",
+    )
+    qc_type = parser.add_mutually_exclusive_group()
+    qc_type.add_argument(
         "--autosomes",
         action="store_true",
         help="If set it will only run the autosomes",
     )
-    parser.add_argument(
+    qc_type.add_argument(
         "--sex_chr",
         action="store_true",
         help="If set it will only run the sex chromosomes",
