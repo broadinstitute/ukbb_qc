@@ -9,6 +9,7 @@ from ukbb_qc.resources.basics import (
     phenotype_ht_path,
     ukbb_phenotype_path,
 )
+from ukbb_qc.resources.sample_qc import get_ukbb_array_pcs_path, get_ukbb_array_pcs_ht_path
 from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 
@@ -59,6 +60,27 @@ def import_array_exome_id_map_ht(freeze: int = CURRENT_FREEZE) -> hl.Table:
             f"Total number of IDs with withdrawn consents in sample map ht: {withdrawn_ids}"
         )
     return sample_map_ht
+
+
+def load_ukbb_array_pcs() -> hl.Table:
+    """
+    Imports UKBB genotype array sample QC information into a Table and extracts the ancestry PCs.
+
+    :return: array ancestry PCs Table
+    :rtype: Table
+    """
+    array_pcs = hl.import_table(
+        get_ukbb_array_pcs_path(),
+        impute=True,
+        delimiter="\t",
+        no_header=True,
+    )
+    array_pcs = array_pcs.select(
+        s=hl.str(array_pcs.f1),
+        scores=hl.array([array_pcs[f"f{i+26}"] for i in range(0, 40)])
+    )
+    array_pcs = array_pcs.key_by('s')
+    array_pcs.write(get_ukbb_array_pcs_ht_path())
 
 
 def import_phenotype_ht() -> None:

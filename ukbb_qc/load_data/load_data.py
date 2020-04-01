@@ -16,6 +16,7 @@ from ukbb_qc.load_data.utils import (
     import_capture_intervals,
     import_phenotype_ht,
     import_vqsr,
+    load_ukbb_array_pcs,
 )
 
 
@@ -44,6 +45,10 @@ def main(args):
         exome_ht = exome_ht.annotate(**sample_map_ht[exome_ht.eid_sample])
         exome_ht = exome_ht.key_by("s")
         exome_ht.write(array_sample_map_ht_path(freeze), overwrite=args.overwrite)
+
+    if args.load_array_pcs:
+        logger.info("Importing UKBB genotype array PCs...")
+        load_ukbb_array_pcs()
 
     if args.load_phenotypes:
         logger.info("Importing phenotype data...")
@@ -99,6 +104,9 @@ if __name__ == "__main__":
         "--load_exome_array_id_map",
         help="Load exome to array id mapping file into Table",
         action="store_true",
+    )
+    parser.add_argument(
+        "--load_array_pcs", help="Load UKBB genotype array PCs into Table", action="store_true",
     )
     parser.add_argument(
         "--load_phenotypes", help="Load phenotype file into Table", action="store_true",
