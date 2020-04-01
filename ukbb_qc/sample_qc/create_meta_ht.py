@@ -1,22 +1,26 @@
 import argparse
 import logging
 import hail as hl
-from gnomad.utils.generic import file_exists
-from ukbb_qc.load_data.utils import import_phenotype_ht
-from ukbb_qc.resources.basics import array_sample_map_ht_path, phenotype_ht_path,  get_checkpoint_path
+from gnomad.utils.relatedness import (
+    DUPLICATE_OR_TWINS,
+    PARENT_CHILD,
+    SECOND_DEGREE_RELATIVES,
+    SIBLINGS,
+)
+from ukbb_qc.resources.basics import array_sample_map_ht_path, get_checkpoint_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import (
     ancestry_hybrid_ht_path,
-    array_sample_concordance_path,
+    array_concordance_results_path,
     hard_filters_ht_path,
-    platform_pca_results_ht_path,
+    platform_pca_assignments_ht_path,
     platform_pop_outlier_ht_path,
     qc_ht_path,
     related_drop_path,
     sex_ht_path,
     meta_ht_path,
 )
-from ukbb_qc.utils.utils import join_tables
+from ukbb_qc.utils.utils import get_age_ht, join_tables
 
 
 logging.basicConfig(
@@ -27,47 +31,20 @@ logger = logging.getLogger("create_meta_ht")
 logger.setLevel(logging.INFO)
 
 
-def get_age_ht(data_source: str, freeze: int) -> hl.Table:
-    """
-    Pull age information from UKBB phenotype file
-
-    :param str data_source: One of "regeneron" or "broad"
-    :param int freeze: One of the data freezes
-    :return: Table with age at recruitment per sample
-    :rtype: Table
-    """
-    # Read in phenotype table
-    if not file_exists(f"{phenotype_ht_path()}_SUCCESS"):
-        import_phenotype_ht()
-    phenotype_ht = hl.read_table(phenotype_ht_path()).select("f.21022.0.0")
-
-    # Re-key phenotype table to UKBB ID using array sample map table and return
-    sample_map_ht = hl.read_table(array_sample_map_ht_path(data_source, freeze))
-    sample_map_ht = sample_map_ht.key_by("ukbb_app_26041_id")
-    phenotype_ht = phenotype_ht.key_by(s=sample_map_ht[phenotype_ht.key].s)
-    phenotype_ht = phenotype_ht.rename({"f.21022.0.0": "age"}).select("age")
-    return phenotype_ht
-
-
 def main(args):
 
     hl.init(log="create_meta.log", default_reference="GRCh38")
 
-    data_source = args.data_source
-    if args.freeze:
-        freeze = args.freeze
-    else:
-        freeze = CURRENT_FREEZE
+    data_source = "broad"
+    freeze = args.freeze
 
     logger.info(
         "Reading in HT mapping ukbb pharma (exome) id to ukbb application 26041 (array) id"
     )
-    left_ht = hl.read_table(array_sample_map_ht_path(data_source, freeze))
-    left_ht = left_ht.key_by(eid_sample=left_ht.s)
+    left_ht = hl.read_table(array_sample_map_ht_path(freeze))
     left_ht = left_ht.annotate(
         pharma_meta=hl.struct(
             ukbb_app_26041_id=left_ht.ukbb_app_26041_id,
-            eid_sample=left_ht.eid_sample,
             batch=left_ht.batch,
             batch_num=left_ht.batch_num,
         )
@@ -75,17 +52,14 @@ def main(args):
 
     logger.info("Getting age information from phenotype file")
     right_ht = get_age_ht(data_source, freeze)
-    right_ht = right_ht.key_by(array_id=right_ht.s).select("age")
 
     logger.info(
         "Joining array map/pharma meta HT (left) and age HT (right) with a right join to start creating meta HT"
     )
-    left_ht = join_tables(left_ht, "eid_sample", right_ht, "array_id", "right")
+    left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
 
     logger.info("Reading in array sample concordance ht")
-    right_ht = hl.read_table(array_sample_concordance_path(data_source, freeze))
-    # Add array ID and struct for join
-    right_ht = right_ht.annotate(array_id=right_ht.s.split("_")[1])
+    right_ht = hl.read_table(array_concordance_results_path(data_source, freeze))
     right_ht = right_ht.tramsmute(
         array_concordance=hl.struct(
             concordance=right_ht.concordance,
@@ -97,8 +71,7 @@ def main(args):
     ).select("array_concordance")
 
     logger.info("Joining array sample concordance HT with meta HT")
-    left_ht = join_tables(left_ht, "array_id", right_ht, "array_id", "left")
-    left_ht = left_ht.drop("array_id", "eid_sample")
+    left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
 
     logger.info("Reading in sex HT")
     right_ht = hl.read_table(sex_ht_path(data_source, freeze))
@@ -122,14 +95,14 @@ def main(args):
     logger.info("Joining sex HT with meta HT")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "right")
 
-    logger.info("Reading in qc HT")
+    logger.info("Reading in sample QC HT")
     right_ht = hl.read_table(qc_ht_path(data_source, freeze))
 
     logger.info("Joining sample QC HT with meta HT")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "right")
 
     logger.info("Reading in platform PCA ht")
-    right_ht = hl.read_table(platform_pca_results_ht_path(data_source, freeze))
+    right_ht = hl.read_table(platform_pca_assignments_ht_path(data_source, freeze))
     # Put platform info into struct for join
     right_ht = right_ht.transmute(
         platform_inference=hl.struct(
@@ -145,15 +118,11 @@ def main(args):
     # Put population info into structs for join
     right_ht = right_ht.transmute(
         gnomad_PC_project_pop_data=hl.struct(
-            gnomad_PCs=hl.array(
-                [right_ht[f"gnomad_pc_project_PC{i + 1}"] for i in range(n_pcs)]
-            ),
+            gnomad_PCs=right_ht.gnomad_PCs,
             gnomad_pc_project_pop=right_ht.gnomad_pc_project_pop,
         ),
         hybrid_pop_data=hl.struct(
-            pop_PCs=hl.array(
-                [right_ht[f"pop_pca_PC{i + 1}"] for i in range(n_pcs)]
-            ),
+            pop_PCs=right_ht.pop_PCs,
             HDBSCAN_pop_cluster=right_ht.HDBSCAN_pop_cluster,
             hybrid_pop=right_ht.hybrid_pop,
         ),
@@ -180,16 +149,16 @@ def main(args):
     logger.info("Reading in related samples HT")
     related_samples_to_drop_ht = hl.read_table(related_drop_path(data_source, freeze))
     related_samples_to_drop_second_ht = related_samples_to_drop_ht.filter(
-        related_samples_to_drop_ht.relationship == "2nd degree relatives"
+        related_samples_to_drop_ht.relationship == SECOND_DEGREE_RELATIVES
     )
     related_samples_to_drop_pc_ht = related_samples_to_drop_ht.filter(
-        related_samples_to_drop_ht.relationship == "Parent-child"
+        related_samples_to_drop_ht.relationship == PARENT_CHILD
     )
     related_samples_to_drop_sib_ht = related_samples_to_drop_ht.filter(
-        related_samples_to_drop_ht.relationship == "Siblings"
+        related_samples_to_drop_ht.relationship == SIBLINGS
     )
     related_samples_to_drop_dup_ht = related_samples_to_drop_ht.filter(
-        related_samples_to_drop_ht.relationship == "Duplicate/twins"
+        related_samples_to_drop_ht.relationship == DUPLICATE_OR_TWINS
     )
 
     logger.info("Annotating sample_filter struct with relatedness booleans")
@@ -198,9 +167,12 @@ def main(args):
             related=hl.is_defined(related_samples_to_drop_second_ht[left_ht.s]),
             duplicate=hl.is_defined(related_samples_to_drop_dup_ht[left_ht.s]),
             parent_child=hl.is_defined(related_samples_to_drop_pc_ht[left_ht.s]),
-            sibling=hl.is_defined(related_samples_to_drop_pc_ht[left_ht.s]),
+            sibling=hl.is_defined(related_samples_to_drop_sib_ht[left_ht.s]),
         )
     )
+
+    logger.info("Adding relatedness globals (cutoffs)")
+    left_ht = left_ht.annotate_globals(**related_samples_to_drop_ht.globals)
 
     logger.info("Reading in outlier HT")
     right_ht = hl.read_table(
@@ -239,7 +211,9 @@ def main(args):
     left_ht = left_ht.annotate(
         sample_filters=left_ht.sample_filters.annotate(
             release=hl.if_else(
-                (left_ht.s.contains("UKB") & left_ht.high_quality), True, False
+                (hl.is_defined(left_ht.pharma_meta.batch) & left_ht.high_quality),
+                True,
+                False,
             )
         )
     )
@@ -249,37 +223,20 @@ def main(args):
     )
 
     logger.info("Writing out meta ht")
-    left_ht.write(meta_ht_path(data_source, freeze), overwrite=args.overwrite)
+    left_ht = left_ht.checkpoint(
+        meta_ht_path(data_source, freeze), overwrite=args.overwrite
+    )
     logger.info(f"Final count: {left_ht.count()}")
     logger.info("Complete")
 
 
 if __name__ == "__main__":
+
     parser = argparse.ArgumentParser(
-        description="This script applies hard filters to UKBB data"
+        description="This script creates the sample meta table for UKBB data"
     )
     parser.add_argument(
-        "-s",
-        "--data_source",
-        help="Data source",
-        choices=["regeneron", "broad"],
-        default="broad",
-    )
-    parser.add_argument(
-        "-f", "--freeze", help="Current freeze #", default=CURRENT_FREEZE, type=int
-    )
-    parser.add_argument(
-        "--n_pcs",
-        help="Number of PCs used in population inference (default: 10)",
-        default=10,
-        type=int,
-    )
-    parser.add_argument(
-        "-d",
-        "--dup_sets",
-        help="Dup sets for duplicate ht table",
-        action="store_true",
-        default=False,
+        "-f", "--freeze", help="Current freeze", default=CURRENT_FREEZE, type=int
     )
     parser.add_argument(
         "--pop_assignment_method",
@@ -294,5 +251,4 @@ if __name__ == "__main__":
         action="store_true",
     )
     args = parser.parse_args()
-
     main(args)
