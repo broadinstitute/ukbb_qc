@@ -4,11 +4,15 @@ from typing import Callable, Tuple
 import hail as hl
 from gnomad.utils.slack import try_slack
 from gnomad.utils.relatedness import (
+    DUPLICATE_OR_TWINS,
     explode_duplicate_samples_ht,
     get_duplicated_samples_ht,
     get_duplicated_samples,
     get_relationship_expr,
     infer_families,
+    PARENT_CHILD,
+    SECOND_DEGREE_RELATIVES,
+    SIBLINGS,
 )
 from ukbb_qc.resources.basics import get_checkpoint_path, logging_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
@@ -40,7 +44,7 @@ def rank_related_samples(
     """
     Rank related samples based on their mean depths. 
 
-    Ranking is used when determining which sample to filter from a  pair of related samples.
+    Ranking is used when determining which sample to filter from a pair of related samples.
 
     :param Table relatedness_ht: Table of samples with relatedness results from pc_relate.
     :param Table qc_ht: Table of samples and their sample QC metrics, including mean depth.
@@ -79,18 +83,19 @@ def rank_related_samples(
         """
         Tie breaker given to maximal independent set (MIS) that determines which related sample to remove.
 
-        NOTE: This tie breaker is r - l (instead of l - r) because we want to keep the sample with the greater depth.
-        MIS removes the largest node.
-        MIS removes the right node when the tie breaker returns a negative value.
-        MIS removes the left node when the tie breaker returns a positive value.
-        By using r - l, we make the sample with the smaller depth the larger node.
-        This removes the sample with lower depth.
+        .. note::
+            This tie breaker is r - l (instead of l - r) because we want to keep the sample with the greater depth.
+            MIS removes the largest node.
+            MIS removes the right node when the tie breaker returns a negative value.
+            MIS removes the left node when the tie breaker returns a positive value.
+            By using r - l, we make the sample with the smaller depth the larger node.
+            This removes the sample with lower depth.
 
         :param hl.expr.Float64Expression l: Mean depth of a sample (left) in the related pair
         :param hl.expr.Float64Expression r: Mean depth of the second sample (right) in the related pair
         :return: The result of subtracting the left depth from the right depth.
-            Returns a negative number with l > r. This mean MIS will remove the right (smaller) node.
-            Returns a positive number when l < r. This means MIS will remove the left (smaller) node.
+            Returns a negative number with l > r. This mean MIS will remove the right (lower depth) node.
+            Returns a positive number when l < r. This means MIS will remove the left (lower depth) node.
         :rtype: hl.expr.Float64Expression
         """
         return r.dp_mean - l.dp_mean
@@ -102,9 +107,12 @@ def filter_related_samples(
     relatedness_ht: hl.Table, qc_ht: hl.Table, relationship: str,
 ) -> hl.Table:
     """
-    Filters samples based on input kinship cutoff.
+    Filters Table to keep only samples with input relationship.
 
-    :param Table relatedness_ht: Table of samples with relatedness results from pc_relate.
+    .. note::
+        Input Table must be annotated with relationship (from `get_relationship_expr`).
+
+    :param Table relatedness_ht: Table of samples with relatedness results from `pc_relate` annotated with `get_relationship_expr`.
     :param Table qc_ht: Table of samples and their sample QC metrics, including mean depth.
     :param str relationship: Desired relationship type to filter.
     :return: Filtered Table of samples with kinship above input cutoff
@@ -170,12 +178,12 @@ def main(args):
             logger.info("Annotating PC relate results with relationships...")
             relatedness_ht = relatedness_ht.annotate(
                 relationship=get_relationship_expr(
-                    kin=relatedness_ht.kin,
+                    kin_expr=relatedness_ht.kin,
                     ibd0_expr=relatedness_ht.ibd0,
                     ibd1_expr=relatedness_ht.ibd1,
                     ibd2_expr=relatedness_ht.ibd2,
-                    first_degree_kin_cutoff=args.first_degree_kin_thresholds,
-                    second_degree_kin_cutoff=args.second_degree_kin_cutoff,
+                    first_degree_kin_thresholds=args.first_degree_kin_thresholds,
+                    second_degree_min_kin=args.second_degree_kin_cutoff,
                     ibd0_0_max=args.ibd0_0_max,
                 )
             )
@@ -234,20 +242,20 @@ def main(args):
 
             # Filter second degree samples
             related_samples_to_drop_second_deg_ht = filter_related_samples(
-                relatedness_ht, qc_ht, "2nd degree relatives"
+                relatedness_ht, qc_ht, "SECOND_DEGREE_RELATIVES"
             )
 
             # Filter duplicate samples
             related_samples_to_drop_dup_ht = filter_related_samples(
-                relatedness_ht, qc_ht, "Duplicate/twins"
+                relatedness_ht, qc_ht, "DUPLICATE_OR_TWINS"
             )
 
             # Filter first degree samples
             related_samples_to_drop_pc_ht = filter_related_samples(
-                relatedness_ht, qc_ht, "Parent-child"
+                relatedness_ht, qc_ht, "PARENT_CHILD"
             )
             related_samples_to_drop_sib_ht = filter_related_samples(
-                relatedness_ht, qc_ht, "Siblings"
+                relatedness_ht, qc_ht, "SIBLINGS"
             )
 
             # Combine first, second, and duplicate sample tables and annotate cutoffs
@@ -268,19 +276,19 @@ def main(args):
                 related_drop_path(data_source, freeze), overwrite=args.overwrite
             )
             logger.info(
-                f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == '2nd degree relatives').count()}"
+                f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == SECOND_DEGREE_RELATIVES).count()}"
                 "second degree samples flagged in callset using maximal independent set"
             )
             logger.info(
-                f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == 'Siblings').count()}"
-                "siblings flagged in callset using maximal independent set"
+                f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == SIBLINGS).count()}"
+                "SIBLINGS flagged in callset using maximal independent set"
             )
             logger.info(
-                f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == 'Parent-child').count()}"
-                "parent-child samples flagged in callset using maximal independent set"
+                f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == PARENT_CHILD).count()}"
+                "PARENT_CHILD samples flagged in callset using maximal independent set"
             )
             logger.info(
-                f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == 'duplicate').count()}"
+                f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == DUPLICATE_OR_TWINS).count()}"
                 "duplicate samples flagged in callset using maximal independent set"
             )
 
