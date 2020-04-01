@@ -1,38 +1,33 @@
 import argparse
-import hdbscan
 import logging
 import pickle
 import numpy as np
 import hail as hl
+import hdbscan
 from gnomad.utils.liftover import (
     annotate_snp_mismatch,
     get_liftover_genome,
     lift_data,
 )
 from gnomad.utils.sample_qc import run_pca_with_relateds
-from gnomad.utils.generic import pc_project, assign_population_pcs
-from gnomad.utils.relatedness import UNRELATED, AMBIGUOUS_RELATIONSHIP
+from gnomad.utils.generic import assign_population_pcs, pc_project
+from gnomad.utils.relatedness import AMBIGUOUS_RELATIONSHIP, UNRELATED
 from gnomad.utils.slack import try_slack
-from gnomad_qc.v2.resources.basics import (
-    metadata_exomes_ht_path,
-    metadata_genomes_ht_path,
-    CURRENT_EXOME_META,
-    CURRENT_GENOME_META,
-)
+from gnomad_qc.v2.resources.basics import get_gnomad_meta
 from gnomad_qc.v2.resources.sample_qc import (
     ancestry_pca_loadings_ht_path as gnomad_ancestry_pca_loadings_ht_path,
 )
-from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.basics import (
-    get_ukbb_data,
     array_sample_map_ht_path,
     get_ukbb_array_pcs_ht_path,
+    get_ukbb_data,
 )
+from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import (
     ancestry_cluster_ht_path,
+    ancestry_hybrid_ht_path,
     ancestry_pc_project_scores_ht_path,
     ancestry_pca_scores_ht_path,
-    ancestry_hybrid_ht_path,
     gnomad_ancestry_loadings_liftover_path,
     qc_mt_path,
     qc_temp_data_prefix,
@@ -50,39 +45,20 @@ def project_on_gnomad_pop_pcs(mt: hl.MatrixTable, n_pcs: int = 10) -> hl.Table:
     """
     Performs pc_project on a mt using gnomAD population pca loadings and known pops
 
-    :param MatrixTable mt: raw matrix table to perform `pc_project` and pop assignment on
+    :param MatrixTable mt: Raw matrix table to perform `pc_project` and pop assignment on
     :return: pc_project scores Table
-    :param int n_pcs: Number of PCs to keep from gnomAD for `pc_project`
+    :param int n_pcs: Number of PCs to keep from gnomAD for `pc_project`. Default is 10.
     :rtype: Table
     """
-
-    def prep_meta(ht: hl.Table, n_pcs: int) -> hl.Table:
-        """
-        Helper function to prep gnomAD exome and genome metadata for population PC
-
-        :param Table ht: Hail table of gnomAD column (sample) annotations
-        :param int n_pcs: Number of PCs to use from gnomAD meta HT
-        :return: Hail Table ready for joining
-        :rtype: Table
-        """
-        ht = ht.key_by("s")
-        ht = ht.rename({"qc_pop": "pop_for_rf"})
-        ht = ht.select(
-            "pop_for_rf", **{f"PC{i}": ht[f"PC{i}"] for i in range(1, n_pcs + 1)}
-        )
-        ht = ht.filter(hl.is_defined(ht.PC1))
-
-        return ht
-
     # Load gnomAD metadata and population pc loadings
-    gnomad_meta_exomes_ht = prep_meta(
-        hl.read_table(metadata_exomes_ht_path(version=CURRENT_EXOME_META)), n_pcs=n_pcs,
+    gnomad_meta_ht = get_gnomad_meta("joint", full_meta=True)
+    gnomad_meta_ht = gnomad_meta_ht.key_by("s")
+    gnomad_meta_ht = gnomad_meta_ht.rename({"qc_pop": "pop_for_rf"})
+    gnomad_meta_ht = gnomad_meta_ht.select(
+        "pop_for_rf", scores=[gnomad_meta_ht[f"PC{i}"] for i in range(1, n_pcs + 1)]
     )
-    gnomad_meta_genomes_ht = prep_meta(
-        hl.read_table(metadata_genomes_ht_path(version=CURRENT_GENOME_META)),
-        n_pcs=n_pcs,
-    )
-    gnomad_meta_ht = gnomad_meta_exomes_ht.union(gnomad_meta_genomes_ht)
+    gnomad_meta_ht = gnomad_meta_ht.filter(hl.is_defined(gnomad_meta_ht.scores))
+
     gnomad_loadings_ht = hl.read_table(gnomad_ancestry_loadings_liftover_path())
     gnomad_loadings_ht = gnomad_loadings_ht.filter(
         ~gnomad_loadings_ht.reference_mismatch
@@ -91,9 +67,7 @@ def project_on_gnomad_pop_pcs(mt: hl.MatrixTable, n_pcs: int = 10) -> hl.Table:
 
     scores_ht = pc_project(mt, gnomad_loadings_ht)
     scores_ht = scores_ht.annotate(pop_for_rf=hl.null(hl.tstr))
-    scores_ht = scores_ht.select(
-        "pop_for_rf", **{f"PC{i + 1}": scores_ht.scores[i] for i in range(n_pcs)}
-    )
+    scores_ht = scores_ht.select("pop_for_rf", scores=scores_ht.scores[:n_pcs])
 
     joint_scores_ht = gnomad_meta_ht.union(scores_ht)
 
@@ -110,17 +84,20 @@ def assign_cluster_from_pcs(
     """
     Assigns ancestry cluster using HBDSCAN on the `pc_scores_ann` from PCA.
 
-    :param MatrixTable pca_ht:
-    :param str pc_scores_ann:
-    :param int hdbscan_min_cluster_size:
-    :param int hdbscan_min_samples:
-    :return: cluster assignment Table
+    :param MatrixTable pca_ht: Input Table with the PCA score for each sample
+    :param str pc_scores_ann: Field in `pca_ht` containing the scores
+    :param int hdbscan_min_cluster_size: HDBSCAN `min_cluster_size` parameter. If not specified the smallest of 500 and 0.1*n_samples will be used.
+    :param int hdbscan_min_samples: HDBSCAN `min_samples` parameter
+    :return: A Table with an `ancestry_cluster` annotation containing the platform based on HDBSCAN clustering
     :rtype: Table
     """
+    logger.info("Assigning ancestry based on PCA clustering")
+    # Read and format data for clustering
     pca_pd = pca_ht.to_pandas()
     pc_scores = np.matrix(pca_pd[pc_scores_ann].tolist())
     logger.info(f"Assigning clusters to {len(pc_scores)} exome samples in MT...")
 
+    # Cluster data using HDBSCAN
     clusterer = hdbscan.HDBSCAN(
         min_cluster_size=hdbscan_min_cluster_size, min_samples=hdbscan_min_samples
     )
@@ -130,19 +107,20 @@ def assign_cluster_from_pcs(
     )  # NOTE: -1 is the label for noisy (un-classifiable) data points
     logger.info(f"Found {n_clusters} unique clusters...")
 
+    # Add ancestry cluster to PCA DataFrame and convert back to Table
     pca_pd["ancestry_cluster"] = cluster_labels
     ht = hl.Table.from_pandas(pca_pd, key=[*pca_ht.key])
     ht = ht.annotate(ancestry_cluster=hl.int32(ht.ancestry_cluster))
-    a
+
     return ht
 
 
-def get_array_pcs_mapped_to_exome_ids(freeze: int, n_pcs: int):
+def get_array_pcs_mapped_to_exome_ids(freeze: int, n_pcs: int = 20):
     """
     Map UKBB genotype array PC file to exome IDs
 
     :param int freeze: One of data freezes
-    :param int n_pcs: The number of PCs to keep in the Table
+    :param int n_pcs: The number of PCs to keep in the Table. Default is 20.
     :return: array ancestry PC HT keyed by exome IDs
     :rtype: Table
     """
@@ -161,9 +139,12 @@ def main(args):
 
     data_source = "broad"
     freeze = args.freeze
-    n_pcs = args.n_pcs
+    n_exome_pcs = args.n_exome_pcs
+    n_array_pcs = args.n_array_pcs
+    n_project_pcs = args.n_project_pcs
 
     if args.liftover_gnomad_ancestry_loadings:
+        # Note: This code only needed to be run once and has already been run
         gnomad_loadings_ht = hl.read_table(gnomad_ancestry_pca_loadings_ht_path())
 
         logger.info("Preparing reference genomes for liftover")
@@ -197,14 +178,11 @@ def main(args):
         )
         logger.info("Filtering related samples...")
         related_ht = related_drop_path(data_source, freeze)
-        related_ht = related_ht.filter(
-            (related_ht.relationship != UNRELATED)
-            | (related_ht.relationship != AMBIGUOUS_RELATIONSHIP)
-        )
+        related_ht = related_ht.filter((related_ht.relationship != UNRELATED))
         pca_evals, pop_pca_scores_ht, pop_pca_loadings_ht = run_pca_with_relateds(
-            qc_mt, related_ht, n_pcs
+            qc_mt, related_ht, n_exome_pcs
         )
-        pop_pca_scores_ht = pop_pca_scores_ht.annotate_globals(n_pcs=n_pcs)
+        pop_pca_scores_ht = pop_pca_scores_ht.annotate_globals(n_exome_pcs=n_exome_pcs)
         pop_pca_loadings_ht.write(
             ancestry_pca_loadings_ht_path(data_source, freeze), args.overwrite
         )
@@ -221,6 +199,7 @@ def main(args):
             hdbscan_min_samples=args.hdbscan_min_samples,
         )
         pops_ht.annotate_globals(
+            n_exome_pcs=scores_ht.n_exome_pcs,
             hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
             hdbscan_min_samples=args.hdbscan_min_samples,
         )
@@ -229,6 +208,7 @@ def main(args):
     if args.assign_clusters_array_pcs:
         logger.info("Loading UKBB array PC data...")
         array_pc_ht = get_array_pcs_mapped_to_exome_ids(freeze)
+        array_pc_ht = array_pc_ht.annotate(scores=array_pc_ht.scores[:n_array_pcs])
 
         logger.info("Assigning PCA clustering...")
         pops_ht = assign_cluster_from_pcs(
@@ -237,6 +217,7 @@ def main(args):
             hdbscan_min_samples=args.hdbscan_min_samples,
         )
         pops_ht.annotate_globals(
+            n_array_pcs=n_array_pcs,
             hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
             hdbscan_min_samples=args.hdbscan_min_samples,
         )
@@ -251,9 +232,9 @@ def main(args):
         logger.info("Load UKBB array PC data...")
         array_pc_ht = get_array_pcs_mapped_to_exome_ids(freeze)
         array_pc_ht = array_pc_ht.annotate(
-            scores=scores_ht[array_pc_ht.key]
-            .scores[:n_pcs]
-            .extend(array_pc_ht.scores[: args.n_array_pcs])
+            scores=scores_ht[array_pc_ht.key].scores.extend(
+                array_pc_ht.scores[:n_array_pcs]
+            )
         )
 
         logger.info("Assigning PCA clustering...")
@@ -265,8 +246,8 @@ def main(args):
         pops_ht.annotate_globals(
             hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
             hdbscan_min_samples=args.hdbscan_min_samples,
-            n_pcs=n_pcs,
-            n_array_pcs=args.n_array_pcs,
+            n_exome_pcs=scores_ht.n_exome_pcs,
+            n_array_pcs=n_array_pcs,
         )
         pops_ht.write(
             ancestry_cluster_ht_path(data_source, freeze, "joint"), args.overwrite,
@@ -278,7 +259,7 @@ def main(args):
         logger.info("Running PC project...")
         mt = get_ukbb_data(data_source, freeze, split=True, adj=True)
         mt = remove_hard_filter_samples(data_source, freeze, mt, gt_field="GT")
-        joint_scores_ht = project_on_gnomad_pop_pcs(mt, n_pcs)
+        joint_scores_ht = project_on_gnomad_pop_pcs(mt, n_project_pcs)
         joint_scores_ht.write(
             ancestry_pc_project_scores_ht_path(data_source, freeze, "joint"),
             overwrite=args.overwrite,
@@ -289,10 +270,13 @@ def main(args):
         joint_scores_ht = hl.read_table(
             ancestry_pc_project_scores_ht_path(data_source, freeze, "joint")
         )
+        joint_scores_ht = joint_scores_ht.annotate(
+            **{f"PC{i + 1}": joint_scores_ht.scores[i] for i in range(n_project_pcs)}
+        )
         joint_scores_pd = joint_scores_ht.to_pandas()
         joint_pops_pd, joint_pops_rf_model = assign_population_pcs(
             joint_scores_pd,
-            pc_cols=[f"PC{i + 1}" for i in range(n_pcs)],
+            pc_cols=[f"PC{i + 1}" for i in range(n_project_pcs)],
             known_col="pop_for_rf",
             min_prob=args.min_pop_prob,
         )
@@ -301,10 +285,12 @@ def main(args):
             joint_pops_pd, key=list(joint_scores_ht.key)
         )
         scores_ht = joint_scores_ht.filter(hl.is_missing(joint_scores_ht.pop_for_rf))
-        scores_ht = scores_ht.drop("pop_for_rf")
+        scores_ht = scores_ht.select("scores")
         joint_pops_ht = joint_pops_ht.drop("pop_for_rf")
         scores_ht = scores_ht.annotate(pop=joint_pops_ht[scores_ht.key])
-        scores_ht = scores_ht.annotate_globals(n_pcs=n_pcs, min_prob=args.min_pop_prob)
+        scores_ht = scores_ht.annotate_globals(
+            n_project_pcs=n_project_pcs, min_prob=args.min_pop_prob
+        )
         scores_ht = scores_ht.checkpoint(
             ancestry_pc_project_scores_ht_path(data_source, freeze),
             overwrite=args.overwrite,
@@ -336,10 +322,7 @@ def main(args):
 
         pop_ht = pc_project_ht.select(
             gnomad_pc_project_pop=pc_project_ht.pop.pop,
-            **{
-                f"gnomad_pc_project_PC{i+1}": pc_project_ht[f"PC{i+1}"]
-                for i in range(hl.eval(pc_project_ht.n_pcs))
-            },
+            gnomad_pc_project_scores=pc_project_ht.scores,
         )
 
         pop_ht = pop_ht.annotate(
@@ -349,55 +332,20 @@ def main(args):
             hybrid_pop=hl.case()
             .when(pop_ht.HDBSCAN_pop_cluster == -1, pop_ht.gnomad_pc_project_pop)
             .default(hl.str(pop_ht.HDBSCAN_pop_cluster)),
-            **{
-                f"pop_pca_PC{i+1}": pc_scores_ht[pop_ht.key].scores[i]
-                for i in range(hl.eval(pc_scores_ht.n_pcs))
-            },
+            pop_pca_scores=pc_scores_ht[pop_ht.key].scores,
         )
         pop_ht.write(ancestry_hybrid_ht_path(data_source, freeze), args.overwrite)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
 
-    parser.add_argument(
-        "-s",
-        "--data_source",
-        help="Data source",
-        choices=["regeneron", "broad"],
-        default="broad",
-    )
+    parser = argparse.ArgumentParser()
     parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
     )
-
     parser.add_argument(
         "--liftover_gnomad_ancestry_loadings",
-        help="Performs liftover on the gnomad joint ancestry loadings",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--run_pca", help="Runs pop PCA on pruned qc MT", action="store_true"
-    )
-    parser.add_argument(
-        "--assign_clusters",
-        help="Assigns clusters based on PCA results using HDBSCAN",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--assign_clusters_array_pcs",
-        help="Assigns clusters based on UKBB genotype array PCs using HDBSCAN",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--n_array_pcs",
-        help="Number of array PCs to use in clustering (default: 16)",
-        default=16,
-        type=int,
-    )
-    parser.add_argument(
-        "--assign_clusters_joint_scratch_array_pcs",
-        help="Assigns clusters using HDBSCAN based on PCs from both the UKBB genotype array data and the exome PCs",
+        help="Performs liftover on the gnomad joint ancestry loadings.",
         action="store_true",
     )
     parser.add_argument(
@@ -412,40 +360,79 @@ if __name__ == "__main__":
         type=int,
         default=50,
     )
-
-    parser.add_argument(
-        "--run_pc_project",
-        help="Runs pc project and population assignment using gnomAD data",
+    hdbscan_ancestry = parser.add_argument_group(
+        "hdbscan_ancestry",
+        description="Arguments relevant to infering ancestry using PCA from scratch on the exomes followed by HDBSCAN clustering.",
+    )
+    hdbscan_ancestry.add_argument(
+        "--run_pca", help="Runs pop PCA on pruned QC MT.", action="store_true"
+    )
+    hdbscan_ancestry.add_argument(
+        "--assign_clusters",
+        help="Assigns clusters based on PCA results using HDBSCAN.",
         action="store_true",
     )
-    parser.add_argument(
-        "--n_pcs",
-        help="Number of PCs to compute or use in population inference (default: 10)",
+    hdbscan_ancestry.add_argument(
+        "--n_exome_pcs",
+        help="Number of PCs to compute on the exome data and use for HDBSCAN population inference (default: 20).",
+        default=20,
+        type=int,
+    )
+    array_ancestry = parser.add_argument_group(
+        "array_ancestry",
+        description="Arguments relevant to infering ancestry using array PCs and HDBSCAN clustering.",
+    )
+    array_ancestry.add_argument(
+        "--assign_clusters_array_pcs",
+        help="Assigns clusters based on UKBB genotype array PCs using HDBSCAN.",
+        action="store_true",
+    )
+    array_ancestry.add_argument(
+        "--assign_clusters_joint_scratch_array_pcs",
+        help="Assigns clusters using HDBSCAN based on PCs from both the UKBB genotype array data and the exome PCs",
+        action="store_true",
+    )
+    array_ancestry.add_argument(
+        "--n_array_pcs",
+        help="Number of array PCs to use in clustering (default: 20).",
+        default=20,
+        type=int,
+    )
+    gnomad_project_ancestry = parser.add_argument_group(
+        "gnomad_project_ancestry",
+        description="Arguments relevant to infering ancestry using projection onto gnomAD PCs followed by random forest with gnomAD known pop labels.",
+    )
+    gnomad_project_ancestry.add_argument(
+        "--run_pc_project",
+        help="Runs pc project and population assignment using gnomAD data.",
+        action="store_true",
+    )
+    gnomad_project_ancestry.add_argument(
+        "--n_project_pcs",
+        help="Number of PCs to use in pc_project and population inference (default: 10).",
         default=10,
         type=int,
     )
-    parser.add_argument(
+    gnomad_project_ancestry.add_argument(
         "--run_rf",
-        help="Create random forest model to assign population labels based on PCA results",
+        help="Create random forest model to assign population labels based on PCA results.",
         action="store_true",
     )
-    parser.add_argument(
+    gnomad_project_ancestry.add_argument(
         "--min_pop_prob",
-        help="Minimum probability of belonging to a given population for assignment (if below, the sample is labeled as 'oth' (default: 0.5)",
+        help="Minimum probability of belonging to a given population for assignment (if below, the sample is labeled as 'oth' (default: 0.5).",
         default=0.5,
         type=float,
     )
-
     parser.add_argument(
         "--assign_hybrid_ancestry",
         help="Assigns samples to HDBSCAN clusters where available otherwise uses pc_project assignments.",
         action="store_true",
     )
-
     parser.add_argument(
         "-o",
         "--overwrite",
-        help="Overwrite all data from this subset (default: False)",
+        help="Overwrite all data from this subset (default: False).",
         action="store_true",
     )
     parser.add_argument(
