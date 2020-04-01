@@ -62,7 +62,7 @@ def import_array_exome_id_map_ht(freeze: int = CURRENT_FREEZE) -> hl.Table:
     return sample_map_ht
 
 
-def load_ukbb_array_pcs():
+def load_ukbb_array_pcs() -> hl.Table:
     """
     Imports UKBB genotype array sample QC information into a Table and extracts the ancestry PCs.
 
