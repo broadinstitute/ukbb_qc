@@ -1,6 +1,7 @@
 import logging
 import hail as hl
 from gnomad.resources.resource_utils import DataException
+from gnomad.utils.generic import file_exists
 from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES
 
 
@@ -260,7 +261,7 @@ def callrate_mt_path(
     :return: Path to callrate MatrixTable
     :rtype: str
     """
-    filtered = ".interval_filtered." if interval_filtered else ""
+    filtered = ".interval_filtered" if interval_filtered else ""
     return f"{sample_qc_path(data_source, freeze)}/platform_pca/callrate{filtered}.mt"
 
 
