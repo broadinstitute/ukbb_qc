@@ -1,10 +1,11 @@
 import argparse
 import logging
 import hail as hl
+from gnomad.resources.resource_utils import DataException
 from gnomad.utils.generic import file_exists
 from gnomad.utils.slack import try_slack
-from ukbb_qc.resources.resource_utils import CURRENT_FREEZE, DataException
-from ukbb_qc.resources.basics import get_checkpoint_path
+from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
+from ukbb_qc.resources.basics import get_checkpoint_path, logging_path
 from ukbb_qc.resources.sample_qc import (
     callrate_mt_path,
     hard_filters_ht_path,
@@ -87,8 +88,10 @@ def hard_filter_samples(
     :rtype: hl.Table
     """
     logger.info("Computing callrate and mean DP over high coverage intervals...")
-    mt = mt.filter_rows(hl.is_defined(interval_qc_ht[mt.row_key]))
-    mt = mt.checkpoint(callrate_mt_path(data_source, freeze, interval_filtered=True))
+    mt = mt.filter_rows(hl.is_defined(interval_qc_ht[mt.interval]))
+    mt = mt.checkpoint(
+        callrate_mt_path(data_source, freeze, interval_filtered=True), overwrite=True
+    )
     ht = mt.annotate_cols(
         call_rate=hl.agg.sum(mt.n_defined) / hl.agg.sum(mt.total),
         mean_dp=hl.agg.sum(mt.dp_sum) / hl.agg.sum(mt.total),
@@ -127,38 +130,47 @@ def main(args):
     data_source = "broad"
     freeze = args.freeze
 
-    if not file_exists(callrate_mt_path(data_source, freeze, interval_filtered=False)):
-        raise DataException("Need to compute interval callrate MT!")
+    try:
+        if not file_exists(
+            callrate_mt_path(data_source, freeze, interval_filtered=False)
+        ):
+            raise DataException("Need to compute interval callrate MT!")
 
-    logger.info("Reading in callrate MT, sex ht, interval qc HT...")
-    callrate_mt = hl.read_matrix_table(
-        callrate_mt_path(data_source, freeze, interval_filtered=False)
-    )
-    sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
-    interval_qc_ht = hl.read_table(interval_qc_path(data_source, freeze, "autosomes"))
-    interval_qc_ht = interval_qc_ht.filter(
-        interval_qc_ht[args.cov_filter_field] > args.pct_samples
-    )
+        logger.info("Reading in callrate MT, sex ht, interval qc HT...")
+        callrate_mt = hl.read_matrix_table(
+            callrate_mt_path(data_source, freeze, interval_filtered=False)
+        )
+        sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
+        interval_qc_ht = hl.read_table(
+            interval_qc_path(data_source, freeze, "autosomes")
+        )
+        interval_qc_ht = interval_qc_ht.filter(
+            interval_qc_ht[args.cov_filter_field] > args.pct_samples
+        )
 
-    logger.info("Hard filtering samples...")
-    hard_filters_ht = hard_filter_samples(
-        data_source,
-        freeze,
-        callrate_mt,
-        interval_qc_ht,
-        sex_ht,
-        args.min_callrate,
-        args.min_dp,
-    )
-    ht = ht.naive_coalesce(args.n_partitions)
-    ht = ht.checkpoint(
-        hard_filters_ht_path(data_source, freeze), overwrite=args.overwrite,
-    )
-    logger.info("Checking number of samples flagged with hard filters...")
-    ht = ht.explode(ht.hard_filters)
-    filters = ht.aggregate(hl.agg.counter(ht.hard_filters))
-    for filt in filters:
-        logger.info(f"Samples flagged due to {filt}: {filters[filt]}")
+        logger.info("Hard filtering samples...")
+        ht = hard_filter_samples(
+            data_source,
+            freeze,
+            callrate_mt,
+            interval_qc_ht,
+            sex_ht,
+            args.min_callrate,
+            args.min_dp,
+        )
+        ht = ht.naive_coalesce(args.n_partitions)
+        ht = ht.checkpoint(
+            hard_filters_ht_path(data_source, freeze), overwrite=args.overwrite,
+        )
+        logger.info("Checking number of samples flagged with hard filters...")
+        ht = ht.explode(ht.hard_filters)
+        filters = ht.aggregate(hl.agg.counter(ht.hard_filters))
+        for filt in filters:
+            logger.info(f"Samples flagged due to {filt}: {filters[filt]}")
+
+    finally:
+        logger.info("Copying hail log to logging bucket...")
+        hl.copy_log(logging_path(data_source, freeze))
 
 
 if __name__ == "__main__":
