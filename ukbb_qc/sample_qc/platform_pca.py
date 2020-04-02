@@ -95,19 +95,11 @@ def main(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
 
-    parser.add_argument(
-        "-s",
-        "--data_source",
-        help="Data source",
-        choices=["regeneron", "broad"],
-        default="broad",
-    )
+    parser = argparse.ArgumentParser()
     parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
     )
-
     parser.add_argument(
         "--apply_interval_qc_filter",  # NOTE not super sure this is necessary
         help="Filter to good intervals from interval QC",
