@@ -84,6 +84,7 @@ def rank_related_samples(
         Tie breaker given to maximal independent set (MIS) that determines which related sample to remove.
 
         .. note::
+
             This tie breaker is r - l (instead of l - r) because we want to keep the sample with the greater depth.
             MIS removes the largest node.
             MIS removes the right node when the tie breaker returns a negative value.
@@ -242,20 +243,20 @@ def main(args):
 
             # Filter second degree samples
             related_samples_to_drop_second_deg_ht = filter_related_samples(
-                relatedness_ht, qc_ht, "SECOND_DEGREE_RELATIVES"
+                relatedness_ht, qc_ht, SECOND_DEGREE_RELATIVES
             )
 
             # Filter duplicate samples
             related_samples_to_drop_dup_ht = filter_related_samples(
-                relatedness_ht, qc_ht, "DUPLICATE_OR_TWINS"
+                relatedness_ht, qc_ht, DUPLICATE_OR_TWINS
             )
 
             # Filter first degree samples
             related_samples_to_drop_pc_ht = filter_related_samples(
-                relatedness_ht, qc_ht, "PARENT_CHILD"
+                relatedness_ht, qc_ht, PARENT_CHILD
             )
             related_samples_to_drop_sib_ht = filter_related_samples(
-                relatedness_ht, qc_ht, "SIBLINGS"
+                relatedness_ht, qc_ht, SIBLINGS
             )
 
             # Combine first, second, and duplicate sample tables and annotate cutoffs
