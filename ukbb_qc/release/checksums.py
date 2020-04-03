@@ -3,7 +3,7 @@ import base64
 import json
 import subprocess
 from typing import Tuple
-from gnomad.utils.generic import get_file_stats
+from gnomad.utils.file_utils import get_file_stats
 from ukbb_qc.resources.basics import release_var_hist_path, release_vcf_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 
