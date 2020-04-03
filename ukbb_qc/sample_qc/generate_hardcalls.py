@@ -82,8 +82,9 @@ def main(args):
                 haploid_adj_dp=5,
             )
             mt = mt.select_entries(
-                GT=mt.GT, adj=mt.adj
+                "GT", "adj", "END",
             )  # Note: this is different from gnomAD hardcalls file because no PGT or PID
+            mt.describe()
             mt = adjust_sex_ploidy(mt, mt.sex_karyotype, male_str="XY", female_str="XX")
             mt = mt.select_cols().naive_coalesce(args.n_partitions)
 
