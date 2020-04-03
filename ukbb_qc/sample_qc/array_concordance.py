@@ -19,8 +19,7 @@ from ukbb_qc.resources.basics import (
     logging_path,
 )
 from ukbb_qc.resources.sample_qc import (
-    array_variant_concordance_path,
-    array_sample_concordance_path,
+    array_concordance_results_path,
     array_concordance_sites_path,
 )
 from ukbb_qc.utils.utils import (
@@ -262,10 +261,11 @@ def main(args):
             )
 
             variants.write(
-                array_variant_concordance_path(data_source, freeze), overwrite=overwrite
+                array_concordance_results_path(data_source, freeze, sample=False),
+                overwrite=overwrite,
             )
             samples.write(
-                array_sample_concordance_path(data_source, freeze), overwrite=overwrite
+                array_concordance_results_path(data_source, freeze), overwrite=overwrite
             )
 
     finally:
