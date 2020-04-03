@@ -1,95 +1,3 @@
-# UKB constants
-GROUPS = ["adj", "raw"]
-SEXES = ["male", "female"]
-POPS = [
-    "0",
-    "1",
-    "2",
-    "3",
-    "4",
-    "5",
-    "6",
-    "7",
-    "8",
-    "9",
-    "10",
-    "11",
-    "12",
-    "13",
-    "afr",
-    "amr",
-    "asj",
-    "eas",
-    "fin",
-    "nfe",
-    "oth",
-    "sas",
-]
-FAF_POPS = ["0", "5", "6", "13", "nfe"]
-
-# gnomAD constants
-GNOMAD_POPS = ["afr", "amr", "asj", "eas", "fin", "nfe", "oth", "sas"]
-GNOMAD_FAF_POPS = ["afr", "amr", "eas", "nfe", "sas"]
-GNOMAD_NFE_SUBPOPS = ["onf", "bgr", "swe", "nwe", "seu", "est"]
-GNOMAD_EAS_SUBPOPS = ["kor", "oea", "jpn"]
-
-# constants for both UKB and gnomAD
-HISTS = ["gq_hist_alt", "gq_hist_all", "dp_hist_alt", "dp_hist_all", "ab_hist_alt"]
-SORT_ORDER = ["popmax", "group", "pop", "subpop", "sex"]
-
-# pop names dict (used in VCF export)
-pop_names = {
-    "0": "hybrid population inference cluster 0",
-    "1": "hybrid population inference cluster 1",
-    "2": "hybrid population inference cluster 2",
-    "3": "hybrid population inference cluster 3",
-    "4": "hybrid population inference cluster 4",
-    "5": "hybrid population inference cluster 5",
-    "6": "hybrid population inference cluster 6",
-    "7": "hybrid population inference cluster 7",
-    "8": "hybrid population inference cluster 8",
-    "9": "hybrid population inference cluster 9",
-    "10": "hybrid population inference cluster 10",
-    "11": "hybrid population inference cluster 11",
-    "12": "hybrid population inference cluster 12",
-    "13": "hybrid population inference cluster 13",
-    "oth": "Other",
-    "afr": "African-American/African",
-    "ami": "Amish",
-    "amr": "Latino",
-    "eas": "East Asian",
-    "fin": "Finnish",
-    "eur": "European",
-    "nfe": "Non-Finnish European",
-    "sas": "South Asian",
-    "mde": "Middle Eastern",
-    "asj": "Ashkenazi Jewish",
-    "uniform": "Uniform",
-    "sas_non_consang": "South Asian (F < 0.05)",
-    "consanguineous": "South Asian (F > 0.05)",
-    "exac": "ExAC",
-    "bgr": "Bulgarian (Eastern European)",
-    "deu": "German",
-    "est": "Estonian",
-    "esp": "Spanish",
-    "gbr": "British",
-    "nwe": "North-Western European",
-    "seu": "Southern European",
-    "ita": "Italian",
-    "swe": "Swedish",
-    "chn": "Chinese",
-    "kor": "Korean",
-    "hkg": "Hong Kong",
-    "sgp": "Singaporean",
-    "twn": "Taiwanese",
-    "jpn": "Japanese",
-    "oea": "Other East Asian",
-    "oeu": "Other European",
-    "onf": "Other Non-Finnish European",
-    "unk": "Unknown",
-}
-
-# INFO dict used in VCF export for variant annotations
 INFO_DICT = {
     "FS": {
         "Description": "Phred-scaled p-value of Fisher's exact test for strand bias"
@@ -152,10 +60,10 @@ INFO_DICT = {
         "Description": "Variant was used in training random forest model"
     },  # export?
     "rf_tp_probability": {
-        "Description": "Random forest prediction probability for a site being a true variant"
+        "Description": "Random forest prediction probability for a variant being a true variant"
     },
     "transmitted_singleton": {
-        "Description": "Variant was a callset-wide doubleton that was transmitted within a family (i.e., a singleton amongst unrelated sampes in cohort)"
+        "Description": "Variant was a callset-wide doubleton that was transmitted within a family (i.e., a singleton amongst unrelated samples in cohort)"
     },
     "original_alleles": {"Description": "Alleles before splitting multiallelics"},
     "variant_type": {
@@ -178,8 +86,10 @@ INFO_DICT = {
         "Description": "Maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of AB=0.5",
     },
 }
+"""
+Dictionary used during VCF export to export variant annotations
+"""
 
-# FORMAT dict used in VCF export for MatrixTable entries
 FORMAT_DICT = {
     "GT": {"Description": "Genotype", "Number": "1", "Type": "String"},
     "AD": {
@@ -219,3 +129,6 @@ FORMAT_DICT = {
         "Type": "Integer",
     },
 }
+"""
+Dictionary used during VCF export to export MatrixTable entries
+"""
