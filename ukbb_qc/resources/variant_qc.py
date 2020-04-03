@@ -5,6 +5,22 @@ import gnomad.resources.grch38 as grch38
 from .resource_utils import CURRENT_FREEZE, CURRENT_HAIL_VERSION, DATA_SOURCES, FREEZES
 
 
+SYNDIP = "CHMI_CHMI3_Nex1"
+"""
+String representation for syndip truth sample
+"""
+
+NA12878 = "Coriell_NA12878_NA12878"
+"""
+String representation for NA12878 truth sample
+"""
+
+TRUTH_SAMPLES = [SYNDIP, NA12878]
+"""
+List containing string representation for truth samples (syndip, NA12878)
+"""
+
+
 def get_truth_sample_data(
     data_source: str,
     freeze: int = CURRENT_FREEZE,
@@ -31,12 +47,12 @@ def get_truth_sample_data(
     """
     truth_samples = {
         "syndip": {
-            "s": "CHMI_CHMI3_Nex1",
+            "s": SYNDIP,
             "truth_mt": grch38.syndip.mt(),
             "hc_intervals": grch38.syndip_hc_intervals.ht(),
         },
         "na12878": {
-            "s": "Coriell_NA12878_NA12878",
+            "s": NA12878,
             "truth_mt": grch38.na12878_giab.mt(),
             "hc_intervals": grch38.na12878_giab_hc_intervals.ht(),
         },
