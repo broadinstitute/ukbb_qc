@@ -20,6 +20,7 @@ from ukbb_qc.resources.sample_qc import (
     sex_ht_path,
     meta_ht_path,
 )
+from ukbb_qc.resources.variant_qc import TRUTH_SAMPLES
 from ukbb_qc.utils.utils import get_age_ht, join_tables
 
 
@@ -217,9 +218,14 @@ def main(args):
             )
         )
     )
+
+    logger.info("Annotating control samples")
+    left_ht = left_ht.annotate(
+        control=(hl.literal(TRUTH_SAMPLES).contains(left_ht.s))
+    )
     logger.info(
         "Release and control sample counts:"
-        f"{left_ht.aggregate(hl.struct(release=hl.agg.count_where(left_ht.release), control=hl.agg.count_where(~left_ht.release)))}"
+        f"{left_ht.aggregate(hl.struct(release=hl.agg.count_where(left_ht.release), control=hl.agg.count_where(left_ht.control)))}"
     )
 
     logger.info("Writing out meta ht")
