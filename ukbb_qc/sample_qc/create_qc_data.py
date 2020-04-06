@@ -120,7 +120,7 @@ def main(args):
             )
             # NOTE: not using default indel_phred_het_prior to make sure lowqual values match with standard pre-VQSR lowqual values
             mt = mt.annotate_rows(
-                lowqual=get_lowqual_expr(
+                AS_lowqual=get_lowqual_expr(
                     mt.alleles, mt.info.AS_QUALapprox[1], indel_phred_het_prior=40,
                 )
             )
