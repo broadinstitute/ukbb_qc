@@ -55,10 +55,8 @@ INFO_DICT = {
     "rf_negative_label": {
         "Description": "Variant was labelled as a negative example for training of random forest model"
     },
-    "rf_label": {"Description": "Random forest training label"},  # export?
-    "rf_train": {
-        "Description": "Variant was used in training random forest model"
-    },  # export?
+    "rf_label": {"Description": "Random forest training label"},
+    "rf_train": {"Description": "Variant was used in training random forest model"},
     "rf_tp_probability": {
         "Description": "Random forest prediction probability for a variant being a true variant"
     },
