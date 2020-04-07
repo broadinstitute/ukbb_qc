@@ -31,7 +31,7 @@ def main(args):
         for shard in shards:
             vcf_url = f"{release_vcf_path(data_source, freeze, contig=None)}/{shard}"
             size, int_size, md5 = get_file_stats(vcf_url)
-            o.write(f"{shard_name}\t{size}\t{md5}\n")
+            o.write(f"{shard}\t{size}\t{md5}\n")
 
 
 if __name__ == "__main__":
