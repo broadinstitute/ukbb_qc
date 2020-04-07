@@ -1,6 +1,7 @@
 import logging
 import hail as hl
 from gnomad.resources.resource_utils import DataException
+from gnomad.utils.generic import file_exists
 from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES
 
 
@@ -260,7 +261,7 @@ def callrate_mt_path(
     :return: Path to callrate MatrixTable
     :rtype: str
     """
-    filtered = ".interval_filtered." if interval_filtered else ""
+    filtered = ".interval_filtered" if interval_filtered else ""
     return f"{sample_qc_path(data_source, freeze)}/platform_pca/callrate{filtered}.mt"
 
 
@@ -551,14 +552,17 @@ def platform_pop_outlier_ht_path(
     data_source: str,
     freeze: int = CURRENT_FREEZE,
     pop_assignment_method: str = "hybrid_pop",
+    platform_assignment_method: str = "batch",
 ) -> str:
     """
     Returns path to Table containing samples flagged for outlier sample QC metrics
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
-    :param str pop_assignment_method: Method used to infer populations (gnomad_qc_project_pop, HDBSCAN_pop_cluster, hybrid_pop)
+    :param str pop_assignment_method: Method used to infer populations (gnomad_qc_project_pop, HDBSCAN_pop_cluster, hybrid_pop). Default is hybrid_pop
+    :param str platform_assignment_method: Method used to infer platforms (qc_platform or batch). Default is batch
     :return: Path to Table with outlier samples flagged
     :rtype: str
     """
-    return f"{sample_qc_path(data_source, freeze)}/outlier_detection/outlier_detection.{pop_assignment_method}.ht"
+    return f"{sample_qc_path(data_source, freeze)}/outlier_detection/outlier_detection.{pop_assignment_method}_{platform_assignment_method}.ht"
+
