@@ -96,7 +96,7 @@ def hard_filter_samples(
     )
     ht = mt.annotate_cols(
         call_rate=hl.agg.sum(mt.n_defined) / hl.agg.sum(mt.total),
-        meandp=hl.agg.sum(mt.dp_sum) / hl.agg.sum(mt.total),
+        sample_mean_dp=hl.agg.sum(mt.dp_sum) / hl.agg.sum(mt.total),
     ).cols()
 
     logger.info("Adding sex imputation annotations...")
@@ -110,7 +110,7 @@ def hard_filter_samples(
     logger.info("Applying hard filters and writing out hard filters HT...")
     ht = ht.annotate(
         hard_filters=apply_hard_filters_expr(
-            ht.call_rate, ht.meandp, ht.sex, min_callrate, min_depth
+            ht.call_rate, ht.sample_mean_dp, ht.sex, min_callrate, min_depth
         )
     )
     ht = ht.annotate(
