@@ -11,7 +11,7 @@ from gnomad.utils.liftover import (
 )
 from gnomad.utils.sample_qc import run_pca_with_relateds
 from gnomad.utils.generic import assign_population_pcs, pc_project
-from gnomad.utils.relatedness import AMBIGUOUS_RELATIONSHIP, UNRELATED
+from gnomad.utils.relatedness import UNRELATED
 from gnomad.utils.slack import try_slack
 from gnomad_qc.v2.resources.basics import get_gnomad_meta
 from gnomad_qc.v2.resources.sample_qc import (
@@ -27,6 +27,7 @@ from ukbb_qc.resources.sample_qc import (
     ancestry_cluster_ht_path,
     ancestry_hybrid_ht_path,
     ancestry_pc_project_scores_ht_path,
+    ancestry_pca_loadings_ht_path,
     ancestry_pca_scores_ht_path,
     gnomad_ancestry_loadings_liftover_path,
     qc_mt_path,
@@ -143,8 +144,8 @@ def main(args):
     n_array_pcs = args.n_array_pcs
     n_project_pcs = args.n_project_pcs
 
+    # Note: This code only needed to be run once and has already been run
     if args.liftover_gnomad_ancestry_loadings:
-        # Note: This code only needed to be run once and has already been run
         gnomad_loadings_ht = hl.read_table(gnomad_ancestry_pca_loadings_ht_path())
 
         logger.info("Preparing reference genomes for liftover")
