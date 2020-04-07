@@ -53,7 +53,7 @@ def apply_hard_filters_expr(
         # "contamination": ht.freemix > 0.05,
         # "chimera": ht.pct_chimeras > 0.05,
         low_callrate=callrate_expr < min_callrate,
-        ambiguous_sex=sex_expr == "Ambiguous",
+        ambiguous_sex=sex_expr == "ambiguous",
         sex_aneuploidy=(
             (sex_expr != "ambiguous") & (sex_expr != "XX") & (sex_expr != "XY")
         ),
