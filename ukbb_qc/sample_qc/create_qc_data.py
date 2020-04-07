@@ -2,7 +2,7 @@ import argparse
 import logging
 import hail as hl
 from gnomad.utils.annotations import get_lowqual_expr
-from gnomad.utils.generic import filter_to_autosomes
+from gnomad.utils.generic import file_exists, filter_to_autosomes
 from gnomad.utils.gnomad_functions import get_adj_expr
 from gnomad.utils.sample_qc import get_qc_mt
 from gnomad.utils.slack import try_slack
@@ -58,7 +58,7 @@ def main(args):
             )
 
             logger.info("Reading in QC MT sites from tranche 2/freeze 5...")
-            if not hl.utils.hadoop_exists(f"{qc_sites_path()}/_SUCCESS"):
+            if not file_exists(qc_sites_path()):
                 get_qc_mt_sites()
             qc_sites_ht = hl.read_table(qc_sites_path())
             logger.info(f"Number of QC sites: {qc_sites_ht.count()}")
