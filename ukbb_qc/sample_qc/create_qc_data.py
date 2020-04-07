@@ -92,9 +92,10 @@ def main(args):
             info_expr = get_site_info_expr(mt)
             info_expr = info_expr.annotate(**get_as_info_expr(mt))
             mt = mt.annotate_rows(info=info_expr)
-            mt = mt.annotate_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
-            mt = mt.select_entries("GT", adj=get_adj_expr(mt.LGT, mt.GQ, mt.DP, mt.LAD))
-            mt = filter_to_adj(mt)
+            mt = mt.select_entries(
+                GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA),
+                adj=get_adj_expr(mt.LGT, mt.GQ, mt.DP, mt.LAD),
+            )
 
             logger.info("Checkpointing MT...")
             mt = mt.checkpoint(
@@ -133,8 +134,19 @@ def main(args):
 
         if args.compute_sample_qc_ht:
             qc_mt = hl.read_matrix_table(qc_mt_path(data_source, freeze))
-            qc_mt = filter_to_autosomes(qc_mt)
-            qc_ht = hl.sample_qc(qc_mt).cols().select("sample_qc")
+            qc_mt_sites = filter_to_autosomes(qc_mt).rows()
+            mt = hl.read_matrix_table(
+                get_checkpoint_path(
+                    data_source,
+                    freeze,
+                    name="dense_qc_mt_v2_sites.repartitioned",
+                    mt=True,
+                )
+            )
+            mt = mt.filter_rows(hl.is_defined(qc_mt_sites[mt.row_key]))
+            mt = mt.annotate_entries(GT=hl.experimental.lgt_to_gt(mt.LGT, mt.LA))
+
+            qc_ht = hl.sample_qc(mt).cols().select("sample_qc")
             qc_ht = qc_ht.transmute(
                 sample_qc=qc_ht.sample_qc.annotate(
                     dp_mean=qc_ht.sample_qc.dp_stats.mean,
