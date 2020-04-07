@@ -2,11 +2,18 @@ import logging
 from typing import Union
 import hail as hl
 from gnomad.utils.generic import (
+    file_exists,
     filter_to_autosomes,
     get_reference_genome,
 )
 from gnomad.resources.grch38.reference_data import lcr_intervals
-from ukbb_qc.resources.basics import get_ukbb_data, raw_mt_path
+from ukbb_qc.load_data.utils import import_phenotype_ht
+from ukbb_qc.resources.basics import (
+    array_sample_map_ht_path,
+    get_ukbb_data,
+    phenotype_ht_path,
+    raw_mt_path,
+)
 from ukbb_qc.resources.sample_qc import (
     f_stat_sites_path,
     interval_qc_path,
@@ -274,3 +281,25 @@ def get_qc_mt_sites() -> None:
     lcr = lcr_intervals.ht()
     ht = ht.filter(hl.is_missing(lcr[ht.locus]))
     ht.write(qc_sites_path())
+
+
+# Sample-related resources
+def get_age_ht(freeze: int) -> hl.Table:
+    """
+    Pull age information from UKBB phenotype file
+
+    :param int freeze: One of the data freezes
+    :return: Table with age at recruitment per sample
+    :rtype: Table
+    """
+    # Read in phenotype table and select age at recruitment field
+    if not file_exists(phenotype_ht_path()):
+        import_phenotype_ht()
+    age_ht = hl.read_table(phenotype_ht_path()).select("f.21022.0.0")
+
+    # Re-key phenotype table to UKBB ID using array sample map table and return
+    sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze))
+    sample_map_ht = sample_map_ht.key_by("ukbb_app_26041_id")
+    age_ht = age_ht.key_by(s=sample_map_ht[age_ht.key].s)
+    age_ht = age_ht.rename({"f.21022.0.0": "age"})
+    return age_ht
