@@ -1,7 +1,7 @@
 import argparse
 import logging
 import hail as hl
-from gnomad.utils.relatedness import (
+from gnomad.sample_qc.relatedness import (
     DUPLICATE_OR_TWINS,
     PARENT_CHILD,
     SECOND_DEGREE_RELATIVES,
@@ -59,7 +59,7 @@ def main(args):
     )
     left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
 
-    logger.info("Reading in array sample concordance ht")
+    logger.info("Reading in array sample concordance HT")
     right_ht = hl.read_table(array_concordance_results_path(data_source, freeze))
     right_ht = right_ht.tramsmute(
         array_concordance=hl.struct(
@@ -102,7 +102,7 @@ def main(args):
     logger.info("Joining sample QC HT with meta HT")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "right")
 
-    logger.info("Reading in platform PCA ht")
+    logger.info("Reading in platform PCA HT")
     right_ht = hl.read_table(platform_pca_assignments_ht_path(data_source, freeze))
     # Put platform info into struct for join
     right_ht = right_ht.transmute(
@@ -114,16 +114,16 @@ def main(args):
     logger.info("Joining platform HT with meta HT")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
 
-    logger.info("Reading in population PC ht")
+    logger.info("Reading in population PC HT")
     right_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
     # Put population info into structs for join
     right_ht = right_ht.transmute(
         gnomad_PC_project_pop_data=hl.struct(
-            gnomad_PCs=right_ht.gnomad_PCs,
+            gnomad_PCs=right_ht.gnomad_pc_project_scores,
             gnomad_pc_project_pop=right_ht.gnomad_pc_project_pop,
         ),
         hybrid_pop_data=hl.struct(
-            pop_PCs=right_ht.pop_PCs,
+            pop_PCs=right_ht.pop_pca_scores,
             HDBSCAN_pop_cluster=right_ht.HDBSCAN_pop_cluster,
             hybrid_pop=right_ht.hybrid_pop,
         ),
@@ -149,26 +149,32 @@ def main(args):
 
     logger.info("Reading in related samples HT")
     related_samples_to_drop_ht = hl.read_table(related_drop_path(data_source, freeze))
-    related_samples_to_drop_second_ht = related_samples_to_drop_ht.filter(
-        related_samples_to_drop_ht.relationship == SECOND_DEGREE_RELATIVES
-    )
-    related_samples_to_drop_pc_ht = related_samples_to_drop_ht.filter(
-        related_samples_to_drop_ht.relationship == PARENT_CHILD
-    )
-    related_samples_to_drop_sib_ht = related_samples_to_drop_ht.filter(
-        related_samples_to_drop_ht.relationship == SIBLINGS
-    )
-    related_samples_to_drop_dup_ht = related_samples_to_drop_ht.filter(
-        related_samples_to_drop_ht.relationship == DUPLICATE_OR_TWINS
-    )
 
     logger.info("Annotating sample_filter struct with relatedness booleans")
     left_ht = left_ht.annotate(
         sample_filters=left_ht.sample_filters.annotate(
-            related=hl.is_defined(related_samples_to_drop_second_ht[left_ht.s]),
-            duplicate=hl.is_defined(related_samples_to_drop_dup_ht[left_ht.s]),
-            parent_child=hl.is_defined(related_samples_to_drop_pc_ht[left_ht.s]),
-            sibling=hl.is_defined(related_samples_to_drop_sib_ht[left_ht.s]),
+            related=hl.if_else(
+                related_samples_to_drop_ht.relationship[left_ht.s]
+                == SECOND_DEGREE_RELATIVES,
+                True,
+                False,
+            ),
+            duplicate=hl.if_else(
+                related_samples_to_drop_ht.relationship[left_ht.s]
+                == DUPLICATE_OR_TWINS,
+                True,
+                False,
+            ),
+            parent_child=hl.if_else(
+                related_samples_to_drop_ht.relationship[left_ht.s] == PARENT_CHILD,
+                True,
+                False,
+            ),
+            sibling=hl.if_else(
+                related_samples_to_drop_ht.relationship[left_ht.s] == SIBLINGS,
+                True,
+                False,
+            ),
         )
     )
 
@@ -177,7 +183,12 @@ def main(args):
 
     logger.info("Reading in outlier HT")
     right_ht = hl.read_table(
-        platform_pop_outlier_ht_path(data_source, freeze, args.pop_assignment_method)
+        platform_pop_outlier_ht_path(
+            data_source,
+            freeze,
+            args.pop_assignment_method,
+            args.platform_assignment_method,
+        )
     )
 
     logger.info("Joining outlier ht to current join")
@@ -220,9 +231,7 @@ def main(args):
     )
 
     logger.info("Annotating control samples")
-    left_ht = left_ht.annotate(
-        control=(hl.literal(TRUTH_SAMPLES).contains(left_ht.s))
-    )
+    left_ht = left_ht.annotate(control=(hl.literal(TRUTH_SAMPLES).contains(left_ht.s)))
     logger.info(
         "Release and control sample counts:"
         f"{left_ht.aggregate(hl.struct(release=hl.agg.count_where(left_ht.release), control=hl.agg.count_where(left_ht.control)))}"
@@ -249,6 +258,12 @@ if __name__ == "__main__":
         help="Population assignment method to use for outlier stratification",
         default="hybrid_pop",
         choices=["gnomad_pc_project_pop", "HDBSCAN_pop_cluster", "hybrid_pop"],
+    )
+    parser.add_argument(
+        "--platform_assignment_method",
+        help="Platform assignment method to use for outlier stratification",
+        default="batch",
+        choices=["batch", "qc_platform"],
     )
     parser.add_argument(
         "-o",
