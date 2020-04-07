@@ -120,6 +120,7 @@ def main(args):
                 filter_segdup=False,
             )
             # NOTE: not using default indel_phred_het_prior to make sure lowqual values match with standard pre-VQSR lowqual values
+            # NOTE: Using AS_QUALapprox[1] because these are biallelic sites
             mt = mt.annotate_rows(
                 AS_lowqual=get_lowqual_expr(
                     mt.alleles, mt.info.AS_QUALapprox[1], indel_phred_het_prior=40,
