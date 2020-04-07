@@ -64,8 +64,8 @@ def prepare_array_and_exome_mt(
         ukbb_app_26041_id=sample_map[exome_mt.col_key].ukbb_app_26041_id
     )
     exome_mt = exome_mt.key_cols_by("ukbb_app_26041_id")
-    exome_mt = exome_mt.semi_join_cols(array_mt)
-    array_mt = array_mt.semi_join_cols(exome_mt)
+    exome_mt = exome_mt.semi_join_cols(array_mt.cols())
+    array_mt = array_mt.semi_join_cols(exome_mt.cols())
 
     exome_array_count = array_mt.count_cols()
     logger.info(
@@ -81,9 +81,10 @@ def prepare_array_and_exome_mt(
     if not file_exists(array_concordance_sites_path()):
         sites_ht = get_sites(af_cutoff, call_rate_cutoff)
     else:
-        sites_ht = array_concordance_sites_path()
+        sites_ht = hl.read_table(array_concordance_sites_path())
 
     logger.info("Filtering exome and array MT to tranche 2 sites...")
+    sites_ht = sites_ht.key_by("locus", "alleles")
     exome_mt = exome_mt.filter_rows(hl.is_defined(sites_ht[exome_mt.row_key]))
     array_mt = array_mt.filter_rows(hl.is_defined(sites_ht[array_mt.row_key]))
     return array_mt, exome_mt
