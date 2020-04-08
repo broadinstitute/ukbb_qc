@@ -280,19 +280,19 @@ def main(args):
             )
             logger.info(
                 f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == SECOND_DEGREE_RELATIVES).count()}"
-                "second degree samples flagged in callset using maximal independent set"
+                f"{SECOND_DEGREE_RELATIVES} samples flagged in callset using maximal independent set"
             )
             logger.info(
                 f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == SIBLINGS).count()}"
-                "SIBLINGS flagged in callset using maximal independent set"
+                f"{SIBLINGS} flagged in callset using maximal independent set"
             )
             logger.info(
                 f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == PARENT_CHILD).count()}"
-                "PARENT_CHILD samples flagged in callset using maximal independent set"
+                f"{PARENT_CHILD} samples flagged in callset using maximal independent set"
             )
             logger.info(
                 f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == DUPLICATE_OR_TWINS).count()}"
-                "duplicate samples flagged in callset using maximal independent set"
+                f"{DUPLICATE_OR_TWINS} samples flagged in callset using maximal independent set"
             )
 
     finally:
@@ -322,7 +322,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--min_individual_maf",
-        help="Minor allele frequency cutoff, must be greater that 0.001 \
+        help="Minor allele frequency cutoff, must be greater than 0.001 \
         because the qc_mt used was already filtered to that maf.",
         default=0.05,
         type=float,
@@ -330,7 +330,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--first_degree_kin_thresholds",
         help="First degree kinship threshold for filtering a pair of samples with a first degree relationship. \
-        (Default = (0.1767767, 0.4); 1st degree relatives)",
+        Default = (0.1767767, 0.4); \
+        0.1767767: lower cutoff for parent-offspring or full-siblings relationship, \
+        0.4: lower cutoff for twins/duplicate relationship)",
         default="0.1767767,0.4",
     )
     parser.add_argument(
@@ -353,12 +355,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--skip_infer_families",
-        help="Skip extracting duplicate samples and infers families samples based on PC-relate results",
+        help="Skip extracting duplicate samples and inferring families samples based on PC-relate results",
         action="store_true",
     )
     parser.add_argument(
         "--skip_filter_related_samples",
-        help="Skip Filter related samples \
+        help="Skip filtering related samples \
         (based on the pairs present from running pc_relate and using the --second_degree_kin_cutoff value for that run)",
         action="store_true",
     )
