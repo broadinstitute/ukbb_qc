@@ -205,7 +205,7 @@ def main(args):
 
         if args.array_concordance:
             logger.info("Checking concordance between exome and array data...")
-            array_mt = hl.read_matrix_table(array_mt_path(liftover=True))
+            '''array_mt = hl.read_matrix_table(array_mt_path(liftover=True))
             exome_mt = get_ukbb_data(data_source, freeze, adj=True, split=True)
 
             logger.info("Removing hard filtered samples...")
@@ -252,7 +252,9 @@ def main(args):
                     mt=True,
                 ),
                 overwrite=overwrite,
-            )
+            )'''
+            exome_mt = hl.read_matrix_table('gs://broad-ukbb/broad.freeze_6/temp/exome_subset_concordance_callrate_0.95_af_0.0001.mt')
+            array_mt = hl.read_matrix_table('gs://broad-ukbb/broad.freeze_6/temp/array_subset_concordance_callrate_0.95_af_0.0001.mt')
 
             samples, variants = get_array_exome_concordance(array_mt, exome_mt)
 
