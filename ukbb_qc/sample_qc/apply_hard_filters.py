@@ -4,7 +4,7 @@ import logging
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.utils import file_exists
+from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import try_slack
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.basics import get_checkpoint_path, logging_path
