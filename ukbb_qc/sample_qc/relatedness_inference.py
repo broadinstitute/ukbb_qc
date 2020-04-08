@@ -110,7 +110,7 @@ def filter_related_samples(
     relatedness_ht: hl.Table, qc_ht: hl.Table, relationship: str,
 ) -> hl.Table:
     """
-    Filters Table to keep only samples with input relationship.
+    Filters Table to keep only samples with input relationship. Returns Table with samples to drop that have the input relationship.
 
     .. note::
         Input Table must be annotated with relationship (from `get_relationship_expr`).
@@ -118,7 +118,7 @@ def filter_related_samples(
     :param Table relatedness_ht: Table of samples with relatedness results from `pc_relate` annotated with `get_relationship_expr`.
     :param Table qc_ht: Table of samples and their sample QC metrics, including mean depth.
     :param str relationship: Desired relationship type to filter.
-    :return: Filtered Table of samples with kinship above input cutoff
+    :return: Table of samples with input relationship to be dropped
     :rtype: hl.Table
     """
     relatedness_ht = relatedness_ht.filter(relatedness_ht.relationship == relationship)
