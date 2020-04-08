@@ -1,12 +1,14 @@
 import argparse
 import logging
+
 import hail as hl
-from gnomad.utils.generic import (
-    bi_allelic_expr,
+
+from gnomad.utils.annotations import bi_allelic_expr
+from gnomad.utils.filtering import (
+    compute_stratified_metrics_filter,
     filter_low_conf_regions,
     filter_to_autosomes,
 )
-from gnomad.utils.sample_qc import compute_stratified_metrics_filter
 from gnomad.utils.slack import try_slack
 from ukbb_qc.resources.basics import (
     array_sample_map_ht_path,
