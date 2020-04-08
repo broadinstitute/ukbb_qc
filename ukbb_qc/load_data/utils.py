@@ -1,6 +1,8 @@
-import hail as hl
 import logging
 from typing import Optional
+
+import hail as hl
+
 from gnomad.utils.generic import file_exists
 from ukbb_qc.resources.basics import (
     array_sample_map_path,
@@ -158,10 +160,35 @@ def import_vqsr(
     ).naive_coalesce(num_partitions)
 
     ht = mt.rows()
+
+    ht = ht.annotate(
+        info=ht.info.annotate(
+            AS_VQSLOD=ht.info.AS_VQSLOD.map(lambda x: hl.float(x)),
+            AS_QUALapprox=ht.info.AS_QUALapprox.split("\|")[1:].map(
+                lambda x: hl.int(x)
+            ),
+            AS_VarDP=ht.info.AS_VarDP.split("\|")[1:].map(lambda x: hl.int(x)),
+            AS_SB_TABLE=ht.info.AS_SB_TABLE.split("\|").map(
+                lambda x: x.split(",").map(lambda y: hl.int(y))
+            ),
+        )
+    )
+
+    ht = ht.checkpoint(
+        var_annotations_ht_path(
+            f'{"vqsr" if vqsr_type == "AS" else "AS_TS_vqsr"}.unsplit',
+            data_source,
+            freeze,
+        ),
+        overwrite=overwrite,
+    )
+
     row_count1 = ht.count()
     ht = hl.split_multi_hts(ht).checkpoint(
         var_annotations_ht_path(
-            data_source, freeze, "vqsr" if vqsr_type == "AS" else "AS_TS_vqsr"
+            "vqsr" if vqsr_type == "AS" else "AS_TS_vqsr",
+            data_source,
+            freeze,
         ),
         overwrite=overwrite,
     )
