@@ -1,7 +1,8 @@
 import logging
 import hail as hl
+
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.generic import file_exists
+from gnomad.utils.file_utils import file_exists
 from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES
 
 

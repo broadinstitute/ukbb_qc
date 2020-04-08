@@ -1,7 +1,9 @@
-import hail as hl
 import logging
 from typing import Optional
-from gnomad.utils.generic import file_exists
+
+import hail as hl
+
+from gnomad.utils.file_utils import file_exists
 from ukbb_qc.resources.basics import (
     array_sample_map_path,
     capture_ht_path,

@@ -1,5 +1,6 @@
 import hail as hl
 from typing import Any, Dict, Optional, Union
+
 from gnomad.resources.resource_utils import DataException
 import gnomad.resources.grch38 as grch38
 from .resource_utils import CURRENT_FREEZE, CURRENT_HAIL_VERSION, DATA_SOURCES, FREEZES
