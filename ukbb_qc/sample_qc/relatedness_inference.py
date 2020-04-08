@@ -1,9 +1,10 @@
 import argparse
 import logging
 from typing import Callable, Tuple
+
 import hail as hl
-from gnomad.utils.slack import try_slack
-from gnomad.utils.relatedness import (
+
+from gnomad.sample_qc.relatedness import (
     DUPLICATE_OR_TWINS,
     explode_duplicate_samples_ht,
     get_duplicated_samples_ht,
@@ -14,6 +15,7 @@ from gnomad.utils.relatedness import (
     SECOND_DEGREE_RELATIVES,
     SIBLINGS,
 )
+from gnomad.utils.slack import try_slack
 from ukbb_qc.resources.basics import get_checkpoint_path, logging_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import (
