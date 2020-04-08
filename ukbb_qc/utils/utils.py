@@ -6,7 +6,7 @@ import hail as hl
 from gnomad.resources.grch38.reference_data import lcr_intervals
 from gnomad.utils.filtering import filter_to_autosomes
 from gnomad.utils.reference_genome import get_reference_genome
-from gnomad.utils.utils import file_exists
+from gnomad.utils.file_utils import file_exists
 from ukbb_qc.load_data.utils import import_phenotype_ht
 from ukbb_qc.resources.basics import (
     array_sample_map_ht_path,
