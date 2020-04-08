@@ -1,8 +1,11 @@
-import hail as hl
 import logging
 from typing import List
-from gnomad.utils.generic import bi_allelic_expr, filter_to_autosomes
-from ukbb_qc.resources.sample_qc import callrate_mt_path, interval_qc_path
+
+import hail as hl
+
+from gnomad.utils.annotations import bi_allelic_expr
+from gnomad.utils.filtering import filter_to_autosomes
+from ukbb_qc.resources.sample_qc import callrate_mt_path
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
