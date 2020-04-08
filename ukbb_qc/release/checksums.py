@@ -1,6 +1,7 @@
 import argparse
 import os
 import subprocess
+
 from gnomad.utils.file_utils import get_file_stats
 from ukbb_qc.resources.basics import release_vcf_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
