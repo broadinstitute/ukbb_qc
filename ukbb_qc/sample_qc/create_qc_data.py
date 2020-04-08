@@ -6,7 +6,7 @@ import hail as hl
 from gnomad.sample_qc.pipeline import get_qc_mt
 from gnomad.utils.annotations import get_adj_expr, get_lowqual_expr
 from gnomad.utils.filtering import filter_to_autosomes
-from gnomad.utils.utils import file_exists
+from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import try_slack
 from gnomad.utils.sparse_mt import densify_sites, get_as_info_expr, get_site_info_expr
 from ukbb_qc.resources.basics import (
