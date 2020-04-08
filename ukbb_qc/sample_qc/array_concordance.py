@@ -1,8 +1,10 @@
 import argparse
 import logging
 from typing import Tuple
+
 import hail as hl
-from gnomad.utils.generic import file_exists
+
+from gnomad.utils.file_utils import file_exists
 from gnomad.utils.liftover import (
     get_liftover_genome,
     lift_data,
