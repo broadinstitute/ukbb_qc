@@ -1,8 +1,10 @@
 import argparse
 import logging
+
 import hail as hl
 import hdbscan
-from gnomad.utils.sample_qc import (
+
+from gnomad.sample_qc.platform import (
     assign_platform_from_pcs,
     run_platform_pca,
 )
