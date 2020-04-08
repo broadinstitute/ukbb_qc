@@ -1,7 +1,8 @@
 import argparse
 import logging
 import hail as hl
-from gnomad.utils.generic import ht_to_vcf_mt
+
+from gnomad.utils.vcf import ht_to_vcf_mt
 from gnomad.utils.slack import try_slack
 from gnomad.utils.sparse_mt import default_compute_info
 from ukbb_qc.resources.basics import get_ukbb_data, logging_path, vqsr_sites_path
