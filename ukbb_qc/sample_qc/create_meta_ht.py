@@ -1,6 +1,8 @@
 import argparse
 import logging
+
 import hail as hl
+
 from gnomad.sample_qc.relatedness import (
     DUPLICATE_OR_TWINS,
     PARENT_CHILD,
