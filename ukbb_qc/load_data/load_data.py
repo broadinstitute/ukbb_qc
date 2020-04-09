@@ -65,7 +65,6 @@ def main(args):
     if args.load_vqsr:
         logger.info("Loading VQSR VCF...")
         import_vqsr(
-            data_source,
             freeze,
             args.vqsr_vcf_path,
             args.vqsr_type,

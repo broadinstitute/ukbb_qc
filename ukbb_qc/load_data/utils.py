@@ -4,6 +4,7 @@ from typing import Optional
 import hail as hl
 
 from gnomad.utils.file_utils import file_exists
+from gnomad.utils.sparse_mt import split_info_annotation
 from ukbb_qc.resources.basics import (
     array_sample_map_path,
     capture_ht_path,
@@ -11,7 +12,10 @@ from ukbb_qc.resources.basics import (
     phenotype_ht_path,
     ukbb_phenotype_path,
 )
-from ukbb_qc.resources.sample_qc import get_ukbb_array_pcs_path, get_ukbb_array_pcs_ht_path
+from ukbb_qc.resources.sample_qc import (
+    get_ukbb_array_pcs_path,
+    get_ukbb_array_pcs_ht_path,
+)
 from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 
@@ -48,7 +52,9 @@ def import_array_exome_id_map_ht(freeze: int = CURRENT_FREEZE) -> hl.Table:
 
     if file_exists(excluded_samples_path()):
         excluded_samples_ht = hl.import_table(excluded_samples_path(), no_header=True)
-        excluded_samples = hl.literal(excluded_samples_ht.aggregate(hl.agg.collect_as_set(excluded_samples_ht.f0)))
+        excluded_samples = hl.literal(
+            excluded_samples_ht.aggregate(hl.agg.collect_as_set(excluded_samples_ht.f0))
+        )
         logger.info(
             f"Total number of samples to exclude: {hl.eval(hl.len(excluded_samples))}"
         )
@@ -72,16 +78,13 @@ def load_ukbb_array_pcs() -> hl.Table:
     :rtype: Table
     """
     array_pcs = hl.import_table(
-        get_ukbb_array_pcs_path(),
-        impute=True,
-        delimiter="\t",
-        no_header=True,
+        get_ukbb_array_pcs_path(), impute=True, delimiter="\t", no_header=True,
     )
     array_pcs = array_pcs.select(
         s=hl.str(array_pcs.f1),
-        scores=hl.array([array_pcs[f"f{i+26}"] for i in range(0, 40)])
+        scores=hl.array([array_pcs[f"f{i+26}"] for i in range(0, 40)]),
     )
-    array_pcs = array_pcs.key_by('s')
+    array_pcs = array_pcs.key_by("s")
     array_pcs.write(get_ukbb_array_pcs_ht_path())
 
 
@@ -157,17 +160,46 @@ def import_vqsr(
         force_bgz=True,
         reference_genome="GRCh38",
         header_file=import_header_path,
-    ).naive_coalesce(num_partitions)
+    ).repartition(num_partitions)
 
     ht = mt.rows()
-    row_count1 = ht.count()
-    ht = hl.split_multi_hts(ht).checkpoint(
+
+    ht = ht.annotate(
+        info=ht.info.annotate(
+            AS_VQSLOD=ht.info.AS_VQSLOD.map(lambda x: hl.float(x)),
+            AS_QUALapprox=ht.info.AS_QUALapprox.split("\|")[1:].map(
+                lambda x: hl.int(x)
+            ),
+            AS_VarDP=ht.info.AS_VarDP.split("\|")[1:].map(lambda x: hl.int(x)),
+            AS_SB_TABLE=ht.info.AS_SB_TABLE.split("\|").map(
+                lambda x: x.split(",").map(lambda y: hl.int(y))
+            ),
+        )
+    )
+
+    ht = ht.checkpoint(
         var_annotations_ht_path(
-            data_source, freeze, "vqsr" if vqsr_type == "AS" else "AS_TS_vqsr"
+            f'{"vqsr" if vqsr_type == "AS" else "AS_TS_vqsr"}.unsplit',
+            data_source,
+            freeze,
         ),
         overwrite=overwrite,
     )
-    row_count2 = ht.count()
+
+    unsplit_count = ht.count()
+    ht = hl.split_multi_hts(ht)
+
+    ht = ht.annotate(
+        info=ht.info.annotate(**split_info_annotation(ht.info, ht.a_index)),
+    )
+
+    ht = ht.checkpoint(
+        var_annotations_ht_path(
+            "vqsr" if vqsr_type == "AS" else "AS_TS_vqsr", data_source, freeze,
+        ),
+        overwrite=overwrite,
+    )
+    split_count = ht.count()
     logger.info(
-        f"Found {row_count1} unsplit and {row_count2} split variants with VQSR annotations"
+        f"Found {unsplit_count} unsplit and {split_count} split variants with VQSR annotations"
     )
