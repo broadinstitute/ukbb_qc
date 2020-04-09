@@ -107,21 +107,21 @@ def rank_related_samples(
 
 
 def filter_related_samples(
-    relatedness_ht: hl.Table, qc_ht: hl.Table, relationship: str,
+    relatedness_ht: hl.Table, qc_ht: hl.Table, relationship: str = UNRELATED,
 ) -> hl.Table:
     """
-    Filters Table to keep only samples with input relationship. Returns Table with samples to drop that have the input relationship.
+    Filters Table to related samples by removing input relationship. Returns Table with related samples to drop.
 
     .. note::
         Input Table must be annotated with relationship (from `get_relationship_expr`).
 
     :param Table relatedness_ht: Table of samples with relatedness results from `pc_relate` annotated with `get_relationship_expr`.
     :param Table qc_ht: Table of samples and their sample QC metrics, including mean depth.
-    :param str relationship: Desired relationship type to filter.
-    :return: Table of samples with input relationship to be dropped
+    :param str relationship: Desired relationship type to remove. Default is UNRELATED
+    :return: Table of related samples to be dropped.
     :rtype: hl.Table
     """
-    relatedness_ht = relatedness_ht.filter(relatedness_ht.relationship == relationship)
+    relatedness_ht = relatedness_ht.filter(relatedness_ht.relationship != relationship)
     related_pairs_ht, related_pairs_tie_breaker = rank_related_samples(
         relatedness_ht, qc_ht,
     )
@@ -243,30 +243,12 @@ def main(args):
             relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
             qc_ht = hl.read_table(qc_ht_path(data_source, freeze))
 
-            # Filter second degree samples
+            # Remove unrelated samples to filter on all related samples
             related_samples_to_drop_second_deg_ht = filter_related_samples(
-                relatedness_ht, qc_ht, SECOND_DEGREE_RELATIVES
+                relatedness_ht, qc_ht
             )
 
-            # Filter duplicate samples
-            related_samples_to_drop_dup_ht = filter_related_samples(
-                relatedness_ht, qc_ht, DUPLICATE_OR_TWINS
-            )
-
-            # Filter first degree samples
-            related_samples_to_drop_pc_ht = filter_related_samples(
-                relatedness_ht, qc_ht, PARENT_CHILD
-            )
-            related_samples_to_drop_sib_ht = filter_related_samples(
-                relatedness_ht, qc_ht, SIBLINGS
-            )
-
-            # Combine first, second, and duplicate sample tables and annotate cutoffs
-            related_samples_to_drop_ht = related_samples_to_drop_second_deg_ht.union(
-                related_samples_to_drop_dup_ht,
-                related_samples_to_drop_pc_ht,
-                related_samples_to_drop_sib_ht,
-            )
+            # Annotate globals with cutoffs
             related_samples_to_drop_ht = related_samples_to_drop_ht.annotate_globals(
                 min_individual_maf=args.min_individual_maf,
                 min_emission_kinship=args.min_emission_kinship,
