@@ -48,6 +48,12 @@ def main(args):
                 f"Count after removing hard filtered samples: {callrate_mt.count_cols()}"
             )
 
+            logger.info("Annotating callrate MT with callrate...")
+            callrate_mt = callrate_mt.annotate_cols(
+                callrate=hl.agg.sum(callrate_mt.n_defined)
+                / hl.agg.sum(callrate_mt.total)
+            )
+
             # NOTE: added None binarization_threshold parameter to make sure we things the same way as before parameter existed
             eigenvalues, scores_ht, loadings_ht = run_platform_pca(
                 callrate_mt, binarization_threshold=None
