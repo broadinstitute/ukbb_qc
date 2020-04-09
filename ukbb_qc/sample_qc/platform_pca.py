@@ -103,7 +103,7 @@ if __name__ == "__main__":
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
     )
     parser.add_argument(
-        "--apply_interval_qc_filter",  # NOTE not super sure this is necessary
+        "--apply_interval_qc_filter",  # NOTE: Applying interval filter is counterproductive to platform PCA. Keeping this arg just in case
         help="Filter to good intervals from interval QC",
         action="store_true",
     )
