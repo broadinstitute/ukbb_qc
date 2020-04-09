@@ -331,20 +331,22 @@ if __name__ == "__main__":
         "--first_degree_kin_thresholds",
         help="First degree kinship threshold for filtering a pair of samples with a first degree relationship. \
         Default = (0.1767767, 0.4); \
-        0.1767767: lower cutoff for parent-offspring or full-siblings relationship, \
-        0.4: lower cutoff for twins/duplicate relationship)",
+        Defaults taken from Bycroft et al. (2018)",
         default="0.1767767,0.4",
     )
     parser.add_argument(
         "--second_degree_kin_cutoff",
         help="Minimum kinship threshold for filtering a pair of samples with a second degree relationship\
-        in PC relate and filtering related individuals. (Default = 0.08838835)",
+        in PC relate and filtering related individuals. (Default = 0.08838835) \
+        Default taken from Bycroft et al. (2018)",
         default=0.08838835,
         type=float,
     )
     parser.add_argument(
         "--ibd0_0_max",
-        help="IBD0 cutoff to determine parent offspring vs full sibling",
+        help="IBD0 cutoff to determine parent offspring vs full sibling (Default = 0.05) \
+        Default is adjusted from theoretical values; parent-offspring should have an IBD0 = 0. \
+        Full siblings should have an IBD0 = 0.25.",
         default=0.05,
     )
 
