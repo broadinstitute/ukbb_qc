@@ -50,9 +50,10 @@ def main(args):
 
             logger.info("Annotating callrate MT with callrate...")
             callrate_mt = callrate_mt.annotate_cols(
-                callrate=hl.agg.sum(callrate_mt.n_defined)
+                call_rate=hl.agg.sum(callrate_mt.n_defined)
                 / hl.agg.sum(callrate_mt.total)
             )
+            callrate_mt = callrate_mt.annotate_entries(callrate=callrate_mt.call_rate)
 
             # NOTE: added None binarization_threshold parameter to make sure we things the same way as before parameter existed
             eigenvalues, scores_ht, loadings_ht = run_platform_pca(
