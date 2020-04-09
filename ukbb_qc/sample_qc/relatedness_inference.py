@@ -14,6 +14,7 @@ from gnomad.sample_qc.relatedness import (
     PARENT_CHILD,
     SECOND_DEGREE_RELATIVES,
     SIBLINGS,
+    UNRELATED,
 )
 from gnomad.utils.slack import try_slack
 from ukbb_qc.resources.basics import get_checkpoint_path, logging_path
@@ -244,7 +245,7 @@ def main(args):
             qc_ht = hl.read_table(qc_ht_path(data_source, freeze))
 
             # Remove unrelated samples to filter on all related samples
-            related_samples_to_drop_second_deg_ht = filter_related_samples(
+            related_samples_to_drop_ht = filter_related_samples(
                 relatedness_ht, qc_ht
             )
 
