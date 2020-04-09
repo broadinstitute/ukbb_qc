@@ -160,7 +160,7 @@ def import_vqsr(
         force_bgz=True,
         reference_genome="GRCh38",
         header_file=import_header_path,
-    ).naive_coalesce(num_partitions)
+    ).repartition(num_partitions)
 
     ht = mt.rows()
 
@@ -186,11 +186,11 @@ def import_vqsr(
         overwrite=overwrite,
     )
 
-    row_count1 = ht.count()
+    unsplit_count = ht.count()
     ht = hl.split_multi_hts(ht)
 
     ht = ht.annotate(
-        info=ht.info.annotate(**split_info_annotation(ht.info, ht.a_index),),
+        info=ht.info.annotate(**split_info_annotation(ht.info, ht.a_index)),
     )
 
     ht = ht.checkpoint(
@@ -199,7 +199,7 @@ def import_vqsr(
         ),
         overwrite=overwrite,
     )
-    row_count2 = ht.count()
+    split_count = ht.count()
     logger.info(
-        f"Found {row_count1} unsplit and {row_count2} split variants with VQSR annotations"
+        f"Found {unsplit_count} unsplit and {split_count} split variants with VQSR annotations"
     )
