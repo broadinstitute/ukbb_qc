@@ -89,7 +89,6 @@ def main(args):
             platform_ht = platform_ht.annotate_globals(
                 hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
                 hdbscan_min_samples=hdbscan_min_samples,
-                interval_filtered=args.apply_interval_qc_filter,
             )
             platform_ht = platform_ht.repartition(args.n_partitions)
             platform_ht = platform_ht.checkpoint(
