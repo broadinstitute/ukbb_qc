@@ -6,13 +6,16 @@ import hail as hl
 import hdbscan
 import numpy as np
 
-from gnomad.sample_qc.ancestry import assign_population_pcs, pc_project
+from gnomad.sample_qc.ancestry import (
+    assign_population_pcs,
+    pc_project,
+    run_pca_with_relateds,
+)
 from gnomad.sample_qc.relatedness import UNRELATED
 from gnomad.utils.liftover import (
     annotate_snp_mismatch,
     get_liftover_genome,
     lift_data,
-    run_pca_with_relateds,
 )
 from gnomad.utils.slack import try_slack
 from gnomad_qc.v2.resources.basics import get_gnomad_meta
