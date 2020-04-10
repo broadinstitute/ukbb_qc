@@ -1,9 +1,7 @@
 import argparse
 import logging
-from typing import List, Optional, Tuple
 
 import hail as hl
-import hdbscan
 
 from gnomad.sample_qc.platform import (
     assign_platform_from_pcs,
@@ -50,68 +48,48 @@ def main(args):
             )
 
             logger.info("Annotating callrate MT with callrate...")
-            callrate_mt = callrate_mt.annotate_cols(
-                call_rate=hl.agg.sum(callrate_mt.n_defined)
-                / hl.agg.sum(callrate_mt.total)
-            )
             callrate_mt = callrate_mt.annotate_entries(
-                callrate=callrate_mt.call_rate
-            ).drop('call_rate')
+                callrate=callrate_mt.n_defined / callrate_mt.total
+            )
 
             # NOTE: added None binarization_threshold parameter to make sure we things the same way as before parameter existed
             eigenvalues, scores_ht, loadings_ht = run_platform_pca(
                 callrate_mt, binarization_threshold=None
             )
-            #scores_ht = scores_ht.checkpoint(
-            #    'gs://broad-ukbb/broad.freeze_6/sample_qc/platform_pca/platform_pca_scores_interval.ht'
-            #)
+            scores_ht = scores_ht.repartition(args.n_partitions)
             scores_ht = scores_ht.checkpoint(
-                platform_pca_scores_ht_path(
-                    data_source, freeze, interval_filtered=args.apply_interval_qc_filter
-                ),
+                platform_pca_scores_ht_path(data_source, freeze),
                 overwrite=args.overwrite,
             )
             logger.info(f"Scores Table count: {scores_ht.count()}")
-            #loadings_ht.write(
-            #    'gs://broad-ukbb/broad.freeze_6/sample_qc/platform_pca/platform_pca_loadings_interval.ht'
-            #)
+            loadings_ht = loadings_ht.repartition(args.n_partitions)
             loadings_ht.write(
-                platform_pca_loadings_ht_path(
-                    data_source, freeze, interval_filtered=args.apply_interval_qc_filter
-                ),
+                platform_pca_loadings_ht_path(data_source, freeze),
                 overwrite=args.overwrite,
             )
 
         if args.assign_platforms:
             logger.info("Assigning platforms based on platform PCA clustering")
-            scores_ht = hl.read_table(
-                platform_pca_scores_ht_path(
-                    data_source, freeze, interval_filtered=args.apply_interval_qc_filter
-                )
-            )
+            scores_ht = hl.read_table(platform_pca_scores_ht_path(data_source, freeze))
             platform_ht = assign_platform_from_pcs(
                 scores_ht,
                 hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
                 hdbscan_min_samples=args.hdbscan_min_samples,
             )
 
+            # Make sure hdbscan_min_samples is not None before annotating globals
             if not args.hdbscan_min_samples:
                 hdbscan_min_samples = args.hdbscan_min_cluster_size
-
             platform_ht = platform_ht.annotate_globals(
                 hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
                 hdbscan_min_samples=hdbscan_min_samples,
                 interval_filtered=args.apply_interval_qc_filter,
             )
+            platform_ht = platform_ht.repartition(args.n_partitions)
             platform_ht = platform_ht.checkpoint(
-                platform_pca_assignments_ht_path(
-                    data_source, freeze, interval_filtered=args.apply_interval_qc_filter
-                ),
+                platform_pca_assignments_ht_path(data_source, freeze),
                 overwrite=args.overwrite,
             )
-            #platform_ht = platform_ht.checkpoint(
-            #    'gs://broad-ukbb/broad.freeze_6/sample_qc/platform_pca/platform_pca_assignments_interval.ht'
-            #)
             logger.info(f"Platform PCA Table count: {platform_ht.count()}")
 
     finally:
@@ -126,9 +104,12 @@ if __name__ == "__main__":
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
     )
     parser.add_argument(
-        "--apply_interval_qc_filter",  # NOTE: Applying interval filter is counterproductive to platform PCA. Keeping this arg just in case
-        help="Filter to good intervals from interval QC",
-        action="store_true",
+        "--n_partitions",
+        help="Number of partitions for output HTs. \
+        NOTE: This argument will be used for ALL output HTs \
+        (scores HT, loadings HT, assignment HT if --run_platform_pca and --assign_platforms are both set",
+        default=5000,
+        type=int,
     )
     parser.add_argument(
         "--run_platform_pca",
