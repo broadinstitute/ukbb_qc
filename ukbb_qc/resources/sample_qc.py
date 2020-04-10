@@ -266,53 +266,47 @@ def callrate_mt_path(
     return f"{sample_qc_path(data_source, freeze)}/platform_pca/callrate{filtered}.mt"
 
 
-def platform_pca_scores_ht_path(
-    data_source: str, freeze: int = CURRENT_FREEZE, interval_filtered: bool = False
-) -> str:
+def platform_pca_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZE,) -> str:
     """
     Returns path to Table with platform PCA scores
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
-    :param bool interval_filtered: Whether data was filtered to high coverage intervals. Default is False
     :return: Path to platform PCA scores Table
     :rtype: str
     """
-    filtered = ".interval_filtered." if interval_filtered else ""
-    return f"{sample_qc_path(data_source, freeze)}/platform_pca/platform_pca_scores{filtered}.ht"
+    return f"{sample_qc_path(data_source, freeze)}/platform_pca/platform_pca_scores.ht"
 
 
 def platform_pca_loadings_ht_path(
-    data_source: str, freeze: int = CURRENT_FREEZE, interval_filtered: bool = False
+    data_source: str, freeze: int = CURRENT_FREEZE,
 ) -> str:
     """
     Returns path to Table with platform PCA loadings
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
-    :param bool interval_filtered: Whether data was filtered to high coverage intervals. Default is False
     :return: Path to platform PCA loadings Table
     :rtype: str
     """
-    filtered = ".interval_filtered." if interval_filtered else ""
-    return f"{sample_qc_path(data_source, freeze)}/platform_pca/platform_pca_loadings{filtered}.ht"
+    return (
+        f"{sample_qc_path(data_source, freeze)}/platform_pca/platform_pca_loadings.ht"
+    )
 
 
 def platform_pca_assignments_ht_path(
-    data_source: str, freeze: int = CURRENT_FREEZE, interval_filtered: bool = False
+    data_source: str, freeze: int = CURRENT_FREEZE,
 ) -> str:
     """
     Returns path to Table with platform PCA results
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
-    :param bool interval_filtered: Whether data was filtered to high coverage intervals. Default is False
     :return: Path to platform PCA results Table
     :rtype: str
     """
-    # NOTE: for tranche 1 and 2, this table was named "platform_pca_results"
-    filtered = ".interval_filtered." if interval_filtered else ""
-    return f"{sample_qc_path(data_source, freeze)}/platform_pca/platform_pca_assignments{filtered}.ht"
+    # NOTE: for tranche 1 and 2 (freeze 4 and 5; 100K and 200K), this table was named "platform_pca_results"
+    return f"{sample_qc_path(data_source, freeze)}/platform_pca/platform_pca_assignments.ht"
 
 
 # Relatedness inference resources
@@ -566,4 +560,3 @@ def platform_pop_outlier_ht_path(
     :rtype: str
     """
     return f"{sample_qc_path(data_source, freeze)}/outlier_detection/outlier_detection.{pop_assignment_method}_{platform_assignment_method}.ht"
-
