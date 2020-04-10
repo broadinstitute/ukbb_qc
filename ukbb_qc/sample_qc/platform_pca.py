@@ -7,6 +7,7 @@ from gnomad.sample_qc.platform import (
     assign_platform_from_pcs,
     run_platform_pca,
 )
+from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import try_slack
 from ukbb_qc.resources.basics import logging_path
 from ukbb_qc.resources.sample_qc import (
@@ -33,11 +34,7 @@ def main(args):
     try:
         if args.run_platform_pca:
             logger.info("Running platform PCA...")
-            callrate_mt = hl.read_matrix_table(
-                callrate_mt_path(
-                    data_source, freeze, interval_filtered=args.apply_interval_qc_filter
-                )
-            )
+            callrate_mt = hl.read_matrix_table(callrate_mt_path(data_source, freeze))
 
             logger.info("Removing hard filtered samples...")
             callrate_mt = remove_hard_filter_samples(
@@ -50,6 +47,15 @@ def main(args):
             logger.info("Annotating callrate MT with callrate...")
             callrate_mt = callrate_mt.annotate_entries(
                 callrate=callrate_mt.n_defined / callrate_mt.total
+            )
+
+            # NOTE: Callrate MT is not filtered to autosomes because it is used in interval QC
+            # NOTE: Can't use filter to autosomes because hl.filter_intervals doesn't appear to work on MT keyed by interval
+            logger.info("Filtering to autosomes...")
+            reference = get_reference_genome(callrate_mt.interval.start)
+            autosomes = hl.literal(reference.contigs[:22])
+            callrate_mt = callrate_mt.filter_rows(
+                autosomes.contains(callrate_mt.interval.start.contig)
             )
 
             # NOTE: added None binarization_threshold parameter to make sure we things the same way as before parameter existed
