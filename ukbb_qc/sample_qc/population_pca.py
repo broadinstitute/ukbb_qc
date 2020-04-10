@@ -1,17 +1,19 @@
 import argparse
 import logging
 import pickle
-import numpy as np
+
 import hail as hl
 import hdbscan
+import numpy as np
+
+from gnomad.sample_qc.ancestry import assign_population_pcs, pc_project
+from gnomad.sample_qc.relatedness import UNRELATED
 from gnomad.utils.liftover import (
     annotate_snp_mismatch,
     get_liftover_genome,
     lift_data,
+    run_pca_with_relateds,
 )
-from gnomad.utils.sample_qc import run_pca_with_relateds
-from gnomad.utils.generic import assign_population_pcs, pc_project
-from gnomad.utils.relatedness import UNRELATED
 from gnomad.utils.slack import try_slack
 from gnomad_qc.v2.resources.basics import get_gnomad_meta
 from gnomad_qc.v2.resources.sample_qc import (
@@ -272,19 +274,15 @@ def main(args):
             ancestry_pc_project_scores_ht_path(data_source, freeze, "joint")
         )
         joint_scores_ht = joint_scores_ht.annotate(
-            **{f"PC{i + 1}": joint_scores_ht.scores[i] for i in range(n_project_pcs)}
+            scores=joint_scores_ht.scores[:n_project_pcs]
         )
-        joint_scores_pd = joint_scores_ht.to_pandas()
-        joint_pops_pd, joint_pops_rf_model = assign_population_pcs(
-            joint_scores_pd,
-            pc_cols=[f"PC{i + 1}" for i in range(n_project_pcs)],
+        joint_pops_ht, joint_pops_rf_model = assign_population_pcs(
+            joint_scores_ht,
+            pc_cols=joint_scores_ht.scores,
             known_col="pop_for_rf",
             min_prob=args.min_pop_prob,
         )
 
-        joint_pops_ht = hl.Table.from_pandas(
-            joint_pops_pd, key=list(joint_scores_ht.key)
-        )
         scores_ht = joint_scores_ht.filter(hl.is_missing(joint_scores_ht.pop_for_rf))
         scores_ht = scores_ht.select("scores")
         joint_pops_ht = joint_pops_ht.drop("pop_for_rf")
