@@ -1,5 +1,6 @@
 import argparse
 import logging
+from typing import List, Optional, Tuple
 
 import hail as hl
 import hdbscan
@@ -53,19 +54,27 @@ def main(args):
                 call_rate=hl.agg.sum(callrate_mt.n_defined)
                 / hl.agg.sum(callrate_mt.total)
             )
-            callrate_mt = callrate_mt.annotate_entries(callrate=callrate_mt.call_rate)
+            callrate_mt = callrate_mt.annotate_entries(
+                callrate=callrate_mt.call_rate
+            ).drop('call_rate')
 
             # NOTE: added None binarization_threshold parameter to make sure we things the same way as before parameter existed
             eigenvalues, scores_ht, loadings_ht = run_platform_pca(
                 callrate_mt, binarization_threshold=None
             )
-            scores_ht.write(
+            #scores_ht = scores_ht.checkpoint(
+            #    'gs://broad-ukbb/broad.freeze_6/sample_qc/platform_pca/platform_pca_scores_interval.ht'
+            #)
+            scores_ht = scores_ht.checkpoint(
                 platform_pca_scores_ht_path(
                     data_source, freeze, interval_filtered=args.apply_interval_qc_filter
                 ),
                 overwrite=args.overwrite,
             )
             logger.info(f"Scores Table count: {scores_ht.count()}")
+            #loadings_ht.write(
+            #    'gs://broad-ukbb/broad.freeze_6/sample_qc/platform_pca/platform_pca_loadings_interval.ht'
+            #)
             loadings_ht.write(
                 platform_pca_loadings_ht_path(
                     data_source, freeze, interval_filtered=args.apply_interval_qc_filter
@@ -85,9 +94,13 @@ def main(args):
                 hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
                 hdbscan_min_samples=args.hdbscan_min_samples,
             )
+
+            if not args.hdbscan_min_samples:
+                hdbscan_min_samples = args.hdbscan_min_cluster_size
+
             platform_ht = platform_ht.annotate_globals(
                 hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
-                hdbscan_min_samples=args.hdbscan_min_samples,
+                hdbscan_min_samples=hdbscan_min_samples,
                 interval_filtered=args.apply_interval_qc_filter,
             )
             platform_ht = platform_ht.checkpoint(
@@ -96,6 +109,9 @@ def main(args):
                 ),
                 overwrite=args.overwrite,
             )
+            #platform_ht = platform_ht.checkpoint(
+            #    'gs://broad-ukbb/broad.freeze_6/sample_qc/platform_pca/platform_pca_assignments_interval.ht'
+            #)
             logger.info(f"Platform PCA Table count: {platform_ht.count()}")
 
     finally:
