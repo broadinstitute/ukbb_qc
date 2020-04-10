@@ -1,8 +1,10 @@
 import argparse
 import logging
 from typing import List
+
 import hail as hl
-from gnomad.utils.generic import filter_to_autosomes
+
+from gnomad.utils.filtering import filter_to_autosomes
 from gnomad.utils.slack import try_slack
 from ukbb_qc.resources.basics import (
     capture_ht_path,

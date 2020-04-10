@@ -1,13 +1,12 @@
 import argparse
 import logging
+
 import hail as hl
+
+from gnomad.sample_qc.pipeline import annotate_sex
+from gnomad.sample_qc.sex import adjust_sex_ploidy
+from gnomad.utils.annotations import add_variant_type, annotate_adj
 from gnomad.utils.slack import try_slack
-from gnomad.utils.gnomad_functions import (
-    adjust_sex_ploidy,
-    annotate_adj,
-    add_variant_type,
-)
-from gnomad.utils.sample_qc import default_annotate_sex
 from ukbb_qc.resources.basics import (
     get_ukbb_data,
     get_ukbb_data_path,
@@ -44,7 +43,7 @@ def main(args):
                 n_partitions=args.n_partitions,
             )
 
-            sex_ht = default_annotate_sex(
+            sex_ht = annotate_sex(
                 mt,
                 sites_ht=hl.read_table(f_stat_sites_path()),
                 aaf_expr="AF",

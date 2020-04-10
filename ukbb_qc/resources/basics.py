@@ -1,7 +1,9 @@
 import logging
 from typing import Optional
+
 import hail as hl
-from gnomad.utils.generic import file_exists, rep_on_read
+
+from gnomad.utils.file_utils import file_exists, rep_on_read
 from gnomad.resources.resource_utils import DataException
 from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES
 from .sample_qc import meta_ht_path
