@@ -5,15 +5,11 @@ from typing import Callable, Tuple
 import hail as hl
 
 from gnomad.sample_qc.relatedness import (
-    DUPLICATE_OR_TWINS,
     explode_duplicate_samples_ht,
     get_duplicated_samples_ht,
     get_duplicated_samples,
     get_relationship_expr,
     infer_families,
-    PARENT_CHILD,
-    SECOND_DEGREE_RELATIVES,
-    SIBLINGS,
     UNRELATED,
 )
 from gnomad.utils.slack import try_slack
@@ -108,21 +104,34 @@ def rank_related_samples(
 
 
 def filter_related_samples(
-    relatedness_ht: hl.Table, qc_ht: hl.Table, relationship: str = UNRELATED,
+    relatedness_ht: hl.Table,
+    qc_ht: hl.Table,
+    relationship: str = UNRELATED,
+    exclude: bool = True,
 ) -> hl.Table:
     """
-    Filters Table to related samples by removing input relationship. Returns Table with related samples to drop.
+    Determines related samples to drop by first filtering on the input relationship prior to using hl.maximal_independent_set.
+
+    Returns Table with related samples to drop.
 
     .. note::
-        Input Table must be annotated with relationship (from `get_relationship_expr`).
+
+        Input Table must be annotated with relationship (from `get_relationship_expr`). 
+        The input relationship is used to either filter samples annotated with that relationship
+        (if exclude is True) or keep samples with relationship (if exclude is False).
 
     :param Table relatedness_ht: Table of samples with relatedness results from `pc_relate` annotated with `get_relationship_expr`.
     :param Table qc_ht: Table of samples and their sample QC metrics, including mean depth.
-    :param str relationship: Desired relationship type to remove. Default is UNRELATED
+    :param str relationship: Desired relationship type. Default is UNRELATED.
+    :param bool exclude: Whether to exclude samples with input relationship. Default is True.
     :return: Table of related samples to be dropped.
     :rtype: hl.Table
     """
-    relatedness_ht = relatedness_ht.filter(relatedness_ht.relationship != relationship)
+    if exclude:
+        relatedness_ht = relatedness_ht.filter(relatedness_ht.relationship != relationship)
+    else:
+        relatedness_ht = relatedness_ht.filter(relatedness_ht.relationship == relationship)
+
     related_pairs_ht, related_pairs_tie_breaker = rank_related_samples(
         relatedness_ht, qc_ht,
     )
@@ -244,10 +253,9 @@ def main(args):
             relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
             qc_ht = hl.read_table(qc_ht_path(data_source, freeze))
 
-            # Remove unrelated samples to filter on all related samples
-            related_samples_to_drop_ht = filter_related_samples(
-                relatedness_ht, qc_ht
-            )
+            # Remove unrelated samples so hl.maximal_independent_set operates
+            # on all samples with more than second-degree relatedness
+            related_samples_to_drop_ht = filter_related_samples(relatedness_ht, qc_ht)
 
             # Annotate globals with cutoffs
             related_samples_to_drop_ht = related_samples_to_drop_ht.annotate_globals(
@@ -262,20 +270,7 @@ def main(args):
                 related_drop_path(data_source, freeze), overwrite=args.overwrite
             )
             logger.info(
-                f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == SECOND_DEGREE_RELATIVES).count()}"
-                f"{SECOND_DEGREE_RELATIVES} samples flagged in callset using maximal independent set"
-            )
-            logger.info(
-                f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == SIBLINGS).count()}"
-                f"{SIBLINGS} flagged in callset using maximal independent set"
-            )
-            logger.info(
-                f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == PARENT_CHILD).count()}"
-                f"{PARENT_CHILD} samples flagged in callset using maximal independent set"
-            )
-            logger.info(
-                f"{related_samples_to_drop_ht.filter(related_samples_to_drop_ht.relationship == DUPLICATE_OR_TWINS).count()}"
-                f"{DUPLICATE_OR_TWINS} samples flagged in callset using maximal independent set"
+                f"Number of related samples to drop (found using maximal independent set): {related_samples_to_drop_ht.count()}"
             )
 
     finally:
