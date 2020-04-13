@@ -110,7 +110,7 @@ def filter_related_samples(
     exclude: bool = True,
 ) -> hl.Table:
     """
-    Determines related samples to drop by first filtering on the input relationship prior to using hl.maximal_independent_set.
+    Determines related samples to drop by filtering to exclude or include the input relationship prior to using hl.maximal_independent_set.
 
     Returns Table with related samples to drop.
 
@@ -128,9 +128,13 @@ def filter_related_samples(
     :rtype: hl.Table
     """
     if exclude:
-        relatedness_ht = relatedness_ht.filter(relatedness_ht.relationship != relationship)
+        relatedness_ht = relatedness_ht.filter(
+            relatedness_ht.relationship != relationship
+        )
     else:
-        relatedness_ht = relatedness_ht.filter(relatedness_ht.relationship == relationship)
+        relatedness_ht = relatedness_ht.filter(
+            relatedness_ht.relationship == relationship
+        )
 
     related_pairs_ht, related_pairs_tie_breaker = rank_related_samples(
         relatedness_ht, qc_ht,
