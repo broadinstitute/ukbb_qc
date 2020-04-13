@@ -37,7 +37,6 @@ logger.setLevel(logging.INFO)
 
 
 def prepare_array_and_exome_mt(
-    data_source: str,
     freeze: int,
     array_mt: hl.MatrixTable,
     exome_mt: hl.MatrixTable,
@@ -51,7 +50,6 @@ def prepare_array_and_exome_mt(
 
     NOTE: Assumes input exome MatrixTable is split (hl.experimental.sparse_split_multi)
     
-    :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
     :param MatrixTable array_mt: Array MatrixTable
     :param MatrixTable exome_mt: Exome MatrixTable
@@ -205,7 +203,7 @@ def main(args):
 
         if args.array_concordance:
             logger.info("Checking concordance between exome and array data...")
-            '''array_mt = hl.read_matrix_table(array_mt_path(liftover=True))
+            array_mt = hl.read_matrix_table(array_mt_path(liftover=True))
             exome_mt = get_ukbb_data(data_source, freeze, adj=True, split=True)
 
             logger.info("Removing hard filtered samples...")
@@ -235,6 +233,8 @@ def main(args):
                 data_source, freeze, array_mt, exome_mt, call_rate_cutoff, af_cutoff
             )
 
+            # NOTE: for freeze 6 (300K), had to remove duplicate samples
+            # removed UKB_4048554_0301608642 and column index 204526 (higher column index for duplicate sample UKB_1223807_0330880742)
             exome_mt = exome_mt.checkpoint(
                 get_checkpoint_path(
                     data_source,
@@ -252,9 +252,7 @@ def main(args):
                     mt=True,
                 ),
                 overwrite=overwrite,
-            )'''
-            exome_mt = hl.read_matrix_table('gs://broad-ukbb/broad.freeze_6/temp/exome_subset_concordance_callrate_0.95_af_0.0001.mt')
-            array_mt = hl.read_matrix_table('gs://broad-ukbb/broad.freeze_6/temp/array_subset_concordance_callrate_0.95_af_0.0001.mt')
+            )
 
             samples, variants = get_array_exome_concordance(array_mt, exome_mt)
 
@@ -264,11 +262,12 @@ def main(args):
             samples = samples.annotate_globals(
                 callrate_cutoff=call_rate_cutoff, af_cutoff=af_cutoff
             )
-
+            variants = variants.naive_coalesce(args.n_partitions)
             variants.write(
                 array_concordance_results_path(data_source, freeze, sample=False),
                 overwrite=overwrite,
             )
+            samples = samples.repartition(args.n_partitions)
             samples.write(
                 array_concordance_results_path(data_source, freeze), overwrite=overwrite
             )
@@ -289,7 +288,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--slack_channel", help="Slack channel to post results and notifications to."
     )
-
+    parser.add_argument(
+        "--n_partitions",
+        help="Number of partitions for desired output Tables. Used when writing variant and sample concordance HTs",
+        default=5000,
+        type=int,
+    )
     array_import = parser.add_argument_group(
         "Import array plink files and write Matrix Table"
     )
