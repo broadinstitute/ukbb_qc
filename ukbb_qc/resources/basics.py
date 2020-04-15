@@ -56,7 +56,7 @@ def get_ukbb_data(
     :return: hardcalls dataset
     :rtype: MatrixTable
     """
-    from gnomad.utils import filter_to_adj
+    from gnomad.utils.filtering import filter_to_adj
 
     if raw and split:
         raise DataException("No split raw data. Use of hardcalls is recommended.")
