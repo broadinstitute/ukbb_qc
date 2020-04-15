@@ -266,7 +266,7 @@ def callrate_mt_path(
     return f"{sample_qc_path(data_source, freeze)}/platform_pca/callrate{filtered}.mt"
 
 
-def platform_pca_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZE,) -> str:
+def platform_pca_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
     Returns path to Table with platform PCA scores
 
@@ -279,7 +279,7 @@ def platform_pca_scores_ht_path(data_source: str, freeze: int = CURRENT_FREEZE,)
 
 
 def platform_pca_loadings_ht_path(
-    data_source: str, freeze: int = CURRENT_FREEZE,
+    data_source: str, freeze: int = CURRENT_FREEZE
 ) -> str:
     """
     Returns path to Table with platform PCA loadings
@@ -295,7 +295,7 @@ def platform_pca_loadings_ht_path(
 
 
 def platform_pca_assignments_ht_path(
-    data_source: str, freeze: int = CURRENT_FREEZE,
+    data_source: str, freeze: int = CURRENT_FREEZE
 ) -> str:
     """
     Returns path to Table with platform PCA results
