@@ -67,7 +67,7 @@ def rank_related_samples(
             **{
                 index_col: related_pairs[index_col].annotate(
                     dp_mean=hl.or_else(
-                        qc_ht[related_pairs.key].sample_qc.dp_mean, -1.0
+                        qc_ht[related_pairs.key].sample_qc.dp_stats.mean, -1.0
                     )
                 )
             }
@@ -199,7 +199,7 @@ def main(args):
                     ibd0_expr=relatedness_ht.ibd0,
                     ibd1_expr=relatedness_ht.ibd1,
                     ibd2_expr=relatedness_ht.ibd2,
-                    first_degree_kin_thresholds=tuple(map(float, args.first_degree_kin_thresholds.split(","))),
+                    first_degree_kin_thresholds=args.first_degree_kin_thresholds,
                     second_degree_min_kin=args.second_degree_kin_cutoff,
                     ibd0_0_max=args.ibd0_0_max,
                 )
@@ -211,7 +211,6 @@ def main(args):
                 second_degree_kin_cutoff=args.second_degree_kin_cutoff,
                 first_degree_kin_thresholds=args.first_degree_kin_thresholds,
             )
-            relatedness_ht = relatedness_ht.repartition(args.n_partitions)
             relatedness_ht.write(
                 relatedness_ht_path(data_source, freeze), args.overwrite
             )
@@ -222,13 +221,12 @@ def main(args):
                 data_source, freeze, hl.read_table(qc_ht_path(data_source, freeze))
             )
             samples_rankings_ht = sample_qc_ht.select(
-                rank=(-1 * sample_qc_ht.sample_qc.dp_mean)
+                rank=(-1 * sample_qc_ht.sample_qc.dp_stats.mean)
             )
             relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
             dup_samples = get_duplicated_samples(relatedness_ht)
             if len(dup_samples) > 0:
                 dups_ht = get_duplicated_samples_ht(dup_samples, samples_rankings_ht)
-                dups_ht = dups_ht.repartition(args.n_partitions)
                 dups_ht.write(
                     duplicates_ht_path(data_source, freeze, dup_sets=True),
                     overwrite=args.overwrite,
@@ -240,14 +238,13 @@ def main(args):
                 )
             else:
                 dups_ht = sample_qc_ht.select(duplicate=False)
-            dups_ht = dups_ht.repartition(args.n_partitions)
             dups_ht.write(
                 duplicates_ht_path(data_source, freeze), overwrite=args.overwrite
             )
 
         if not args.skip_infer_families:
             logger.info("Inferring families...")
-            dups_ht = hl.read_table(duplicates_ht_path(data_source, freeze, dup_sets=True))
+            dups_ht = hl.read_table(duplicates_ht_path(data_source, freeze))
             ped = infer_families(
                 hl.read_table(relatedness_ht_path(data_source, freeze)),
                 hl.read_table(sex_ht_path(data_source, freeze)),
@@ -272,7 +269,7 @@ def main(args):
                 second_degree_kin_cutoff=args.second_degree_kin_cutoff,
                 first_degree_kin_thresholds=args.first_degree_kin_thresholds,
             )
-            related_samples_to_drop_ht = related_samples_to_drop_ht.repartition(args.n_partitions)
+
             related_samples_to_drop_ht = related_samples_to_drop_ht.checkpoint(
                 related_drop_path(data_source, freeze), overwrite=args.overwrite
             )
@@ -292,9 +289,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
     )
-    parser.add_argument(
-        "--n_partitions", help="Number of partitions to use for all output HTs", default=5000, type=int
-    )
+
     parser.add_argument(
         "--skip_pc_relate",
         help="Skip running PC-relate on all samples. \
