@@ -66,9 +66,7 @@ def rank_related_samples(
         return related_pairs.annotate(
             **{
                 index_col: related_pairs[index_col].annotate(
-                    dp_mean=hl.or_else(
-                        qc_ht[related_pairs.key].sample_qc.dp_stats.mean, -1.0
-                    )
+                    dp_mean=hl.or_else(qc_ht[related_pairs.key].sample_qc.dp_mean, -1.0)
                 )
             }
         ).key_by()
@@ -161,6 +159,7 @@ def main(args):
 
     data_source = "broad"
     freeze = args.freeze
+    first_degree_kin_thresholds = tuple(args.first_degree_kin_thresholds)
 
     try:
         if not args.skip_pc_relate:
@@ -199,7 +198,7 @@ def main(args):
                     ibd0_expr=relatedness_ht.ibd0,
                     ibd1_expr=relatedness_ht.ibd1,
                     ibd2_expr=relatedness_ht.ibd2,
-                    first_degree_kin_thresholds=args.first_degree_kin_thresholds,
+                    first_degree_kin_thresholds=first_degree_kin_thresholds,
                     second_degree_min_kin=args.second_degree_kin_cutoff,
                     ibd0_0_max=args.ibd0_0_max,
                 )
@@ -209,8 +208,9 @@ def main(args):
                 min_emission_kinship=args.min_emission_kinship,
                 ibd0_0_max=args.ibd0_0_max,
                 second_degree_kin_cutoff=args.second_degree_kin_cutoff,
-                first_degree_kin_thresholds=args.first_degree_kin_thresholds,
+                first_degree_kin_thresholds=first_degree_kin_thresholds,
             )
+            relatedness_ht = relatedness_ht.repartition(args.n_partitions)
             relatedness_ht.write(
                 relatedness_ht_path(data_source, freeze), args.overwrite
             )
@@ -221,12 +221,13 @@ def main(args):
                 data_source, freeze, hl.read_table(qc_ht_path(data_source, freeze))
             )
             samples_rankings_ht = sample_qc_ht.select(
-                rank=(-1 * sample_qc_ht.sample_qc.dp_stats.mean)
+                rank=(-1 * sample_qc_ht.sample_qc.dp_mean)
             )
             relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
             dup_samples = get_duplicated_samples(relatedness_ht)
             if len(dup_samples) > 0:
                 dups_ht = get_duplicated_samples_ht(dup_samples, samples_rankings_ht)
+                dups_ht = dups_ht.repartition(args.n_partitions)
                 dups_ht.write(
                     duplicates_ht_path(data_source, freeze, dup_sets=True),
                     overwrite=args.overwrite,
@@ -238,13 +239,16 @@ def main(args):
                 )
             else:
                 dups_ht = sample_qc_ht.select(duplicate=False)
+            dups_ht = dups_ht.repartition(args.n_partitions)
             dups_ht.write(
                 duplicates_ht_path(data_source, freeze), overwrite=args.overwrite
             )
 
         if not args.skip_infer_families:
             logger.info("Inferring families...")
-            dups_ht = hl.read_table(duplicates_ht_path(data_source, freeze))
+            dups_ht = hl.read_table(
+                duplicates_ht_path(data_source, freeze, dup_sets=True)
+            )
             ped = infer_families(
                 hl.read_table(relatedness_ht_path(data_source, freeze)),
                 hl.read_table(sex_ht_path(data_source, freeze)),
@@ -267,9 +271,11 @@ def main(args):
                 min_emission_kinship=args.min_emission_kinship,
                 ibd0_0_max=args.ibd0_0_max,
                 second_degree_kin_cutoff=args.second_degree_kin_cutoff,
-                first_degree_kin_thresholds=args.first_degree_kin_thresholds,
+                first_degree_kin_thresholds=first_degree_kin_thresholds,
             )
-
+            related_samples_to_drop_ht = related_samples_to_drop_ht.repartition(
+                args.n_partitions
+            )
             related_samples_to_drop_ht = related_samples_to_drop_ht.checkpoint(
                 related_drop_path(data_source, freeze), overwrite=args.overwrite
             )
@@ -289,7 +295,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
     )
-
+    parser.add_argument(
+        "--n_partitions",
+        help="Number of partitions to use for all output HTs",
+        default=5000,
+        type=int,
+    )
     parser.add_argument(
         "--skip_pc_relate",
         help="Skip running PC-relate on all samples. \
@@ -314,7 +325,9 @@ if __name__ == "__main__":
         help="First degree kinship threshold for filtering a pair of samples with a first degree relationship. \
         Default = (0.1767767, 0.4); \
         Defaults taken from Bycroft et al. (2018)",
-        default="0.1767767,0.4",
+        nargs=2,
+        default=(0.1767767, 0.4),
+        type=float,
     )
     parser.add_argument(
         "--second_degree_kin_cutoff",
@@ -331,7 +344,6 @@ if __name__ == "__main__":
         Full siblings should have an IBD0 = 0.25.",
         default=0.05,
     )
-
     parser.add_argument(
         "--skip_filter_dups",
         help="Skip filtering duplicated samples",
@@ -354,7 +366,6 @@ if __name__ == "__main__":
         default=0.4,
         type=float,
     )
-
     parser.add_argument(
         "-o",
         "--overwrite",
