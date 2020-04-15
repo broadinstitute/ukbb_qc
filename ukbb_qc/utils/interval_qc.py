@@ -128,6 +128,7 @@ def main(args):
                 capture_ht,
                 autosomes_only=False,
                 target_pct_gt_cov=target_pct_gt_cov,
+                overwrite=args.overwrite,
             )
 
         logger.info("Reading in call rate MT...")
