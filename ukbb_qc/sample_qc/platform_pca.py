@@ -87,7 +87,6 @@ def main(args):
                 hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
                 hdbscan_min_samples=hdbscan_min_samples,
             )
-            platform_ht = platform_ht.repartition(args.n_partitions)
             platform_ht = platform_ht.checkpoint(
                 platform_pca_assignments_ht_path(data_source, freeze),
                 overwrite=args.overwrite,
