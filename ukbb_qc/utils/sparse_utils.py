@@ -21,6 +21,7 @@ def compute_interval_callrate_dp_mt(
     bi_allelic_only: bool = True,
     autosomes_only: bool = True,
     target_pct_gt_cov: List = [10, 20],
+    overwrite: bool = False,
 ) -> None:
     """
     Computes sample metrics (n_defined, total, mean_dp, pct_gt_20x, pct_dp_defined) per interval. 
@@ -39,6 +40,7 @@ def compute_interval_callrate_dp_mt(
     :param bool bi_allelic_only: If set, only bi-allelic sites are used for the computation.
     :param bool autosomes_only: If set, only autosomal intervals are used.
     :param List target_pct_gt_cov: Coverage levels to check for each target. Default is [10, 20].
+    :param bool overwrite: Whether to overwrite existing data. Default is False.
     :return: None
     """
     logger.warning(
