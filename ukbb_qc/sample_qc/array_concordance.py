@@ -233,7 +233,7 @@ def main(args):
                 data_source, freeze, array_mt, exome_mt, call_rate_cutoff, af_cutoff
             )
 
-            # NOTE: for freeze 6 (300K), had to remove duplicate samples
+            # NOTE: for freeze 6 (300K), had to remove two samples with duplicate IDs
             # removed UKB_4048554_0301608642 and column index 204526 (higher column index for duplicate sample UKB_1223807_0330880742)
             exome_mt = exome_mt.checkpoint(
                 get_checkpoint_path(
