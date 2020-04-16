@@ -88,12 +88,13 @@ def main(args):
 
             # Filter out star alleles and checkpoint
             mt = mt.filter_rows((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
+            ht = mt.rows().select("allele_data")
+            mt = mt.drop("allele_data")
             mt = mt.checkpoint(
                 get_ukbb_data_path(data_source, freeze, hardcalls=True), args.overwrite,
             )
 
             # Finish generating allele data
-            ht = mt.rows().select("allele_data")
             allele_type = (
                 hl.case()
                 .when(hl.is_snp(ht.alleles[0], ht.alleles[1]), "snv")
