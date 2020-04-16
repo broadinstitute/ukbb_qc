@@ -92,4 +92,7 @@ def compute_interval_callrate_dp_mt(
         },
         pct_dp_defined=hl.agg.count_where(mt.DP > 0) / hl.agg.count(),
     )
-    mt.write(callrate_mt_path(data_source, freeze, interval_filtered=False))
+    mt.write(
+        callrate_mt_path(data_source, freeze, interval_filtered=False),
+        overwrite=overwrite,
+    )
