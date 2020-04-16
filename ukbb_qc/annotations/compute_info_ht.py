@@ -1,6 +1,8 @@
 import argparse
-import hail as hl
 import logging
+
+import hail as hl
+
 from gnomad.utils.annotations import get_lowqual_expr
 from gnomad.utils.slack import try_slack
 from gnomad.utils.sparse_mt import (
@@ -34,7 +36,8 @@ def main(args):
         freeze,
         split=False,
         raw=True,
-        repartition=True,
+        repartition=args.repartition,
+        n_partitions=args.raw_partitions,
         key_by_locus_and_alleles=True,
     )
     mt = mt.filter_rows((hl.len(mt.alleles) > 1))
@@ -50,7 +53,8 @@ def main(args):
             )
         )
 
-        logger.info("Annotating VQSR raw MT with pab max...")
+        logger.info("Annotating raw MT with pab max...")
+        # Note: we use indel_phred_het_prior=40 to be more consistent with the filtering used by DSP/Laura for VQSR
         mt = mt.select_rows()
         ht = mt.annotate_rows(
             AS_pab_max=hl.agg.array_agg(
@@ -66,7 +70,6 @@ def main(args):
 
         logger.info("Annotating VQSR unsplit HT with pab max from raw MT...")
         info_ht = info_ht.annotate(AS_pab_max=ht[info_ht.key].AS_pab_max)
-
     else:
         logger.info("Computing info HT...")
         info_ht = default_compute_info(mt, site_annotations=True)
@@ -76,6 +79,7 @@ def main(args):
     )
 
     logger.info("Annotating info HT with lowqual...")
+    # Note: we use indel_phred_het_prior=40 to be more consistent with the filtering used by DSP/Laura for VQSR
     info_ht = info_ht.annotate(
         lowqual=get_lowqual_expr(
             info_ht.alleles, info_ht.info.QUALapprox, indel_phred_het_prior=40
@@ -103,7 +107,11 @@ def main(args):
         pct_samples=args.interval_filter_pct_samples,
     )
     info_ht = info_ht.annotate_globals(
-        vqsr=args.use_vqsr, vqsr_type=args.vqsr_type if args.use_vqsr else None
+        vqsr=args.use_vqsr,
+        vqsr_type=args.vqsr_type if args.use_vqsr else None,
+        cov_filter_field=args.interval_cov_filter_field,
+        xy_cov_filter_field=args.xy_cov_filter_field,
+        pct_samples=args.interval_filter_pct_samples,
     )
 
     info_ht.write(
@@ -115,6 +123,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
+    )
+    parser.add_argument(
+        "--repartition",
+        help="Repartition raw MT on read. Required for 300K",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--raw_partitions",
+        help="Number of desired partitions for the raw MT. Necessary only for 300K. Used only if --repartition is also specified",
+        default=30000,
+        type=int,
     )
     parser.add_argument(
         "--use_vqsr",
