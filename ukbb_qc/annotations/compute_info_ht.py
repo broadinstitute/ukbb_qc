@@ -69,14 +69,12 @@ def main(args):
         ).rows()
 
         logger.info("Annotating VQSR unsplit HT with pab max from raw MT...")
-        info_ht = info_ht.annotate(AS_pab_max=ht[info_ht.key].AS_pab_max)
+        info_ht = info_ht.annotate(
+            info=info_ht.info.annotate(AS_pab_max=ht[info_ht.key].AS_pab_max)
+        )
     else:
         logger.info("Computing info HT...")
         info_ht = default_compute_info(mt, site_annotations=True)
-
-    info_ht = info_ht.checkpoint(
-        info_ht_path(data_source, freeze, split=False), overwrite=args.overwrite
-    )
 
     logger.info("Annotating info HT with lowqual...")
     # Note: we use indel_phred_het_prior=40 to be more consistent with the filtering used by DSP/Laura for VQSR
@@ -87,6 +85,10 @@ def main(args):
         AS_lowqual=get_lowqual_expr(
             info_ht.alleles, info_ht.info.AS_QUALapprox, indel_phred_het_prior=40
         ),
+    )
+
+    info_ht = info_ht.checkpoint(
+        info_ht_path(data_source, freeze, split=False), overwrite=args.overwrite
     )
 
     logger.info("Splitting info ht...")
