@@ -40,7 +40,7 @@ def main(args):
         n_partitions=args.raw_partitions,
         key_by_locus_and_alleles=True,
     )
-    mt = mt.filter_rows((hl.len(mt.alleles) > 1))
+    mt = mt.filter_rows(hl.len(mt.alleles) > 1)
     mt = remove_hard_filter_samples(data_source, freeze, mt, non_refs_only=True)
 
     if args.use_vqsr:
@@ -54,7 +54,6 @@ def main(args):
         )
 
         logger.info("Annotating raw MT with pab max...")
-        # Note: we use indel_phred_het_prior=40 to be more consistent with the filtering used by DSP/Laura for VQSR
         mt = mt.select_rows()
         ht = mt.annotate_rows(
             AS_pab_max=hl.agg.array_agg(
@@ -76,7 +75,7 @@ def main(args):
         logger.info("Computing info HT...")
         info_ht = default_compute_info(mt, site_annotations=True)
 
-    logger.info("Annotating info HT with lowqual...")
+    logger.info("Updating lowqual annotations with indel_phred_het_prior=40...")
     # Note: we use indel_phred_het_prior=40 to be more consistent with the filtering used by DSP/Laura for VQSR
     info_ht = info_ht.annotate(
         lowqual=get_lowqual_expr(
