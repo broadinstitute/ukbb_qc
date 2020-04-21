@@ -184,21 +184,23 @@ def main(args):
         )
         logger.info("Filtering related samples...")
         related_ht = hl.read_table(related_drop_path(data_source, freeze))
-        related_ht = related_ht.filter((related_ht.relationship != UNRELATED))
+        # related_ht = related_ht.filter((related_ht.relationship != UNRELATED))
         pca_evals, pop_pca_scores_ht, pop_pca_loadings_ht = run_pca_with_relateds(
             qc_mt, related_ht, n_exome_pcs
         )
         pop_pca_scores_ht = pop_pca_scores_ht.annotate_globals(n_exome_pcs=n_exome_pcs)
+        pop_pca_loadings_ht = pop_pca_loadings_ht.naive_coalesce(args.n_partitions)
         pop_pca_loadings_ht.write(
             ancestry_pca_loadings_ht_path(data_source, freeze), args.overwrite
         )
+        pop_pca_scores_ht = pop_pca_scores_ht.repartition(args.n_partitions)
         pop_pca_scores_ht.write(
             ancestry_pca_scores_ht_path(data_source, freeze), args.overwrite
         )
 
     if args.assign_clusters:
         logger.info("Assigning PCA clustering...")
-        scores_ht = hl.read_table((data_source, freeze))
+        scores_ht = hl.read_table(pop_pca_scores_ht(data_source, freeze))
         pops_ht = assign_cluster_from_pcs(
             scores_ht,
             hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
@@ -209,6 +211,7 @@ def main(args):
             hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
             hdbscan_min_samples=args.hdbscan_min_samples,
         )
+        pops_ht = pops_ht.repartition(args.n_partitions)
         pops_ht.write(ancestry_cluster_ht_path(data_source, freeze), args.overwrite)
 
     if args.assign_clusters_array_pcs:
@@ -227,6 +230,7 @@ def main(args):
             hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
             hdbscan_min_samples=args.hdbscan_min_samples,
         )
+        pops_ht = pops_ht.repartition(args.n_partitions)
         pops_ht.write(
             ancestry_cluster_ht_path(data_source, freeze, "array"), args.overwrite
         )
@@ -255,6 +259,7 @@ def main(args):
             n_exome_pcs=scores_ht.n_exome_pcs,
             n_array_pcs=n_array_pcs,
         )
+        pops_ht = pops_ht.repartition(args.n_partitions)
         pops_ht.write(
             ancestry_cluster_ht_path(data_source, freeze, "joint"), args.overwrite,
         )
@@ -266,6 +271,7 @@ def main(args):
         mt = get_ukbb_data(data_source, freeze, split=True, adj=True)
         mt = remove_hard_filter_samples(data_source, freeze, mt, gt_field="GT")
         joint_scores_ht = project_on_gnomad_pop_pcs(mt, n_project_pcs)
+        joint_scores_ht = joint_scores_ht.repartition(args.n_partitions)
         joint_scores_ht.write(
             ancestry_pc_project_scores_ht_path(data_source, freeze, "joint"),
             overwrite=args.overwrite,
@@ -293,6 +299,7 @@ def main(args):
         scores_ht = scores_ht.annotate_globals(
             n_project_pcs=n_project_pcs, min_prob=args.min_pop_prob
         )
+        scores_ht = scores_ht.repartition(args.n_partitions)
         scores_ht = scores_ht.checkpoint(
             ancestry_pc_project_scores_ht_path(data_source, freeze),
             overwrite=args.overwrite,
@@ -336,6 +343,7 @@ def main(args):
             .default(hl.str(pop_ht.HDBSCAN_pop_cluster)),
             pop_pca_scores=pc_scores_ht[pop_ht.key].scores,
         )
+        pop_ht = pop_ht.repartition(args.n_partitions)
         pop_ht.write(ancestry_hybrid_ht_path(data_source, freeze), args.overwrite)
 
 
@@ -344,6 +352,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
+    )
+    parser.add_argument(
+        "--n_partitions",
+        help="Number of desired partitions for output",
+        default=5000,
+        type=int,
     )
     parser.add_argument(
         "--liftover_gnomad_ancestry_loadings",
