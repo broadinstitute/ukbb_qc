@@ -183,7 +183,7 @@ def main(args):
             gt_field="GT",
         )
         logger.info("Filtering related samples...")
-        related_ht = related_drop_path(data_source, freeze)
+        related_ht = hl.read_table(related_drop_path(data_source, freeze))
         related_ht = related_ht.filter((related_ht.relationship != UNRELATED))
         pca_evals, pop_pca_scores_ht, pop_pca_loadings_ht = run_pca_with_relateds(
             qc_mt, related_ht, n_exome_pcs
