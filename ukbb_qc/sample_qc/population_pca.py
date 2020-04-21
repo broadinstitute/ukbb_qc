@@ -24,7 +24,6 @@ from gnomad_qc.v2.resources.sample_qc import (
 )
 from ukbb_qc.resources.basics import (
     array_sample_map_ht_path,
-    get_ukbb_array_pcs_ht_path,
     get_ukbb_data,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
@@ -34,6 +33,7 @@ from ukbb_qc.resources.sample_qc import (
     ancestry_pc_project_scores_ht_path,
     ancestry_pca_loadings_ht_path,
     ancestry_pca_scores_ht_path,
+    get_ukbb_array_pcs_ht_path,
     gnomad_ancestry_loadings_liftover_path,
     qc_mt_path,
     qc_temp_data_prefix,
