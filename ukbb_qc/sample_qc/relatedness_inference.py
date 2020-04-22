@@ -173,6 +173,7 @@ def main(args):
             eig, scores, _ = hl.hwe_normalized_pca(
                 pruned_qc_mt.GT, k=10, compute_loadings=False
             )
+            scores = scores.repartition(args.n_partitions)
             scores.write(
                 relatedness_pca_scores_ht_path(data_source, freeze), args.overwrite
             )
