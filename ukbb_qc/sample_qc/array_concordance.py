@@ -87,6 +87,7 @@ def prepare_array_and_exome_mt(
     sites_ht = sites_ht.key_by("locus", "alleles")
     exome_mt = exome_mt.filter_rows(hl.is_defined(sites_ht[exome_mt.row_key]))
     array_mt = array_mt.filter_rows(hl.is_defined(sites_ht[array_mt.row_key]))
+    array_mt = array_mt.annotate_rows(tranche_2_af=sites_ht[array_mt.row_key].AF)
     return array_mt, exome_mt
 
 
@@ -230,7 +231,7 @@ def main(args):
                 exome_mt = exome_mt.filter_rows(exome_mt.interval_qc_pass)
 
             array_mt, exome_mt = prepare_array_and_exome_mt(
-                data_source, freeze, array_mt, exome_mt, call_rate_cutoff, af_cutoff
+                freeze, array_mt, exome_mt, call_rate_cutoff, af_cutoff
             )
 
             # NOTE: for freeze 6 (300K), had to remove two samples with duplicate IDs
