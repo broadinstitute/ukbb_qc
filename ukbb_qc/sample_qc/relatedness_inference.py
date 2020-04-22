@@ -175,7 +175,8 @@ def main(args):
             )
             scores = scores.repartition(args.n_partitions)
             scores.write(
-                relatedness_pca_scores_ht_path(data_source, freeze), args.overwrite
+                relatedness_pca_scores_ht_path(data_source, freeze),
+                overwrite=args.overwrite,
             )
 
             logger.info("Running PC-Relate...")
@@ -189,7 +190,8 @@ def main(args):
                 statistics="all",
             )
             relatedness_ht = relatedness_ht.checkpoint(
-                get_checkpoint_path(data_source, freeze, name="pc_relate_temp")
+                get_checkpoint_path(data_source, freeze, name="pc_relate_temp"),
+                overwrite=args.overwrite,
             )
 
             logger.info("Annotating PC relate results with relationships...")
@@ -213,7 +215,7 @@ def main(args):
             )
             relatedness_ht = relatedness_ht.repartition(args.n_partitions)
             relatedness_ht.write(
-                relatedness_ht_path(data_source, freeze), args.overwrite
+                relatedness_ht_path(data_source, freeze), overwrite=args.overwrite
             )
 
         if not args.skip_filter_dups:
