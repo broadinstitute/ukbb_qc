@@ -88,7 +88,6 @@ def prepare_array_and_exome_mt(
     exome_mt = exome_mt.filter_rows(hl.is_defined(sites_ht[exome_mt.row_key]))
     array_mt = array_mt.filter_rows(hl.is_defined(sites_ht[array_mt.row_key]))
     array_mt = array_mt.annotate_rows(tranche_2_af=sites_ht[array_mt.row_key].AF)
-    array_mt.describe()
     return array_mt, exome_mt
 
 
