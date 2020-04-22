@@ -148,6 +148,8 @@ def main(args):
     n_exome_pcs = args.n_exome_pcs
     n_array_pcs = args.n_array_pcs
     n_project_pcs = args.n_project_pcs
+    if not args.hdbscan_min_samples:
+        hdbscan_min_samples = args.hdbscan_min_cluster_size
 
     # Note: This code only needed to be run once and has already been run
     if args.liftover_gnomad_ancestry_loadings:
@@ -200,16 +202,17 @@ def main(args):
 
     if args.assign_clusters:
         logger.info("Assigning PCA clustering...")
-        scores_ht = hl.read_table(pop_pca_scores_ht(data_source, freeze))
+        scores_ht = hl.read_table(ancestry_pca_scores_ht_path(data_source, freeze))
+        n_exome_pcs = hl.eval(scores_ht.n_exome_pcs)
         pops_ht = assign_cluster_from_pcs(
             scores_ht,
             hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
-            hdbscan_min_samples=args.hdbscan_min_samples,
+            hdbscan_min_samples=hdbscan_min_samples,
         )
         pops_ht.annotate_globals(
-            n_exome_pcs=scores_ht.n_exome_pcs,
+            n_exome_pcs=n_exome_pcs,
             hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
-            hdbscan_min_samples=args.hdbscan_min_samples,
+            hdbscan_min_samples=hdbscan_min_samples,
         )
         pops_ht = pops_ht.repartition(args.n_partitions)
         pops_ht.write(ancestry_cluster_ht_path(data_source, freeze), args.overwrite)
@@ -223,12 +226,12 @@ def main(args):
         pops_ht = assign_cluster_from_pcs(
             array_pc_ht,
             hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
-            hdbscan_min_samples=args.hdbscan_min_samples,
+            hdbscan_min_samples=hdbscan_min_samples,
         )
         pops_ht.annotate_globals(
             n_array_pcs=n_array_pcs,
             hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
-            hdbscan_min_samples=args.hdbscan_min_samples,
+            hdbscan_min_samples=hdbscan_min_samples,
         )
         pops_ht = pops_ht.repartition(args.n_partitions)
         pops_ht.write(
@@ -251,11 +254,11 @@ def main(args):
         pops_ht = assign_cluster_from_pcs(
             array_pc_ht,
             hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
-            hdbscan_min_samples=args.hdbscan_min_samples,
+            hdbscan_min_samples=hdbscan_min_samples,
         )
         pops_ht.annotate_globals(
             hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
-            hdbscan_min_samples=args.hdbscan_min_samples,
+            hdbscan_min_samples=hdbscan_min_samples,
             n_exome_pcs=scores_ht.n_exome_pcs,
             n_array_pcs=n_array_pcs,
         )
