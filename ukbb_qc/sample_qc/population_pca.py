@@ -75,7 +75,7 @@ def project_on_gnomad_pop_pcs(mt: hl.MatrixTable, n_pcs: int = 10) -> hl.Table:
     scores_ht = pc_project(mt, gnomad_loadings_ht)
     scores_ht = scores_ht.annotate(pop_for_rf=hl.null(hl.tstr))
     scores_ht = scores_ht.select("pop_for_rf", scores=scores_ht.scores[:n_pcs])
-    #scores_ht = scores_ht.select(pop_for_rf="Unknown", scores=scores_ht.scores[:n_pcs])
+    # scores_ht = scores_ht.select(pop_for_rf="Unknown", scores=scores_ht.scores[:n_pcs])
 
     joint_scores_ht = gnomad_meta_ht.union(scores_ht)
 
