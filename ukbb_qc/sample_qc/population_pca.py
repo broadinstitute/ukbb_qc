@@ -186,7 +186,6 @@ def main(args):
             hl.read_matrix_table(qc_mt_path(data_source, freeze, ld_pruned=True)),
             gt_field="GT",
         )
-        logger.info("Filtering related samples...")
         related_ht = hl.read_table(related_drop_path(data_source, freeze))
         pca_evals, pop_pca_scores_ht, pop_pca_loadings_ht = run_pca_with_relateds(
             qc_mt, related_ht, n_exome_pcs
@@ -282,6 +281,7 @@ def main(args):
         )
 
     if args.run_rf:
+        # NOTE: I needed to switch to n1-standard-16s for 300k
         logger.info("Running random forest after projection on gnomAD PCs...")
         joint_scores_ht = hl.read_table(
             ancestry_pc_project_scores_ht_path(data_source, freeze, "joint")
@@ -289,18 +289,6 @@ def main(args):
         joint_scores_ht = joint_scores_ht.annotate(
             scores=joint_scores_ht.scores[:n_project_pcs]
         )
-        #test = joint_scores_ht.explode("scores")
-        #test.show()
-        #test = test.filter(hl.is_missing(test.scores))
-        #print(test.count())
-        #test.show()
-        #boop = test.aggregate(hl.agg.collect_as_set(test.s))
-        #print(len(boop))
-        #print(boop)
-        #test = joint_scores_ht.filter(joint_scores_ht.s == "00-0239")
-        #test.show()
-        #test = test.explode("scores")
-        #test.show(20)
         joint_pops_ht, joint_pops_rf_model = assign_population_pcs(
             joint_scores_ht,
             pc_cols=joint_scores_ht.scores,
