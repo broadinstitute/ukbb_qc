@@ -59,11 +59,12 @@ def project_on_gnomad_pop_pcs(mt: hl.MatrixTable, n_pcs: int = 10) -> hl.Table:
     # Load gnomAD metadata and population pc loadings
     gnomad_meta_ht = get_gnomad_meta("joint", full_meta=True)
     gnomad_meta_ht = gnomad_meta_ht.key_by("s")
+    # NOTE: Filtering to defined qc_pop to only keep gnomAD samples that have inferred ancestries
+    gnomad_meta_ht = gnomad_meta_ht.filter(hl.is_defined(gnomad_meta_ht.qc_pop))
     gnomad_meta_ht = gnomad_meta_ht.rename({"qc_pop": "pop_for_rf"})
     gnomad_meta_ht = gnomad_meta_ht.select(
         "pop_for_rf", scores=[gnomad_meta_ht[f"PC{i}"] for i in range(1, n_pcs + 1)]
     )
-    gnomad_meta_ht = gnomad_meta_ht.filter(hl.is_defined(gnomad_meta_ht.scores))
 
     gnomad_loadings_ht = hl.read_table(gnomad_ancestry_loadings_liftover_path())
     gnomad_loadings_ht = gnomad_loadings_ht.filter(
@@ -74,6 +75,7 @@ def project_on_gnomad_pop_pcs(mt: hl.MatrixTable, n_pcs: int = 10) -> hl.Table:
     scores_ht = pc_project(mt, gnomad_loadings_ht)
     scores_ht = scores_ht.annotate(pop_for_rf=hl.null(hl.tstr))
     scores_ht = scores_ht.select("pop_for_rf", scores=scores_ht.scores[:n_pcs])
+    #scores_ht = scores_ht.select(pop_for_rf="Unknown", scores=scores_ht.scores[:n_pcs])
 
     joint_scores_ht = gnomad_meta_ht.union(scores_ht)
 
@@ -186,7 +188,6 @@ def main(args):
         )
         logger.info("Filtering related samples...")
         related_ht = hl.read_table(related_drop_path(data_source, freeze))
-        # related_ht = related_ht.filter((related_ht.relationship != UNRELATED))
         pca_evals, pop_pca_scores_ht, pop_pca_loadings_ht = run_pca_with_relateds(
             qc_mt, related_ht, n_exome_pcs
         )
@@ -288,6 +289,18 @@ def main(args):
         joint_scores_ht = joint_scores_ht.annotate(
             scores=joint_scores_ht.scores[:n_project_pcs]
         )
+        #test = joint_scores_ht.explode("scores")
+        #test.show()
+        #test = test.filter(hl.is_missing(test.scores))
+        #print(test.count())
+        #test.show()
+        #boop = test.aggregate(hl.agg.collect_as_set(test.s))
+        #print(len(boop))
+        #print(boop)
+        #test = joint_scores_ht.filter(joint_scores_ht.s == "00-0239")
+        #test.show()
+        #test = test.explode("scores")
+        #test.show(20)
         joint_pops_ht, joint_pops_rf_model = assign_population_pcs(
             joint_scores_ht,
             pc_cols=joint_scores_ht.scores,
