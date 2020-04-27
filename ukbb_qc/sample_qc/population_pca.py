@@ -328,7 +328,7 @@ def main(args):
         logger.info("Writing out random forest model...")
         with hl.hadoop_open(
             qc_temp_data_prefix(data_source, freeze)
-            + "project_gnomad_pop_rf_model_test.pkl",
+            + "project_gnomad_pop_rf_model.pkl",
             "wb",
         ) as out:
             pickle.dump(joint_pops_rf_model, out)
