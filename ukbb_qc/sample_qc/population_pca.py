@@ -49,7 +49,9 @@ logger = logging.getLogger("population_pca")
 logger.setLevel(logging.INFO)
 
 
-def project_on_gnomad_pop_pcs(mt: hl.MatrixTable, freeze: int, n_pcs: int = 10) -> hl.Table:
+def project_on_gnomad_pop_pcs(
+    mt: hl.MatrixTable, freeze: int, n_pcs: int = 10
+) -> hl.Table:
     """
     Performs pc_project on a mt using gnomAD population pca loadings and known pops
 
@@ -63,6 +65,7 @@ def project_on_gnomad_pop_pcs(mt: hl.MatrixTable, freeze: int, n_pcs: int = 10) 
     gnomad_meta_ht = get_gnomad_meta("joint", full_meta=True)
     gnomad_meta_ht = gnomad_meta_ht.key_by("s")
     # NOTE: Filtering to defined qc_pop to only keep gnomAD samples that have inferred ancestries
+    # This is to avoid samples that were hard filtered prior to population inference
     gnomad_meta_ht = gnomad_meta_ht.filter(hl.is_defined(gnomad_meta_ht.qc_pop))
     gnomad_meta_ht = gnomad_meta_ht.rename({"qc_pop": "pop_for_rf"})
     gnomad_meta_ht = gnomad_meta_ht.select(
@@ -75,14 +78,13 @@ def project_on_gnomad_pop_pcs(mt: hl.MatrixTable, freeze: int, n_pcs: int = 10) 
         & ~gnomad_loadings_ht.new_locus.is_negative_strand
     )
 
-    # test adding densify before pc project
+    # Need to densify before running pc project
     last_END_ht = hl.read_table(last_END_positions_ht_path(freeze))
     mt = densify_sites(mt, gnomad_loadings_ht, last_END_ht)
 
     scores_ht = pc_project(mt, gnomad_loadings_ht)
     scores_ht = scores_ht.annotate(pop_for_rf=hl.null(hl.tstr))
     scores_ht = scores_ht.select("pop_for_rf", scores=scores_ht.scores[:n_pcs])
-    # scores_ht = scores_ht.select(pop_for_rf="Unknown", scores=scores_ht.scores[:n_pcs])
 
     joint_scores_ht = gnomad_meta_ht.union(scores_ht)
 
@@ -312,8 +314,8 @@ def main(args):
         )
         scores_ht = scores_ht.repartition(args.n_partitions)
         scores_ht = scores_ht.checkpoint(
-            #ancestry_pc_project_scores_ht_path(data_source, freeze),
-            'gs://broad-ukbb/broad.freeze_6/temp/pc_project_scores_pop_assign.ht',
+            ancestry_pc_project_scores_ht_path(data_source, freeze),
+            "gs://broad-ukbb/broad.freeze_6/temp/pc_project_scores_pop_assign.ht",
             overwrite=args.overwrite,
         )
 
@@ -356,8 +358,7 @@ def main(args):
             pop_pca_scores=pc_scores_ht[pop_ht.key].scores,
         )
         pop_ht = pop_ht.repartition(args.n_partitions)
-        #pop_ht.write(ancestry_hybrid_ht_path(data_source, freeze), args.overwrite)
-        pop_ht.write('gs://broad-ukbb/broad.freeze_6/temp/hybrid_pop_assignments.ht')
+        pop_ht.write(ancestry_hybrid_ht_path(data_source, freeze), args.overwrite)
 
 
 if __name__ == "__main__":
