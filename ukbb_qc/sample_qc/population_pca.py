@@ -229,7 +229,6 @@ def main(args):
     if args.assign_clusters_array_pcs:
         logger.info("Loading UKBB array PC data...")
         array_pc_ht = get_array_pcs_mapped_to_exome_ids(freeze)
-        array_pc_ht = array_pc_ht.annotate(scores=array_pc_ht.scores[:n_array_pcs])
 
         logger.info("Assigning PCA clustering...")
         pops_ht = assign_cluster_from_pcs(
