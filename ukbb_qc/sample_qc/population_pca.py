@@ -315,7 +315,6 @@ def main(args):
         scores_ht = scores_ht.repartition(args.n_partitions)
         scores_ht = scores_ht.checkpoint(
             ancestry_pc_project_scores_ht_path(data_source, freeze),
-            "gs://broad-ukbb/broad.freeze_6/temp/pc_project_scores_pop_assign.ht",
             overwrite=args.overwrite,
         )
 
