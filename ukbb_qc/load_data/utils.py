@@ -117,7 +117,7 @@ def load_self_reported_ancestry(freeze: int) -> hl.Table:
     sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze)).key_by(
         "ukbb_app_26041_id"
     )
-    ukbb_ancestry_ht = ukbb_ancestry_ht.key_by(s=sample_map_ht[ukbb_ancestry_ht.key])
+    ukbb_ancestry_ht = ukbb_ancestry_ht.key_by(s=sample_map_ht[ukbb_ancestry_ht.key].s)
     ukbb_ancestry_ht = ukbb_ancestry_ht.annotate(
         self_reported_ancestry=hl.switch(ukbb_ancestry_ht["f.21000.0.0"])
         .when(1, "White")
