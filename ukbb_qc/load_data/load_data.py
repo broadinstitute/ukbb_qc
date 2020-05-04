@@ -124,7 +124,6 @@ if __name__ == "__main__":
         help="Loads self reported ancestry from phenotype file and writes Table",
         action="store_true",
     )
-
     capture_intervals = parser.add_argument_group(
         "capture_intervals",
         description="Arguments relevant to loading capture intervals",
