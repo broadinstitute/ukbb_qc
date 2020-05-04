@@ -11,7 +11,6 @@ from gnomad.sample_qc.ancestry import (
     pc_project,
     run_pca_with_relateds,
 )
-from gnomad.sample_qc.relatedness import UNRELATED
 from gnomad.utils.liftover import (
     annotate_snp_mismatch,
     get_liftover_genome,
@@ -37,6 +36,7 @@ from ukbb_qc.resources.sample_qc import (
     ancestry_pca_loadings_ht_path,
     ancestry_pca_scores_ht_path,
     get_ukbb_array_pcs_ht_path,
+    get_ukbb_self_reported_ancestry_path,
     gnomad_ancestry_loadings_liftover_path,
     qc_mt_path,
     qc_temp_data_prefix,
@@ -133,7 +133,7 @@ def assign_cluster_from_pcs(
     return ht
 
 
-def get_array_pcs_mapped_to_exome_ids(freeze: int, n_pcs: int = 20):
+def get_array_pcs_mapped_to_exome_ids(freeze: int, n_pcs: int = 20) -> hl.Table:
     """
     Map UKBB genotype array PC file to exome IDs
 
@@ -365,6 +365,17 @@ def main(args):
                 .default(hl.str(pop_ht.HDBSCAN_pop_cluster)),
                 pop_pca_scores=pc_scores_ht[pop_ht.key].scores,
             )
+
+            logger.info("Getting self reported ancestries...")
+            ukbb_ancestry_ht = hl.read_table(
+                get_ukbb_self_reported_ancestry_path(freeze)
+            )
+            pop_ht = pop_ht.annotate(
+                self_reported_ancestry=ukbb_ancestry_ht[
+                    pop_ht.key
+                ].self_reported_ancestry
+            )
+
             pop_ht = pop_ht.repartition(args.n_partitions)
             pop_ht.write(
                 ancestry_hybrid_ht_path(data_source, freeze), overwrite=args.overwrite,
