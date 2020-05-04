@@ -95,7 +95,7 @@ def import_phenotype_ht() -> None:
     :return: None
     :rtype: None
     """
-    phenotype_ht = hl.import_table(ukbb_phenotype_path, impute=True)
+    phenotype_ht = hl.import_table(ukbb_phenotype_path(), impute=True)
     phenotype_ht = phenotype_ht.key_by(s_old=hl.str(phenotype_ht["f.eid"]))
     phenotype_ht.write(phenotype_ht_path(), overwrite=True)
 
