@@ -201,17 +201,16 @@ def main(args):
             pca_evals, pop_pca_scores_ht, pop_pca_loadings_ht = run_pca_with_relateds(
                 qc_mt, related_ht, n_exome_pcs
             )
-            pop_pca_scores_ht = pop_pca_scores_ht.annotate_globals(n_exome_pcs=n_exome_pcs)
+            pop_pca_scores_ht = pop_pca_scores_ht.annotate_globals(
+                n_exome_pcs=n_exome_pcs
+            )
             pop_pca_loadings_ht = pop_pca_loadings_ht.naive_coalesce(args.n_partitions)
             pop_pca_loadings_ht.write(
-                #ancestry_pca_loadings_ht_path(data_source, freeze), args.overwrite
-                'gs://broad-ukbb/broad.freeze_6/sample_qc/population_pca/pca_loadings_10pcs.ht',
-
+                ancestry_pca_loadings_ht_path(data_source, freeze), args.overwrite
             )
             pop_pca_scores_ht = pop_pca_scores_ht.repartition(args.n_partitions)
             pop_pca_scores_ht.write(
-                #ancestry_pca_scores_ht_path(data_source, freeze), args.overwrite
-                'gs://broad-ukbb/broad.freeze_6/sample_qc/population_pca/pca_scores_10pcs.ht',
+                ancestry_pca_scores_ht_path(data_source, freeze), args.overwrite
             )
 
         if args.assign_clusters:
@@ -229,10 +228,7 @@ def main(args):
                 hdbscan_min_samples=hdbscan_min_samples,
             )
             pops_ht = pops_ht.repartition(args.n_partitions)
-            pops_ht.write(
-                #ancestry_cluster_ht_path(data_source, freeze), args.overwrite)
-                'gs://broad-ukbb/broad.freeze_6/sample_qc/population_pca/cluster_assignments_10pcs.ht',
-            )
+            pops_ht.write(ancestry_cluster_ht_path(data_source, freeze), args.overwrite)
 
         if args.assign_clusters_array_pcs:
             logger.info("Loading UKBB array PC data...")
@@ -288,12 +284,10 @@ def main(args):
             # Using the split mt led to better clustering and fewer others in Broad freeze 4
             logger.info("Running PC project...")
             mt = get_ukbb_data(data_source, freeze, split=True, adj=True)
-            mt = remove_hard_filter_samples(data_source, freeze, mt, gt_field="GT")
             joint_scores_ht = project_on_gnomad_pop_pcs(mt, freeze, n_project_pcs)
             joint_scores_ht = joint_scores_ht.repartition(args.n_partitions)
             joint_scores_ht.write(
-                #ancestry_pc_project_scores_ht_path(data_source, freeze, "joint"),
-                'gs://broad-ukbb/broad.freeze_6/sample_qc/population_pca/pc_project_scores_pop_assign_10pcs.joint.ht',
+                ancestry_pc_project_scores_ht_path(data_source, freeze, "joint"),
                 overwrite=args.overwrite,
             )
 
@@ -313,17 +307,21 @@ def main(args):
                 min_prob=args.min_pop_prob,
             )
 
-            scores_ht = joint_scores_ht.filter(hl.is_missing(joint_scores_ht.pop_for_rf))
+            scores_ht = joint_scores_ht.filter(
+                hl.is_missing(joint_scores_ht.pop_for_rf)
+            )
             scores_ht = scores_ht.select("scores")
             joint_pops_ht = joint_pops_ht.drop("pop_for_rf")
             scores_ht = scores_ht.annotate(pop=joint_pops_ht[scores_ht.key])
             scores_ht = scores_ht.annotate_globals(
                 n_project_pcs=n_project_pcs, min_prob=args.min_pop_prob
             )
+
+            # NOTE: Removing hard filtered samples here to avoid sample filtration pre-densify
+            scores_ht = remove_hard_filter_samples(data_source, freeze, scores_ht)
             scores_ht = scores_ht.repartition(args.n_partitions)
             scores_ht = scores_ht.checkpoint(
-                #ancestry_pc_project_scores_ht_path(data_source, freeze),
-                'gs://broad-ukbb/broad.freeze_6/sample_qc/population_pca/pc_project_scores_pop_assign_10pcs.ht',
+                ancestry_pc_project_scores_ht_path(data_source, freeze),
                 overwrite=args.overwrite,
             )
 
@@ -349,7 +347,9 @@ def main(args):
                 ancestry_pc_project_scores_ht_path(data_source, freeze)
             )
             pc_cluster_ht = hl.read_table(ancestry_cluster_ht_path(data_source, freeze))
-            pc_scores_ht = hl.read_table(ancestry_pca_scores_ht_path(data_source, freeze))
+            pc_scores_ht = hl.read_table(
+                ancestry_pca_scores_ht_path(data_source, freeze)
+            )
 
             pop_ht = pc_project_ht.select(
                 gnomad_pc_project_pop=pc_project_ht.pop.pop,
@@ -367,8 +367,7 @@ def main(args):
             )
             pop_ht = pop_ht.repartition(args.n_partitions)
             pop_ht.write(
-                #ancestry_hybrid_ht_path(data_source, freeze), args.overwrite)
-                'gs://broad-ukbb/broad.freeze_6/sample_qc/population_pca/hybrid_pop_assignments_10pcs.ht',
+                ancestry_hybrid_ht_path(data_source, freeze), overwrite=args.overwrite,
             )
 
     finally:
