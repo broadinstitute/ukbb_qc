@@ -45,7 +45,7 @@ def main(args):
     freeze = args.freeze
 
     logger.info(
-        "Reading in HT mapping ukbb pharma (exome) id to ukbb application 26041 (array) id"
+        "Joining array map/pharma meta HT (left) and age HT (left) with a right join to start creating meta HT"
     )
     left_ht = hl.read_table(array_sample_map_ht_path(freeze))
     left_ht = left_ht.annotate(
@@ -55,16 +55,10 @@ def main(args):
             batch_num=left_ht.batch_num,
         )
     ).select("pharma_meta")
-
-    logger.info("Getting age information from phenotype file")
     right_ht = get_age_ht(data_source, freeze)
-
-    logger.info(
-        "Joining array map/pharma meta HT (left) and age HT (right) with a right join to start creating meta HT"
-    )
     left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
 
-    logger.info("Reading in array sample concordance HT")
+    logger.info("Reading in array sample concordance HT and joining with meta HT")
     right_ht = hl.read_table(array_concordance_results_path(data_source, freeze))
     right_ht = right_ht.tramsmute(
         array_concordance=hl.struct(
@@ -75,11 +69,9 @@ def main(args):
             prop_gt_con_non_ref=right_ht.prop_gt_con_non_ref,
         )
     ).select("array_concordance")
-
-    logger.info("Joining array sample concordance HT with meta HT")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
 
-    logger.info("Reading in sex HT")
+    logger.info("Reading in sex HT and joining with meta HT")
     right_ht = hl.read_table(sex_ht_path(data_source, freeze))
     # Create struct for join
     right_ht = right_ht.transmute(
@@ -97,17 +89,13 @@ def main(args):
             sex_karyotype=right_ht.sex_karyotype,
         )
     )
-
-    logger.info("Joining sex HT with meta HT")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "right")
 
-    logger.info("Reading in sample QC HT")
+    logger.info("Reading in sample QC HT and joining with meta HT")
     right_ht = hl.read_table(qc_ht_path(data_source, freeze))
-
-    logger.info("Joining sample QC HT with meta HT")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "right")
 
-    logger.info("Reading in platform PCA HT")
+    logger.info("Reading in platform PCA HT and joining with meta HT")
     right_ht = hl.read_table(platform_pca_assignments_ht_path(data_source, freeze))
     # Put platform info into struct for join
     right_ht = right_ht.transmute(
@@ -115,11 +103,9 @@ def main(args):
             callrate_pcs=right_ht.scores, qc_platform=right_ht.qc_platform
         )
     )
-
-    logger.info("Joining platform HT with meta HT")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
 
-    logger.info("Reading in population PC HT")
+    logger.info("Reading in population PC HT and joining with meta HT")
     right_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
     # Put population info into structs for join
     right_ht = right_ht.transmute(
@@ -133,8 +119,6 @@ def main(args):
             hybrid_pop=right_ht.hybrid_pop,
         ),
     )
-
-    logger.info("Joining population PC HT with meta HT")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
 
     logger.info("Creating checkpoint")
@@ -143,19 +127,15 @@ def main(args):
         overwrite=True,
     )
 
-    logger.info("Reading hard filters HT")
+    logger.info("Reading hard filters HT and joining with meta HT")
     right_ht = hl.read_table(hard_filters_ht_path(data_source, freeze))
-
-    logger.info("Joining hard filters HT with meta HT")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
 
-    logger.info("Renaming hard_filters struct to sample_filter struct")
+    logger.info("Renaming hard_filters struct to start sample_filter struct")
     left_ht = left_ht.transmute(sample_filters=left_ht.hard_filters)
 
-    logger.info("Reading in related samples to drop HT")
+    logger.info("Reading in related samples to drop HT and joining with meta HT")
     related_samples_to_drop_ht = hl.read_table(related_drop_path(data_source, freeze))
-
-    logger.info("Annotating related samples to drop HT with relationship strings")
     relatedness_dict = hl.literal(
         dict(zip(args.relationship_order, range(len(args.relationship_order))))
     )
@@ -231,7 +211,7 @@ def main(args):
     logger.info("Adding relatedness globals (cutoffs)")
     left_ht = left_ht.annotate_globals(**related_samples_to_drop_ht.globals)
 
-    logger.info("Reading in outlier HT")
+    logger.info("Reading in outlier HT and joining to meta HT")
     right_ht = hl.read_table(
         platform_pop_outlier_ht_path(
             data_source,
@@ -240,8 +220,6 @@ def main(args):
             args.platform_assignment_method,
         )
     )
-
-    logger.info("Joining outlier ht to current join")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
     left_ht = left_ht.transmute(
         sample_filters=left_ht.sample_filters.annotate(
