@@ -87,7 +87,10 @@ def main(args):
             mt = mt.select_cols().naive_coalesce(args.n_partitions)
 
             # Filter out star alleles and checkpoint
-            mt = mt.filter_rows((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
+            mt = mt.filter_rows(
+                (hl.len(mt.alleles) == 1)
+                | ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
+            )
             ht = mt.rows().select("allele_data")
             mt = mt.drop("allele_data")
             mt = mt.checkpoint(
