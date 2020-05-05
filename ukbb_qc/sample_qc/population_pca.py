@@ -51,13 +51,14 @@ logger.setLevel(logging.INFO)
 
 
 def project_on_gnomad_pop_pcs(
-    mt: hl.MatrixTable, freeze: int, n_pcs: int = 10
+    mt: hl.MatrixTable, last_END_ht: hl.Table, n_pcs: int = 10
 ) -> hl.Table:
     """
     Performs pc_project on a mt using gnomAD population pca loadings and known pops
 
-    :param MatrixTable mt: Raw matrix table to perform `pc_project` and pop assignment on
-    :param int freeze: Current data freeze
+    :param MatrixTable mt: Raw MatrixTable to perform `pc_project` and pop assignment on
+    :param Table last_END_ht: Table with most upstream informative position (last END) annotated for each locus.
+        Used when densifying data.
     :return: pc_project scores Table
     :param int n_pcs: Number of PCs to keep from gnomAD for `pc_project`. Default is 10.
     :rtype: Table
@@ -80,7 +81,6 @@ def project_on_gnomad_pop_pcs(
     )
 
     # Need to densify before running pc project
-    last_END_ht = hl.read_table(last_END_positions_ht_path(freeze))
     mt = densify_sites(mt, gnomad_loadings_ht, last_END_ht)
 
     scores_ht = pc_project(mt, gnomad_loadings_ht)
@@ -284,7 +284,8 @@ def main(args):
             # Using the split mt led to better clustering and fewer others in Broad freeze 4
             logger.info("Running PC project...")
             mt = get_ukbb_data(data_source, freeze, split=True, adj=True)
-            joint_scores_ht = project_on_gnomad_pop_pcs(mt, freeze, n_project_pcs)
+            last_END_ht = hl.read_table(last_END_positions_ht_path(freeze))
+            joint_scores_ht = project_on_gnomad_pop_pcs(mt, last_END_ht, n_project_pcs)
             joint_scores_ht = joint_scores_ht.repartition(args.n_partitions)
             joint_scores_ht.write(
                 ancestry_pc_project_scores_ht_path(data_source, freeze, "joint"),
