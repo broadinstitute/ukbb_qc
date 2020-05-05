@@ -3,9 +3,9 @@ import logging
 
 import hail as hl
 
+from gnomad.sample_qc.filtering import compute_stratified_metrics_filter
 from gnomad.utils.annotations import bi_allelic_expr
 from gnomad.utils.filtering import (
-    compute_stratified_metrics_filter,
     filter_low_conf_regions,
     filter_to_autosomes,
 )
@@ -30,7 +30,7 @@ logger = logging.getLogger("outlier_filter")
 logger.setLevel(logging.INFO)
 
 
-def run_sample_qc(mt: hl.MatrixTable) -> hl.MatrixTable:
+def run_sample_qc(mt: hl.MatrixTable) -> hl.Table:
     """
     Filter input MatrixTable to bi-allelic sites, removes problematic intervals, and computes sample QC metrics
 
@@ -115,6 +115,7 @@ def main(args):
                     qc_platform=platform_ht[sample_qc_ht.key].qc_platform
                 )
                 strata["qc_platform"] = sample_qc_ht.qc_platform
+                platform_assignment_method = "qc_platform"
 
             if args.batch_filter:
                 # NOTE: used tranche as a proxy for platform in tranche 2/freeze 5/200K
