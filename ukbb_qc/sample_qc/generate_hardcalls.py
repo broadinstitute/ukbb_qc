@@ -105,6 +105,7 @@ def main(args):
                 .when(hl.is_deletion(ht.alleles[0], ht.alleles[1]), "del")
                 .default("complex")
             )
+            ht = ht.filter_rows(hl.len(ht.alleles) > 1)
             ht = ht.annotate(
                 allele_data=ht.allele_data.annotate(
                     allele_type=allele_type,
