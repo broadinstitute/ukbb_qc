@@ -220,7 +220,7 @@ def main(args):
             args.platform_assignment_method,
         )
     )
-    left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
+    left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
     left_ht = left_ht.transmute(
         sample_filters=left_ht.sample_filters.annotate(
             fail_n_snp=left_ht.fail_n_snp,
