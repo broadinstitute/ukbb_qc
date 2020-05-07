@@ -22,7 +22,7 @@ from ukbb_qc.resources.sample_qc import (
     platform_pop_outlier_ht_path,
     qc_temp_data_prefix,
 )
-from ukbb_qc.utils import annotate_interval_qc_filter, remove_hard_filter_samples
+from ukbb_qc.utils.utils import annotate_interval_qc_filter, remove_hard_filter_samples
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
