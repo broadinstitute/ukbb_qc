@@ -93,40 +93,42 @@ def main(args):
         )
         strata = {}
 
-        if args.population_filter:
-            logger.info("Annotating population assignments...")
-            pop_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
-            sample_qc_ht = sample_qc_ht.annotate(
-                qc_pop=pop_ht[sample_qc_ht.key][pop_assignment_method]
+        logger.info("Annotating population assignments...")
+        pop_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
+        sample_qc_ht = sample_qc_ht.annotate(
+            qc_pop=pop_ht[sample_qc_ht.key][pop_assignment_method]
+        )
+        logger.info("Annotating inferred platform assignments...")
+        platform_ht = hl.read_table(
+            platform_pca_assignments_ht_path(
+                data_source, freeze, 
             )
+        )
+        sample_qc_ht = sample_qc_ht.annotate(
+            qc_platform=platform_ht[sample_qc_ht.key].qc_platform
+        )
+        logger.info(
+            "Annotating with batch (tranche) as a proxy for platform..."
+        )
+        sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze))
+        sample_qc_ht = sample_qc_ht.annotate(
+            batch=sample_map_ht[sample_qc_ht.key].batch
+        )
+
+        if args.population_filter:
             strata["qc_pop"] = sample_qc_ht.qc_pop
         else:
             pop_assignment_method = "no_pop"
 
         if args.platform_filter or args.batch_filter:
             if args.platform_filter:
-                logger.info("Annotating inferred platform assignments...")
-                platform_ht = hl.read_table(
-                    platform_pca_assignments_ht_path(
-                        data_source, freeze, interval_filtered=args.interval_filtered
-                    )
-                )
-                sample_qc_ht = sample_qc_ht.annotate(
-                    qc_platform=platform_ht[sample_qc_ht.key].qc_platform
-                )
                 strata["qc_platform"] = sample_qc_ht.qc_platform
                 platform_assignment_method = "qc_platform"
 
             if args.batch_filter:
                 # NOTE: used tranche as a proxy for platform in tranche 2/freeze 5/200K
-                logger.info(
-                    "Annotating with batch (tranche) as a proxy for platform..."
-                )
-                sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze))
-                sample_qc_ht = sample_qc_ht.annotate(
-                    batch=sample_map_ht[sample_qc_ht.key].batch
-                )
                 strata["qc_platform"] = sample_qc_ht.batch
+                platform_assignment_method = "batch"
         else:
             platform_assignment_method = "no_platform"
 
@@ -201,11 +203,6 @@ if __name__ == "__main__":
     platform_group.add_argument(
         "--batch_filter",
         help="Include batch (tranche) as proxy for platform in outlier filtering",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--interval_filtered",
-        help="Whether to return platform PCA results created using high coverage intervals",
         action="store_true",
     )
     parser.add_argument(
