@@ -82,6 +82,7 @@ def main(args):
                 "Running mini sample QC for platform- and population-specific filtering..."
             )
             sample_qc_ht = run_sample_qc(mt)
+            sample_qc_ht = sample_qc_ht.repartition(args.n_partitions)
             sample_qc_ht.write(
                 qc_temp_data_prefix(data_source, freeze)
                 + "outlier_sample_qc_intervals.ht",
@@ -100,16 +101,12 @@ def main(args):
         )
         logger.info("Annotating inferred platform assignments...")
         platform_ht = hl.read_table(
-            platform_pca_assignments_ht_path(
-                data_source, freeze, 
-            )
+            platform_pca_assignments_ht_path(data_source, freeze,)
         )
         sample_qc_ht = sample_qc_ht.annotate(
             qc_platform=platform_ht[sample_qc_ht.key].qc_platform
         )
-        logger.info(
-            "Annotating with batch (tranche) as a proxy for platform..."
-        )
+        logger.info("Annotating with batch (tranche) as a proxy for platform...")
         sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze))
         sample_qc_ht = sample_qc_ht.annotate(
             batch=sample_map_ht[sample_qc_ht.key].batch
@@ -145,6 +142,7 @@ def main(args):
         pop_platform_filter_ht = compute_stratified_metrics_filter(
             sample_qc_ht, qc_metrics, strata
         )
+        pop_platform_filter_ht = pop_platform_filter_ht.repartition(args.n_partitions)
         pop_platform_filter_ht.write(
             platform_pop_outlier_ht_path(
                 data_source, freeze, pop_assignment_method, platform_assignment_method
@@ -176,6 +174,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
+    )
+    parser.add_argument(
+        "--n_partitions",
+        help="Desired number of partitions. Used for ALL output HTs",
+        default=5000,
+        type=int,
     )
 
     parser.add_argument(
