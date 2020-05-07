@@ -4,7 +4,6 @@ import logging
 import hail as hl
 
 from gnomad.sample_qc.relatedness import (
-    AMBIGUOUS_RELATIONSHIP,
     DUPLICATE_OR_TWINS,
     PARENT_CHILD,
     SECOND_DEGREE_RELATIVES,
@@ -134,74 +133,69 @@ def main(args):
     logger.info("Renaming hard_filters struct to start sample_filter struct")
     left_ht = left_ht.transmute(sample_filters=left_ht.hard_filters)
 
-    logger.info("Reading in related samples to drop HT and joining with meta HT")
-    related_samples_to_drop_ht = hl.read_table(related_drop_path(data_source, freeze))
-    relatedness_dict = hl.literal(
-        dict(zip(args.relationship_order, range(len(args.relationship_order))))
+    logger.info(
+        "Reading in related samples to drop HT and preparing to annotate meta HT"
     )
-    related_samples_to_drop = hl.literal(
-        related_samples_to_drop_ht.aggregate(
-            hl.agg.collect_as_set(related_samples_to_drop_ht.key)
-        )
+    related_samples_to_drop_ht = hl.read_table(related_drop_path(data_source, freeze))
+    related_samples_to_drop = related_samples_to_drop_ht.aggregate(
+        hl.agg.collect_as_set(related_samples_to_drop_ht.s)
     )
     relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
-    relatedness_ht = relatedness_ht.filter(
-        (relatedness_ht.relationship != UNRELATED)
-        & (
-            (related_samples_to_drop.contains(relatedness_ht.i.s))
-            | (related_samples_to_drop.contains(relatedness_ht.j.s))
+    relatedness_ht = relatedness_ht.filter(relatedness_ht.relationship != UNRELATED)
+    relatedness_i = relatedness_ht.aggregate(
+        hl.agg.group_by(
+            relatedness_ht.i.s, hl.agg.collect_as_set(relatedness_ht.relationship)
         )
     )
-    relatedness_i_ht = relatedness_ht.key_by(relatedness_ht.i.s).select("relationship")
-    relatedness_j_ht = relatedness_ht.key_by(relatedness_ht.j.s).select("relationship")
-    related_samples_to_drop_ht = related_samples_to_drop_ht.annotate(
-        i_relationship=relatedness_i_ht[related_samples_to_drop_ht.key].relationship,
-        j_relationship=relatedness_j_ht[related_samples_to_drop_ht.key].relationship,
-    )
-    related_samples_to_drop_ht = related_samples_to_drop_ht.transmute(
-        relationship=hl.case()
-        .when(
-            hl.is_missing(related_samples_to_drop_ht.i_relationship)
-            & hl.is_defined(related_samples_to_drop_ht.j_relationship),
-            related_samples_to_drop_ht.j_relationship,
-        )
-        .when(
-            hl.is_missing(related_samples_to_drop_ht.j_relationship)
-            & hl.is_defined(related_samples_to_drop_ht.i_relationship),
-            related_samples_to_drop_ht.i_relationship,
-        )
-        .default(
-            hl.if_else(
-                relatedness_dict[related_samples_to_drop_ht.i_relationship]
-                <= relatedness_dict[related_samples_to_drop_ht.j_relationship],
-                related_samples_to_drop_ht.i_relationship,
-                related_samples_to_drop_ht.j_relationship,
-            )
+    relatedness_j = relatedness_ht.aggregate(
+        hl.agg.group_by(
+            relatedness_ht.j.s, hl.agg.collect_as_set(relatedness_ht.relationship)
         )
     )
 
-    logger.info("Annotating sample_filter struct with relatedness booleans")
+    related_samples_to_drop_dict = {}
+    for sample in related_samples_to_drop:
+        related_samples_to_drop_dict[sample] = relatedness_i.get(sample, set()).union(
+            relatedness_j.get(sample, set())
+        )
+
+    temp_path = f"gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/related_samples_to_drop.tsv"
+    with hl.hadoop_open(temp_path, "w") as o:
+        o.write("s\trelationship\n")
+        for sample in samples_to_drop_dict:
+            o.write(sample + "\t" + ",".join(samples_to_drop_dict[sample]) + "\n")
+
+    related_samples_to_drop_ht = hl.import_table(temp_path, impute=True).key_by("s")
+    related_samples_to_drop_ht = related_samples_to_drop_ht.annotate(
+        relationship=hl.set(related_samples_to_drop_ht.relationship.split(","))
+    )
+
+    logger.info("Annotating meta HT's sample_filter struct with relatedness booleans")
     left_ht = left_ht.annotate(
         sample_filters=left_ht.sample_filters.annotate(
             related=hl.if_else(
-                related_samples_to_drop_ht.relationship[left_ht.s]
-                == SECOND_DEGREE_RELATIVES,
+                related_samples_to_drop_ht[left_ht.s].relationship.contains(
+                    SECOND_DEGREE_RELATIVES
+                ),
                 True,
                 False,
             ),
             duplicate=hl.if_else(
-                related_samples_to_drop_ht.relationship[left_ht.s]
-                == DUPLICATE_OR_TWINS,
+                related_samples_to_drop_ht[left_ht.s].relationship.contains(
+                    DUPLICATE_OR_TWINS
+                ),
                 True,
                 False,
             ),
             parent_child=hl.if_else(
-                related_samples_to_drop_ht.relationship[left_ht.s] == PARENT_CHILD,
+                related_samples_to_drop_ht[left_ht.s].relationship.contains(
+                    PARENT_CHILD
+                ),
                 True,
                 False,
             ),
             sibling=hl.if_else(
-                related_samples_to_drop_ht.relationship[left_ht.s] == SIBLINGS,
+                related_samples_to_drop_ht[left_ht.s].relationship.contains(SIBLINGS),
                 True,
                 False,
             ),
@@ -292,19 +286,6 @@ if __name__ == "__main__":
         help="Platform assignment method to use for outlier stratification",
         default="batch",
         choices=["batch", "qc_platform"],
-    )
-    parser.add_argument(
-        "--relationship_order",
-        help="Order to prioritize relationships for related samples to drop",
-        default=(
-            DUPLICATE_OR_TWINS,
-            PARENT_CHILD,
-            SIBLINGS,
-            SECOND_DEGREE_RELATIVES,
-            AMBIGUOUS_RELATIONSHIP,
-            UNRELATED,
-        ),
-        type=tuple,
     )
     parser.add_argument(
         "-o",
