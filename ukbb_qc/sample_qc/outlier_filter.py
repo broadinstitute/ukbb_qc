@@ -122,9 +122,7 @@ def main(args):
                 logger.info(
                     "Annotating with batch (tranche) as a proxy for platform..."
                 )
-                sample_map_ht = hl.read_table(
-                    array_sample_map_ht_path(data_source, freeze)
-                )
+                sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze))
                 sample_qc_ht = sample_qc_ht.annotate(
                     batch=sample_map_ht[sample_qc_ht.key].batch
                 )
