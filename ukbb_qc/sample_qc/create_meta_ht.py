@@ -148,7 +148,7 @@ def main(args):
         relationship=hl.agg.collect_as_set(relatedness_ht.relationship)
     )
     related_samples_to_drop_ht = related_samples_to_drop_ht.annotate(
-        relationship=relatedness_ht[drop_ht.s].relationship
+        relationship=relatedness_ht[related_samples_to_drop_ht.s].relationship
     )
     left_ht = left_ht.annotate(
         sample_filters=left_ht.sample_filters.annotate(
