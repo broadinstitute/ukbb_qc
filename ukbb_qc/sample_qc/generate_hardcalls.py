@@ -98,6 +98,7 @@ def main(args):
             )
 
             # Finish generating allele data
+            ht = ht.filter(hl.len(ht.alleles) > 1)
             allele_type = (
                 hl.case()
                 .when(hl.is_snp(ht.alleles[0], ht.alleles[1]), "snv")
