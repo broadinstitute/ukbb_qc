@@ -42,9 +42,10 @@ def main(args):
 
     data_source = "broad"
     freeze = args.freeze
+    logging_statement = "Reading in {} and joining with meta HT"
 
     logger.info(
-        "Joining array map/pharma meta HT (left) and age HT (left) with a right join to start creating meta HT"
+        "Joining array map/pharma meta HT (left) and age HT (right) with a left join to start creating meta HT"
     )
     left_ht = hl.read_table(array_sample_map_ht_path(freeze))
     left_ht = left_ht.annotate(
@@ -57,7 +58,7 @@ def main(args):
     right_ht = get_age_ht(data_source, freeze)
     left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
 
-    logger.info("Reading in array sample concordance HT and joining with meta HT")
+    logger.info(logging_statement.format("array sample concordance HT"))
     right_ht = hl.read_table(array_concordance_results_path(data_source, freeze))
     right_ht = right_ht.tramsmute(
         array_concordance=hl.struct(
@@ -70,7 +71,7 @@ def main(args):
     ).select("array_concordance")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
 
-    logger.info("Reading in sex HT and joining with meta HT")
+    logger.info(logging_statement.format("sex HT"))
     right_ht = hl.read_table(sex_ht_path(data_source, freeze))
     # Create struct for join
     right_ht = right_ht.transmute(
@@ -90,11 +91,11 @@ def main(args):
     )
     left_ht = join_tables(left_ht, "s", right_ht, "s", "right")
 
-    logger.info("Reading in sample QC HT and joining with meta HT")
+    logger.info(logging_statment.format("sample QC HT"))
     right_ht = hl.read_table(qc_ht_path(data_source, freeze))
     left_ht = join_tables(left_ht, "s", right_ht, "s", "right")
 
-    logger.info("Reading in platform PCA HT and joining with meta HT")
+    logger.info(logging_statement.format("platform PCA HT"))
     right_ht = hl.read_table(platform_pca_assignments_ht_path(data_source, freeze))
     # Put platform info into struct for join
     right_ht = right_ht.transmute(
@@ -104,7 +105,7 @@ def main(args):
     )
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
 
-    logger.info("Reading in population PC HT and joining with meta HT")
+    logger.info(logging_statement.format("population PCA HT"))
     right_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
     # Put population info into structs for join
     right_ht = right_ht.transmute(
@@ -126,78 +127,41 @@ def main(args):
         overwrite=True,
     )
 
-    logger.info("Reading hard filters HT and joining with meta HT")
+    logger.info(
+        "Reading hard filters HT, renaming hard filters struct to sample_filters, and joining with meta HT"
+    )
     right_ht = hl.read_table(hard_filters_ht_path(data_source, freeze))
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
-
-    logger.info("Renaming hard_filters struct to start sample_filter struct")
     left_ht = left_ht.transmute(sample_filters=left_ht.hard_filters)
 
     logger.info(
-        "Reading in related samples to drop HT and preparing to annotate meta HT"
+        "Reading in related samples to drop HT and preparing to annotate meta HT's sample_filter struct with relatedness booleans"
     )
     related_samples_to_drop_ht = hl.read_table(related_drop_path(data_source, freeze))
-    related_samples_to_drop = related_samples_to_drop_ht.aggregate(
-        hl.agg.collect_as_set(related_samples_to_drop_ht.s)
-    )
     relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
     relatedness_ht = relatedness_ht.filter(relatedness_ht.relationship != UNRELATED)
-    relatedness_i = relatedness_ht.aggregate(
-        hl.agg.group_by(
-            relatedness_ht.i.s, hl.agg.collect_as_set(relatedness_ht.relationship)
-        )
+    relatedness_ht = relatedness_ht.select("relationship", s=relatedness_ht.i.s).union(
+        relatedness_ht.select("relationship", s=relatedness_ht.j.s)
     )
-    relatedness_j = relatedness_ht.aggregate(
-        hl.agg.group_by(
-            relatedness_ht.j.s, hl.agg.collect_as_set(relatedness_ht.relationship)
-        )
+    relatedness_ht = relatedness_ht.group_by(relatedness_ht.s).aggregate(
+        relationship=hl.agg.collect_as_set(relatedness_ht.relationship)
     )
-
-    related_samples_to_drop_dict = {}
-    for sample in related_samples_to_drop:
-        related_samples_to_drop_dict[sample] = relatedness_i.get(sample, set()).union(
-            relatedness_j.get(sample, set())
-        )
-
-    temp_path = f"gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/related_samples_to_drop.tsv"
-    with hl.hadoop_open(temp_path, "w") as o:
-        o.write("s\trelationship\n")
-        for sample in samples_to_drop_dict:
-            o.write(sample + "\t" + ",".join(samples_to_drop_dict[sample]) + "\n")
-
-    related_samples_to_drop_ht = hl.import_table(temp_path, impute=True).key_by("s")
     related_samples_to_drop_ht = related_samples_to_drop_ht.annotate(
-        relationship=hl.set(related_samples_to_drop_ht.relationship.split(","))
+        relationship=relatedness_ht[drop_ht.s].relationship
     )
-
-    logger.info("Annotating meta HT's sample_filter struct with relatedness booleans")
     left_ht = left_ht.annotate(
         sample_filters=left_ht.sample_filters.annotate(
-            related=hl.if_else(
-                related_samples_to_drop_ht[left_ht.s].relationship.contains(
-                    SECOND_DEGREE_RELATIVES
-                ),
-                True,
-                False,
+            related=related_samples_to_drop_ht[left_ht.s].relationship.contains(
+                SECOND_DEGREE_RELATIVES
             ),
-            duplicate=hl.if_else(
-                related_samples_to_drop_ht[left_ht.s].relationship.contains(
-                    DUPLICATE_OR_TWINS
-                ),
-                True,
-                False,
+            duplicate=related_samples_to_drop_ht[left_ht.s].relationship.contains(
+                DUPLICATE_OR_TWINS
             ),
-            parent_child=hl.if_else(
-                related_samples_to_drop_ht[left_ht.s].relationship.contains(
-                    PARENT_CHILD
-                ),
-                True,
-                False,
+            parent_child=related_samples_to_drop_ht[left_ht.s].relationship.contains(
+                PARENT_CHILD
             ),
-            sibling=hl.if_else(
-                related_samples_to_drop_ht[left_ht.s].relationship.contains(SIBLINGS),
-                True,
-                False,
+            sibling=related_samples_to_drop_ht[left_ht.s].relationship.contains(
+                SIBLINGS
             ),
         )
     )
@@ -205,7 +169,7 @@ def main(args):
     logger.info("Adding relatedness globals (cutoffs)")
     left_ht = left_ht.annotate_globals(**related_samples_to_drop_ht.globals)
 
-    logger.info("Reading in outlier HT and joining to meta HT")
+    logger.info(logging_statement.format("outlier HT"))
     right_ht = hl.read_table(
         platform_pop_outlier_ht_path(
             data_source,
