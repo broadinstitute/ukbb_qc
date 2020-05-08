@@ -225,6 +225,7 @@ def main(args):
     )
 
     logger.info("Writing out meta ht")
+    left_ht = left_ht.repartition(args.n_partitions)
     left_ht = left_ht.checkpoint(
         meta_ht_path(data_source, freeze), overwrite=args.overwrite
     )
@@ -236,6 +237,12 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
         description="This script creates the sample meta table for UKBB data"
+    )
+    parser.add_argument(
+        "--n_partitions",
+        help="Desired number of partitions for output HT",
+        default=5000,
+        type=int,
     )
     parser.add_argument(
         "-f", "--freeze", help="Current freeze", default=CURRENT_FREEZE, type=int
