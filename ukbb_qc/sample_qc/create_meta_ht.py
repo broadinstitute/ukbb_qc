@@ -55,12 +55,12 @@ def main(args):
             batch_num=left_ht.batch_num,
         )
     ).select("pharma_meta")
-    right_ht = get_age_ht(data_source, freeze)
+    right_ht = get_age_ht(freeze)
     left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
 
     logger.info(logging_statement.format("array sample concordance HT"))
     right_ht = hl.read_table(array_concordance_results_path(data_source, freeze))
-    right_ht = right_ht.tramsmute(
+    right_ht = right_ht.transmute(
         array_concordance=hl.struct(
             concordance=right_ht.concordance,
             n_discordant=right_ht.n_discordant,
