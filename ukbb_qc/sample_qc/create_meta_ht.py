@@ -53,6 +53,7 @@ def main(args):
             ukbb_app_26041_id=left_ht.ukbb_app_26041_id,
             batch=left_ht.batch,
             batch_num=left_ht.batch_num,
+            withdrawn_consent=left_ht.withdrawn_consent,
         )
     ).select("pharma_meta")
     right_ht = get_age_ht(freeze)
@@ -91,7 +92,7 @@ def main(args):
     )
     left_ht = join_tables(left_ht, "s", right_ht, "s", "right")
 
-    logger.info(logging_statment.format("sample QC HT"))
+    logger.info(logging_statement.format("sample QC HT"))
     right_ht = hl.read_table(qc_ht_path(data_source, freeze))
     left_ht = join_tables(left_ht, "s", right_ht, "s", "right")
 
