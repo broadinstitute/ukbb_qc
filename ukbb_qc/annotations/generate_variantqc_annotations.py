@@ -8,7 +8,7 @@ from gnomad.sample_qc.relatedness import filter_mt_to_trios
 from gnomad.utils.slack import try_slack
 from gnomad.utils.vep import vep_or_lookup_vep, vep_struct_to_csq
 from gnomad.variant_qc.pipeline import generate_sib_stats, generate_trio_stats
-from ukbb_qc.resources.basics import get_ukbb_data
+from ukbb_qc.resources.basics import get_checkpoint_path, get_ukbb_data
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import (
     array_concordance_results_path,
