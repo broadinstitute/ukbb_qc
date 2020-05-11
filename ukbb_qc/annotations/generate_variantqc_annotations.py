@@ -9,10 +9,11 @@ from gnomad.utils.filtering import filter_to_autosomes
 from gnomad.utils.slack import try_slack
 from gnomad.utils.vep import vep_or_lookup_vep, vep_struct_to_csq
 from gnomad.variant_qc.pipeline import generate_sib_stats, generate_trio_stats
-from ukbb_qc.resources.basics import get_checkpoint_path, get_ukbb_data
+from ukbb_qc.resources.basics import get_ukbb_data
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import (
     array_concordance_results_path,
+    array_concordance_sites_path,
     inferred_ped_path,
     relatedness_ht_path,
 )
@@ -113,31 +114,25 @@ def main(args):
         logger.info(
             "Filtering array concordance data based on allele frequency and concordance..."
         )
-        variants = hl.read_table(
+        variants_ht = hl.read_table(
             array_concordance_results_path(data_source, freeze, sample=False)
         )
 
-        # Get the tranche 2 (200K) allele frequency from the MT subset to tranche 2 sites used in array concordance
-        array_mt = hl.read_table(
-            get_checkpoint_path(
-                data_source,
-                freeze,
-                name=f"array_subset_concordance_callrate_{variants.call_rate_cutoff}_af_{variants.af_cutoff}",
-                mt=True,
-            )
-        ).rows()
+        # Get the tranche 2 (200K) allele frequency from the tranche 2 array concordance sites
+        sites_ht = hl.read_table(array_concordance_sites_path())
+        sites_ht = sites_ht.key_by("locus", "alleles")
+        variants_ht = variants_ht.annotate_rows(AF=sites_ht[variants_ht.row_key].AF)
 
-        variants = variants.annotate(AF=array_mt[variants.key].tranche_2_af)
-        variants = variants.filter(
-            (variants.prop_gt_con_non_ref > args.concordance_cutoff)
-            & (variants.AF > args.variant_qc_af_cutoff)
+        variants_ht = variants.filter(
+            (variants_ht.prop_gt_con_non_ref > args.concordance_cutoff)
+            & (variants_ht.AF > args.variant_qc_af_cutoff)
         )
-        variants = variants.repartition(n_partitions)
-        variants = variants.annotate_globals(
+        variants_ht = variants_ht.repartition(n_partitions)
+        variants_ht = variants_ht.annotate_globals(
             concordance_cutoff=args.concordance_cutoff,
             variant_qc_af_cutoff=args.variant_qc_af_cutoff,
         )
-        variants.write(
+        variants_ht.write(
             var_annotations_ht_path(
                 "array_exome_concordant_variants", data_source, freeze,
             ),
@@ -146,9 +141,8 @@ def main(args):
 
     if args.annotate_truth_data:
         logger.info("Joining truth data annotations...")
-        ht = get_ukbb_data(data_source, freeze).rows()
+        ht = get_ukbb_data(data_source, freeze).rows().select()
         truth_ht = get_truth_ht()
-        ht = ht.select()
         ht = ht.join(truth_ht, how="left")
         array_con_ht = hl.read_table(
             var_annotations_ht_path(
@@ -157,6 +151,10 @@ def main(args):
         )
 
         ht = ht.annotate(ukbb_array_con_common=hl.is_defined(array_con_ht[ht.key]))
+        ht = ht.annotate_globals(
+            concordance_cutoff=array_con_ht.concordance_cutoff,
+            variant_qc_af_cutoff=array_con_ht.variant_qc_af_cutoff,
+        )
         ht = ht.checkpoint(
             var_annotations_ht_path("truth_data", data_source, freeze),
             overwrite=overwrite,
