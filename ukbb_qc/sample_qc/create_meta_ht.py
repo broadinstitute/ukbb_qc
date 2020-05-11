@@ -49,15 +49,16 @@ def main(args):
     )
     left_ht = hl.read_table(array_sample_map_ht_path(freeze))
     left_ht = left_ht.annotate(
-        pharma_meta=hl.struct(
+        ukbb_meta=hl.struct(
             ukbb_app_26041_id=left_ht.ukbb_app_26041_id,
             batch=left_ht.batch,
             batch_num=left_ht.batch_num,
             withdrawn_consent=left_ht.withdrawn_consent,
         )
-    ).select("pharma_meta")
+    ).select("ukbb_meta")
     right_ht = get_age_ht(freeze)
     left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
+    left_ht = left_ht.transmute(ukbb_meta=left_ht.ukbb_meta.annotate(age=left_ht.age))
 
     logger.info(logging_statement.format("array sample concordance HT"))
     right_ht = hl.read_table(array_concordance_results_path(data_source, freeze))
@@ -121,6 +122,11 @@ def main(args):
         ),
     )
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
+    left_ht = left_ht.transmute(
+        ukbb_meta=left_ht.ukbb_meta.annotate(
+            self_reported_ancestry=left_ht.self_reported_ancestry,
+        )
+    )
 
     logger.info("Creating checkpoint")
     left_ht = left_ht.checkpoint(
@@ -131,7 +137,9 @@ def main(args):
     logger.info(
         "Reading hard filters HT, renaming hard filters struct to sample_filters, and joining with meta HT"
     )
-    right_ht = hl.read_table(hard_filters_ht_path(data_source, freeze))
+    right_ht = hl.read_table(hard_filters_ht_path(data_source, freeze)).select(
+        "hard_filters"
+    )
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
     left_ht = left_ht.transmute(sample_filters=left_ht.hard_filters)
 
@@ -211,7 +219,7 @@ def main(args):
         sample_filters=left_ht.sample_filters.annotate(
             release=hl.if_else(
                 (
-                    hl.is_defined(left_ht.pharma_meta.batch)
+                    hl.is_defined(left_ht.ukbb_meta.batch)
                     & left_ht.sample_filters.high_quality
                 ),
                 True,
@@ -229,6 +237,7 @@ def main(args):
 
     logger.info("Removing duplicate samples and writing out meta ht")
     left_ht = left_ht.distinct()
+    left_ht.describe()
     left_ht = left_ht.repartition(args.n_partitions)
     left_ht = left_ht.checkpoint(
         meta_ht_path(data_source, freeze), overwrite=args.overwrite
