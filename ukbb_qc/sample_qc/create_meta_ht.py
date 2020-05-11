@@ -148,7 +148,7 @@ def main(args):
         relationship=hl.agg.collect_as_set(relatedness_ht.relationship)
     )
     related_samples_to_drop_ht = related_samples_to_drop_ht.annotate(
-        relationship=relatedness_ht[drop_ht.s].relationship
+        relationship=relatedness_ht[related_samples_to_drop_ht.s].relationship
     )
     left_ht = left_ht.annotate(
         sample_filters=left_ht.sample_filters.annotate(
@@ -168,7 +168,7 @@ def main(args):
     )
 
     logger.info("Adding relatedness globals (cutoffs)")
-    left_ht = left_ht.annotate_globals(**related_samples_to_drop_ht.globals)
+    left_ht = left_ht.annotate_globals(**related_samples_to_drop_ht.index_globals())
 
     logger.info(logging_statement.format("outlier HT"))
     right_ht = hl.read_table(
@@ -210,7 +210,10 @@ def main(args):
     left_ht = left_ht.annotate(
         sample_filters=left_ht.sample_filters.annotate(
             release=hl.if_else(
-                (hl.is_defined(left_ht.pharma_meta.batch) & left_ht.high_quality),
+                (
+                    hl.is_defined(left_ht.pharma_meta.batch)
+                    & left_ht.sample_filters.high_quality
+                ),
                 True,
                 False,
             )
@@ -221,10 +224,11 @@ def main(args):
     left_ht = left_ht.annotate(control=(hl.literal(TRUTH_SAMPLES).contains(left_ht.s)))
     logger.info(
         "Release and control sample counts:"
-        f"{left_ht.aggregate(hl.struct(release=hl.agg.count_where(left_ht.release), control=hl.agg.count_where(left_ht.control)))}"
+        f"{left_ht.aggregate(hl.struct(release=hl.agg.count_where(left_ht.sample_filters.release), control=hl.agg.count_where(left_ht.control)))}"
     )
 
-    logger.info("Writing out meta ht")
+    logger.info("Removing duplicate samples and writing out meta ht")
+    left_ht = left_ht.distinct()
     left_ht = left_ht.repartition(args.n_partitions)
     left_ht = left_ht.checkpoint(
         meta_ht_path(data_source, freeze), overwrite=args.overwrite
