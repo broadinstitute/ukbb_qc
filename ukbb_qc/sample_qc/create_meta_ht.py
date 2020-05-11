@@ -88,6 +88,8 @@ def main(args):
             chrY_mean_dp=right_ht.chrY_mean_dp,
             chrX_ploidy=right_ht.chrX_ploidy,
             chrY_ploidy=right_ht.chrY_ploidy,
+            X_karyotype=right_ht.X_karyotype,
+            Y_karyotype=right_ht.Y_karyotype,
             sex_karyotype=right_ht.sex_karyotype,
         )
     )
