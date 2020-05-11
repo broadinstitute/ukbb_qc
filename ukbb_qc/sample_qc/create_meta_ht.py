@@ -210,7 +210,10 @@ def main(args):
     left_ht = left_ht.annotate(
         sample_filters=left_ht.sample_filters.annotate(
             release=hl.if_else(
-                (hl.is_defined(left_ht.pharma_meta.batch) & left_ht.sample_filters.high_quality),
+                (
+                    hl.is_defined(left_ht.pharma_meta.batch)
+                    & left_ht.sample_filters.high_quality
+                ),
                 True,
                 False,
             )
@@ -221,7 +224,7 @@ def main(args):
     left_ht = left_ht.annotate(control=(hl.literal(TRUTH_SAMPLES).contains(left_ht.s)))
     logger.info(
         "Release and control sample counts:"
-        f"{left_ht.aggregate(hl.struct(release=hl.agg.count_where(left_ht.release), control=hl.agg.count_where(left_ht.control)))}"
+        f"{left_ht.aggregate(hl.struct(release=hl.agg.count_where(left_ht.sample_filters.release), control=hl.agg.count_where(left_ht.control)))}"
     )
 
     logger.info("Writing out meta ht")
