@@ -101,7 +101,7 @@ def main(args):
         )
         logger.info("Annotating inferred platform assignments...")
         platform_ht = hl.read_table(
-            platform_pca_assignments_ht_path(data_source, freeze,)
+            platform_pca_assignments_ht_path(data_source, freeze)
         )
         sample_qc_ht = sample_qc_ht.annotate(
             qc_platform=platform_ht[sample_qc_ht.key].qc_platform
