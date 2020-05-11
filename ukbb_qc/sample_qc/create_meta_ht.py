@@ -227,7 +227,8 @@ def main(args):
         f"{left_ht.aggregate(hl.struct(release=hl.agg.count_where(left_ht.sample_filters.release), control=hl.agg.count_where(left_ht.control)))}"
     )
 
-    logger.info("Writing out meta ht")
+    logger.info("Removing duplicate samples and writing out meta ht")
+    left_ht = left_ht.distinct()
     left_ht = left_ht.repartition(args.n_partitions)
     left_ht = left_ht.checkpoint(
         meta_ht_path(data_source, freeze), overwrite=args.overwrite
