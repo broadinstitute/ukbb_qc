@@ -302,4 +302,4 @@ def get_age_ht(freeze: int) -> hl.Table:
     sample_map_ht = sample_map_ht.key_by("ukbb_app_26041_id")
     age_ht = age_ht.key_by(s=sample_map_ht[age_ht.key].s)
     age_ht = age_ht.rename({"f.21022.0.0": "age"})
-    return age_ht
+    return age_ht.select("age")
