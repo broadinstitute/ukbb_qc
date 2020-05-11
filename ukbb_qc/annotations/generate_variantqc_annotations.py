@@ -5,6 +5,7 @@ import hail as hl
 
 from gnomad.resources.grch38.reference_data import get_truth_ht
 from gnomad.sample_qc.relatedness import filter_mt_to_trios
+from gnomad.utils.filtering import filter_to_autosomes
 from gnomad.utils.slack import try_slack
 from gnomad.utils.vep import vep_or_lookup_vep, vep_struct_to_csq
 from gnomad.variant_qc.pipeline import generate_sib_stats, generate_trio_stats
@@ -83,15 +84,8 @@ def main(args):
         ped = hl.Pedigree.read(ped_fp, delimiter="\t")
         fam_ht = hl.import_fam(ped_fp, delimiter="\t")
 
-        # Filter to biallelic since the MatrixTable has already been split
-        mt = mt.filter_rows(~mt.was_split)
-
-        mt = mt.annotate_cols(
-            is_female=hl.case()
-            .when(mt.meta.sex_imputation.sex_karyotype == "XX", True)
-            .when(mt.meta.sex_imputation.sex_karyotype == "XY", False)
-            .or_missing()
-        )
+        # Filter to autosomes to prevent unnecessary densify of the sex chromosomes
+        mt = filter_to_autosomes(mt)
         mt = filter_mt_to_trios(mt, fam_ht)
         mt = hl.experimental.densify(mt)
 
@@ -107,10 +101,8 @@ def main(args):
             "Loading split hard call MT to generate sibling variant sharing statistics..."
         )
         mt = get_ukbb_data(data_source, freeze, meta_root="meta")
-        mt = mt.filter_rows((hl.len(mt.alleles) > 1) & ~mt.was_split)
 
         relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
-
         sib_stats_ht = generate_sib_stats(mt, relatedness_ht)
         sib_stats_ht.naive_coalesce(n_partitions).write(
             var_annotations_ht_path("sib_stats", data_source, freeze),
