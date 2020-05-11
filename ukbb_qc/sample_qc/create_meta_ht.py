@@ -53,14 +53,15 @@ def main(args):
             ukbb_app_26041_id=left_ht.ukbb_app_26041_id,
             batch=left_ht.batch,
             batch_num=left_ht.batch_num,
+            withdrawn_consent=left_ht.withdrawn_consent,
         )
     ).select("pharma_meta")
-    right_ht = get_age_ht(data_source, freeze)
+    right_ht = get_age_ht(freeze)
     left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
 
     logger.info(logging_statement.format("array sample concordance HT"))
     right_ht = hl.read_table(array_concordance_results_path(data_source, freeze))
-    right_ht = right_ht.tramsmute(
+    right_ht = right_ht.transmute(
         array_concordance=hl.struct(
             concordance=right_ht.concordance,
             n_discordant=right_ht.n_discordant,
@@ -91,7 +92,7 @@ def main(args):
     )
     left_ht = join_tables(left_ht, "s", right_ht, "s", "right")
 
-    logger.info(logging_statment.format("sample QC HT"))
+    logger.info(logging_statement.format("sample QC HT"))
     right_ht = hl.read_table(qc_ht_path(data_source, freeze))
     left_ht = join_tables(left_ht, "s", right_ht, "s", "right")
 
@@ -224,6 +225,7 @@ def main(args):
     )
 
     logger.info("Writing out meta ht")
+    left_ht = left_ht.repartition(args.n_partitions)
     left_ht = left_ht.checkpoint(
         meta_ht_path(data_source, freeze), overwrite=args.overwrite
     )
@@ -235,6 +237,12 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
         description="This script creates the sample meta table for UKBB data"
+    )
+    parser.add_argument(
+        "--n_partitions",
+        help="Desired number of partitions for output HT",
+        default=5000,
+        type=int,
     )
     parser.add_argument(
         "-f", "--freeze", help="Current freeze", default=CURRENT_FREEZE, type=int
