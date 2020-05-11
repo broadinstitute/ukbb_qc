@@ -14,7 +14,6 @@ from ukbb_qc.resources.sample_qc import (
     array_concordance_results_path,
     inferred_ped_path,
     relatedness_ht_path,
-    sex_ht_path,
 )
 from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 
@@ -111,9 +110,8 @@ def main(args):
         mt = mt.filter_rows((hl.len(mt.alleles) > 1) & ~mt.was_split)
 
         relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
-        sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
 
-        sib_stats_ht = generate_sib_stats(mt, relatedness_ht, sex_ht)
+        sib_stats_ht = generate_sib_stats(mt, relatedness_ht)
         sib_stats_ht.naive_coalesce(n_partitions).write(
             var_annotations_ht_path("sib_stats", data_source, freeze),
             overwrite=overwrite,
