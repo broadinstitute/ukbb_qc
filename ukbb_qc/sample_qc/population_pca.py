@@ -336,6 +336,7 @@ def main(args):
             .default(hl.str(pop_ht.HDBSCAN_pop_cluster)),
             pop_pca_scores=pc_scores_ht[pop_ht.key].scores,
         )
+        pop_ht = pop_ht.annotate_globals(**pc_scores_ht.index_globals())
         pop_ht.write(ancestry_hybrid_ht_path(data_source, freeze), args.overwrite)
 
 
