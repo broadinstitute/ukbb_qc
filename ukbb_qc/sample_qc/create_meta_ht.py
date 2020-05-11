@@ -210,7 +210,7 @@ def main(args):
     left_ht = left_ht.annotate(
         sample_filters=left_ht.sample_filters.annotate(
             release=hl.if_else(
-                (hl.is_defined(left_ht.pharma_meta.batch) & left_ht.high_quality),
+                (hl.is_defined(left_ht.pharma_meta.batch) & left_ht.sample_filters.high_quality),
                 True,
                 False,
             )
