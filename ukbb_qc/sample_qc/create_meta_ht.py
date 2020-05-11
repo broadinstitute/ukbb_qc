@@ -168,7 +168,7 @@ def main(args):
     )
 
     logger.info("Adding relatedness globals (cutoffs)")
-    left_ht = left_ht.annotate_globals(**related_samples_to_drop_ht.globals)
+    left_ht = left_ht.annotate_globals(**related_samples_to_drop_ht.index_globals())
 
     logger.info(logging_statement.format("outlier HT"))
     right_ht = hl.read_table(
