@@ -303,3 +303,25 @@ def get_age_ht(freeze: int) -> hl.Table:
     age_ht = age_ht.key_by(s=sample_map_ht[age_ht.key].s)
     age_ht = age_ht.rename({"f.21022.0.0": "age"})
     return age_ht.select("age")
+
+
+def get_reported_sex_ht(freeze: int) -> hl.Table:
+    """
+    Pull sex information from UKBB phenotype file
+
+    :param int freeze: One of the data freezes
+    :return: Table with reported sex per sample
+    :rtype: Table
+    """
+    # Read in phenotype table and select sex
+    if not file_exists(phenotype_ht_path()):
+        import_phenotype_ht()
+    sex_ht = hl.read_table(phenotype_ht_path()).select("f.22001.0.0")
+
+    # Re-key phenotype table to UKBB ID using array sample map table and return
+    sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze))
+    sample_map_ht = sample_map_ht.key_by("ukbb_app_26041_id")
+    sex_ht = sex_ht.key_by(s=sample_map_ht[sex_ht.key].s)
+    return sex_ht.annotate(
+        reported_sex=hl.if_else(reported_sex_ht["f.22001.0.0"] == 0, "XX", "XY",)
+    ).select("reported_sex")
