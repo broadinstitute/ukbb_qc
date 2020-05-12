@@ -22,6 +22,16 @@ List containing string representation for truth samples (syndip, NA12878)
 """
 
 
+def clinvar_pathogenic_ht_path(version: str) -> str:
+    """
+    Returns path to a ClinVar Table that has been filtered to only pathogenic variants
+
+    :param str version: ClinVar version
+    :return: Path to ClinVar pathogenic variant Table
+    """
+    return f"gs://broad-ukbb/resources/clinvar_{version}.pathogenic.ht"
+
+
 def get_truth_sample_data(
     data_source: str,
     freeze: int = CURRENT_FREEZE,

@@ -3,6 +3,7 @@ from typing import Optional
 
 import hail as hl
 
+from gnomad.resources.grch38.reference_data import clinvar
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.sparse_mt import split_info_annotation
 from ukbb_qc.resources.basics import (
@@ -16,7 +17,7 @@ from ukbb_qc.resources.sample_qc import (
     get_ukbb_array_pcs_path,
     get_ukbb_array_pcs_ht_path,
 )
-from ukbb_qc.resources.variant_qc import var_annotations_ht_path
+from ukbb_qc.resources.variant_qc import clinvar_pathogenic_ht_path, var_annotations_ht_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 
 
@@ -133,6 +134,7 @@ def import_capture_intervals(interval_path: str, header: bool, overwrite: bool) 
     capture_ht.write(capture_ht_path(data_source), overwrite=overwrite)
 
 
+# Variant resources
 def import_vqsr(
     freeze: int,
     vqsr_path: str,
@@ -203,3 +205,55 @@ def import_vqsr(
     logger.info(
         f"Found {unsplit_count} unsplit and {split_count} split variants with VQSR annotations"
     )
+
+
+def load_clinvar_path() -> hl.Table:
+    """
+    Filters the most recent GRCh38 ClinVar dataset in gnomad_methods resources to only pathogenic variants.
+
+    Removes variants with no star assertions and filtering to only (likely) pathogenic variants and no
+    conflicting clinical interpretations
+reference_data.clinvar
+    :return: Table of ClinVar variants filtered to only pathogenic
+    """
+    logger.info(
+        f"Filtering ClinVar version {} to only pathogenic variants"
+    )
+
+    clinvar_ht = clinvar.ht()
+    logger.info(f"Found {clinvar_ht.count()} variants before filtering")
+
+    no_star_assertions = hl.literal(
+        {
+            "no_assertion_provided",
+            "no_assertion_criteria_provided",
+            "no_interpretation_for_the_single_variant",
+        }
+    )clinvar.default_version
+    clinvar_ht = clinvar_ht.filter(
+        hl.set(clinvar_ht.info.CLNREVSTAT).intersection(no_star_assertions).length()
+        > 0,
+        keep=False,
+    )
+    logger.info(
+        f"Found {clinvar_ht.count()} variants after removing variants without assertions"
+    )
+    clinvar_ht = clinvar_ht.filter(
+        clinvar_ht.info.CLNSIG.map(lambda x: x.lower())
+        .map(lambda x: x.contains("pathogenic"))
+        .any(lambda x: x),
+        keep=True,
+    )
+    logger.info(
+        f"Found {clinvar_ht.count()} variants after filtering to (likely) pathogenic variants"
+    )
+    clinvar_ht = clinvar_ht.filter(
+        hl.is_defined(clinvar_ht.info.CLNSIGCONF), keep=False
+    )
+    clinvar_ht.write(clinvar_pathogenic_ht_path(clinvar.default_version), overwrite=True)
+    logger.info(
+        f"Found {clinvar_ht.count()} variants after filtering to variants without CLNSIGCONF (conflicting clinical \
+        interpretations)"
+    )
+
+
