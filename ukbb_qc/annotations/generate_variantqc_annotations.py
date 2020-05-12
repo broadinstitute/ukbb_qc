@@ -120,7 +120,6 @@ def main(args):
 
         # Get the tranche 2 (200K) allele frequency from the tranche 2 array concordance sites
         sites_ht = hl.read_table(array_concordance_sites_path())
-        sites_ht = sites_ht.key_by("locus", "alleles")
         variants_ht = variants_ht.annotate_rows(AF=sites_ht[variants_ht.row_key].AF)
 
         variants_ht = variants.filter(
