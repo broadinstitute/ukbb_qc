@@ -64,9 +64,8 @@ def main(args):
             sex_ht.write(sex_ht_path(data_source, freeze), overwrite=True)
 
             mismatch = sex_ht.filter(
-                (sex_ht.sex_karyotype == "XX" | sex_ht.sex_karyotype == "XY")
-                & sex_ht.sex_karyotype
-                != sex_ht.reported_sex
+                ((sex_ht.sex_karyotype == "XX") | (sex_ht.sex_karyotype == "XY"))
+                & (sex_ht.sex_karyotype != sex_ht.reported_sex)
             )
             if mismatch.count() != 0:
                 mismatch = mismatch.annotate(
