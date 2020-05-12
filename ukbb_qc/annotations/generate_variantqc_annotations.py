@@ -120,7 +120,7 @@ def main(args):
         sites_ht = hl.read_table(array_concordance_sites_path())
         variants_ht = variants_ht.annotate_rows(AF=sites_ht[variants_ht.row_key].AF)
 
-        variants_ht = variants.filter(
+        variants_ht = variants_ht.filter(
             (variants_ht.prop_gt_con_non_ref > args.concordance_cutoff)
             & (variants_ht.AF > args.variant_qc_af_cutoff)
         )
