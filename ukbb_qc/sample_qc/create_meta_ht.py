@@ -273,7 +273,6 @@ def main(args):
 
     logger.info("Removing duplicate samples and writing out meta ht")
     left_ht = left_ht.distinct()
-    left_ht.describe()
     left_ht = left_ht.repartition(args.n_partitions)
     left_ht = left_ht.checkpoint(
         meta_ht_path(data_source, freeze), overwrite=args.overwrite
