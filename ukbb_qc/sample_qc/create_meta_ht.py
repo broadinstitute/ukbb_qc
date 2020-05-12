@@ -105,6 +105,9 @@ def main(args):
         )
     )
     left_ht = join_tables(left_ht, "s", right_ht, "s", "right")
+    left_ht = left_ht.transmute(
+        ukbb_meta=left_ht.ukbb_meta.annotate(repoted_sex=left_ht.reported_sex)
+    )
 
     logger.info(logging_statement.format("sample QC HT"))
     right_ht = hl.read_table(qc_ht_path(data_source, freeze))
