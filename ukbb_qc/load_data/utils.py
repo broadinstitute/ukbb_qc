@@ -217,7 +217,7 @@ reference_data.clinvar
     :return: Table of ClinVar variants filtered to only pathogenic
     """
     logger.info(
-        f"Filtering ClinVar version {} to only pathogenic variants"
+        f"Filtering ClinVar version {clinvar.default_version} to only pathogenic variants"
     )
 
     clinvar_ht = clinvar.ht()
@@ -229,7 +229,7 @@ reference_data.clinvar
             "no_assertion_criteria_provided",
             "no_interpretation_for_the_single_variant",
         }
-    )clinvar.default_version
+    )
     clinvar_ht = clinvar_ht.filter(
         hl.set(clinvar_ht.info.CLNREVSTAT).intersection(no_star_assertions).length()
         > 0,
