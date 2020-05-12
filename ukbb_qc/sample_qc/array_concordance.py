@@ -84,7 +84,6 @@ def prepare_array_and_exome_mt(
         sites_ht = hl.read_table(array_concordance_sites_path())
 
     logger.info("Filtering exome and array MT to tranche 2 sites...")
-    sites_ht = sites_ht.key_by("locus", "alleles")
     exome_mt = exome_mt.filter_rows(hl.is_defined(sites_ht[exome_mt.row_key]))
     array_mt = array_mt.filter_rows(hl.is_defined(sites_ht[array_mt.row_key]))
     return array_mt, exome_mt
