@@ -35,7 +35,7 @@ def main(args):
     if args.vep:
         # Need to spin up a cluster with  --requester-pays-allow-buckets gs://hail-us-vep
         # (or --requester-pays-allows-all) in addition to --vep (build)
-        logger.info(f"Running VEP on the MT...")
+        logger.info(f"Running VEP on split hard call MT...")
         ht = get_ukbb_data(data_source, freeze).rows()
         ht = ht.filter(hl.len(ht.alleles) > 1)
         ht = vep_or_lookup_vep(ht)
@@ -45,11 +45,9 @@ def main(args):
         )
 
     if args.generate_allele_counts:
-        logger.info("Loading split hard call MT to compute allele counts...")
+        logger.info("Computing allele counts on split hard call MT...")
         mt = get_ukbb_data(data_source, freeze, meta_root="meta")
         mt = mt.filter_rows(hl.len(mt.alleles) > 1)
-
-        logger.info("Calculate allele counts...")
         ac_expr = {
             "ac_qc_samples_raw": mt.meta.sample_filters.high_quality
             | mt.meta.sample_filters.control,
@@ -78,7 +76,7 @@ def main(args):
         )
 
     if args.generate_trio_stats:
-        logger.info("Generating statistics on trios...")
+        logger.info("Generate trio statistics on split hard call MT...")
         mt = get_ukbb_data(data_source, freeze, meta_root="meta")
 
         ped_fp = inferred_ped_path(data_source, freeze)
@@ -99,7 +97,7 @@ def main(args):
 
     if args.generate_sibling_stats:
         logger.info(
-            "Loading split hard call MT to generate sibling variant sharing statistics..."
+            "Generating sibling variant sharing statistics on split hard call MT..."
         )
         mt = get_ukbb_data(data_source, freeze, meta_root="meta")
 
@@ -151,8 +149,8 @@ def main(args):
 
         ht = ht.annotate(ukbb_array_con_common=hl.is_defined(array_con_ht[ht.key]))
         ht = ht.annotate_globals(
-            concordance_cutoff=array_con_ht.concordance_cutoff,
-            variant_qc_af_cutoff=array_con_ht.variant_qc_af_cutoff,
+            concordance_cutoff=array_con_ht.index_globals().concordance_cutoff,
+            variant_qc_af_cutoff=array_con_ht.index_globals().variant_qc_af_cutoff,
         )
         ht = ht.checkpoint(
             var_annotations_ht_path("truth_data", data_source, freeze),
