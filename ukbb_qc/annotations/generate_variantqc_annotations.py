@@ -6,7 +6,7 @@ import hail as hl
 from gnomad.resources.grch38.reference_data import get_truth_ht
 from gnomad.sample_qc.relatedness import filter_mt_to_trios
 from gnomad.utils.filtering import filter_to_autosomes
-from gnomad.utils.slack import try_slack
+from gnomad.utils.slack import slack_notifications
 from gnomad.utils.vep import vep_or_lookup_vep, vep_struct_to_csq
 from gnomad.variant_qc.pipeline import generate_sib_stats, generate_trio_stats
 from ukbb_qc.resources.basics import get_ukbb_data
@@ -41,7 +41,8 @@ def main(args):
         ht = vep_or_lookup_vep(ht)
         ht = ht.annotate(vep_csq=vep_struct_to_csq(ht.vep))
         ht.naive_coalesce(n_partitions).write(
-            var_annotations_ht_path("vep", data_source, freeze), overwrite
+            var_annotations_ht_path("vep", data_source, freeze),
+            overwrite=overwrite,
         )
 
     if args.generate_allele_counts:
@@ -66,7 +67,7 @@ def main(args):
         ht = mt.annotate_rows(
             **{
                 ac_name: hl.agg.filter(expr, hl.agg.sum(mt.GT.n_alt_alleles()))
-                for ac_name, expr in ac_expr
+                for ac_name, expr in ac_expr.items()
             }
         ).rows()
 
@@ -83,7 +84,6 @@ def main(args):
         ped = hl.Pedigree.read(ped_fp, delimiter="\t")
         fam_ht = hl.import_fam(ped_fp, delimiter="\t")
 
-        # Filter to autosomes to prevent unnecessary densify of the sex chromosomes
         mt = filter_to_autosomes(mt)
         mt = filter_mt_to_trios(mt, fam_ht)
         mt = hl.experimental.densify(mt)
@@ -118,7 +118,7 @@ def main(args):
 
         # Get the tranche 2 (200K) allele frequency from the tranche 2 array concordance sites
         sites_ht = hl.read_table(array_concordance_sites_path())
-        variants_ht = variants_ht.annotate_rows(AF=sites_ht[variants_ht.row_key].AF)
+        variants_ht = variants_ht.annotate(AF=sites_ht[variants_ht.key].AF)
 
         variants_ht = variants_ht.filter(
             (variants_ht.prop_gt_con_non_ref > args.concordance_cutoff)
@@ -214,6 +214,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.slack_channel:
-        try_slack(args.slack_channel, main, args)
+        main(args)
+        #slack_notifications(args.slack_channel, main, args)
     else:
         main(args)
