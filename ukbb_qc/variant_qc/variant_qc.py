@@ -7,7 +7,6 @@ import uuid
 
 import hail as hl
 
-
 from ukbb_qc.resources.basics import CURRENT_FREEZE, get_ukbb_data
 from ukbb_qc.resources.variant_qc import (
     info_ht_path,
