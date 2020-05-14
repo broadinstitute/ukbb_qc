@@ -377,6 +377,7 @@ def main(args):
                 ].self_reported_ancestry
             )
 
+            pop_ht = pop_ht.annotate_globals(**pc_scores_ht.index_globals())
             pop_ht = pop_ht.repartition(args.n_partitions)
             pop_ht.write(
                 ancestry_hybrid_ht_path(data_source, freeze), overwrite=args.overwrite,

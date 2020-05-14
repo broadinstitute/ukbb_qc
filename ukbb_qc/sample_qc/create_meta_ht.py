@@ -49,15 +49,16 @@ def main(args):
     )
     left_ht = hl.read_table(array_sample_map_ht_path(freeze))
     left_ht = left_ht.annotate(
-        pharma_meta=hl.struct(
+        ukbb_meta=hl.struct(
             ukbb_app_26041_id=left_ht.ukbb_app_26041_id,
             batch=left_ht.batch,
             batch_num=left_ht.batch_num,
             withdrawn_consent=left_ht.withdrawn_consent,
         )
-    ).select("pharma_meta")
+    ).select("ukbb_meta")
     right_ht = get_age_ht(freeze)
     left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
+    left_ht = left_ht.transmute(ukbb_meta=left_ht.ukbb_meta.annotate(age=left_ht.age))
 
     logger.info(logging_statement.format("array sample concordance HT"))
     right_ht = hl.read_table(array_concordance_results_path(data_source, freeze))
@@ -70,6 +71,11 @@ def main(args):
             prop_gt_con_non_ref=right_ht.prop_gt_con_non_ref,
         )
     ).select("array_concordance")
+    right_ht = right_ht.transmute_globals(
+        array_concordance_sites_cutoffs=hl.struct(
+            callrate_cutoff=right_ht.callrate_cutoff, af_cutoff=right_ht.af_cutoff,
+        )
+    )
     left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
 
     logger.info(logging_statement.format("sex HT"))
@@ -87,10 +93,21 @@ def main(args):
             chrY_mean_dp=right_ht.chrY_mean_dp,
             chrX_ploidy=right_ht.chrX_ploidy,
             chrY_ploidy=right_ht.chrY_ploidy,
+            X_karyotype=right_ht.X_karyotype,
+            Y_karyotype=right_ht.Y_karyotype,
             sex_karyotype=right_ht.sex_karyotype,
         )
     )
+    right_ht = right_ht.transmute_globals(
+        sex_imputation_ploidy_cutoffs=hl.struct(
+            x_ploidy_cutoffs=right_ht.x_ploidy_cutoffs,
+            y_ploidy_cutoffs=right_ht.y_ploidy_cutoffs,
+        )
+    )
     left_ht = join_tables(left_ht, "s", right_ht, "s", "right")
+    left_ht = left_ht.transmute(
+        ukbb_meta=left_ht.ukbb_meta.annotate(repoted_sex=left_ht.reported_sex)
+    )
 
     logger.info(logging_statement.format("sample QC HT"))
     right_ht = hl.read_table(qc_ht_path(data_source, freeze))
@@ -104,11 +121,16 @@ def main(args):
             callrate_pcs=right_ht.scores, qc_platform=right_ht.qc_platform
         )
     )
+    right_ht = right_ht.transmute_globals(
+        platform_inference_hdbscan_parameters=hl.struct(
+            hdbscan_min_cluster_size=right_ht.hdbscan_min_cluster_size,
+            hdbscan_min_samples=right_ht.hdbscan_min_samples,
+        )
+    )
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
 
     logger.info(logging_statement.format("population PCA HT"))
     right_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
-    # Put population info into structs for join
     right_ht = right_ht.transmute(
         gnomad_PC_project_pop_data=hl.struct(
             gnomad_PCs=right_ht.gnomad_pc_project_scores,
@@ -120,7 +142,19 @@ def main(args):
             hybrid_pop=right_ht.hybrid_pop,
         ),
     )
+    right_ht = right_ht.transmute_globals(
+        population_inference_pca_metrics=hl.struct(
+            n_project_pcs=right_ht.n_project_pcs,
+            min_prob=right_ht.min_prob,
+            n_exome_pcs=right_ht.n_exome_pcs,
+        )
+    )
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
+    left_ht = left_ht.transmute(
+        ukbb_meta=left_ht.ukbb_meta.annotate(
+            self_reported_ancestry=left_ht.self_reported_ancestry,
+        )
+    )
 
     logger.info("Creating checkpoint")
     left_ht = left_ht.checkpoint(
@@ -131,7 +165,9 @@ def main(args):
     logger.info(
         "Reading hard filters HT, renaming hard filters struct to sample_filters, and joining with meta HT"
     )
-    right_ht = hl.read_table(hard_filters_ht_path(data_source, freeze))
+    right_ht = hl.read_table(hard_filters_ht_path(data_source, freeze)).select(
+        "hard_filters"
+    )
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
     left_ht = left_ht.transmute(sample_filters=left_ht.hard_filters)
 
@@ -168,7 +204,11 @@ def main(args):
     )
 
     logger.info("Adding relatedness globals (cutoffs)")
-    left_ht = left_ht.annotate_globals(**related_samples_to_drop_ht.index_globals())
+    left_ht = left_ht.annotate_globals(
+        relatedness_inference_cutoffs=hl.struct(
+            **related_samples_to_drop_ht.index_globals()
+        )
+    )
 
     logger.info(logging_statement.format("outlier HT"))
     right_ht = hl.read_table(
@@ -178,6 +218,9 @@ def main(args):
             args.pop_assignment_method,
             args.platform_assignment_method,
         )
+    )
+    right_ht = right_ht.transmute_globals(
+        outlier_detection_metrics=right_ht.qc_metrics_stats,
     )
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
     left_ht = left_ht.transmute(
@@ -211,7 +254,7 @@ def main(args):
         sample_filters=left_ht.sample_filters.annotate(
             release=hl.if_else(
                 (
-                    hl.is_defined(left_ht.pharma_meta.batch)
+                    hl.is_defined(left_ht.ukbb_meta.batch)
                     & left_ht.sample_filters.high_quality
                 ),
                 True,
@@ -221,10 +264,14 @@ def main(args):
     )
 
     logger.info("Annotating control samples")
-    left_ht = left_ht.annotate(control=(hl.literal(TRUTH_SAMPLES).contains(left_ht.s)))
+    left_ht = left_ht.annotate(
+        sample_filters=left_ht.sample_filters.annotate(
+            control=(hl.literal(TRUTH_SAMPLES).contains(left_ht.s))
+        )
+    )
     logger.info(
         "Release and control sample counts:"
-        f"{left_ht.aggregate(hl.struct(release=hl.agg.count_where(left_ht.sample_filters.release), control=hl.agg.count_where(left_ht.control)))}"
+        f"{left_ht.aggregate(hl.struct(release=hl.agg.count_where(left_ht.sample_filters.release), control=hl.agg.count_where(left_ht.sample_filters.control)))}"
     )
 
     logger.info("Removing duplicate samples and writing out meta ht")
@@ -233,6 +280,7 @@ def main(args):
     left_ht = left_ht.checkpoint(
         meta_ht_path(data_source, freeze), overwrite=args.overwrite
     )
+    left_ht.summarize()
     logger.info(f"Final count: {left_ht.count()}")
     logger.info("Complete")
 
