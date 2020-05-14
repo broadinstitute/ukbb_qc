@@ -78,12 +78,13 @@ def main(args):
 
     if args.generate_trio_stats:
         logger.info("Generate trio statistics on split hard call MT...")
-        mt = get_ukbb_data(data_source, freeze, meta_root="meta")
+        mt = get_ukbb_data(data_source, freeze)
 
         ped_fp = inferred_ped_path(data_source, freeze)
         ped = hl.Pedigree.read(ped_fp, delimiter="\t")
         fam_ht = hl.import_fam(ped_fp, delimiter="\t")
 
+        # Filter to autosomes to prevent unnecessary densify of the sex chromosomes
         mt = filter_to_autosomes(mt)
         mt = filter_mt_to_trios(mt, fam_ht)
         mt = hl.experimental.densify(mt)
