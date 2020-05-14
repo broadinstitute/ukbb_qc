@@ -127,7 +127,7 @@ def create_grouped_bin_ht(
         var_annotations_ht_path("trio_stats", data_source, freeze)
     )
 
-    logger.info(f"Creating grouped bin table")
+    logger.info(f"Creating grouped bin table...")
     grouped_binned_ht = compute_grouped_binned_ht(
         ht,
         checkpoint_path=get_checkpoint_path(
@@ -135,6 +135,7 @@ def create_grouped_bin_ht(
         ),
     )
 
+    logger.info(f"Aggregating grouped bin table...")
     parent_ht = grouped_binned_ht._parent
     agg_ht = grouped_binned_ht.aggregate(
         n_clinvar_path=hl.agg.count_where(parent_ht.clinvar_path),
