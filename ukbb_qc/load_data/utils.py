@@ -17,7 +17,10 @@ from ukbb_qc.resources.sample_qc import (
     get_ukbb_array_pcs_path,
     get_ukbb_array_pcs_ht_path,
 )
-from ukbb_qc.resources.variant_qc import clinvar_pathogenic_ht_path, var_annotations_ht_path
+from ukbb_qc.resources.variant_qc import (
+    clinvar_pathogenic_ht_path,
+    var_annotations_ht_path,
+)
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 
 
@@ -211,9 +214,9 @@ def load_clinvar_path() -> hl.Table:
     """
     Filters the most recent GRCh38 ClinVar dataset in gnomad_methods resources to only pathogenic variants.
 
-    Removes variants with no star assertions and filtering to only (likely) pathogenic variants and no
+    Removes variants with no star assertions and filters to only (likely) pathogenic variants and no
     conflicting clinical interpretations
-reference_data.clinvar
+
     :return: Table of ClinVar variants filtered to only pathogenic
     """
     logger.info(
@@ -250,10 +253,10 @@ reference_data.clinvar
     clinvar_ht = clinvar_ht.filter(
         hl.is_defined(clinvar_ht.info.CLNSIGCONF), keep=False
     )
-    clinvar_ht.write(clinvar_pathogenic_ht_path(clinvar.default_version), overwrite=True)
+    clinvar_ht.write(
+        clinvar_pathogenic_ht_path(clinvar.default_version), overwrite=True
+    )
     logger.info(
         f"Found {clinvar_ht.count()} variants after filtering to variants without CLNSIGCONF (conflicting clinical \
         interpretations)"
     )
-
-
