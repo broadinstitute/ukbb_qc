@@ -324,7 +324,7 @@ def get_reported_sex_ht(freeze: int) -> hl.Table:
     sample_map_ht = sample_map_ht.key_by("ukbb_app_26041_id")
     sex_ht = sex_ht.key_by(s=sample_map_ht[sex_ht.key].s)
     return sex_ht.annotate(
-        reported_sex=hl.if_else(reported_sex_ht["f.22001.0.0"] == 0, "XX", "XY",)
+        reported_sex=hl.if_else(sex_ht["f.22001.0.0"] == 0, "XX", "XY",)
     ).select("reported_sex")
 
 
