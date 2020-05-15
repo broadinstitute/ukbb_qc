@@ -6,7 +6,7 @@ import hail as hl
 from gnomad.resources.grch38.reference_data import get_truth_ht
 from gnomad.sample_qc.relatedness import filter_mt_to_trios
 from gnomad.utils.filtering import filter_to_autosomes
-from gnomad.utils.slack import slack_notifications
+from gnomad.utils.slack import try_slack
 from gnomad.utils.vep import vep_or_lookup_vep, vep_struct_to_csq
 from gnomad.variant_qc.pipeline import generate_sib_stats, generate_trio_stats
 from ukbb_qc.resources.basics import get_ukbb_data
@@ -215,7 +215,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.slack_channel:
-        main(args)
-        #slack_notifications(args.slack_channel, main, args)
+        try_slack(args.slack_channel, main, args)
     else:
         main(args)
