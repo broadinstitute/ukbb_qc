@@ -183,18 +183,40 @@ def main(args):
     )
     left_ht = left_ht.annotate(
         sample_filters=left_ht.sample_filters.annotate(
-            related=related_samples_to_drop_ht[left_ht.s].relationship.contains(
-                SECOND_DEGREE_RELATIVES
-            ),
-            duplicate=related_samples_to_drop_ht[left_ht.s].relationship.contains(
-                DUPLICATE_OR_TWINS
-            ),
-            parent_child=related_samples_to_drop_ht[left_ht.s].relationship.contains(
-                PARENT_CHILD
-            ),
-            sibling=related_samples_to_drop_ht[left_ht.s].relationship.contains(
-                SIBLINGS
-            ),
+            related=hl.case()
+            .when(left_ht.sample_filters.hard_filtered, hl.null(hl.tbool))
+            .when(
+                hl.is_defined(related_samples_to_drop_ht[left_ht.key]),
+                related_samples_to_drop_ht[left_ht.s].relationship.contains(
+                    SECOND_DEGREE_RELATIVES
+                ),
+            )
+            .default(False),
+            duplicate=hl.case()
+            .when(left_ht.sample_filters.hard_filtered, hl.null(hl.tbool))
+            .when(
+                hl.is_defined(related_samples_to_drop_ht[left_ht.key]),
+                related_samples_to_drop_ht[left_ht.s].relationship.contains(
+                    DUPLICATE_OR_TWINS
+                ),
+            )
+            .default(False),
+            parent_child=hl.case()
+            .when(left_ht.sample_filters.hard_filtered, hl.null(hl.tbool))
+            .when(
+                hl.is_defined(related_samples_to_drop_ht[left_ht.key]),
+                related_samples_to_drop_ht[left_ht.s].relationship.contains(
+                    PARENT_CHILD
+                ),
+            )
+            .default(False),
+            sibling=hl.case()
+            .when(left_ht.sample_filters.hard_filtered, hl.null(hl.tbool))
+            .when(
+                hl.is_defined(related_samples_to_drop_ht[left_ht.key]),
+                related_samples_to_drop_ht[left_ht.s].relationship.contains(SIBLINGS),
+            )
+            .default(False),
         )
     )
     left_ht = left_ht.annotate(
