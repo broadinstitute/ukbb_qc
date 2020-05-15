@@ -100,7 +100,7 @@ def main(args):
         logger.info(
             "Generating sibling variant sharing statistics on split hard call MT..."
         )
-        mt = get_ukbb_data(data_source, freeze, meta_root="meta")
+        mt = get_ukbb_data(data_source, freeze)
 
         relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
         sib_stats_ht = generate_sib_stats(mt, relatedness_ht)
