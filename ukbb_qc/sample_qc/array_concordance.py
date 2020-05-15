@@ -45,7 +45,13 @@ def prepare_array_and_exome_mt(
 ) -> Tuple[hl.MatrixTable, hl.MatrixTable]:
     """
     Prepares array and exome MatrixTables for calculating concordance using `get_array_exome_concordance`.
+<<<<<<< HEAD
     Maps array to exome IDs and filters both matrix tables to overlapping samples and high callrate, common sites.
+=======
+
+    Maps array to exome IDs and filters both matrix tables to overlapping samples and high callrate, common sites.
+
+>>>>>>> parent of ce94396... Accidental commit of array concordance
     NOTE: Assumes input exome MatrixTable is split (hl.experimental.sparse_split_multi)
     
     :param int freeze: One of the data freezes
@@ -92,7 +98,13 @@ def get_array_exome_concordance(
 ) -> Tuple[hl.Table, hl.Table]:
     """
     Runs concordance on input array and exome MatrixTables.
+<<<<<<< HEAD
     Returns both sample and variant concordance Tables.
+=======
+
+    Returns both sample and variant concordance Tables.
+
+>>>>>>> parent of ce94396... Accidental commit of array concordance
     :param array_mt: Array MatrixTable
     :param exome_mt: Exome MatrixTable
     :return: Sample and variant concordance Tables
@@ -344,4 +356,7 @@ if __name__ == "__main__":
         try_slack(args.slack_channel, main, args)
     else:
         main(args)
+<<<<<<< HEAD
 
+=======
+>>>>>>> parent of ce94396... Accidental commit of array concordance
