@@ -26,6 +26,9 @@ def clinvar_pathogenic_ht_path(version: str) -> str:
     """
     Returns path to a ClinVar Table that has been filtered to only pathogenic variants
 
+    This Table contains only ClinVar variants with star assertions, that are likely pathogenic or pathogenic,
+    and have no conflicting clinical interpretations
+
     :param str version: ClinVar version
     :return: Path to ClinVar pathogenic variant Table
     """
