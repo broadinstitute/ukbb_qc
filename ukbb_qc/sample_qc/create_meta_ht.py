@@ -175,13 +175,8 @@ def main(args):
         "Reading in related samples to drop HT and preparing to annotate meta HT's sample_filter struct with relatedness booleans"
     )
     related_samples_to_drop_ht = hl.read_table(related_drop_path(data_source, freeze))
-    relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
-    relatedness_ht = relatedness_ht.filter(relatedness_ht.relationship != UNRELATED)
-    relatedness_ht = relatedness_ht.select("relationship", s=relatedness_ht.i.s).union(
-        relatedness_ht.select("relationship", s=relatedness_ht.j.s)
-    )
-    relatedness_ht = relatedness_ht.group_by(relatedness_ht.s).aggregate(
-        relationship=hl.agg.collect_as_set(relatedness_ht.relationship)
+    relatedness_ht = get_relatedness_set_ht(
+        hl.read_table(relatedness_ht_path(data_source, freeze))
     )
     related_samples_to_drop_ht = related_samples_to_drop_ht.annotate(
         relationship=relatedness_ht[related_samples_to_drop_ht.s].relationship
@@ -200,6 +195,11 @@ def main(args):
             sibling=related_samples_to_drop_ht[left_ht.s].relationship.contains(
                 SIBLINGS
             ),
+        )
+    )
+    left_ht = left_ht.annotate(
+        relatedness_inference=hl.struct(
+            relationship=relatedness_ht[left_ht.s].relationship
         )
     )
 
