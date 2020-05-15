@@ -8,7 +8,6 @@ from gnomad.sample_qc.relatedness import (
     PARENT_CHILD,
     SECOND_DEGREE_RELATIVES,
     SIBLINGS,
-    UNRELATED,
 )
 from ukbb_qc.resources.basics import array_sample_map_ht_path, get_checkpoint_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
@@ -25,7 +24,7 @@ from ukbb_qc.resources.sample_qc import (
     meta_ht_path,
 )
 from ukbb_qc.resources.variant_qc import TRUTH_SAMPLES
-from ukbb_qc.utils.utils import get_age_ht, join_tables
+from ukbb_qc.utils.utils import get_age_ht, get_relatedness_set_ht, join_tables
 
 
 logging.basicConfig(
