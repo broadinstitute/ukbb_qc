@@ -4,6 +4,7 @@ from typing import Union
 import hail as hl
 
 from gnomad.resources.grch38.reference_data import lcr_intervals
+from gnomad.sample_qc.relatedness import UNRELATED
 from gnomad.utils.filtering import filter_to_autosomes
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.file_utils import file_exists
@@ -325,3 +326,24 @@ def get_reported_sex_ht(freeze: int) -> hl.Table:
     return sex_ht.annotate(
         reported_sex=hl.if_else(reported_sex_ht["f.22001.0.0"] == 0, "XX", "XY",)
     ).select("reported_sex")
+
+
+def get_relatedness_set_ht(relatedness_ht: hl.Table) -> hl.Table:
+    """
+    Parses relatedness Table to get every relationship (except UNRELATED) per sample.
+
+    Returns Table keyed by sample with all sample relationships in a set.
+
+    :param Table relatedness_ht: Table with inferred relationship information output by pc_relate. 
+        Keyed by sample pair (i, j).
+    :return: Table keyed by sample (s) with all relationships annotated as a set.
+    :rtype: hl.Table
+    """
+    relatedness_ht = relatedness_ht.filter(relatedness_ht.relationship != UNRELATED)
+    relatedness_ht = relatedness_ht.select("relationship", s=relatedness_ht.i.s).union(
+        relatedness_ht.select("relationship", s=relatedness_ht.j.s)
+    )
+    relatedness_ht = relatedness_ht.group_by(relatedness_ht.s).aggregate(
+        relationship=hl.agg.collect_as_set(relatedness_ht.relationship)
+    )
+    return relatedness_ht
