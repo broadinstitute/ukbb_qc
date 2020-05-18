@@ -183,7 +183,7 @@ def main(args):
             .when(left_ht.sample_filters.hard_filtered, hl.null(hl.tbool))
             .when(
                 hl.is_defined(related_samples_to_drop_ht[left_ht.key]),
-                related_samples_to_drop_ht[left_ht.s].relationship.contains(
+                related_samples_to_drop_ht[left_ht.s].relationships.contains(
                     relationship
                 ),
             )
