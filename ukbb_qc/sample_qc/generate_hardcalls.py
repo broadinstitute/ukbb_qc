@@ -16,7 +16,7 @@ from ukbb_qc.resources.basics import (
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import f_stat_sites_path, sex_ht_path
 from ukbb_qc.resources.variant_qc import var_annotations_ht_path
-from ukbb_qc.utils.utils import get_reported_sex_ht
+from ukbb_qc.utils.utils import get_array_sex_ht
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -51,25 +51,24 @@ def main(args):
                 aaf_expr="AF",
                 gt_expr="LGT",
             )
+            # Checkpointing here because annotate_sex does a few slow computations (including sex ploidy imputation)
             sex_ht = sex_ht.checkpoint(
                 get_checkpoint_path(data_source, freeze, name="temp_sex")
             )
 
             logger.info("Comparing imputed and reported sex...")
-            reported_sex_ht = get_reported_sex_ht(freeze)
-            sex_ht = sex_ht.annotate(
-                reported_sex=reported_sex_ht[sex_ht.key].reported_sex
-            )
+            array_sex_ht = get_array_sex_ht(freeze)
+            sex_ht = sex_ht.annotate(array_sex=array_sex_ht[sex_ht.key].array_sex)
             sex_ht = sex_ht.repartition(args.n_partitions)
             sex_ht.write(sex_ht_path(data_source, freeze), overwrite=True)
 
             mismatch = sex_ht.filter(
                 ((sex_ht.sex_karyotype == "XX") | (sex_ht.sex_karyotype == "XY"))
-                & (sex_ht.sex_karyotype != sex_ht.reported_sex)
+                & (sex_ht.sex_karyotype != sex_ht.array_sex)
             )
             if mismatch.count() != 0:
                 mismatch = mismatch.annotate(
-                    inferred_reported=mismatch.sex_karyotype + mismatch.reported_sex
+                    inferred_reported=mismatch.sex_karyotype + mismatch.array_sex
                 )
                 mismatch_counts = mismatch.aggregate(
                     hl.agg.counter(mismatch.inferred_reported)
