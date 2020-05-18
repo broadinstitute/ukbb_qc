@@ -54,10 +54,9 @@ def main(args):
     )
     left_ht = hl.read_table(array_sample_map_ht_path(freeze))
     left_ht = left_ht.annotate(
-        ukbb_meta=hl.struct(**left_ht.row.drop("eid_sample"))
+        ukbb_meta=hl.struct(**left_ht.row.drop("s", "eid_sample"))
     ).select("ukbb_meta")
     right_ht = get_age_ht(freeze)
-    left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
     left_ht = left_ht.annotate(
         ukbb_meta=left_ht.ukbb_meta.annotate(age=right_ht[left_ht.key].age)
     )
@@ -204,7 +203,7 @@ def main(args):
     )
     left_ht = left_ht.annotate(
         relatedness_inference=hl.struct(
-            relationships=relatedness_ht[left_ht.s].relationship
+            relationships=relatedness_ht[left_ht.s].relationship,
         )
     )
 
