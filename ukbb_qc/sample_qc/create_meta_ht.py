@@ -3,12 +3,14 @@ import logging
 
 import hail as hl
 
+# from gnomad.slack_creds import slack_token
 from gnomad.sample_qc.relatedness import (
     DUPLICATE_OR_TWINS,
     PARENT_CHILD,
     SECOND_DEGREE_RELATIVES,
     SIBLINGS,
 )
+from gnomad.utils.slack import slack_notifications
 from ukbb_qc.resources.basics import array_sample_map_ht_path, get_checkpoint_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import (
@@ -24,7 +26,12 @@ from ukbb_qc.resources.sample_qc import (
     meta_ht_path,
 )
 from ukbb_qc.resources.variant_qc import TRUTH_SAMPLES
-from ukbb_qc.utils.utils import get_age_ht, get_relatedness_set_ht, join_tables
+from ukbb_qc.utils.utils import (
+    get_age_ht,
+    get_array_sex_ht,
+    get_relatedness_set_ht,
+    join_tables,
+)
 
 
 logging.basicConfig(
@@ -44,7 +51,7 @@ def main(args):
     logging_statement = "Reading in {} and joining with meta HT"
 
     logger.info(
-        "Joining array map/pharma meta HT (left) and age HT (right) with a left join to start creating meta HT"
+        "Reading in array map/pharma meta HT and annotating with age HT to start creating meta HT"
     )
     left_ht = hl.read_table(array_sample_map_ht_path(freeze))
     left_ht = left_ht.annotate(
@@ -57,7 +64,9 @@ def main(args):
     ).select("ukbb_meta")
     right_ht = get_age_ht(freeze)
     left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
-    left_ht = left_ht.transmute(ukbb_meta=left_ht.ukbb_meta.annotate(age=left_ht.age))
+    left_ht = left_ht.annotate(
+        ukbb_meta=left_ht.ukbb_meta.annotate(age=right_ht[left_ht.key].age)
+    )
 
     logger.info(logging_statement.format("array sample concordance HT"))
     right_ht = hl.read_table(array_concordance_results_path(data_source, freeze))
@@ -72,7 +81,7 @@ def main(args):
     ).select("array_concordance")
     right_ht = right_ht.transmute_globals(
         array_concordance_sites_cutoffs=hl.struct(
-            callrate_cutoff=right_ht.callrate_cutoff, af_cutoff=right_ht.af_cutoff,
+            callrate_cutoff=right_ht.callrate_cutoff, af_cutoff=right_ht.af_cutoff
         )
     )
     left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
@@ -104,8 +113,14 @@ def main(args):
         )
     )
     left_ht = join_tables(left_ht, "s", right_ht, "s", "right")
-    left_ht = left_ht.transmute(
-        ukbb_meta=left_ht.ukbb_meta.annotate(repoted_sex=left_ht.reported_sex)
+    array_sex_ht = get_array_sex_ht(freeze)
+    # left_ht = left_ht.transmute(
+    #    ukbb_meta=left_ht.ukbb_meta.annotate(array_sex=left_ht.array_sex)
+    # )
+    left_ht = left_ht.annotate(
+        ukbb_meta=left_ht.ukbb_meta.annotate(
+            array_sex=array_sex_ht[left_ht.key].array_sex
+        )
     )
 
     logger.info(logging_statement.format("sample QC HT"))
@@ -129,7 +144,14 @@ def main(args):
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
 
     logger.info(logging_statement.format("population PCA HT"))
-    right_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
+    right_ht = hl.read_table(
+        "gs://broad-ukbb/broad.freeze_6/sample_qc/population_pca/hybrid_pop_assignments_10pcs.ht"
+    )
+    pca_ht = hl.read_table(
+        "gs://broad-ukbb/broad.freeze_6/sample_qc/population_pca/pca_scores_10pcs.ht"
+    )
+    right_ht = right_ht.annotate_globals(**pca_ht.index_globals())
+    # right_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
     right_ht = right_ht.transmute(
         gnomad_PC_project_pop_data=hl.struct(
             gnomad_PCs=right_ht.gnomad_pc_project_scores,
@@ -151,7 +173,7 @@ def main(args):
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
     left_ht = left_ht.transmute(
         ukbb_meta=left_ht.ukbb_meta.annotate(
-            self_reported_ancestry=left_ht.self_reported_ancestry,
+            self_reported_ancestry=left_ht.self_reported_ancestry
         )
     )
 
@@ -178,7 +200,7 @@ def main(args):
         hl.read_table(relatedness_ht_path(data_source, freeze))
     )
     related_samples_to_drop_ht = related_samples_to_drop_ht.annotate(
-        relationship=relatedness_ht[related_samples_to_drop_ht.s].relationship
+        relationships=relatedness_ht[related_samples_to_drop_ht.s].relationship
     )
     left_ht = left_ht.annotate(
         sample_filters=left_ht.sample_filters.annotate(
@@ -241,7 +263,7 @@ def main(args):
         )
     )
     right_ht = right_ht.transmute_globals(
-        outlier_detection_metrics=right_ht.qc_metrics_stats,
+        outlier_detection_metrics=right_ht.qc_metrics_stats
     )
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
     left_ht = left_ht.transmute(
@@ -338,5 +360,14 @@ if __name__ == "__main__":
         help="Overwrite all data from this subset (default: False)",
         action="store_true",
     )
+    parser.add_argument(
+        "--slack_channel", help="Slack channel to post results and notifications to",
+    )
     args = parser.parse_args()
+
+    if args.slack_channel:
+        slack_notifications(
+            "xoxb-3114021723-1092439063975-G6icxweKHcX1nmfG5FFqbErn", args.slack_channel
+        )
+        
     main(args)
