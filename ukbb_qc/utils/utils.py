@@ -4,6 +4,7 @@ from typing import Union
 import hail as hl
 
 from gnomad.resources.grch38.reference_data import lcr_intervals
+from gnomad.sample_qc.relatedness import UNRELATED
 from gnomad.utils.filtering import filter_to_autosomes
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.file_utils import file_exists
@@ -284,22 +285,71 @@ def get_qc_mt_sites() -> None:
 
 
 # Sample-related resources
-def get_age_ht(freeze: int) -> hl.Table:
+def get_phenotype_field(freeze: int, field: str) -> hl.Table:
     """
-    Pull age information from UKBB phenotype file
+    Pull phenotype information using input field from UKBB phenotype file
 
     :param int freeze: One of the data freezes
-    :return: Table with age at recruitment per sample
-    :rtype: Table
+    :param str field: Field containing desired phenotype information
+    :return: Table with phenotype information per sample
+    :rtype: hl.Table
     """
-    # Read in phenotype table and select age at recruitment field
     if not file_exists(phenotype_ht_path()):
         import_phenotype_ht()
-    age_ht = hl.read_table(phenotype_ht_path()).select("f.21022.0.0")
+    ht = hl.read_table(phenotype_ht_path()).select(field)
 
     # Re-key phenotype table to UKBB ID using array sample map table and return
     sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze))
     sample_map_ht = sample_map_ht.key_by("ukbb_app_26041_id")
-    age_ht = age_ht.key_by(s=sample_map_ht[age_ht.key].s)
-    age_ht = age_ht.rename({"f.21022.0.0": "age"})
-    return age_ht
+    ht = ht.key_by(s=sample_map_ht[ht.key].s)
+    return ht.select(field)
+
+
+def get_age_ht(freeze: int, field: str = "f.21022.0.0") -> hl.Table:
+    """
+    Pull age information from UKBB phenotype file
+
+    :param int freeze: One of the data freezes
+    :param str field: Field containing age information. Default is f.21022.0.0.
+    :return: Table with age at recruitment per sample
+    :rtype: hl.Table
+    """
+    age_ht = get_phenotype_field(freeze, field)
+    age_ht = age_ht.rename({field: "age"})
+    return age_ht.select("age")
+
+
+def get_array_sex_ht(freeze: int, field: str = "f.22001.0.0") -> hl.Table:
+    """
+    Pulls genetic sex information from UKBB phenotype file (Field: 22001)
+
+    :param int freeze: One of the data freezes
+    :param str field: Field containing age information. Default is f.22001.0.0.
+    :return: Table with genetic sex per sample
+    :rtype: Table
+    """
+    sex_ht = get_phenotype_field(freeze, field)
+    return sex_ht.annotate(
+        array_sex=hl.if_else(sex_ht["f.22001.0.0"] == 0, "XX", "XY")
+    ).select("array_sex")
+
+
+def get_relatedness_set_ht(relatedness_ht: hl.Table) -> hl.Table:
+    """
+    Parses relatedness Table to get every relationship (except UNRELATED) per sample.
+
+    Returns Table keyed by sample with all sample relationships in a set.
+
+    :param Table relatedness_ht: Table with inferred relationship information output by pc_relate. 
+        Keyed by sample pair (i, j).
+    :return: Table keyed by sample (s) with all relationships annotated as a set.
+    :rtype: hl.Table
+    """
+    relatedness_ht = relatedness_ht.filter(relatedness_ht.relationship != UNRELATED)
+    relatedness_ht = relatedness_ht.select("relationship", s=relatedness_ht.i.s).union(
+        relatedness_ht.select("relationship", s=relatedness_ht.j.s)
+    )
+    relatedness_ht = relatedness_ht.group_by(relatedness_ht.s).aggregate(
+        relationship=hl.agg.collect_as_set(relatedness_ht.relationship)
+    )
+    return relatedness_ht
