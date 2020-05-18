@@ -285,46 +285,52 @@ def get_qc_mt_sites() -> None:
 
 
 # Sample-related resources
-def get_age_ht(freeze: int) -> hl.Table:
+def get_phenotype_field(freeze: int, field: str) -> hl.Table:
+    """
+    Pull phenotype information using input field from UKBB phenotype file
+
+    :param int freeze: One of the data freezes
+    :param str field: Field containing desired phenotype information
+    :return: Table with phenotype information per sample
+    :rtype: hl.Table
+    """
+    if not file_exists(phenotype_ht_path()):
+        import_phenotype_ht()
+    ht = hl.read_table(phenotype_ht_path()).select(field)
+
+    # Re-key phenotype table to UKBB ID using array sample map table and return
+    sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze))
+    sample_map_ht = sample_map_ht.key_by("ukbb_app_26041_id")
+    ht = ht.key_by(s=sample_map_ht[ht.key].s)
+    return ht.select(field)
+
+
+def get_age_ht(freeze: int, field: str = "f.21022.0.0") -> hl.Table:
     """
     Pull age information from UKBB phenotype file
 
     :param int freeze: One of the data freezes
+    :param str field: Field containing age information. Default is f.21022.0.0.
     :return: Table with age at recruitment per sample
-    :rtype: Table
+    :rtype: hl.Table
     """
-    # Read in phenotype table and select age at recruitment field
-    if not file_exists(phenotype_ht_path()):
-        import_phenotype_ht()
-    age_ht = hl.read_table(phenotype_ht_path()).select("f.21022.0.0")
-
-    # Re-key phenotype table to UKBB ID using array sample map table and return
-    sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze))
-    sample_map_ht = sample_map_ht.key_by("ukbb_app_26041_id")
-    age_ht = age_ht.key_by(s=sample_map_ht[age_ht.key].s)
-    age_ht = age_ht.rename({"f.21022.0.0": "age"})
+    age_ht = get_phenotype_field(freeze, field)
+    age_ht = age_ht.rename({field: "age"})
     return age_ht.select("age")
 
 
-def get_reported_sex_ht(freeze: int) -> hl.Table:
+def get_reported_sex_ht(freeze: int, field: str = "f.22001.0.0") -> hl.Table:
     """
-    Pull sex information from UKBB phenotype file
+    Pulls genetic sex information from UKBB phenotype file (Field: 22001)
 
     :param int freeze: One of the data freezes
-    :return: Table with reported sex per sample
+    :param str field: Field containing age information. Default is f.22001.0.0.
+    :return: Table with genetic sex per sample
     :rtype: Table
     """
-    # Read in phenotype table and select sex
-    if not file_exists(phenotype_ht_path()):
-        import_phenotype_ht()
-    sex_ht = hl.read_table(phenotype_ht_path()).select("f.22001.0.0")
-
-    # Re-key phenotype table to UKBB ID using array sample map table and return
-    sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze))
-    sample_map_ht = sample_map_ht.key_by("ukbb_app_26041_id")
-    sex_ht = sex_ht.key_by(s=sample_map_ht[sex_ht.key].s)
+    sex_ht = get_phenotype_field(freeze, field)
     return sex_ht.annotate(
-        reported_sex=hl.if_else(sex_ht["f.22001.0.0"] == 0, "XX", "XY",)
+        reported_sex=hl.if_else(sex_ht["f.22001.0.0"] == 0, "XX", "XY")
     ).select("reported_sex")
 
 
