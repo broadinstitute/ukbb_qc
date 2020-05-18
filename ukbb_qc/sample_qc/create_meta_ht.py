@@ -67,20 +67,21 @@ def main(args):
     right_ht = right_ht.annotate(
         array_concordance=hl.struct(**right_ht.row.drop("s"))
     ).select("array_concordance")
-    right_ht = right_ht.transmute_globals(
-        array_concordance_sites_cutoffs=hl.struct(right_ht.globals)
-    )
+    right_ht = right_ht.annotate_globals(
+        array_concordance_sites_cutoffs=right_ht.globals
+    ).select_globals("array_concordance_sites_cutoffs")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
 
     logger.info(logging_statement.format("sex HT"))
     right_ht = hl.read_table(sex_ht_path(data_source, freeze))
     # Create struct for join
     right_ht = right_ht.transmute(
-        sex_imputation=hl.struct(**right_ht.row.drop("s", "array_sex"))
+        #sex_imputation=hl.struct(**right_ht.row.drop("s", "array_sex"))
+        sex_imputation=hl.struct(**right_ht.row.drop("s"))
     )
-    right_ht = right_ht.transmute_globals(
-        sex_imputation_ploidy_cutoffs=hl.struct(right_ht.globals)
-    )
+    right_ht = right_ht.annotate_globals(
+        sex_imputation_ploidy_cutoffs=right_ht.globals
+    ).select_globals("sex_imputation_ploidy_cutoffs")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "right")
     # left_ht = left_ht.transmute(
     #    ukbb_meta=left_ht.ukbb_meta.annotate(array_sex=left_ht.array_sex)
@@ -104,9 +105,9 @@ def main(args):
             callrate_pcs=right_ht.scores, qc_platform=right_ht.qc_platform
         )
     )
-    right_ht = right_ht.transmute_globals(
-        platform_inference_hdbscan_parameters=hl.struct(right_ht.globals)
-    )
+    right_ht = right_ht.annotate_globals(
+        platform_inference_hdbscan_parameters=right_ht.globals
+    ).select_globals("platform_inference_hdbscan_parameters")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
 
     logger.info(logging_statement.format("population PCA HT"))
