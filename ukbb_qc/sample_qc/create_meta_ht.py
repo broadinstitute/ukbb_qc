@@ -3,7 +3,7 @@ import logging
 
 import hail as hl
 
-# from gnomad.slack_creds import slack_token
+from gnomad.slack_creds import slack_token
 from gnomad.sample_qc.relatedness import (
     DUPLICATE_OR_TWINS,
     PARENT_CHILD,
@@ -76,7 +76,7 @@ def main(args):
     right_ht = hl.read_table(sex_ht_path(data_source, freeze))
     # Create struct for join
     right_ht = right_ht.transmute(
-        #sex_imputation=hl.struct(**right_ht.row.drop("s", "array_sex"))
+        # sex_imputation=hl.struct(**right_ht.row.drop("s", "array_sex"))
         sex_imputation=hl.struct(**right_ht.row.drop("s"))
     )
     right_ht = right_ht.annotate_globals(
@@ -328,8 +328,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.slack_channel:
-        slack_notifications(
-            "xoxb-3114021723-1092439063975-G6icxweKHcX1nmfG5FFqbErn", args.slack_channel
-        )
-
-    main(args)
+        with slack_notifications(slack_token, args.slack_channel):
+            main(args)
+    else:
+        main(args)
