@@ -319,7 +319,7 @@ def get_age_ht(freeze: int, field: str = "f.21022.0.0") -> hl.Table:
     return age_ht.select("age")
 
 
-def get_reported_sex_ht(freeze: int, field: str = "f.22001.0.0") -> hl.Table:
+def get_array_sex_ht(freeze: int, field: str = "f.22001.0.0") -> hl.Table:
     """
     Pulls genetic sex information from UKBB phenotype file (Field: 22001)
 
@@ -330,8 +330,8 @@ def get_reported_sex_ht(freeze: int, field: str = "f.22001.0.0") -> hl.Table:
     """
     sex_ht = get_phenotype_field(freeze, field)
     return sex_ht.annotate(
-        reported_sex=hl.if_else(sex_ht["f.22001.0.0"] == 0, "XX", "XY")
-    ).select("reported_sex")
+        array_sex=hl.if_else(sex_ht["f.22001.0.0"] == 0, "XX", "XY")
+    ).select("array_sex")
 
 
 def get_relatedness_set_ht(relatedness_ht: hl.Table) -> hl.Table:
