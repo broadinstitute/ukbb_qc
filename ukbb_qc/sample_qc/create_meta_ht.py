@@ -27,7 +27,6 @@ from ukbb_qc.resources.sample_qc import (
 from ukbb_qc.resources.variant_qc import TRUTH_SAMPLES
 from ukbb_qc.utils.utils import (
     get_age_ht,
-    get_array_sex_ht,
     get_relatedness_set_ht,
     join_tables,
 )
@@ -43,6 +42,27 @@ logger.setLevel(logging.INFO)
 
 def main(args):
 
+    def _get_relationship_filter(relationship: str) -> hl.expr.builders.CaseBuilder:
+        """
+        Returns case statement to populate relatedness filters in sample_filters struct
+
+        :param str relationship: Relationship to check for. One of DUPLICATE_OR_TWINS, PARENT_CHILD, or SIBLINGS.
+        :return: Case statement used to population sample_filters related filter field.
+        :rtype: hl.expr.builders.CaseBuilder
+        """
+        return (
+            hl.case()
+            .when(left_ht.sample_filters.hard_filtered, hl.null(hl.tbool))
+            .when(
+                hl.is_defined(related_samples_to_drop_ht[left_ht.key]),
+                related_samples_to_drop_ht[left_ht.s].relationships.contains(
+                    relationship
+                ),
+            )
+            .default(False)
+        )
+
+        
     hl.init(log="create_meta.log", default_reference="GRCh38")
 
     data_source = "broad"
@@ -75,21 +95,14 @@ def main(args):
     right_ht = hl.read_table(sex_ht_path(data_source, freeze))
     # Create struct for join
     right_ht = right_ht.transmute(
-        # sex_imputation=hl.struct(**right_ht.row.drop("s", "array_sex"))
-        sex_imputation=hl.struct(**right_ht.row.drop("s"))
+        sex_imputation=hl.struct(**right_ht.row.drop("s", "array_sex"))
     ).select("s", "array_sex")
     right_ht = right_ht.annotate_globals(
         sex_imputation_ploidy_cutoffs=right_ht.globals
     ).select_globals("sex_imputation_ploidy_cutoffs")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "right")
-    # left_ht = left_ht.transmute(
-    #    ukbb_meta=left_ht.ukbb_meta.annotate(array_sex=left_ht.array_sex)
-    # )
-    array_sex_ht = get_array_sex_ht(freeze)
-    left_ht = left_ht.annotate(
-        ukbb_meta=left_ht.ukbb_meta.annotate(
-            array_sex=array_sex_ht[left_ht.key].array_sex
-        )
+    left_ht = left_ht.transmute(
+        ukbb_meta=left_ht.ukbb_meta.annotate(array_sex=left_ht.array_sex)
     )
 
     logger.info(logging_statement.format("sample QC HT"))
@@ -110,14 +123,7 @@ def main(args):
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
 
     logger.info(logging_statement.format("population PCA HT"))
-    right_ht = hl.read_table(
-        "gs://broad-ukbb/broad.freeze_6/sample_qc/population_pca/hybrid_pop_assignments_10pcs.ht"
-    )
-    pca_ht = hl.read_table(
-        "gs://broad-ukbb/broad.freeze_6/sample_qc/population_pca/pca_scores_10pcs.ht"
-    )
-    right_ht = right_ht.annotate_globals(**pca_ht.index_globals())
-    # right_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
+    right_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
     right_ht = right_ht.transmute(
         gnomad_PC_project_pop_data=hl.struct(
             scores=right_ht.gnomad_pc_project_scores,
@@ -168,26 +174,6 @@ def main(args):
     related_samples_to_drop_ht = related_samples_to_drop_ht.annotate(
         relationships=relatedness_ht[related_samples_to_drop_ht.s].relationship
     )
-
-    def _get_relationship_filter(relationship: str) -> hl.expr.builders.CaseBuilder:
-        """
-        Returns case statement to populate relatedness filters in sample_filters struct
-
-        :param str relationship: Relationship to check for. One of DUPLICATE_OR_TWINS, PARENT_CHILD, or SIBLINGS.
-        :return: Case statement used to population sample_filters related filter field.
-        :rtype: hl.expr.builders.CaseBuilder
-        """
-        return (
-            hl.case()
-            .when(left_ht.sample_filters.hard_filtered, hl.null(hl.tbool))
-            .when(
-                hl.is_defined(related_samples_to_drop_ht[left_ht.key]),
-                related_samples_to_drop_ht[left_ht.s].relationships.contains(
-                    relationship
-                ),
-            )
-            .default(False)
-        )
 
     left_ht = left_ht.annotate(
         sample_filters=left_ht.sample_filters.annotate(
