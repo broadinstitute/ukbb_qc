@@ -120,13 +120,13 @@ def main(args):
     # right_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
     right_ht = right_ht.transmute(
         gnomad_PC_project_pop_data=hl.struct(
-            gnomad_PCs=right_ht.gnomad_pc_project_scores,
-            gnomad_pc_project_pop=right_ht.gnomad_pc_project_pop,
+            scores=right_ht.gnomad_pc_project_scores,
+            pop=right_ht.gnomad_pc_project_pop,
         ),
         hybrid_pop_data=hl.struct(
-            pop_PCs=right_ht.pop_pca_scores,
-            HDBSCAN_pop_cluster=right_ht.HDBSCAN_pop_cluster,
-            hybrid_pop=right_ht.hybrid_pop,
+            scores=right_ht.pop_pca_scores,
+            cluster=right_ht.HDBSCAN_pop_cluster,
+            pop=right_ht.hybrid_pop,
         ),
     )
     right_ht = right_ht.transmute_globals(
