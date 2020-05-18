@@ -41,7 +41,8 @@ def main(args):
         ht = vep_or_lookup_vep(ht)
         ht = ht.annotate(vep_csq=vep_struct_to_csq(ht.vep))
         ht.naive_coalesce(n_partitions).write(
-            var_annotations_ht_path("vep", data_source, freeze), overwrite
+            var_annotations_ht_path("vep", data_source, freeze),
+            overwrite=overwrite,
         )
 
     if args.generate_allele_counts:
@@ -66,7 +67,7 @@ def main(args):
         ht = mt.annotate_rows(
             **{
                 ac_name: hl.agg.filter(expr, hl.agg.sum(mt.GT.n_alt_alleles()))
-                for ac_name, expr in ac_expr
+                for ac_name, expr in ac_expr.items()
             }
         ).rows()
 
@@ -77,7 +78,7 @@ def main(args):
 
     if args.generate_trio_stats:
         logger.info("Generate trio statistics on split hard call MT...")
-        mt = get_ukbb_data(data_source, freeze, meta_root="meta")
+        mt = get_ukbb_data(data_source, freeze)
 
         ped_fp = inferred_ped_path(data_source, freeze)
         ped = hl.Pedigree.read(ped_fp, delimiter="\t")
@@ -99,7 +100,7 @@ def main(args):
         logger.info(
             "Generating sibling variant sharing statistics on split hard call MT..."
         )
-        mt = get_ukbb_data(data_source, freeze, meta_root="meta")
+        mt = get_ukbb_data(data_source, freeze)
 
         relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
         sib_stats_ht = generate_sib_stats(mt, relatedness_ht)
@@ -118,7 +119,7 @@ def main(args):
 
         # Get the tranche 2 (200K) allele frequency from the tranche 2 array concordance sites
         sites_ht = hl.read_table(array_concordance_sites_path())
-        variants_ht = variants_ht.annotate_rows(AF=sites_ht[variants_ht.row_key].AF)
+        variants_ht = variants_ht.annotate(AF=sites_ht[variants_ht.key].AF)
 
         variants_ht = variants_ht.filter(
             (variants_ht.prop_gt_con_non_ref > args.concordance_cutoff)
