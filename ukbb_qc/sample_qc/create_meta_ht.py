@@ -77,7 +77,7 @@ def main(args):
     right_ht = right_ht.transmute(
         # sex_imputation=hl.struct(**right_ht.row.drop("s", "array_sex"))
         sex_imputation=hl.struct(**right_ht.row.drop("s"))
-    )
+    ).select("s", "array_sex")
     right_ht = right_ht.annotate_globals(
         sex_imputation_ploidy_cutoffs=right_ht.globals
     ).select_globals("sex_imputation_ploidy_cutoffs")
