@@ -7,7 +7,6 @@ import hail as hl
 from gnomad.sample_qc.relatedness import (
     DUPLICATE_OR_TWINS,
     PARENT_CHILD,
-    SECOND_DEGREE_RELATIVES,
     SIBLINGS,
 )
 from gnomad.utils.slack import slack_notifications
@@ -55,12 +54,7 @@ def main(args):
     )
     left_ht = hl.read_table(array_sample_map_ht_path(freeze))
     left_ht = left_ht.annotate(
-        ukbb_meta=hl.struct(
-            ukbb_app_26041_id=left_ht.ukbb_app_26041_id,
-            batch=left_ht.batch,
-            batch_num=left_ht.batch_num,
-            withdrawn_consent=left_ht.withdrawn_consent,
-        )
+        ukbb_meta=hl.struct(**left_ht.row.drop("eid_sample"))
     ).select("ukbb_meta")
     right_ht = get_age_ht(freeze)
     left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
@@ -70,19 +64,11 @@ def main(args):
 
     logger.info(logging_statement.format("array sample concordance HT"))
     right_ht = hl.read_table(array_concordance_results_path(data_source, freeze))
-    right_ht = right_ht.transmute(
-        array_concordance=hl.struct(
-            concordance=right_ht.concordance,
-            n_discordant=right_ht.n_discordant,
-            num_gt_con_non_ref=right_ht.num_gt_con_non_ref,
-            num_gt_non_ref=right_ht.num_gt_non_ref,
-            prop_gt_con_non_ref=right_ht.prop_gt_con_non_ref,
-        )
+    right_ht = right_ht.annotate(
+        array_concordance=hl.struct(**right_ht.row.drop("s"))
     ).select("array_concordance")
     right_ht = right_ht.transmute_globals(
-        array_concordance_sites_cutoffs=hl.struct(
-            callrate_cutoff=right_ht.callrate_cutoff, af_cutoff=right_ht.af_cutoff
-        )
+        array_concordance_sites_cutoffs=hl.struct(right_ht.globals)
     )
     left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
 
@@ -90,33 +76,16 @@ def main(args):
     right_ht = hl.read_table(sex_ht_path(data_source, freeze))
     # Create struct for join
     right_ht = right_ht.transmute(
-        sex_imputation=hl.struct(
-            is_female=right_ht.is_female,
-            f_stat=right_ht.f_stat,
-            n_called=right_ht.n_called,
-            expected_homs=right_ht.expected_homs,
-            observed_homs=right_ht.observed_homs,
-            chr20_mean_dp=right_ht.chr20_mean_dp,
-            chrX_mean_dp=right_ht.chrX_mean_dp,
-            chrY_mean_dp=right_ht.chrY_mean_dp,
-            chrX_ploidy=right_ht.chrX_ploidy,
-            chrY_ploidy=right_ht.chrY_ploidy,
-            X_karyotype=right_ht.X_karyotype,
-            Y_karyotype=right_ht.Y_karyotype,
-            sex_karyotype=right_ht.sex_karyotype,
-        )
+        sex_imputation=hl.struct(**right_ht.row.drop("s", "array_sex"))
     )
     right_ht = right_ht.transmute_globals(
-        sex_imputation_ploidy_cutoffs=hl.struct(
-            x_ploidy_cutoffs=right_ht.x_ploidy_cutoffs,
-            y_ploidy_cutoffs=right_ht.y_ploidy_cutoffs,
-        )
+        sex_imputation_ploidy_cutoffs=hl.struct(right_ht.globals)
     )
     left_ht = join_tables(left_ht, "s", right_ht, "s", "right")
-    array_sex_ht = get_array_sex_ht(freeze)
     # left_ht = left_ht.transmute(
     #    ukbb_meta=left_ht.ukbb_meta.annotate(array_sex=left_ht.array_sex)
     # )
+    array_sex_ht = get_array_sex_ht(freeze)
     left_ht = left_ht.annotate(
         ukbb_meta=left_ht.ukbb_meta.annotate(
             array_sex=array_sex_ht[left_ht.key].array_sex
@@ -136,10 +105,7 @@ def main(args):
         )
     )
     right_ht = right_ht.transmute_globals(
-        platform_inference_hdbscan_parameters=hl.struct(
-            hdbscan_min_cluster_size=right_ht.hdbscan_min_cluster_size,
-            hdbscan_min_samples=right_ht.hdbscan_min_samples,
-        )
+        platform_inference_hdbscan_parameters=hl.struct(right_ht.globals)
     )
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
 
@@ -202,47 +168,42 @@ def main(args):
     related_samples_to_drop_ht = related_samples_to_drop_ht.annotate(
         relationships=relatedness_ht[related_samples_to_drop_ht.s].relationship
     )
+
+    def _get_relationship_filter(relationship: str) -> hl.expr.builders.CaseBuilder:
+        """
+        Returns case statement to populate relatedness filters in sample_filters struct
+
+        :param str relationship: Relationship to check for. One of DUPLICATE_OR_TWINS, PARENT_CHILD, or SIBLINGS.
+        :return: Case statement used to population sample_filters related filter field.
+        :rtype: hl.expr.builders.CaseBuilder
+        """
+        return (
+            hl.case()
+            .when(left_ht.sample_filters.hard_filtered, hl.null(hl.tbool))
+            .when(
+                hl.is_defined(related_samples_to_drop_ht[left_ht.key]),
+                related_samples_to_drop_ht[left_ht.s].relationship.contains(
+                    relationship
+                ),
+            )
+            .default(False)
+        )
+
     left_ht = left_ht.annotate(
         sample_filters=left_ht.sample_filters.annotate(
-            related=hl.case()
-            .when(left_ht.sample_filters.hard_filtered, hl.null(hl.tbool))
-            .when(
+            related=hl.if_else(
+                left_ht.sample_filters.hard_filtered,
+                hl.null(hl.tbool),
                 hl.is_defined(related_samples_to_drop_ht[left_ht.key]),
-                related_samples_to_drop_ht[left_ht.s].relationship.contains(
-                    SECOND_DEGREE_RELATIVES
-                ),
-            )
-            .default(False),
-            duplicate=hl.case()
-            .when(left_ht.sample_filters.hard_filtered, hl.null(hl.tbool))
-            .when(
-                hl.is_defined(related_samples_to_drop_ht[left_ht.key]),
-                related_samples_to_drop_ht[left_ht.s].relationship.contains(
-                    DUPLICATE_OR_TWINS
-                ),
-            )
-            .default(False),
-            parent_child=hl.case()
-            .when(left_ht.sample_filters.hard_filtered, hl.null(hl.tbool))
-            .when(
-                hl.is_defined(related_samples_to_drop_ht[left_ht.key]),
-                related_samples_to_drop_ht[left_ht.s].relationship.contains(
-                    PARENT_CHILD
-                ),
-            )
-            .default(False),
-            sibling=hl.case()
-            .when(left_ht.sample_filters.hard_filtered, hl.null(hl.tbool))
-            .when(
-                hl.is_defined(related_samples_to_drop_ht[left_ht.key]),
-                related_samples_to_drop_ht[left_ht.s].relationship.contains(SIBLINGS),
-            )
-            .default(False),
+            ),
+            duplicate=_get_relationship_filter(DUPLICATE_OR_TWINS),
+            parent_child=_get_relationship_filter(PARENT_CHILD),
+            sibling=_get_relationship_filter(SIBLINGS),
         )
     )
     left_ht = left_ht.annotate(
         relatedness_inference=hl.struct(
-            relationship=relatedness_ht[left_ht.s].relationship
+            relationships=relatedness_ht[left_ht.s].relationship
         )
     )
 
@@ -369,5 +330,5 @@ if __name__ == "__main__":
         slack_notifications(
             "xoxb-3114021723-1092439063975-G6icxweKHcX1nmfG5FFqbErn", args.slack_channel
         )
-        
+
     main(args)
