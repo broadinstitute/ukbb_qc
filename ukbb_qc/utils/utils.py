@@ -353,3 +353,25 @@ def get_relatedness_set_ht(relatedness_ht: hl.Table) -> hl.Table:
         relationship=hl.agg.collect_as_set(relatedness_ht.relationship)
     )
     return relatedness_ht
+
+
+def get_relationship_filter(
+    hard_filtered_expr: hl.expr.BooleanExpression,
+    relationship: str,
+    relationship_set: hl.expr.SetExpression,
+) -> hl.expr.builders.CaseBuilder:
+    """
+    Returns case statement to populate relatedness filters in sample_filters struct
+
+    :param hl.expr.BooleanExpression hard_filtered_expr: Boolean for whether sample was hard filtered. 
+    :param str relationship: Relationship to check for. One of DUPLICATE_OR_TWINS, PARENT_CHILD, or SIBLINGS.
+    :param hl.expr.SetExpression relationship_set: Set containing all possible relationship strings for sample.
+    :return: Case statement used to population sample_filters related filter field.
+    :rtype: hl.expr.builders.CaseBuilder
+    """
+    return (
+        hl.case()
+        .when(hard_filtered_expr, hl.null(hl.tbool))
+        .when(hl.is_defined(relationship_set), relationship_set.contains(relationship),)
+        .default(False)
+    )
