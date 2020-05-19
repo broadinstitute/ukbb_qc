@@ -27,6 +27,7 @@ from ukbb_qc.resources.sample_qc import (
 from ukbb_qc.resources.variant_qc import TRUTH_SAMPLES
 from ukbb_qc.utils.utils import (
     get_age_ht,
+    get_relationship_filter_expr,
     get_relatedness_set_ht,
     join_tables,
 )
@@ -41,28 +42,6 @@ logger.setLevel(logging.INFO)
 
 
 def main(args):
-
-    def _get_relationship_filter(relationship: str) -> hl.expr.builders.CaseBuilder:
-        """
-        Returns case statement to populate relatedness filters in sample_filters struct
-
-        :param str relationship: Relationship to check for. One of DUPLICATE_OR_TWINS, PARENT_CHILD, or SIBLINGS.
-        :return: Case statement used to population sample_filters related filter field.
-        :rtype: hl.expr.builders.CaseBuilder
-        """
-        return (
-            hl.case()
-            .when(left_ht.sample_filters.hard_filtered, hl.null(hl.tbool))
-            .when(
-                hl.is_defined(related_samples_to_drop_ht[left_ht.key]),
-                related_samples_to_drop_ht[left_ht.s].relationships.contains(
-                    relationship
-                ),
-            )
-            .default(False)
-        )
-
-        
     hl.init(log="create_meta.log", default_reference="GRCh38")
 
     data_source = "broad"
@@ -182,9 +161,21 @@ def main(args):
                 hl.null(hl.tbool),
                 hl.is_defined(related_samples_to_drop_ht[left_ht.key]),
             ),
-            duplicate=_get_relationship_filter(DUPLICATE_OR_TWINS),
-            parent_child=_get_relationship_filter(PARENT_CHILD),
-            sibling=_get_relationship_filter(SIBLINGS),
+            duplicate=get_relationship_filter_expr(
+                left_ht.sample_filters.hard_filtered,
+                DUPLICATE_OR_TWINS,
+                related_samples_to_drop_ht[left_ht.key].relationships,
+            ),
+            parent_child=get_relationship_filter_expr(
+                left_ht.sample_filters.hard_filtered,
+                PARENT_CHILD,
+                related_samples_to_drop_ht[left_ht.key].relationships,
+            ),
+            sibling=get_relationship_filter_expr(
+                left_ht.sample_filters.hard_filtered,
+                SIBLINGS,
+                related_samples_to_drop_ht[left_ht.key].relationships,
+            ),
         )
     )
     left_ht = left_ht.annotate(
