@@ -3,12 +3,12 @@ import logging
 
 import hail as hl
 
-from gnomad.slack_creds import slack_token
 from gnomad.sample_qc.relatedness import (
     DUPLICATE_OR_TWINS,
     PARENT_CHILD,
     SIBLINGS,
 )
+from gnomad.slack_creds import slack_token
 from gnomad.utils.slack import slack_notifications
 from ukbb_qc.resources.basics import array_sample_map_ht_path, get_checkpoint_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
@@ -103,24 +103,9 @@ def main(args):
 
     logger.info(logging_statement.format("population PCA HT"))
     right_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
-    right_ht = right_ht.transmute(
-        gnomad_PC_project_pop_data=hl.struct(
-            scores=right_ht.gnomad_pc_project_scores,
-            pop=right_ht.gnomad_pc_project_pop,
-        ),
-        hybrid_pop_data=hl.struct(
-            scores=right_ht.pop_pca_scores,
-            cluster=right_ht.HDBSCAN_pop_cluster,
-            pop=right_ht.hybrid_pop,
-        ),
-    )
-    right_ht = right_ht.transmute_globals(
-        population_inference_pca_metrics=hl.struct(
-            n_project_pcs=right_ht.n_project_pcs,
-            min_prob=right_ht.min_prob,
-            n_exome_pcs=right_ht.n_exome_pcs,
-        )
-    )
+    right_ht = right_ht.annotate_globals(
+        population_inference_pca_metrics=right_ht.globals
+    ).select("population_inference_pca_metrics")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
     left_ht = left_ht.transmute(
         ukbb_meta=left_ht.ukbb_meta.annotate(
@@ -151,9 +136,14 @@ def main(args):
         hl.read_table(relatedness_ht_path(data_source, freeze))
     )
     related_samples_to_drop_ht = related_samples_to_drop_ht.annotate(
-        relationships=relatedness_ht[related_samples_to_drop_ht.s].relationship
+        relationships=relatedness_ht[related_samples_to_drop_ht.s].relationships
     )
 
+    # Annotating meta HT with related filter booleans
+    # Any sample that is hard filtered will have missing values for these bools
+    # Any sample that was filtered for relatedness will have True for sample_filters.related
+    # If a filtered related sample had a relationship with a higher degree than second-degree (duplicate, parent-child, sibling),
+    # that filter will also be True
     left_ht = left_ht.annotate(
         sample_filters=left_ht.sample_filters.annotate(
             related=hl.if_else(
