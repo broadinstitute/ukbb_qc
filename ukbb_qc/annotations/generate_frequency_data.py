@@ -6,6 +6,7 @@ import hail as hl
 
 from gnomad.sample_qc.sex import adjusted_sex_ploidy_expr
 from gnomad.resources.grch37.gnomad import liftover
+from gnomad.resources.grch38.gnomad import public_release
 from gnomad.utils.annotations import (
     age_hists_expr,
     annotate_freq,
@@ -61,53 +62,131 @@ def get_hists(mt: hl.MatrixTable, freeze: int) -> hl.MatrixTable:
     )
     ht = mt_filt.rows()
     mt = mt.annotate_rows(adj_qual_hists=ht[mt.row_key])
-
     return mt
+
+
+def calculate_inbreeding_coefficient(
+    mt: hl.MatrixTable, data_source: str, freeze: int, overwrite: bool
+) -> None:
+    """
+    Calculate inbreeding coefficient annotation and writes Table.
+
+    :param MatrixTable mt: Input MatrixTable with related samples removed.
+    :param str data_source: One of "regeneron" or "broad".
+    :param int freeze: One of the data freezes.
+    :param bool overwrite: Whether to overwrite data.
+    :return: None
+    :rtype: None
+    """
+    ht = mt.annotate_rows(InbreedingCoeff=bi_allelic_site_inbreeding_expr(mt.GT)).rows()
+    ht = ht.select("InbreedingCoeff")
+    ht.write(
+        var_annotations_ht_path("inbreeding_coefficient", data_source, freeze),
+        overwrite=overwrite,
+    )
+
+
+def generate_cohort_frequency_data(
+    mt: hl.MatrixTable, pops: List[str]
+) -> hl.MatrixTable:
+    """
+    Generates frequency struct annotation containing AC, AF, AN, and homozygote count for all NFE individuals from input dataset.
+
+    Option to stratify by tranche as proxy for platform.
+
+    :param MatrixTable mt: Input MatrixTable annotated with sample metadata information.
+    :param list pops: Populations to include in frequency calculation.
+    :return: MatrixTable with frequency annotations in struct named `cohort_freq` and metadata in globals named `freq_meta`.
+    :rtype: hl.MatrixTable
+    """
+    logger.info(
+        f"Filtering to {pops} to calculate cohort frequency (includes related samples)..."
+    )
+    pops = hl.literal(pops)
+    mt = mt.filter_cols(pops.contains(mt.meta.hybrid_pop_data.pop))
+    mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
+
+    logger.info("Generating frequency data...")
+    mt = annotate_freq(mt, sex_expr=mt.meta.sex_imputation.sex_karyotype,)
+    mt = mt.transmute_rows(cohort_freq=mt.freq).select_rows("cohort_freq")
+    cohort_freq_meta = hl.eval(mt.freq_meta)
+    for i in range(len(cohort_freq_meta)):
+        if i == 0:
+            update_dict = {"group": "cohort_adj"}
+        elif i == 1:
+            update_dict = {"group": "cohort_raw"}
+        else:
+            update_dict = {"group": "cohort"}
+        cohort_freq_meta[i].update(update_dict)
+    mt = mt.annotate_globals(cohort_freq_meta=cohort_freq_meta)
+    return mt.select_globals("cohort_freq_meta")
 
 
 def generate_frequency_data(
     mt: hl.MatrixTable,
+    data_source: str,
     freeze: int,
-    POPS_TO_REMOVE_FOR_POPMAX: List[str],
-    calculate_by_platform: bool = False,
+    pops_to_remove_for_popmax: List[str],
+    cohort_frequency_pops: List[str],
+    overwrite: bool,
+    calculate_by_tranche: bool,
 ) -> hl.Table:
     """
-    Generates frequency struct annotation containing AC, AF, AN, and homozygote count for dataset stratified by population.
+    Generates frequency struct annotation containing AC, AF, AN, and homozygote count for input dataset stratified by population.
 
     Option to stratify by tranche as proxy for platform.
 
     :param MatrixTable mt: Input MatrixTable.
-    :param int freeze: One of the data freezes
-    :param list POPS_TO_REMOVE_FOR_POPMAX: List of populations to exclude from popmax calculations.
-    :param bool calculate_by_platform: Whether to calculate frequencies per tranche.
-    :return: Table with frequency annotations in struct named `freq` and metadata in globals named `freq_meta`
+    :param str data_source: One of "regeneron" or "broad".
+    :param int freeze: One of the data freezes.
+    :param list pops_to_remove_for_popmax: List of populations to exclude from popmax calculations. 
+    :param list cohort_frequency_pops: List of populations to include in cohort frequency calculations.
+    :param bool overwrite: Whether to overwrite data.
+    :param bool calculate_by_tranche: Whether to calculate frequencies per tranche.
+    :return: Table with frequency annotations in struct named `freq` and metadata in globals named `freq_meta`.
     :rtype: Table
     """
-    if calculate_by_platform:
+    if calculate_by_tranche:
         additional_strata_expr = {"tranche": mt.tranche}
     else:
         additional_strata_expr = None
+
+    logger.info("Generating cohort frequency data...")
+    mt = generate_cohort_frequency_data(mt, cohort_frequency_pops)
+
+    logger.info("Filtering related samples...")
+    mt = mt.filter_cols(~mt.meta.sample_filters.related)
+
+    logger.info("Calculating InbreedingCoefficient...")
+    # NOTE: This is not the ideal location to calculate this, but added here to avoid another densify
+    calculate_inbreeding_coefficient(mt, data_source, freeze, overwrite)
 
     logger.info("Generating frequency data...")
     mt = annotate_freq(
         mt,
         sex_expr=mt.meta.sex_imputation.sex_karyotype,
-        pop_expr=mt.meta.hybrid_pop_data.hybrid_pop,
+        pop_expr=mt.meta.gnomad_pc_project_data.pop,
+        subpop_expr=mt.meta.hybrid_pop_data.pop,
         additional_strata_expr=additional_strata_expr,
     )
 
-    # Select freq, FAF and popmax
-    faf, faf_meta = faf_expr(mt.freq, mt.freq_meta, mt.locus, POPS_TO_REMOVE_FOR_POPMAX)
+    # Add cohort frequency to last index of freq struct
+    # Also add cohort frequency meta to freq_meta globals
+    freq_expr = mt.freq.extend(mt.cohort_freq)
+    freq_meta = mt.freq_meta.extend(mt.cohort_freq_meta)
+    mt = mt.select_globals()
+
+    logger.info("Calculating faf...")
+    faf, faf_meta = faf_expr(mt.freq, mt.freq_meta, mt.locus, pops_to_remove_for_popmax)
     mt = mt.select_rows(
-        "freq",
+        freq=freq_expr,
         faf=faf,
-        popmax=pop_max_expr(mt.freq, mt.freq_meta, POPS_TO_REMOVE_FOR_POPMAX),
+        popmax=pop_max_expr(mt.freq, mt.freq_meta, pops_to_remove_for_popmax),
     )
-    mt = mt.annotate_globals(faf_meta=faf_meta)
+    mt = mt.annotate_globals(faf_meta=faf_meta, freq_meta=freq_meta)
 
     logger.info("Getting hists")
     mt = get_hists(mt, freeze)
-
     return mt.rows()
 
 
@@ -143,9 +222,8 @@ def join_gnomad(ht: hl.Table, data_type: str) -> hl.Table:
 
     else:
         gnomad_ht = (
-            hl.read_table(
-                "gs://gnomad-public/release/3.0/ht/genomes/gnomad.genomes.r3.0.sites.ht"
-            )
+            public_release(data_type)
+            .ht()
             .select("freq", "popmax", "faf")
             .select_globals("freq_meta", "faf_index_dict")
         )
@@ -169,15 +247,16 @@ def main(args):
 
     data_source = "broad"
     freeze = args.freeze
-    POPS_TO_REMOVE_FOR_POPMAX = set(args.pops.split(","))
+    pops_to_remove_for_popmax = set(args.pops_to_remove_for_popmax.split(","))
+    cohort_frequency_pops = set(args.pops_to_include_for_cohort.split(","))
     logger.info(
-        f"Excluding {POPS_TO_REMOVE_FOR_POPMAX} from popmax and faf calculations"
+        f"Excluding {pops_to_remove_for_popmax} from popmax and faf calculations"
+        f"Including {cohort_frequency_pops} in cohort frequency calculations"
     )
 
     # Read in hardcalls and filter to high quality UKBB samples only
     mt = get_ukbb_data(data_source, freeze, ukbb_samples_only=True, meta_root="meta")
     mt = mt.filter_cols(mt.meta.sample_filters.high_quality)
-    mt = mt.filter_rows(hl.agg.any(mt.LGT.is_non_ref() | hl.is_defined(mt.END)))
 
     if not args.skip_densify:
         logger.info("Reading in capture HT a")
@@ -194,10 +273,6 @@ def main(args):
         mt = hl.experimental.densify(mt)
         mt = mt.filter_rows(hl.len(mt.alleles) > 1)
         mt = mt.filter_rows(hl.is_defined(capture_ht[mt.locus]))
-
-    if args.filter_related:
-        logger.info("Filtering out related samples and their variants...")
-        mt = mt.filter_cols(~mt.meta.sample_filters.related)
         mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
 
     if args.by_platform:
@@ -207,55 +282,31 @@ def main(args):
         sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze))
         mt = mt.annotate_cols(tranche=sample_map_ht[mt.col_key].batch)
 
-    if args.calculate_frequencies:
-        logger.info("Calculating InbreedingCoeff to avoid another densify")
-        # Note: this is not the ideal location for this, but adding here to avoid another densify
-        # TODO: Still need to decide how to handle variants where there are no hets, this returns NA
-        if args.filter_related:
-            mt = mt.annotate_rows(
-                InbreedingCoeff=bi_allelic_site_inbreeding_expr(mt.GT)
-            )
-
         logger.info("Calculating frequencies")
         ht = generate_frequency_data(
-            mt, freeze, POPS_TO_REMOVE_FOR_POPMAX, args.by_platform
+            mt,
+            data_source,
+            freeze,
+            pops_to_remove_for_popmax,
+            cohort_frequency_pops,
+            args.overwrite,
+            args.by_platform,
         )
 
         ht = ht.repartition(args.n_partitions)
         ht = ht.checkpoint(
-            var_annotations_ht_path(
-                f'ukb_freq_hybrid{"_unrelated" if args.filter_related else ""}',
-                data_source,
-                freeze,
-            ),
-            args.overwrite,
+            var_annotations_ht_path("ukb_freq", data_source, freeze,), args.overwrite,
         )
-
-        if args.filter_related:
-            ht.select_rows("InbreedingCoeff").write(
-                var_annotations_ht_path("inbreeding_coeff", data_source, freeze),
-                args.overwrite,
-            )
 
     if args.join_gnomad:
-        ht = hl.read_table(
-            var_annotations_ht_path(
-                f'ukb_freq_hybrid{"_unrelated" if args.filter_related else ""}',
-                data_source,
-                freeze,
-            )
-        )
+        ht = hl.read_table(var_annotations_ht_path("ukb_freq", data_source, freeze,))
 
         logger.info("Joining UKBB ht to gnomAD exomes and genomes liftover hts")
         ht = join_gnomad(ht, "exomes")
         ht = join_gnomad(ht, "genomes")
         write_temp_gcs(
             ht,
-            var_annotations_ht_path(
-                f'join_freq_hybrid{"_unrelated" if args.filter_related else ""}',
-                data_source,
-                freeze,
-            ),
+            var_annotations_ht_path("join_freq", data_source, freeze,),
             args.overwrite,
         )
 
@@ -273,7 +324,13 @@ if __name__ == "__main__":
         type=int,
     )
     parser.add_argument(
-        "--pops", help="Pops to exclude for popmax", default="asj,fin,oth"
+        "--pops_to_remove_for_popmax",
+        help="Pops to exclude for popmax",
+        default="asj,fin,oth",
+    )
+    parser.add_argument(
+        "--pops_to_include_for_cohort",
+        help="Pops to include in cohort frequency calculations",
     )
     parser.add_argument(
         "--skip_densify", help="Skip densifying data", action="store_true",
@@ -284,13 +341,8 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--by_platform",
-        help="Also calculate frequencies by platform",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--filter_related",
-        help="Filter related individuals before calculating allele frequencies",
+        "--by_tranche",
+        help="Also calculate frequencies by UKBB data tranche",
         action="store_true",
     )
     parser.add_argument(
