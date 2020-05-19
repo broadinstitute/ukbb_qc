@@ -355,7 +355,7 @@ def get_relatedness_set_ht(relatedness_ht: hl.Table) -> hl.Table:
     return relatedness_ht
 
 
-def get_relationship_filter(
+def get_relationship_filter_expr(
     hard_filtered_expr: hl.expr.BooleanExpression,
     relationship: str,
     relationship_set: hl.expr.SetExpression,
