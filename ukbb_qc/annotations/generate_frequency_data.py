@@ -4,9 +4,10 @@ from typing import List
 
 import hail as hl
 
-from gnomad.sample_qc.sex import adjusted_sex_ploidy_expr
 from gnomad.resources.grch37.gnomad import liftover
 from gnomad.resources.grch38.gnomad import public_release
+from gnomad.sample_qc.sex import adjusted_sex_ploidy_expr
+from gnomad.slack_creds import slack_token
 from gnomad.utils.annotations import (
     age_hists_expr,
     annotate_freq,
@@ -18,7 +19,7 @@ from gnomad.utils.annotations import (
 )
 from gnomad.utils.file_utils import write_temp_gcs
 from gnomad.utils.filtering import filter_to_adj
-from gnomad.utils.slack import try_slack
+from gnomad.utils.slack import slack_notifications
 from ukbb_qc.resources.basics import (
     array_sample_map_ht_path,
     capture_ht_path,
@@ -358,6 +359,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.slack_channel:
-        try_slack(args.slack_channel, main, args)
+        with slack_notifications(slack_token, args.slack_channel):
+            main(args)
     else:
         main(args)
