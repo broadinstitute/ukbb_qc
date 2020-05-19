@@ -350,7 +350,7 @@ def get_relatedness_set_ht(relatedness_ht: hl.Table) -> hl.Table:
         relatedness_ht.select("relationship", s=relatedness_ht.j.s)
     )
     relatedness_ht = relatedness_ht.group_by(relatedness_ht.s).aggregate(
-        relationship=hl.agg.collect_as_set(relatedness_ht.relationship)
+        relationships=hl.agg.collect_as_set(relatedness_ht.relationship)
     )
     return relatedness_ht
 
