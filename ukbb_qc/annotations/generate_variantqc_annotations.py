@@ -5,7 +5,6 @@ import hail as hl
 
 from gnomad.resources.grch38.reference_data import get_truth_ht
 from gnomad.sample_qc.relatedness import filter_mt_to_trios
-from gnomad.slack_creds import slack_token
 from gnomad.utils.filtering import filter_to_autosomes
 from gnomad.utils.slack import slack_notifications
 from gnomad.utils.vep import vep_or_lookup_vep, vep_struct_to_csq
@@ -166,8 +165,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
     )
-    parser.add_argument(
+    slack_params = parser.add_argument_group("Slack parameters")
+    slack_params.add_argument(
         "--slack_channel", help="Slack channel to post results and notifications to."
+    )
+    slack_params.add_argument(
+        "--slack_token_file", help="File containing slack token."
     )
     parser.add_argument("-o", "--overwrite", help="Overwrite data", action="store_true")
     parser.add_argument(
@@ -216,7 +219,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.slack_channel:
-        with slack_notifications(slack_token, args.slack_channel):
+        with slack_notifications(args.slack_token_file.read(), args.slack_channel):
             main(args)
     else:
         main(args)
