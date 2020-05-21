@@ -38,7 +38,7 @@ def main(args):
         # (or --requester-pays-allows-all) in addition to --vep (build)
         logger.info(f"Running VEP on split hard call MT...")
         mt = get_ukbb_data(data_source, freeze)
-        ht = mt.filter((hl.len(mt.alleles) > 1) & hl.agg.any(mt.GT.is_non_ref())).rows()
+        ht = mt.filter_rows((hl.len(mt.alleles) > 1) & hl.agg.any(mt.GT.is_non_ref())).rows()
         ht = vep_or_lookup_vep(ht)
         ht = ht.annotate(vep_csq=vep_struct_to_csq(ht.vep))
         ht.naive_coalesce(n_partitions).write(
@@ -49,7 +49,7 @@ def main(args):
     if args.generate_allele_counts:
         logger.info("Computing allele counts on split hard call MT...")
         mt = get_ukbb_data(data_source, freeze, meta_root="meta")
-        mt = mt.filter((hl.len(mt.alleles) > 1) & hl.agg.any(mt.GT.is_non_ref()))
+        mt = mt.filter_rows((hl.len(mt.alleles) > 1) & hl.agg.any(mt.GT.is_non_ref()))
         ac_expr = {
             "ac_qc_samples_raw": mt.meta.sample_filters.high_quality
             | mt.meta.sample_filters.control,
