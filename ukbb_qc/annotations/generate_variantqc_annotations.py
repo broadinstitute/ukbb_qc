@@ -170,7 +170,7 @@ if __name__ == "__main__":
         "--slack_channel", help="Slack channel to post results and notifications to."
     )
     slack_params.add_argument(
-        "--slack_token_file", help="File containing slack token."
+        "--slack_token", help="Slack token."
     )
     parser.add_argument("-o", "--overwrite", help="Overwrite data", action="store_true")
     parser.add_argument(
@@ -219,7 +219,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.slack_channel:
-        with slack_notifications(args.slack_token_file.read(), args.slack_channel):
+        with slack_notifications(args.slack_token, args.slack_channel):
             main(args)
     else:
         main(args)
