@@ -372,6 +372,6 @@ def get_relationship_filter_expr(
     return (
         hl.case()
         .when(hard_filtered_expr, hl.null(hl.tbool))
-        .when(hl.is_defined(relationship_set), relationship_set.contains(relationship),)
+        .when(hl.is_defined(relationship_set), relationship_set.contains(relationship))
         .default(False)
     )
