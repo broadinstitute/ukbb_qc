@@ -6,14 +6,12 @@ import hail as hl
 
 from gnomad.resources.grch37.gnomad import liftover
 from gnomad.resources.grch38.gnomad import public_release
-from gnomad.slack_creds import slack_token
 from gnomad.utils.annotations import (
     annotate_freq,
     bi_allelic_site_inbreeding_expr,
     faf_expr,
     pop_max_expr,
 )
-from gnomad.utils.file_utils import write_temp_gcs
 from gnomad.utils.slack import slack_notifications
 from ukbb_qc.resources.basics import (
     capture_ht_path,
@@ -21,6 +19,7 @@ from ukbb_qc.resources.basics import (
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import var_annotations_ht_path
+from ukbb_qc.slack_creds import slack_token
 from ukbb_qc.utils.utils import get_hists
 
 
@@ -33,15 +32,18 @@ logger.setLevel(logging.INFO)
 
 
 def generate_cohort_frequency_data(
-    mt: hl.MatrixTable, pops: List[str], pop_col: str, sex_col,
+    mt: hl.MatrixTable,
+    pops: List[str],
+    pop_col: hl.expr.StringExpression,
+    sex_col: hl.expr.StringExpression,
 ) -> hl.MatrixTable:
     """
     Generates frequency struct annotation containing AC, AF, AN, and homozygote count for all individuals of specified ancestry from input dataset.
 
     :param MatrixTable mt: Input MatrixTable annotated with sample metadata information.
     :param list pops: Populations to include in frequency calculation.
-    :param str pop_col: Name of column containing population information.
-    :param str sex_col: Name of column containing sex karyotype information.
+    :param StringExpression pop_col: Name of column containing population information.
+    :param StringExpression sex_col: Name of column containing sex karyotype information.
     :return: MatrixTable with frequency annotations in struct named `cohort_freq` and metadata in globals named `freq_meta`.
     :rtype: hl.MatrixTable
     """
@@ -54,7 +56,7 @@ def generate_cohort_frequency_data(
 
     logger.info("Generating frequency data...")
     mt = annotate_freq(mt, sex_expr=mt[sex_col])
-    mt = mt.transmute_rows(cohort_freq=mt.freq).select_rows("cohort_freq")
+    mt = mt.select_rows(cohort_freq=mt.freq)
     cohort_freq_meta = hl.eval(mt.freq_meta)
     for i in range(len(cohort_freq_meta)):
         if i == 1:
@@ -103,7 +105,7 @@ def generate_frequency_data(
             name = "tranche"
         else:
             name = "platform"
-        additional_strata_expr = {f"{name}": platform_expr}
+        additional_strata_expr = {f"{name}": mt[platform_expr]}
     else:
         additional_strata_expr = None
 
@@ -251,19 +253,17 @@ def main(args):
 
         ht = ht.repartition(args.n_partitions)
         ht = ht.checkpoint(
-            var_annotations_ht_path("ukb_freq", data_source, freeze,), args.overwrite,
+            var_annotations_ht_path("ukb_freq", data_source, freeze), args.overwrite
         )
 
     if args.join_gnomad:
-        ht = hl.read_table(var_annotations_ht_path("ukb_freq", data_source, freeze,))
+        ht = hl.read_table(var_annotations_ht_path("ukb_freq", data_source, freeze))
 
         logger.info("Joining UKBB ht to gnomAD exomes and genomes liftover hts")
         ht = join_gnomad(ht, "exomes")
         ht = join_gnomad(ht, "genomes")
-        write_temp_gcs(
-            ht,
-            var_annotations_ht_path("join_freq", data_source, freeze,),
-            args.overwrite,
+        ht.write(
+            var_annotations_ht_path("join_freq", data_source, freeze), args.overwrite,
         )
 
 
