@@ -1,3 +1,8 @@
+INTERVAL_QC_PARAMETERS = (85, 20)
+"""
+Parameters used for interval QC (sample percentage cutoff, coverage cutoff).
+"""
+
 INFO_DICT = {
     "FS": {
         "Description": "Phred-scaled p-value of Fisher's exact test for strand bias"
@@ -25,7 +30,7 @@ INFO_DICT = {
         "Description": "Variant was used to build the negative training set of low-quality variants for VQSR"
     },
     "AS_BaseQRankSum": {
-        "Description": "Allele specific Z-score from Wilcoxon rank sum test of alternate vs. reference base qualities"
+        "Description": "Allele-specific Z-score from Wilcoxon rank sum test of alternate vs. reference base qualities"
     },
     "ClippingRankSum": {
         "Description": "Z-score from Wilcoxon rank sum test of alternate vs. reference number of hard clipped bases"
@@ -34,17 +39,17 @@ INFO_DICT = {
         "Description": "Depth over variant genotypes (does not include depth of reference samples)"
     },
     "AS_VarDP": {
-        "Description": "Allele specific depth over variant genotypes (does not include depth of reference samples)"
+        "Description": "Allele-specific depth over variant genotypes (does not include depth of reference samples)"
     },
     "AS_VQSLOD": {
-        "Description": "Allele specific log-odds ratio of being a true variant versus being a false positive under the trained VQSR Gaussian mixture model"
+        "Description": "Allele-specific log-odds ratio of being a true variant versus being a false positive under the trained VQSR Gaussian mixture model"
     },
     "AS_VQSR_culprit": {
-        "Description": "Allele specific worst-performing annotation in the VQSR Gaussian mixture model"
+        "Description": "Allele-specific worst-performing annotation in the VQSR Gaussian mixture model"
     },
     "lcr": {"Description": "Variant falls within a low complexity region"},
     "fail_interval_qc": {
-        "Description": "Variant falls within a region where less than 85% of samples had a mean coverage of 20X"
+        "Description": f"Variant falls within a region where less than {INTERVAL_QC_PARAMETERS[0]}% of samples had a mean coverage of {INTERVAL_QC_PARAMETERS[1]}X"
     },
     "nonpar": {
         "Description": "Variant (on sex chromosome) falls outside a pseudoautosomal region"
@@ -58,10 +63,10 @@ INFO_DICT = {
     "rf_label": {"Description": "Random forest training label"},
     "rf_train": {"Description": "Variant was used in training random forest model"},
     "rf_tp_probability": {
-        "Description": "Random forest prediction probability for a variant being a true variant"
+        "Description": "Probability of a called variant being a true variant"
     },
     "transmitted_singleton": {
-        "Description": "Variant was a callset-wide doubleton that was transmitted within a family (i.e., a singleton amongst unrelated samples in cohort)"
+        "Description": "Variant was a callset-wide doubleton that was transmitted within a family from a parent to a child (i.e., a singleton amongst unrelated samples in cohort)"
     },
     "original_alleles": {"Description": "Alleles before splitting multiallelics"},
     "variant_type": {
@@ -69,7 +74,7 @@ INFO_DICT = {
     },
     "allele_type": {
         "Number": "A",
-        "Description": "Allele type (snv, ins, del, or mixed)",
+        "Description": "Allele type (snv, insertion, deletion, or mixed)",
     },
     "n_alt_alleles": {
         "Number": "A",
@@ -100,7 +105,11 @@ FORMAT_DICT = {
         "Number": "1",
         "Type": "Integer",
     },
-    "GQ": {"Description": "Genotype Quality", "Number": "1", "Type": "Integer"},
+    "GQ": {
+        "Description": "Phred-scaled confidence that the genotype assignment is correct. Derived from the PLs of the two most likely genotypes",
+        "Number": "1",
+        "Type": "Integer",
+    },
     "MIN_DP": {
         "Description": "Minimum DP observed within the GVCF block",
         "Number": "1",
