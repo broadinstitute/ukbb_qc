@@ -86,6 +86,9 @@ def generate_frequency_data(
 
     .. note::
         This function expects dense format data.
+        Frequency data is generated using gnomAD PC project population labels as the main population stratification.
+        Hybrid population labels are used as the subpopulation stratification.
+        However, cohort frequency (frequency including all related samples) data is generated using hybrid population labels.
 
     :param MatrixTable mt: Input MatrixTable.
     :param str data_source: One of "regeneron" or "broad".
