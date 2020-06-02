@@ -34,16 +34,16 @@ logger.setLevel(logging.INFO)
 def generate_cohort_frequency_data(
     mt: hl.MatrixTable,
     pops: List[str],
-    pop_col: hl.expr.StringExpression,
-    sex_col: hl.expr.StringExpression,
+    pop_expr: hl.expr.StringExpression,
+    sex_expr: hl.expr.StringExpression,
 ) -> hl.MatrixTable:
     """
     Generates frequency struct annotation containing AC, AF, AN, and homozygote count for all individuals of specified ancestry from input dataset.
 
     :param MatrixTable mt: Input MatrixTable annotated with sample metadata information.
     :param list pops: Populations to include in frequency calculation.
-    :param StringExpression pop_col: Name of column containing population information.
-    :param StringExpression sex_col: Name of column containing sex karyotype information.
+    :param StringExpression pop_expr: Expression containing population information.
+    :param StringExpression sex_expr: Expression containing sex karyotype information.
     :return: MatrixTable with frequency annotations in struct named `cohort_freq` and metadata in globals named `freq_meta`.
     :rtype: hl.MatrixTable
     """
@@ -51,11 +51,11 @@ def generate_cohort_frequency_data(
         f"Filtering to {pops} to calculate cohort frequency (includes related samples)..."
     )
     pops = hl.literal(pops)
-    mt = mt.filter_cols(pops.contains(mt[pop_col]))
+    mt = mt.filter_cols(pops.contains(mt[pop_expr]))
     mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
 
     logger.info("Generating frequency data...")
-    mt = annotate_freq(mt, sex_expr=mt[sex_col])
+    mt = annotate_freq(mt, sex_expr=mt[sex_expr])
     mt = mt.select_rows(cohort_freq=mt.freq)
     cohort_freq_meta = hl.eval(mt.freq_meta)
     for i in range(len(cohort_freq_meta)):
@@ -75,9 +75,9 @@ def generate_frequency_data(
     pops_to_remove_for_popmax: List[str],
     cohort_frequency_pops: List[str],
     overwrite: bool,
+    platform_expr: Optional[hl.expr.StringExpression],
     platform_strata: bool = False,
     tranche: bool = False,
-    platform_expr: Optional[hl.expr.StringExpression] = "meta.ukbb_meta.batch",
 ) -> hl.Table:
     """
     Generates frequency struct annotation containing AC, AF, AN, and homozygote count for input dataset stratified by population.
@@ -85,6 +85,7 @@ def generate_frequency_data(
     Option to stratify by platform (either inferred platform or tranche as proxy for platform).
 
     .. note::
+
         This function expects dense format data.
         Frequency data is generated using gnomAD PC project population labels as the main population stratification.
         Hybrid population labels are used as the subpopulation stratification.
@@ -96,9 +97,9 @@ def generate_frequency_data(
     :param list pops_to_remove_for_popmax: List of populations to exclude from popmax calculations. 
     :param list cohort_frequency_pops: List of populations to include in cohort frequency calculations.
     :param bool overwrite: Whether to overwrite data.
+    :param hl.expr.StringExpression platform_expr: Expression containing platform or tranche information. Required if platform_strata is set.
     :param bool platform_strata: Whether to calculate frequencies per platform or tranche as proxy for platform.
     :param bool tranche: Whether to use tranche (as a proxy for platform) instead of inferred platform.
-    :param hl.expr.StringExpression platform_expr: Platform or tranche StringExpression.
     :param bool calculate_by_tranche: Whether to calculate frequencies per tranche.
     :return: Table with frequency annotations in struct named `freq` and metadata in globals named `freq_meta`.
     :rtype: Table
@@ -108,7 +109,7 @@ def generate_frequency_data(
             name = "tranche"
         else:
             name = "platform"
-        additional_strata_expr = {f"{name}": mt[platform_expr]}
+        additional_strata_expr = {f"{name}": platform_expr}
     else:
         additional_strata_expr = None
 
@@ -198,7 +199,6 @@ def join_gnomad(ht: hl.Table, data_type: str) -> hl.Table:
             .select("freq", "popmax", "faf")
             .select_globals("freq_meta", "faf_index_dict")
         )
-
         ht = ht.join(gnomad_ht, how="left")
         ht = ht.rename(
             {
@@ -242,17 +242,33 @@ def main(args):
         mt = mt.filter_cols(hl.is_defined(mt.meta.ukbb_meta.batch))
         mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
 
-        logger.info("Calculating frequencies")
-        ht = generate_frequency_data(
-            mt,
-            data_source,
-            freeze,
-            pops_to_remove_for_popmax,
-            cohort_frequency_pops,
-            args.overwrite,
-            args.by_platform,
-            args.by_tranche,
-        )
+        if args.by_platform or args.by_tranche:
+            if args.by_tranche:
+                platform_expr = mt.meta.ukbb_meta.batch
+            else:
+                platform_expr = mt.meta.platform_inference.qc_platform
+
+            logger.info("Calculating frequencies")
+            ht = generate_frequency_data(
+                mt,
+                data_source,
+                freeze,
+                pops_to_remove_for_popmax,
+                cohort_frequency_pops,
+                args.overwrite,
+                platform_expr,
+                args.by_platform,
+                args.by_tranche,
+            )
+        else:
+            ht = generate_frequency_data(
+                mt,
+                data_source,
+                freeze,
+                pops_to_remove_for_popmax,
+                cohort_frequency_pops,
+                args.overwrite,
+            )
 
         ht = ht.repartition(args.n_partitions)
         ht = ht.checkpoint(
