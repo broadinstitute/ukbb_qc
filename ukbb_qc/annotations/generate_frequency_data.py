@@ -51,11 +51,11 @@ def generate_cohort_frequency_data(
         f"Filtering to {pops} to calculate cohort frequency (includes related samples)..."
     )
     pops = hl.literal(pops)
-    mt = mt.filter_cols(pops.contains(mt[pop_expr]))
+    mt = mt.filter_cols(pops.contains(pop_expr))
     mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
 
     logger.info("Generating frequency data...")
-    mt = annotate_freq(mt, sex_expr=mt[sex_expr])
+    mt = annotate_freq(mt, sex_expr=sex_expr)
     mt = mt.select_rows(cohort_freq=mt.freq)
     cohort_freq_meta = hl.eval(mt.freq_meta)
     for i in range(len(cohort_freq_meta)):
@@ -75,9 +75,9 @@ def generate_frequency_data(
     pops_to_remove_for_popmax: List[str],
     cohort_frequency_pops: List[str],
     overwrite: bool,
-    platform_expr: Optional[hl.expr.StringExpression],
     platform_strata: bool = False,
     tranche: bool = False,
+    platform_expr: Optional[hl.expr.StringExpression] = None,
 ) -> hl.Table:
     """
     Generates frequency struct annotation containing AC, AF, AN, and homozygote count for input dataset stratified by population.
@@ -97,10 +97,10 @@ def generate_frequency_data(
     :param list pops_to_remove_for_popmax: List of populations to exclude from popmax calculations. 
     :param list cohort_frequency_pops: List of populations to include in cohort frequency calculations.
     :param bool overwrite: Whether to overwrite data.
-    :param hl.expr.StringExpression platform_expr: Expression containing platform or tranche information. Required if platform_strata is set.
     :param bool platform_strata: Whether to calculate frequencies per platform or tranche as proxy for platform.
     :param bool tranche: Whether to use tranche (as a proxy for platform) instead of inferred platform.
     :param bool calculate_by_tranche: Whether to calculate frequencies per tranche.
+    :param hl.expr.StringExpression platform_expr: Expression containing platform or tranche information. Required if platform_strata is set.
     :return: Table with frequency annotations in struct named `freq` and metadata in globals named `freq_meta`.
     :rtype: Table
     """
@@ -117,8 +117,8 @@ def generate_frequency_data(
     mt = generate_cohort_frequency_data(
         mt,
         cohort_frequency_pops,
-        "meta.hybrid_pop_data.pop",
-        "meta.sex_imputation.sex_karyotype",
+        mt.meta.hybrid_pop_data.pop,
+        mt.meta.sex_imputation.sex_karyotype,
     )
 
     logger.info("Filtering related samples...")
@@ -242,33 +242,25 @@ def main(args):
         mt = mt.filter_cols(hl.is_defined(mt.meta.ukbb_meta.batch))
         mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
 
-        if args.by_platform or args.by_tranche:
-            if args.by_tranche:
-                platform_expr = mt.meta.ukbb_meta.batch
-            else:
-                platform_expr = mt.meta.platform_inference.qc_platform
-
-            logger.info("Calculating frequencies")
-            ht = generate_frequency_data(
-                mt,
-                data_source,
-                freeze,
-                pops_to_remove_for_popmax,
-                cohort_frequency_pops,
-                args.overwrite,
-                platform_expr,
-                args.by_platform,
-                args.by_tranche,
-            )
+        if args.by_tranche:
+            platform_expr = mt.meta.ukbb_meta.batch
+        elif args.by_platform:
+            platform_expr = mt.meta.platform_inference.qc_platform
         else:
-            ht = generate_frequency_data(
-                mt,
-                data_source,
-                freeze,
-                pops_to_remove_for_popmax,
-                cohort_frequency_pops,
-                args.overwrite,
-            )
+            platform_expr = None
+
+        logger.info("Calculating frequencies")
+        ht = generate_frequency_data(
+            mt,
+            data_source,
+            freeze,
+            pops_to_remove_for_popmax,
+            cohort_frequency_pops,
+            args.overwrite,
+            args.by_platform,
+            args.by_tranche,
+            platform_expr,
+        )
 
         ht = ht.repartition(args.n_partitions)
         ht = ht.checkpoint(
@@ -310,12 +302,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--compute_frequency", help="Compute frequency data data", action="store_true",
     )
-    parser.add_argument(
+    platform_args = parser.add_mutually_exclusive_group()
+    platform_args.add_argument(
         "--by_platform",
         help="Calculate frequencies stratified by inferred platform",
         action="store_true",
     )
-    parser.add_argument(
+    platform_args.add_argument(
         "--by_tranche", help="Use tranche as a proxy for platform", action="store_true",
     )
     parser.add_argument(
