@@ -8,6 +8,7 @@ from gnomad.utils.file_utils import file_exists
 from gnomad.utils.sparse_mt import split_info_annotation
 from ukbb_qc.resources.basics import (
     array_sample_map_path,
+    array_sample_map_ht_path,
     capture_ht_path,
     excluded_samples_path,
     phenotype_ht_path,
@@ -16,6 +17,7 @@ from ukbb_qc.resources.basics import (
 from ukbb_qc.resources.sample_qc import (
     get_ukbb_array_pcs_path,
     get_ukbb_array_pcs_ht_path,
+    get_ukbb_self_reported_ancestry_path,
 )
 from ukbb_qc.resources.variant_qc import (
     clinvar_pathogenic_ht_path,
@@ -39,8 +41,6 @@ def import_array_exome_id_map_ht(freeze: int = CURRENT_FREEZE) -> hl.Table:
     :return: Table with array IDs mapped to exome IDs
     :rtype: hl.Table
     """
-    data_source = "broad"
-
     sample_map_ht = hl.import_table(
         array_sample_map_path(freeze), delimiter=",", quote='"'
     )
@@ -99,9 +99,56 @@ def import_phenotype_ht() -> None:
     :return: None
     :rtype: None
     """
-    phenotype_ht = hl.import_table(ukbb_phenotype_path, impute=True)
+    phenotype_ht = hl.import_table(ukbb_phenotype_path(), impute=True)
     phenotype_ht = phenotype_ht.key_by(s_old=hl.str(phenotype_ht["f.eid"]))
     phenotype_ht.write(phenotype_ht_path(), overwrite=True)
+
+
+def load_self_reported_ancestry(freeze: int) -> hl.Table:
+    """
+    Loads phenotype Table and extracts self reported ancestry information.
+
+    Converts ancestry integers to more legible strings (e.g., 1 -> "White")
+
+    :param int freeze: One of data freezes
+    :return: Table with self reported ancestry information
+    :rtype: Table
+    """
+    ukbb_ancestry_ht = hl.read_table(phenotype_ht_path())
+    ukbb_ancestry_ht = ukbb_ancestry_ht.select(
+        "f.21000.0.0", "f.21000.1.0", "f.21000.2.0"
+    )
+    sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze)).key_by(
+        "ukbb_app_26041_id"
+    )
+    ukbb_ancestry_ht = ukbb_ancestry_ht.key_by(s=sample_map_ht[ukbb_ancestry_ht.key].s)
+    ukbb_ancestry_ht = ukbb_ancestry_ht.annotate(
+        self_reported_ancestry=hl.switch(ukbb_ancestry_ht["f.21000.0.0"])
+        .when(1, "White")
+        .when(1001, "British")
+        .when(1002, "Irish")
+        .when(1003, "Other white")
+        .when(2, "Mixed")
+        .when(2001, "White and Black Caribbean")
+        .when(2002, "White and Black African")
+        .when(2003, "White and Asian")
+        .when(2004, "Other Mixed")
+        .when(3, "Asian or Asian British")
+        .when(3001, "Indian")
+        .when(3002, "Pakistani")
+        .when(3003, "Bangladeshi")
+        .when(3004, "Other Asian")
+        .when(4, "Black or Black British")
+        .when(4001, "Caribbean")
+        .when(4002, "African")
+        .when(4003, "Other Black")
+        .when(5, "Chinese")
+        .when(6, "Other")
+        .when(-1, "Do not Know")
+        .when(-3, "Prefer not to answer")
+        .default("None")
+    )
+    ukbb_ancestry_ht.write(get_ukbb_self_reported_ancestry_path(freeze), overwrite=True)
 
 
 # Interval resources
