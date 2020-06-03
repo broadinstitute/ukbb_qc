@@ -18,6 +18,7 @@ from ukbb_qc.load_data.utils import (
     import_capture_intervals,
     import_phenotype_ht,
     import_vqsr,
+    load_clinvar_path,
     load_self_reported_ancestry,
     load_ukbb_array_pcs,
 )
@@ -66,6 +67,10 @@ def main(args):
         import_capture_intervals(
             args.intervals, args.header, args.overwrite,
         )
+
+    if args.load_clinvar_path:
+        logger.info("Importing ClinVar pathogenic variants...")
+        load_clinvar_path()
 
     if args.load_vqsr:
         logger.info("Loading VQSR VCF...")
@@ -120,10 +125,16 @@ if __name__ == "__main__":
         "--load_phenotypes", help="Load phenotype file into Table", action="store_true",
     )
     parser.add_argument(
+        "--load_clinvar_path",
+        help="Load ClinVar pathogenic variants into Table",
+        action="store_true",
+    )
+    parser.add_argument(
         "--load_self_reported_ancestry",
         help="Loads self reported ancestry from phenotype file and writes Table",
         action="store_true",
     )
+    
     capture_intervals = parser.add_argument_group(
         "capture_intervals",
         description="Arguments relevant to loading capture intervals",
