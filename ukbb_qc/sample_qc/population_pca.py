@@ -16,12 +16,12 @@ from gnomad.utils.liftover import (
     get_liftover_genome,
     lift_data,
 )
-from gnomad.utils.slack import try_slack
+#from gnomad.utils.slack import try_slack
 from gnomad.utils.sparse_mt import densify_sites
-from gnomad_qc.v2.resources.basics import get_gnomad_meta
-from gnomad_qc.v2.resources.sample_qc import (
-    ancestry_pca_loadings_ht_path as gnomad_ancestry_pca_loadings_ht_path,
-)
+#from gnomad_qc.v2.resources.basics import get_gnomad_meta
+#from gnomad_qc.v2.resources.sample_qc import (
+#    ancestry_pca_loadings_ht_path as gnomad_ancestry_pca_loadings_ht_path,
+#)
 from ukbb_qc.resources.basics import (
     array_sample_map_ht_path,
     get_ukbb_data,
@@ -296,21 +296,27 @@ def main(args):
             # NOTE: I needed to switch to n1-standard-16s for 300k
             logger.info("Running random forest after projection on gnomAD PCs...")
             joint_scores_ht = hl.read_table(
-                ancestry_pc_project_scores_ht_path(data_source, freeze, "joint")
+                ancestry_pc_project_scores_ht_path(data_source, freeze)
             )
             joint_scores_ht = joint_scores_ht.annotate(
-                scores=joint_scores_ht.scores[:n_project_pcs]
+                scores=joint_scores_ht.scores[:6],
+                pop_for_rf=hl.null(hl.tstr),
             )
+            import pickle
+            fit = None
+            with hl.hadoop_open("gs://gnomad/sample_qc/temp/joint/gnomad.joint.RF_fit.pkl", 'rb') as f:
+                fit = pickle.load(f)
             joint_pops_ht, joint_pops_rf_model = assign_population_pcs(
                 joint_scores_ht,
                 pc_cols=joint_scores_ht.scores,
                 known_col="pop_for_rf",
+                fit=fit,
                 min_prob=args.min_pop_prob,
             )
 
-            scores_ht = joint_scores_ht.filter(
-                hl.is_missing(joint_scores_ht.pop_for_rf)
-            )
+            #scores_ht = joint_scores_ht.filter(
+            #    hl.is_missing(joint_scores_ht.pop_for_rf)
+            #)
             scores_ht = scores_ht.select("scores")
             joint_pops_ht = joint_pops_ht.drop("pop_for_rf")
             scores_ht = scores_ht.annotate(pop=joint_pops_ht[scores_ht.key])
@@ -322,7 +328,8 @@ def main(args):
             scores_ht = remove_hard_filter_samples(data_source, freeze, scores_ht)
             scores_ht = scores_ht.repartition(args.n_partitions)
             scores_ht = scores_ht.checkpoint(
-                ancestry_pc_project_scores_ht_path(data_source, freeze),
+                #ancestry_pc_project_scores_ht_path(data_source, freeze),
+                "gs://broad-ukbb/broad.freeze_6/sample_qc/population_pca/pc_project_scores_pop_assign_test_gnomad_RF_model_only_ukb.ht",
                 overwrite=args.overwrite,
             )
 
@@ -332,13 +339,13 @@ def main(args):
                 )
             )
 
-            logger.info("Writing out random forest model...")
-            with hl.hadoop_open(
-                qc_temp_data_prefix(data_source, freeze)
-                + "project_gnomad_pop_rf_model.pkl",
-                "wb",
-            ) as out:
-                pickle.dump(joint_pops_rf_model, out)
+            #logger.info("Writing out random forest model...")
+            #with hl.hadoop_open(
+            #    qc_temp_data_prefix(data_source, freeze)
+            #    + "project_gnomad_pop_rf_model.pkl",
+            #    "wb",
+            #) as out:
+            #    pickle.dump(joint_pops_rf_model, out)
 
         if args.assign_hybrid_ancestry:
             logger.info(
@@ -496,7 +503,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    if args.slack_channel:
-        try_slack(args.slack_channel, main, args)
-    else:
-        main(args)
+    #if args.slack_channel:
+    #    try_slack(args.slack_channel, main, args)
+    #else:
+    main(args)
