@@ -8,7 +8,7 @@ INFO_DICT = {
         "Description": "Phred-scaled p-value of Fisher's exact test for strand bias"
     },
     "InbreedingCoeff": {
-        "Description": "Inbreeding coefficient as estimated from the genotype likelihoods per-sample when compared against the Hardy-Weinberg expectation"
+        "Description": "Inbreeding coefficient, the excess heterozygosity at a variant site, computed as 1 - (the number of heterozygous genotypes)/(the number of heterozygous genotypes expected under Hardy-Weinberg equilibrium)"
     },
     "MQ": {
         "Description": "Root mean square of the mapping quality of reads across all samples"
@@ -30,22 +30,27 @@ INFO_DICT = {
         "Description": "Variant was used to build the negative training set of low-quality variants for VQSR"
     },
     "AS_BaseQRankSum": {
-        "Description": "Allele-specific Z-score from Wilcoxon rank sum test of alternate vs. reference base qualities"
+        "Number": "A",
+        "Description": "Allele-specific Z-score from Wilcoxon rank sum test of alternate vs. reference base qualities",
     },
     "ClippingRankSum": {
-        "Description": "Z-score from Wilcoxon rank sum test of alternate vs. reference number of hard clipped bases"
+        "Number": "A",
+        "Description": "Z-score from Wilcoxon rank sum test of alternate vs. reference number of hard clipped bases",
     },
     "VarDP": {
         "Description": "Depth over variant genotypes (does not include depth of reference samples)"
     },
     "AS_VarDP": {
-        "Description": "Allele-specific depth over variant genotypes (does not include depth of reference samples)"
+        "Number": "A",
+        "Description": "Allele-specific depth over variant genotypes (does not include depth of reference samples)",
     },
     "AS_VQSLOD": {
-        "Description": "Allele-specific log-odds ratio of being a true variant versus being a false positive under the trained VQSR Gaussian mixture model"
+        "Number": "A",
+        "Description": "Allele-specific log-odds ratio of being a true variant versus being a false positive under the trained VQSR Gaussian mixture model",
     },
     "AS_VQSR_culprit": {
-        "Description": "Allele-specific worst-performing annotation in the VQSR Gaussian mixture model"
+        "Number": "A",
+        "Description": "Allele-specific worst-performing annotation in the VQSR Gaussian mixture model",
     },
     "lcr": {"Description": "Variant falls within a low complexity region"},
     "fail_interval_qc": {
@@ -63,7 +68,7 @@ INFO_DICT = {
     "rf_label": {"Description": "Random forest training label"},
     "rf_train": {"Description": "Variant was used in training random forest model"},
     "rf_tp_probability": {
-        "Description": "Probability of a called variant being a true variant"
+        "Description": "Probability of a called variant being a true variant as determined by random forest model"
     },
     "transmitted_singleton": {
         "Description": "Variant was a callset-wide doubleton that was transmitted within a family from a parent to a child (i.e., a singleton amongst unrelated samples in cohort)"
@@ -86,7 +91,7 @@ INFO_DICT = {
     },
     "pab_max": {
         "Number": "A",
-        "Description": "Maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of AB=0.5",
+        "Description": "Maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of 0.5",
     },
 }
 """
@@ -106,7 +111,7 @@ FORMAT_DICT = {
         "Type": "Integer",
     },
     "GQ": {
-        "Description": "Phred-scaled confidence that the genotype assignment is correct. Derived from the PLs of the two most likely genotypes",
+        "Description": "Phred-scaled confidence that the genotype assignment is correct. Value is the difference between the second lowest PL and the lowest PL (always normalized to 0).",
         "Number": "1",
         "Type": "Integer",
     },
@@ -126,12 +131,12 @@ FORMAT_DICT = {
         "Type": "String",
     },
     "PL": {
-        "Description": "Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification",
+        "Description": "Normalized, phred-scaled likelihoods for genotypes as defined in the VCF specification",
         "Number": "G",
         "Type": "Integer",
     },
     "SB": {
-        "Description": "Per-sample component statistics which comprise the Fisher's Exact Test to detect strand bias.",
+        "Description": "Per-sample component statistics which comprise the Fisher's exact test to detect strand bias. Values are: depth of reference allele on forward strand, depth of reference allele on reverse strand, depth of alternate allele on forward strand, depth of alternate allele on reverse strand.",
         "Number": "4",
         "Type": "Integer",
     },
