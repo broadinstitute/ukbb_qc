@@ -1,8 +1,10 @@
 import argparse
 import logging
 from typing import Tuple
+
 import hail as hl
-from gnomad.utils.generic import file_exists
+
+from gnomad.utils.file_utils import file_exists
 from gnomad.utils.liftover import (
     get_liftover_genome,
     lift_data,
@@ -19,8 +21,7 @@ from ukbb_qc.resources.basics import (
     logging_path,
 )
 from ukbb_qc.resources.sample_qc import (
-    array_variant_concordance_path,
-    array_sample_concordance_path,
+    array_concordance_results_path,
     array_concordance_sites_path,
 )
 from ukbb_qc.utils.utils import (
@@ -36,7 +37,6 @@ logger.setLevel(logging.INFO)
 
 
 def prepare_array_and_exome_mt(
-    data_source: str,
     freeze: int,
     array_mt: hl.MatrixTable,
     exome_mt: hl.MatrixTable,
@@ -50,7 +50,6 @@ def prepare_array_and_exome_mt(
 
     NOTE: Assumes input exome MatrixTable is split (hl.experimental.sparse_split_multi)
     
-    :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
     :param MatrixTable array_mt: Array MatrixTable
     :param MatrixTable exome_mt: Exome MatrixTable
@@ -65,8 +64,8 @@ def prepare_array_and_exome_mt(
         ukbb_app_26041_id=sample_map[exome_mt.col_key].ukbb_app_26041_id
     )
     exome_mt = exome_mt.key_cols_by("ukbb_app_26041_id")
-    exome_mt = exome_mt.semi_join_cols(array_mt)
-    array_mt = array_mt.semi_join_cols(exome_mt)
+    exome_mt = exome_mt.semi_join_cols(array_mt.cols())
+    array_mt = array_mt.semi_join_cols(exome_mt.cols())
 
     exome_array_count = array_mt.count_cols()
     logger.info(
@@ -82,7 +81,7 @@ def prepare_array_and_exome_mt(
     if not file_exists(array_concordance_sites_path()):
         sites_ht = get_sites(af_cutoff, call_rate_cutoff)
     else:
-        sites_ht = array_concordance_sites_path()
+        sites_ht = hl.read_table(array_concordance_sites_path())
 
     logger.info("Filtering exome and array MT to tranche 2 sites...")
     exome_mt = exome_mt.filter_rows(hl.is_defined(sites_ht[exome_mt.row_key]))
@@ -230,9 +229,11 @@ def main(args):
                 exome_mt = exome_mt.filter_rows(exome_mt.interval_qc_pass)
 
             array_mt, exome_mt = prepare_array_and_exome_mt(
-                data_source, freeze, array_mt, exome_mt, call_rate_cutoff, af_cutoff
+                freeze, array_mt, exome_mt, call_rate_cutoff, af_cutoff
             )
 
+            # NOTE: for freeze 6 (300K), had to remove two samples with duplicate IDs
+            # removed UKB_4048554_0301608642 and column index 204526 (higher column index for duplicate sample UKB_1223807_0330880742)
             exome_mt = exome_mt.checkpoint(
                 get_checkpoint_path(
                     data_source,
@@ -260,12 +261,14 @@ def main(args):
             samples = samples.annotate_globals(
                 callrate_cutoff=call_rate_cutoff, af_cutoff=af_cutoff
             )
-
+            variants = variants.naive_coalesce(args.n_partitions)
             variants.write(
-                array_variant_concordance_path(data_source, freeze), overwrite=overwrite
+                array_concordance_results_path(data_source, freeze, sample=False),
+                overwrite=overwrite,
             )
+            samples = samples.repartition(args.n_partitions)
             samples.write(
-                array_sample_concordance_path(data_source, freeze), overwrite=overwrite
+                array_concordance_results_path(data_source, freeze), overwrite=overwrite
             )
 
     finally:
@@ -284,7 +287,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--slack_channel", help="Slack channel to post results and notifications to."
     )
-
+    parser.add_argument(
+        "--n_partitions",
+        help="Number of partitions for desired output Tables. Used when writing variant and sample concordance HTs",
+        default=5000,
+        type=int,
+    )
     array_import = parser.add_argument_group(
         "Import array plink files and write Matrix Table"
     )

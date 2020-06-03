@@ -1,8 +1,10 @@
 import argparse
 import logging
+
 import hail as hl
+
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.generic import file_exists
+from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import try_slack
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.basics import get_checkpoint_path, logging_path
@@ -70,6 +72,7 @@ def hard_filter_samples(
     sex_ht: hl.Table,
     min_callrate: float = 0.99,
     min_depth: float = 20.0,
+    n_partitions: int = 5000,
 ) -> hl.Table:
     """
     Applies hard filters to samples and returns Table with samples and their hard filter status.
@@ -84,6 +87,7 @@ def hard_filter_samples(
     :param Table sex_ht: Table with samples and their inferred sex
     :param float min_callrate: Callrate threshold to be used to filter samples; default is 0.99
     :param float min_depth: Mean depth threshold to be used to filter samples; default is 20.0
+    :param int n_partitions: Number of desired partitions for output Table
     :return: Table with samples and their hard filter status
     :rtype: hl.Table
     """
@@ -94,12 +98,12 @@ def hard_filter_samples(
     )
     ht = mt.annotate_cols(
         call_rate=hl.agg.sum(mt.n_defined) / hl.agg.sum(mt.total),
-        mean_dp=hl.agg.sum(mt.dp_sum) / hl.agg.sum(mt.total),
+        sample_mean_dp=hl.agg.sum(mt.dp_sum) / hl.agg.sum(mt.total),
     ).cols()
 
     logger.info("Adding sex imputation annotations...")
     ht = ht.annotate(sex=sex_ht[ht.key].sex_karyotype)
-
+    ht = ht.repartition(5000)
     ht = ht.checkpoint(
         get_checkpoint_path(data_source, freeze, name="interval_qc_sample_qc"),
         overwrite=True,
@@ -108,11 +112,11 @@ def hard_filter_samples(
     logger.info("Applying hard filters and writing out hard filters HT...")
     ht = ht.annotate(
         hard_filters=apply_hard_filters_expr(
-            ht.call_rate, ht.mean_dp, ht.sex, min_callrate, min_depth
+            ht.call_rate, ht.sample_mean_dp, ht.sex, min_callrate, min_depth
         )
     )
     ht = ht.annotate(
-        ht.hard_filters.annotate(
+        hard_filters=ht.hard_filters.annotate(
             hard_filtered=(
                 (ht.hard_filters.low_callrate)
                 | (ht.hard_filters.ambiguous_sex)
@@ -157,16 +161,23 @@ def main(args):
             sex_ht,
             args.min_callrate,
             args.min_dp,
+            args.n_partitions,
         )
-        ht = ht.naive_coalesce(args.n_partitions)
         ht = ht.checkpoint(
             hard_filters_ht_path(data_source, freeze), overwrite=args.overwrite,
         )
+
         logger.info("Checking number of samples flagged with hard filters...")
-        ht = ht.explode(ht.hard_filters)
-        filters = ht.aggregate(hl.agg.counter(ht.hard_filters))
-        for filt in filters:
-            logger.info(f"Samples flagged due to {filt}: {filters[filt]}")
+        filtered = ht.aggregate(
+            hl.struct(
+                total_filtered=hl.agg.count_where(ht.hard_filters.hard_filtered),
+                low_callrate=hl.agg.count_where(ht.hard_filters.low_callrate),
+                ambiguous_sex=hl.agg.count_where(ht.hard_filters.ambiguous_sex),
+                sex_aneuploidy=hl.agg.count_where(ht.hard_filters.sex_aneuploidy),
+                low_coverage=hl.agg.count_where(ht.hard_filters.low_coverage),
+            )
+        )
+        logger.info(filtered)
 
     finally:
         logger.info("Copying hail log to logging bucket...")

@@ -60,7 +60,7 @@ def join_tables(
     :return: Table with annotations
     :rtype: Table
     """
-    sample_count_match = compare_samples(left_ht, right_ht)
+    sample_count_match = compare_row_counts(left_ht, right_ht)
     if not sample_count_match:
         logger.warning("Sample counts in left and right tables do not match!")
     return left_ht.key_by(left_key).join(right_ht.key_by(right_key), how=join_type)
