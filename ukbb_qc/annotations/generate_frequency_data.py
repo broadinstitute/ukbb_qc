@@ -13,10 +13,7 @@ from gnomad.utils.annotations import (
     pop_max_expr,
 )
 from gnomad.utils.slack import slack_notifications
-from ukbb_qc.resources.basics import (
-    capture_ht_path,
-    get_ukbb_data,
-)
+from ukbb_qc.resources.basics import get_ukbb_data
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 from ukbb_qc.slack_creds import slack_token
@@ -117,7 +114,7 @@ def generate_frequency_data(
     mt = generate_cohort_frequency_data(
         mt,
         cohort_frequency_pops,
-        mt.meta.hybrid_pop_data.pop,
+        mt.meta.gnomad_pc_project_data.pop,
         mt.meta.sex_imputation.sex_karyotype,
     )
 
@@ -229,13 +226,9 @@ def main(args):
     mt = get_ukbb_data(data_source, freeze, meta_root="meta")
 
     if args.compute_frequency:
-        logger.info("Reading in capture HT")
-        capture_ht = hl.read_table(capture_ht_path(data_source))
-
         logger.info("Densifying...")
         mt = hl.experimental.densify(mt)
         mt = mt.filter_rows(hl.len(mt.alleles) > 1)
-        mt = mt.filter_rows(hl.is_defined(capture_ht[mt.locus]))
 
         # Filter to high quality UKBB samples only
         mt = mt.filter_cols(mt.meta.sample_filters.high_quality)
