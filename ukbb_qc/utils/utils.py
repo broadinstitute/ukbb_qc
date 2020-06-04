@@ -4,7 +4,11 @@ from typing import Union
 import hail as hl
 
 from gnomad.resources.grch38.reference_data import lcr_intervals
-from gnomad.utils.filtering import filter_to_autosomes
+from gnomad.utils.annotations import (
+    age_hists_expr,
+    qual_hist_expr,
+)
+from gnomad.utils.filtering import filter_to_adj, filter_to_autosomes
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.file_utils import file_exists
 from ukbb_qc.load_data.utils import import_phenotype_ht
@@ -303,3 +307,37 @@ def get_age_ht(freeze: int) -> hl.Table:
     age_ht = age_ht.key_by(s=sample_map_ht[age_ht.key].s)
     age_ht = age_ht.rename({"f.21022.0.0": "age"})
     return age_ht
+
+
+def get_hists(mt: hl.MatrixTable, freeze: int) -> hl.MatrixTable:
+    """
+    Gets age (at recruitment; field 21022) and qual hists for UKBB.
+
+    .. note::
+        This function expects dense format data.
+
+    :param MatrixTable mt: Input MatrixTable
+    :param int freeze: One of the data freezes
+    :return: MatrixTable with age and qual hists
+    :rtype: MatrixTable
+    """
+    logger.warning(
+        "This function expects dense data! Make sure you have run hl.experimental.densify."
+    )
+    logger.info("Getting age hists...")
+    age_ht = get_age_ht(freeze)
+    mt = mt.annotate_cols(age=age_ht[mt.col_key].age)
+    mt = mt.annotate_rows(**age_hists_expr(mt.adj, mt.GT, mt.age))
+
+    logger.info("Annotating with qual hists (on raw data)...")
+    mt = mt.annotate_rows(**qual_hist_expr(mt.GT, mt.GQ, mt.DP, mt.AD))
+
+    logger.info("Annotating with qual hists (adj)...")
+    mt_filt = filter_to_adj(mt)
+    mt_filt = mt_filt.select_rows()
+    mt_filt = mt_filt.annotate_rows(
+        **qual_hist_expr(mt_filt.GT, mt_filt.GQ, mt_filt.DP, mt_filt.AD)
+    )
+    ht = mt_filt.rows()
+    mt = mt.annotate_rows(adj_qual_hists=ht[mt.row_key])
+    return mt
