@@ -145,6 +145,8 @@ def generate_frequency_data(
     freq_meta = mt.freq_meta.extend(mt.cohort_freq_meta)
     mt = mt.select_globals()
 
+    # NOTE: faf and popmax are calculated on freq, not freq_expr
+    # We do not want to include relateds when calculating faf and popmax
     logger.info("Calculating faf...")
     faf, faf_meta = faf_expr(mt.freq, mt.freq_meta, mt.locus, pops_to_remove_for_popmax)
     mt = mt.select_rows(
