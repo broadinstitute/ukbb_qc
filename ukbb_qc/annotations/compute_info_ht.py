@@ -4,15 +4,16 @@ import logging
 import hail as hl
 
 from gnomad.utils.annotations import get_lowqual_expr
-from gnomad.utils.slack import try_slack
+from gnomad.utils.slack import slack_notifications
 from gnomad.utils.sparse_mt import (
     default_compute_info,
     split_info_annotation,
     split_lowqual_annotation,
 )
-from ukbb_qc.resources.basics import get_ukbb_data
+from ukbb_qc.resources.basics import get_ukbb_data, logging_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import info_ht_path, var_annotations_ht_path
+from ukbb_qc.slack_creds import slack_token
 from ukbb_qc.utils.utils import annotate_interval_qc_filter, remove_hard_filter_samples
 
 
@@ -30,94 +31,99 @@ def main(args):
     data_source = "broad"
     freeze = args.freeze
 
-    logger.info("Reading in raw MT and removing hard filtered samples...")
-    mt = get_ukbb_data(
-        data_source,
-        freeze,
-        split=False,
-        raw=True,
-        repartition=args.repartition,
-        n_partitions=args.raw_partitions,
-        key_by_locus_and_alleles=True,
-    )
-    mt = mt.filter_rows(hl.len(mt.alleles) > 1)
-    mt = remove_hard_filter_samples(data_source, freeze, mt, non_refs_only=True)
-
-    if args.use_vqsr:
-        logger.info("Reading in VQSR unsplit HT...")
-        info_ht = hl.read_table(
-            var_annotations_ht_path(
-                f'{"vqsr" if args.vqsr_type == "AS" else "AS_TS_vqsr"}.unsplit',
-                data_source,
-                freeze,
-            )
+    try:
+        logger.info("Reading in raw MT and removing hard filtered samples...")
+        mt = get_ukbb_data(
+            data_source,
+            freeze,
+            split=False,
+            raw=True,
+            repartition=args.repartition,
+            n_partitions=args.raw_partitions,
+            key_by_locus_and_alleles=True,
         )
+        mt = mt.filter_rows(hl.len(mt.alleles) > 1)
+        mt = remove_hard_filter_samples(data_source, freeze, mt, non_refs_only=True)
 
-        logger.info("Annotating raw MT with pab max...")
-        mt = mt.select_rows()
-        ht = mt.annotate_rows(
-            AS_pab_max=hl.agg.array_agg(
-                lambda ai: hl.agg.filter(
-                    mt.LA.contains(ai) & mt.LGT.is_het(),
-                    hl.agg.max(
-                        hl.binom_test(mt.LAD[1], hl.sum(mt.LAD), 0.5, "two-sided")
+        if args.use_vqsr:
+            logger.info("Reading in VQSR unsplit HT...")
+            info_ht = hl.read_table(
+                var_annotations_ht_path(
+                    f'{"vqsr" if args.vqsr_type == "AS" else "AS_TS_vqsr"}.unsplit',
+                    data_source,
+                    freeze,
+                )
+            )
+
+            logger.info("Annotating raw MT with pab max...")
+            mt = mt.select_rows()
+            ht = mt.annotate_rows(
+                AS_pab_max=hl.agg.array_agg(
+                    lambda ai: hl.agg.filter(
+                        mt.LA.contains(ai) & mt.LGT.is_het(),
+                        hl.agg.max(
+                            hl.binom_test(mt.LAD[1], hl.sum(mt.LAD), 0.5, "two-sided")
+                        ),
                     ),
-                ),
-                hl.range(1, hl.len(mt.alleles)),
+                    hl.range(1, hl.len(mt.alleles)),
+                )
+            ).rows()
+
+            logger.info("Annotating VQSR unsplit HT with pab max from raw MT...")
+            info_ht = info_ht.annotate(
+                info=info_ht.info.annotate(AS_pab_max=ht[info_ht.key].AS_pab_max)
             )
-        ).rows()
+        else:
+            logger.info("Computing info HT...")
+            info_ht = default_compute_info(mt, site_annotations=True)
 
-        logger.info("Annotating VQSR unsplit HT with pab max from raw MT...")
+        logger.info("Updating lowqual annotations with indel_phred_het_prior=40...")
+        # Note: we use indel_phred_het_prior=40 to be more consistent with the filtering used by DSP/Laura for VQSR
         info_ht = info_ht.annotate(
-            info=info_ht.info.annotate(AS_pab_max=ht[info_ht.key].AS_pab_max)
+            lowqual=get_lowqual_expr(
+                info_ht.alleles, info_ht.info.QUALapprox, indel_phred_het_prior=40
+            ),
+            AS_lowqual=get_lowqual_expr(
+                info_ht.alleles, info_ht.info.AS_QUALapprox, indel_phred_het_prior=40
+            ),
         )
-    else:
-        logger.info("Computing info HT...")
-        info_ht = default_compute_info(mt, site_annotations=True)
 
-    logger.info("Updating lowqual annotations with indel_phred_het_prior=40...")
-    # Note: we use indel_phred_het_prior=40 to be more consistent with the filtering used by DSP/Laura for VQSR
-    info_ht = info_ht.annotate(
-        lowqual=get_lowqual_expr(
-            info_ht.alleles, info_ht.info.QUALapprox, indel_phred_het_prior=40
-        ),
-        AS_lowqual=get_lowqual_expr(
-            info_ht.alleles, info_ht.info.AS_QUALapprox, indel_phred_het_prior=40
-        ),
-    )
+        info_ht = info_ht.checkpoint(
+            info_ht_path(data_source, freeze, split=False), overwrite=args.overwrite
+        )
 
-    info_ht = info_ht.checkpoint(
-        info_ht_path(data_source, freeze, split=False), overwrite=args.overwrite
-    )
+        logger.info("Splitting info ht...")
+        info_ht = hl.split_multi(info_ht)
+        info_ht = info_ht.annotate(
+            info=info_ht.info.annotate(
+                **split_info_annotation(info_ht.info, info_ht.a_index),
+            ),
+            AS_lowqual=split_lowqual_annotation(info_ht.AS_lowqual, info_ht.a_index),
+        )
 
-    logger.info("Splitting info ht...")
-    info_ht = hl.split_multi(info_ht)
-    info_ht = info_ht.annotate(
-        info=info_ht.info.annotate(
-            **split_info_annotation(info_ht.info, info_ht.a_index),
-        ),
-        AS_lowqual=split_lowqual_annotation(info_ht.AS_lowqual, info_ht.a_index),
-    )
+        info_ht = annotate_interval_qc_filter(
+            data_source,
+            freeze,
+            info_ht,
+            cov_filter_field=args.interval_cov_filter_field,
+            xy_cov_filter_field=args.xy_cov_filter_field,
+            pct_samples=args.interval_filter_pct_samples,
+        )
+        info_ht = info_ht.annotate_globals(
+            vqsr=args.use_vqsr,
+            vqsr_type=args.vqsr_type if args.use_vqsr else None,
+            cov_filter_field=args.interval_cov_filter_field,
+            xy_cov_filter_field=args.xy_cov_filter_field,
+            pct_samples=args.interval_filter_pct_samples,
+        )
 
-    info_ht = annotate_interval_qc_filter(
-        data_source,
-        freeze,
-        info_ht,
-        cov_filter_field=args.interval_cov_filter_field,
-        xy_cov_filter_field=args.xy_cov_filter_field,
-        pct_samples=args.interval_filter_pct_samples,
-    )
-    info_ht = info_ht.annotate_globals(
-        vqsr=args.use_vqsr,
-        vqsr_type=args.vqsr_type if args.use_vqsr else None,
-        cov_filter_field=args.interval_cov_filter_field,
-        xy_cov_filter_field=args.xy_cov_filter_field,
-        pct_samples=args.interval_filter_pct_samples,
-    )
+        info_ht.write(
+            info_ht_path(data_source, freeze, split=True), overwrite=args.overwrite
+        )
 
-    info_ht.write(
-        info_ht_path(data_source, freeze, split=True), overwrite=args.overwrite
-    )
+    finally:
+        logger.info("Copying hail log to logging bucket...")
+        hl.copy_log(logging_path(data_source, freeze))
 
 
 if __name__ == "__main__":
@@ -176,6 +182,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.slack_channel:
-        try_slack(args.slack_channel, main, args)
+        with slack_notifications(slack_token, args.slack_channel):
+            main(args)
     else:
         main(args)
