@@ -3,8 +3,8 @@ import logging
 import pickle
 
 import hail as hl
-import hdbscan
 import numpy as np
+import hdbscan
 
 from gnomad.sample_qc.ancestry import (
     assign_population_pcs,
@@ -352,19 +352,22 @@ def main(args):
                 ancestry_pca_scores_ht_path(data_source, freeze)
             )
 
-            pop_ht = pc_project_ht.select(
-                gnomad_pc_project_pop=pc_project_ht.pop.pop,
-                gnomad_pc_project_scores=pc_project_ht.scores,
-            )
+            pop_ht = pc_project_ht.transmute(
+                gnomad_pc_project_pop_data=hl.struct(
+                    pop=pc_project_ht.pop.pop, scores=pc_project_ht.scores,
+                )
+            ).select("gnomad_PC_project_pop_data")
 
             pop_ht = pop_ht.annotate(
-                HDBSCAN_pop_cluster=pc_cluster_ht[pop_ht.key].ancestry_cluster
-            )
-            pop_ht = pop_ht.annotate(
-                hybrid_pop=hl.case()
-                .when(pop_ht.HDBSCAN_pop_cluster == -1, pop_ht.gnomad_pc_project_pop)
-                .default(hl.str(pop_ht.HDBSCAN_pop_cluster)),
-                pop_pca_scores=pc_scores_ht[pop_ht.key].scores,
+                hybrid_pop_data=hl.struct(
+                    scores=pc_scores_ht[pop_ht.key].scores,
+                    cluster=pc_cluster_ht[pop_ht.key].ancestry_cluster,
+                    pop=hl.case()
+                    .when(
+                        pop_ht.HDBSCAN_pop_cluster == -1, pop_ht.gnomad_pc_project_pop
+                    )
+                    .default(hl.str(pop_ht.HDBSCAN_pop_cluster)),
+                ),
             )
 
             logger.info("Getting self reported ancestries...")
@@ -376,7 +379,7 @@ def main(args):
                     pop_ht.key
                 ].self_reported_ancestry
             )
-
+            pop_ht = pop_ht.annotate_globals(**pc_scores_ht.index_globals())
             pop_ht = pop_ht.repartition(args.n_partitions)
             pop_ht.write(
                 ancestry_hybrid_ht_path(data_source, freeze), overwrite=args.overwrite,
