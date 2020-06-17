@@ -18,7 +18,7 @@ from gnomad.variant_qc.random_forest import (
     pretty_print_runs,
     save_model,
 )
-from ukbb_qc.resources.basics import get_ukbb_data
+from ukbb_qc.resources.basics import capture_ht_path, get_ukbb_data
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import (
     info_ht_path,
@@ -53,7 +53,6 @@ FEATURES = [
     "AS_ReadPosRankSum",
 ]
 TRUTH_DATA = ["hapmap", "omni", "mills", "kgp_phase1_hc", "ukbb_array_con_common"]
-
 INBREEDING_COEFF_HARD_CUTOFF = -0.3
 
 
@@ -64,7 +63,7 @@ def create_rf_ht(
     group: str = "raw",
 ) -> hl.Table:
     """
-    Creates a Table with all necessary annotations for RF.
+    Creates a Table with all necessary annotations for the random forest model.
 
     Annotations that are added:
 
@@ -97,7 +96,7 @@ def create_rf_ht(
     :rtype: Table
     """
     logger.info("Loading split hardcall MatrixTable and annotation Tables")
-    ht = get_ukbb_data(data_source, freeze, meta_root="meta").rows()
+    ht = get_ukbb_data(data_source, freeze).rows()
 
     inbreeding_ht = hl.read_table(
         var_annotations_ht_path("inbreeding_coeff", data_source, freeze)
@@ -130,7 +129,7 @@ def create_rf_ht(
         "AS_lowqual", "interval_qc_pass", "FS", "MQ", "QD", *INFO_FEATURES
     )
 
-    logger.info("Annotating MatrixTable with all columns from annotation Tables")
+    logger.info("Annotating Table with all columns from multiple annotation Tables")
     ht = ht.annotate(
         **info_ht[ht.key],
         **inbreeding_ht[ht.key],
@@ -140,7 +139,7 @@ def create_rf_ht(
         **allele_data_ht[ht.key].allele_data,
         **allele_counts_ht[ht.key],
     )
-    # Filter to only variants found in high qual samples (included controls in count) and with no LowQual filter
+    # Filter to only variants found in high quality samples or controls with no LowQual filter
     ht = ht.filter((ht[f"ac_qc_samples_{group}"] > 0) & ~ht.AS_lowqual)
     ht = ht.select(
         "a_index",
@@ -227,7 +226,7 @@ def get_run_data(
     :return: Dict of RF information
     """
     if vqsr_training:
-        no_transmitted_singletons = no_sibling_singletons = no_array_con_common = None
+        transmitted_singletons = sibling_singletons = array_con_common = None
 
     run_data = {
         "data": data_source,
@@ -267,7 +266,7 @@ def generate_final_rf_ht(
     indel_cutoff: Union[int, float],
     determine_cutoff_from_bin: bool = False,
     aggregated_bin_ht: Optional[hl.Table] = None,
-    inbreeding_coeff_cutoff: float = -0.3,
+    inbreeding_coeff_cutoff: float = INBREEDING_COEFF_HARD_CUTOFF,
 ) -> hl.Table:
     """
     Prepares finalized RF model given an RF result table from `rf.apply_rf_model` and cutoffs for filtering.
@@ -410,10 +409,12 @@ def main(args):
             if not args.no_sibling_singletons:
                 tp_expr = tp_expr | ht.sibling_singleton
 
-            if isinstance(args.test_intervals, str):
-                test_intervals = [args.test_intervals]
             if args.test_intervals:
-                test_intervals = [hl.parse_locus_interval(x) for x in args.test_intervals]
+                if isinstance(args.test_intervals, str):
+                    test_intervals = [args.test_intervals]
+                test_intervals = [
+                    hl.parse_locus_interval(x) for x in args.test_intervals
+                ]
 
         if args.interval_qc_filter:
             interval_filter_expr = ht.interval_qc_pass
@@ -428,7 +429,9 @@ def main(args):
             fp_to_tp=args.fp_to_tp,
             num_trees=args.num_trees,
             max_depth=args.max_depth,
-            test_expr=hl.literal(test_intervals).any(lambda interval: interval.contains(ht.locus)),
+            test_expr=hl.literal(test_intervals).any(
+                lambda interval: interval.contains(ht.locus)
+            ),
         )
 
         logger.info("Saving RF model")
@@ -505,6 +508,14 @@ def main(args):
             sys.exit(
                 f"Could not find binned HT for RF  run {args.run_hash} ({aggregated_bin_ht}). Please run create_ranked_scores.py for that hash."
             )
+
+        # Add an annotation indicating variants that are within a capture interval or are mono-allelic
+        capture_ht = hl.read_table(capture_ht_path(data_source))
+        ht = ht.annotate(
+            mono_allelic = freq_ht[ht.key].freq[1].AF == 1 | freq_ht[ht.key].freq[1].AF == 0,
+            in_capture_interval = hl.is_defined(capture_ht[ht.key]),
+        )
+
         ht = generate_final_rf_ht(
             ht,
             ac0_filter_expr=freq_ht[ht.key].freq[0].AC == 0,
