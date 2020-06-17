@@ -7,7 +7,7 @@ from gnomad.sample_qc.platform import (
     assign_platform_from_pcs,
     run_platform_pca,
 )
-from gnomad.utils.slack import try_slack
+from gnomad.utils.slack import slack_notifications
 from ukbb_qc.resources.basics import logging_path
 from ukbb_qc.resources.sample_qc import (
     callrate_mt_path,
@@ -16,6 +16,7 @@ from ukbb_qc.resources.sample_qc import (
     platform_pca_scores_ht_path,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
+from ukbb_qc.slack_creds import slack_token
 from ukbb_qc.utils.utils import remove_hard_filter_samples
 
 
@@ -87,7 +88,7 @@ def main(args):
                 hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
                 hdbscan_min_samples=hdbscan_min_samples,
             )
-            platform_ht =  platform_ht.repartition(args.n_partitions)
+            platform_ht = platform_ht.repartition(args.n_partitions)
             platform_ht = platform_ht.checkpoint(
                 platform_pca_assignments_ht_path(data_source, freeze),
                 overwrite=args.overwrite,
@@ -147,6 +148,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.slack_channel:
-        try_slack(args.slack_channel, main, args)
+        with slack_notifications(slack_token, args.slack_channel):
+            main(args)
     else:
         main(args)

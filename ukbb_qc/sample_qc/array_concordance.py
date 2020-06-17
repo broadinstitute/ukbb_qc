@@ -10,7 +10,7 @@ from gnomad.utils.liftover import (
     lift_data,
     annotate_snp_mismatch,
 )
-from gnomad.utils.slack import try_slack
+from gnomad.utils.slack import slack_notifications
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.basics import (
     array_mt_path,
@@ -24,6 +24,7 @@ from ukbb_qc.resources.sample_qc import (
     array_concordance_results_path,
     array_concordance_sites_path,
 )
+from ukbb_qc.slack_creds import slack_token
 from ukbb_qc.utils.utils import (
     remove_hard_filter_samples,
     get_sites,
@@ -345,6 +346,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.slack_channel:
-        try_slack(args.slack_channel, main, args)
+        with slack_notifications(slack_token, args.slack_channel):
+            main(args)
     else:
         main(args)

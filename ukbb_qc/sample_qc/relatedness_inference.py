@@ -12,7 +12,7 @@ from gnomad.sample_qc.relatedness import (
     infer_families,
     UNRELATED,
 )
-from gnomad.utils.slack import try_slack
+from gnomad.utils.slack import slack_notifications
 from ukbb_qc.resources.basics import get_checkpoint_path, logging_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import (
@@ -25,6 +25,7 @@ from ukbb_qc.resources.sample_qc import (
     qc_ht_path,
     qc_mt_path,
 )
+from ukbb_qc.slack_creds import slack_token
 from ukbb_qc.utils.utils import remove_hard_filter_samples
 
 
@@ -381,6 +382,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.slack_channel:
-        try_slack(args.slack_channel, main, args)
+        with slack_notifications(slack_token, args.slack_channel):
+            main(args)
     else:
         main(args)
