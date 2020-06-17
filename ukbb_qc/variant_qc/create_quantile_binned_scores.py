@@ -6,11 +6,12 @@ import hail as hl
 
 from gnomad.resources.grch38.reference_data import clinvar
 from gnomad.utils.file_utils import file_exists
-from gnomad.utils.slack import try_slack
+from gnomad.utils.slack import slack_notifications
 from gnomad.variant_qc.evaluation import compute_grouped_binned_ht
 from gnomad.variant_qc.pipeline import create_binned_ht, score_bin_agg
 from ukbb_qc.load_data.utils import load_clinvar_path
-from ukbb_qc.resources.basics import get_checkpoint_path, CURRENT_FREEZE
+from ukbb_qc.resources.basics import get_checkpoint_path
+from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import (
     clinvar_pathogenic_ht_path,
     info_ht_path,
@@ -19,6 +20,7 @@ from ukbb_qc.resources.variant_qc import (
     score_quantile_bin_path,
     var_annotations_ht_path,
 )
+from ukbb_qc.slack_creds import slack_token
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -52,9 +54,7 @@ def create_quantile_bin_ht(
     info_ht = hl.read_table(info_ht_path(data_source, freeze))
     if metric.endswith("vqsr"):
         rf_ht = hl.read_table(rf_annotated_path(data_source, freeze))
-        ht = hl.read_table(
-            var_annotations_ht_path(metric, data_source, freeze)
-        ).repartition(n_partitions)
+        ht = hl.read_table(var_annotations_ht_path(metric, data_source, freeze))
 
         ht = ht.filter(~info_ht[ht.key].AS_lowqual & ~hl.is_infinite(ht.info.AS_VQSLOD))
         ht = ht.annotate(
@@ -94,7 +94,7 @@ def create_grouped_bin_ht(
     :param int freeze: One of the data freezes
     :param str metric: Which data/run hash is being created
     :param bool overwrite: Should output files be overwritten if present
-    :return: Binned Table
+    :return: None
     :rtype: None
     """
 
@@ -111,7 +111,7 @@ def create_grouped_bin_ht(
         for x in ht.row
         if x.endswith("bin")
     }
-    bin_variant_counts = ht.aggregate(hl.Struct(**count_expr))
+    bin_variant_counts = ht.aggregate(hl.struct(**count_expr))
     logger.info(f"Found the following variant counts:\n {pformat(bin_variant_counts)}")
     ht = ht.annotate_globals(bin_variant_counts=bin_variant_counts)
 
@@ -199,7 +199,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
     )
-
     parser.add_argument("--run_hash", help="Run hash for RF results to be ranked.")
     parser.add_argument(
         "--vqsr", help="When set, creates the VQSR rank file.", action="store_true"
@@ -241,6 +240,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.slack_channel:
-        try_slack(args.slack_channel, main, args)
+        with slack_notifications(slack_token, args.slack_channel):
+            main(args)
     else:
         main(args)
