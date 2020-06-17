@@ -525,7 +525,8 @@ def main(args):
             ht,
             ac0_filter_expr=freq_ht[ht.key].freq[0].AC == 0,
             ts_ac_filter_expr=freq_ht[ht.key].freq[1].AC == 2,
-            mono_allelic_fiter_expr=(freq_ht[ht.key].freq[1].AF == 1) | (freq_ht[ht.key].freq[1].AF== 0),
+            mono_allelic_fiter_expr=(freq_ht[ht.key].freq[1].AF == 1)
+            | (freq_ht[ht.key].freq[1].AF == 0),
             snp_cutoff=args.snp_cutoff,
             indel_cutoff=args.indel_cutoff,
             determine_cutoff_from_bin=args.treat_cutoff_as_prob,
