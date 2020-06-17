@@ -18,7 +18,12 @@ from gnomad.variant_qc.random_forest import (
     pretty_print_runs,
     save_model,
 )
-from ukbb_qc.resources.basics import capture_ht_path, get_checkpoint_path, get_ukbb_data
+from ukbb_qc.resources.basics import (
+    capture_ht_path,
+    get_checkpoint_path,
+    get_ukbb_data,
+    logging_path,
+)
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import (
     info_ht_path,
@@ -369,178 +374,190 @@ def main(args):
     data_source = "broad"
     freeze = args.freeze
 
-    if args.list_rf_runs:
-        logger.info(f"RF runs for {data_source}.freeze_{freeze}:")
-        pretty_print_runs(get_rf_runs(rf_run_hash_path(data_source, freeze)))
+    try:
+        if args.list_rf_runs:
+            logger.info(f"RF runs for {data_source}.freeze_{freeze}:")
+            pretty_print_runs(get_rf_runs(rf_run_hash_path(data_source, freeze)))
 
-    if args.annotate_for_rf:
-        ht = create_rf_ht(
-            data_source,
-            freeze,
-            impute_features_by_variant_type=not args.impute_features_no_variant_type,
-            group="adj" if args.adj else "raw",
-            n_partitions=args.n_partitions,
-            checkpoint_path=get_checkpoint_path(data_source, freeze, "rf_annotation"),
-        )
-        ht.write(
-            rf_annotated_path(data_source, freeze, args.adj), overwrite=args.overwrite
-        )
-        logger.info(f"Completed annotation wrangling for random forests model training")
+        if args.annotate_for_rf:
+            ht = create_rf_ht(
+                data_source,
+                freeze,
+                impute_features_by_variant_type=not args.impute_features_no_variant_type,
+                group="adj" if args.adj else "raw",
+                n_partitions=args.n_partitions,
+                checkpoint_path=get_checkpoint_path(
+                    data_source, freeze, "rf_annotation"
+                ),
+            )
+            ht.write(
+                rf_annotated_path(data_source, freeze, args.adj),
+                overwrite=args.overwrite,
+            )
+            logger.info(
+                f"Completed annotation wrangling for random forests model training"
+            )
 
-    if args.train_rf:
-        run_hash = str(uuid.uuid4())[:8]
-        rf_runs = get_rf_runs(rf_run_hash_path(data_source, freeze))
-        while run_hash in rf_runs:
+        if args.train_rf:
             run_hash = str(uuid.uuid4())[:8]
+            rf_runs = get_rf_runs(rf_run_hash_path(data_source, freeze))
+            while run_hash in rf_runs:
+                run_hash = str(uuid.uuid4())[:8]
 
-        ht = hl.read_table(rf_annotated_path(data_source, freeze, args.adj))
+            ht = hl.read_table(rf_annotated_path(data_source, freeze, args.adj))
 
-        if args.vqsr_training:
-            vqsr_ht = hl.read_table(
-                var_annotations_ht_path(
-                    "vqsr" if args.vqsr_type == "AS" else "AS_TS_vqsr",
-                    data_source,
-                    freeze,
+            if args.vqsr_training:
+                vqsr_ht = hl.read_table(
+                    var_annotations_ht_path(
+                        "vqsr" if args.vqsr_type == "AS" else "AS_TS_vqsr",
+                        data_source,
+                        freeze,
+                    )
                 )
+                ht = ht.annotate(
+                    vqsr_POSITIVE_TRAIN_SITE=vqsr_ht[ht.key].info.POSITIVE_TRAIN_SITE,
+                    vqsr_NEGATIVE_TRAIN_SITE=vqsr_ht[ht.key].info.NEGATIVE_TRAIN_SITE,
+                )
+                tp_expr = ht.vqsr_POSITIVE_TRAIN_SITE
+                fp_expr = ht.vqsr_NEGATIVE_TRAIN_SITE
+            else:
+                fp_expr = ht.fail_hard_filters
+                tp_expr = ht.omni | ht.mills
+                if not args.no_array_con_common:
+                    tp_expr = tp_expr | ht.ukbb_array_con_common
+                if not args.no_transmitted_singletons:
+                    tp_expr = tp_expr | ht.transmitted_singleton
+                if not args.no_sibling_singletons:
+                    tp_expr = tp_expr | ht.sibling_singleton
+
+                if args.test_intervals:
+                    if isinstance(args.test_intervals, str):
+                        test_intervals = [args.test_intervals]
+                    test_intervals = [
+                        hl.parse_locus_interval(x) for x in args.test_intervals
+                    ]
+
+            if args.interval_qc_filter:
+                interval_filter_expr = ht.interval_qc_pass
+            else:
+                interval_filter_expr = True
+
+            ht, rf_model = train_rf_model(
+                ht.filter(interval_filter_expr),
+                rf_features=FEATURES,
+                tp_expr=tp_expr,
+                fp_expr=fp_expr,
+                fp_to_tp=args.fp_to_tp,
+                num_trees=args.num_trees,
+                max_depth=args.max_depth,
+                test_expr=hl.literal(test_intervals).any(
+                    lambda interval: interval.contains(ht.locus)
+                ),
             )
-            ht = ht.annotate(
-                vqsr_POSITIVE_TRAIN_SITE=vqsr_ht[ht.key].info.POSITIVE_TRAIN_SITE,
-                vqsr_NEGATIVE_TRAIN_SITE=vqsr_ht[ht.key].info.NEGATIVE_TRAIN_SITE,
+
+            logger.info("Saving RF model")
+            save_model(
+                rf_model,
+                rf_path(data_source, freeze, data="model", run_hash=run_hash),
+                overwrite=args.overwrite,
             )
-            tp_expr = ht.vqsr_POSITIVE_TRAIN_SITE
-            fp_expr = ht.vqsr_NEGATIVE_TRAIN_SITE
+
+            ht = ht.checkpoint(
+                rf_path(data_source, freeze, data="training", run_hash=run_hash),
+                overwrite=args.overwrite,
+            )
+
+            logger.info("Adding run to RF run list")
+            rf_runs[run_hash] = get_run_data(
+                data_source,
+                freeze,
+                interval_qc_filter=args.interval_qc_filter,
+                transmitted_singletons=not args.no_transmitted_singletons,
+                sibling_singletons=not args.no_sibling_singletons,
+                array_con_common=not args.no_array_con_common,
+                adj=args.adj,
+                vqsr_training=args.vqsr_training,
+                test_intervals=hl.eval(ht.test_intervals),
+                features_importance=hl.eval(ht.features_importance),
+                test_results=hl.eval(ht.test_results),
+            )
+
+            with hl.hadoop_open(rf_run_hash_path(data_source, freeze), "w") as f:
+                json.dump(rf_runs, f)
+
+            logger.info(f"Completed training of random forests model")
+
         else:
-            fp_expr = ht.fail_hard_filters
-            tp_expr = ht.omni | ht.mills
-            if not args.no_array_con_common:
-                tp_expr = tp_expr | ht.ukbb_array_con_common
-            if not args.no_transmitted_singletons:
-                tp_expr = tp_expr | ht.transmitted_singleton
-            if not args.no_sibling_singletons:
-                tp_expr = tp_expr | ht.sibling_singleton
+            run_hash = args.run_hash
 
-            if args.test_intervals:
-                if isinstance(args.test_intervals, str):
-                    test_intervals = [args.test_intervals]
-                test_intervals = [
-                    hl.parse_locus_interval(x) for x in args.test_intervals
-                ]
-
-        if args.interval_qc_filter:
-            interval_filter_expr = ht.interval_qc_pass
-        else:
-            interval_filter_expr = True
-
-        ht, rf_model = train_rf_model(
-            ht.filter(interval_filter_expr),
-            rf_features=FEATURES,
-            tp_expr=tp_expr,
-            fp_expr=fp_expr,
-            fp_to_tp=args.fp_to_tp,
-            num_trees=args.num_trees,
-            max_depth=args.max_depth,
-            test_expr=hl.literal(test_intervals).any(
-                lambda interval: interval.contains(ht.locus)
-            ),
-        )
-
-        logger.info("Saving RF model")
-        save_model(
-            rf_model,
-            rf_path(data_source, freeze, data="model", run_hash=run_hash),
-            overwrite=args.overwrite,
-        )
-
-        ht = ht.checkpoint(
-            rf_path(data_source, freeze, data="training", run_hash=run_hash),
-            overwrite=args.overwrite,
-        )
-
-        logger.info("Adding run to RF run list")
-        rf_runs[run_hash] = get_run_data(
-            data_source,
-            freeze,
-            interval_qc_filter=args.interval_qc_filter,
-            transmitted_singletons=not args.no_transmitted_singletons,
-            sibling_singletons=not args.no_sibling_singletons,
-            array_con_common=not args.no_array_con_common,
-            adj=args.adj,
-            vqsr_training=args.vqsr_training,
-            test_intervals=hl.eval(ht.test_intervals),
-            features_importance=hl.eval(ht.features_importance),
-            test_results=hl.eval(ht.test_results),
-        )
-
-        with hl.hadoop_open(rf_run_hash_path(data_source, freeze), "w") as f:
-            json.dump(rf_runs, f)
-
-        logger.info(f"Completed training of random forests model")
-
-    else:
-        run_hash = args.run_hash
-
-    if args.apply_rf:
-        logger.info(f"Applying RF model {run_hash} to {data_source}.freeze_{freeze}.")
-
-        rf_model = load_model(
-            rf_path(data_source, freeze, data="model", run_hash=run_hash)
-        )
-        ht = hl.read_table(
-            rf_path(data_source, freeze, data="training", run_hash=run_hash)
-        )
-
-        ht = apply_rf_model(ht, rf_model, FEATURES, label=LABEL_COL)
-
-        logger.info("Finished applying RF model")
-        ht = ht.annotate_globals(rf_hash=run_hash)
-        ht = ht.checkpoint(
-            rf_path(data_source, freeze, "rf_result", run_hash=run_hash),
-            overwrite=args.overwrite,
-        )
-
-        ht_summary = ht.group_by("tp", TRAIN_COL, LABEL_COL, PREDICTION_COL).aggregate(
-            n=hl.agg.count()
-        )
-        ht_summary.show(n=20)
-
-    if args.finalize:
-        ht = hl.read_table(
-            rf_path(data_source, freeze, "rf_result", run_hash=args.run_hash)
-        )
-        freq_ht = hl.read_table(
-            var_annotations_ht_path("ukb_freq", data_source, freeze)
-        )
-
-        aggregated_bin_ht = score_quantile_bin_path(
-            args.run_hash, data_source, freeze, aggregated=True
-        )
-        if not file_exists(aggregated_bin_ht):
-            sys.exit(
-                f"Could not find binned HT for RF  run {args.run_hash} ({aggregated_bin_ht}). Please run create_ranked_scores.py for that hash."
+        if args.apply_rf:
+            logger.info(
+                f"Applying RF model {run_hash} to {data_source}.freeze_{freeze}."
             )
 
-        # Add an annotation indicating variants that are within a capture interval
-        capture_ht = hl.read_table(capture_ht_path(data_source))
-        ht = ht.annotate(in_capture_interval=hl.is_defined(capture_ht[ht.key]))
+            rf_model = load_model(
+                rf_path(data_source, freeze, data="model", run_hash=run_hash)
+            )
+            ht = hl.read_table(
+                rf_path(data_source, freeze, data="training", run_hash=run_hash)
+            )
 
-        ht = generate_final_rf_ht(
-            ht,
-            ac0_filter_expr=freq_ht[ht.key].freq[0].AC == 0,
-            ts_ac_filter_expr=freq_ht[ht.key].freq[1].AC == 2,
-            mono_allelic_fiter_expr=(freq_ht[ht.key].freq[1].AF == 1)
-            | (freq_ht[ht.key].freq[1].AF == 0),
-            snp_cutoff=args.snp_cutoff,
-            indel_cutoff=args.indel_cutoff,
-            determine_cutoff_from_bin=args.treat_cutoff_as_prob,
-            aggregated_bin_ht=aggregated_bin_ht,
-            inbreeding_coeff_cutoff=INBREEDING_COEFF_HARD_CUTOFF,
-        )
-        # This column is added by the RF module based on a 0.5 threshold which doesn't correspond to what we use
-        ht = ht.drop(ht[PREDICTION_COL])
+            ht = apply_rf_model(ht, rf_model, FEATURES, label=LABEL_COL)
 
-        ht.describe()
-        ht.show(20)
-        ht.write(var_annotations_ht_path(data_source, freeze, "rf"), args.overwrite)
+            logger.info("Finished applying RF model")
+            ht = ht.annotate_globals(rf_hash=run_hash)
+            ht = ht.checkpoint(
+                rf_path(data_source, freeze, "rf_result", run_hash=run_hash),
+                overwrite=args.overwrite,
+            )
+
+            ht_summary = ht.group_by(
+                "tp", TRAIN_COL, LABEL_COL, PREDICTION_COL
+            ).aggregate(n=hl.agg.count())
+            ht_summary.show(n=20)
+
+        if args.finalize:
+            ht = hl.read_table(
+                rf_path(data_source, freeze, "rf_result", run_hash=args.run_hash)
+            )
+            freq_ht = hl.read_table(
+                var_annotations_ht_path("ukb_freq", data_source, freeze)
+            )
+
+            aggregated_bin_ht = score_quantile_bin_path(
+                args.run_hash, data_source, freeze, aggregated=True
+            )
+            if not file_exists(aggregated_bin_ht):
+                sys.exit(
+                    f"Could not find binned HT for RF  run {args.run_hash} ({aggregated_bin_ht}). Please run create_ranked_scores.py for that hash."
+                )
+
+            # Add an annotation indicating variants that are within a capture interval
+            capture_ht = hl.read_table(capture_ht_path(data_source))
+            ht = ht.annotate(in_capture_interval=hl.is_defined(capture_ht[ht.key]))
+
+            ht = generate_final_rf_ht(
+                ht,
+                ac0_filter_expr=freq_ht[ht.key].freq[0].AC == 0,
+                ts_ac_filter_expr=freq_ht[ht.key].freq[1].AC == 2,
+                mono_allelic_fiter_expr=(freq_ht[ht.key].freq[1].AF == 1)
+                | (freq_ht[ht.key].freq[1].AF == 0),
+                snp_cutoff=args.snp_cutoff,
+                indel_cutoff=args.indel_cutoff,
+                determine_cutoff_from_bin=args.treat_cutoff_as_prob,
+                aggregated_bin_ht=aggregated_bin_ht,
+                inbreeding_coeff_cutoff=INBREEDING_COEFF_HARD_CUTOFF,
+            )
+            # This column is added by the RF module based on a 0.5 threshold which doesn't correspond to what we use
+            ht = ht.drop(ht[PREDICTION_COL])
+
+            ht.describe()
+            ht.show(20)
+            ht.write(var_annotations_ht_path(data_source, freeze, "rf"), args.overwrite)
+
+    finally:
+        logger.info("Copying hail log to logging bucket...")
+        hl.copy_log(logging_path(data_source, freeze))
 
 
 if __name__ == "__main__":
