@@ -10,7 +10,7 @@ from gnomad.utils.slack import slack_notifications
 from gnomad.variant_qc.evaluation import compute_grouped_binned_ht
 from gnomad.variant_qc.pipeline import create_binned_ht, score_bin_agg
 from ukbb_qc.load_data.utils import load_clinvar_path
-from ukbb_qc.resources.basics import get_checkpoint_path
+from ukbb_qc.resources.basics import get_checkpoint_path, logging_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import (
     clinvar_pathogenic_ht_path,
