@@ -6,10 +6,10 @@ import hail as hl
 from gnomad.sample_qc.relatedness import (
     DUPLICATE_OR_TWINS,
     PARENT_CHILD,
-    SECOND_DEGREE_RELATIVES,
     SIBLINGS,
-    UNRELATED,
 )
+from gnomad.slack_creds import slack_token
+from gnomad.utils.slack import slack_notifications
 from ukbb_qc.resources.basics import array_sample_map_ht_path, get_checkpoint_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import (
@@ -25,7 +25,12 @@ from ukbb_qc.resources.sample_qc import (
     meta_ht_path,
 )
 from ukbb_qc.resources.variant_qc import TRUTH_SAMPLES
-from ukbb_qc.utils.utils import get_age_ht, join_tables
+from ukbb_qc.utils.utils import (
+    get_age_ht,
+    get_relationship_filter_expr,
+    get_relatedness_set_ht,
+    join_tables,
+)
 
 
 logging.basicConfig(
@@ -37,7 +42,6 @@ logger.setLevel(logging.INFO)
 
 
 def main(args):
-
     hl.init(log="create_meta.log", default_reference="GRCh38")
 
     data_source = "broad"
@@ -45,52 +49,40 @@ def main(args):
     logging_statement = "Reading in {} and joining with meta HT"
 
     logger.info(
-        "Joining array map/pharma meta HT (left) and age HT (right) with a left join to start creating meta HT"
+        "Reading in array map/pharma meta HT and annotating with age HT to start creating meta HT"
     )
     left_ht = hl.read_table(array_sample_map_ht_path(freeze))
     left_ht = left_ht.annotate(
-        pharma_meta=hl.struct(
-            ukbb_app_26041_id=left_ht.ukbb_app_26041_id,
-            batch=left_ht.batch,
-            batch_num=left_ht.batch_num,
-            withdrawn_consent=left_ht.withdrawn_consent,
-        )
-    ).select("pharma_meta")
+        ukbb_meta=hl.struct(**left_ht.row.drop("s", "eid_sample"))
+    ).select("ukbb_meta")
     right_ht = get_age_ht(freeze)
-    left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
+    left_ht = left_ht.annotate(
+        ukbb_meta=left_ht.ukbb_meta.annotate(age=right_ht[left_ht.key].age)
+    )
 
     logger.info(logging_statement.format("array sample concordance HT"))
     right_ht = hl.read_table(array_concordance_results_path(data_source, freeze))
-    right_ht = right_ht.transmute(
-        array_concordance=hl.struct(
-            concordance=right_ht.concordance,
-            n_discordant=right_ht.n_discordant,
-            num_gt_con_non_ref=right_ht.num_gt_con_non_ref,
-            num_gt_non_ref=right_ht.num_gt_non_ref,
-            prop_gt_con_non_ref=right_ht.prop_gt_con_non_ref,
-        )
+    right_ht = right_ht.annotate(
+        array_concordance=hl.struct(**right_ht.row.drop("s"))
     ).select("array_concordance")
+    right_ht = right_ht.annotate_globals(
+        array_concordance_sites_cutoffs=right_ht.globals
+    ).select_globals("array_concordance_sites_cutoffs")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
 
     logger.info(logging_statement.format("sex HT"))
     right_ht = hl.read_table(sex_ht_path(data_source, freeze))
     # Create struct for join
     right_ht = right_ht.transmute(
-        sex_imputation=hl.struct(
-            is_female=right_ht.is_female,
-            f_stat=right_ht.f_stat,
-            n_called=right_ht.n_called,
-            expected_homs=right_ht.expected_homs,
-            observed_homs=right_ht.observed_homs,
-            chr20_mean_dp=right_ht.chr20_mean_dp,
-            chrX_mean_dp=right_ht.chrX_mean_dp,
-            chrY_mean_dp=right_ht.chrY_mean_dp,
-            chrX_ploidy=right_ht.chrX_ploidy,
-            chrY_ploidy=right_ht.chrY_ploidy,
-            sex_karyotype=right_ht.sex_karyotype,
-        )
-    )
+        sex_imputation=hl.struct(**right_ht.row.drop("s", "array_sex"))
+    ).select("s", "array_sex")
+    right_ht = right_ht.annotate_globals(
+        sex_imputation_ploidy_cutoffs=right_ht.globals
+    ).select_globals("sex_imputation_ploidy_cutoffs")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "right")
+    left_ht = left_ht.transmute(
+        ukbb_meta=left_ht.ukbb_meta.annotate(array_sex=left_ht.array_sex)
+    )
 
     logger.info(logging_statement.format("sample QC HT"))
     right_ht = hl.read_table(qc_ht_path(data_source, freeze))
@@ -104,23 +96,22 @@ def main(args):
             callrate_pcs=right_ht.scores, qc_platform=right_ht.qc_platform
         )
     )
+    right_ht = right_ht.annotate_globals(
+        platform_inference_hdbscan_parameters=right_ht.globals
+    ).select_globals("platform_inference_hdbscan_parameters")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
 
     logger.info(logging_statement.format("population PCA HT"))
     right_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
-    # Put population info into structs for join
-    right_ht = right_ht.transmute(
-        gnomad_PC_project_pop_data=hl.struct(
-            gnomad_PCs=right_ht.gnomad_pc_project_scores,
-            gnomad_pc_project_pop=right_ht.gnomad_pc_project_pop,
-        ),
-        hybrid_pop_data=hl.struct(
-            pop_PCs=right_ht.pop_pca_scores,
-            HDBSCAN_pop_cluster=right_ht.HDBSCAN_pop_cluster,
-            hybrid_pop=right_ht.hybrid_pop,
-        ),
-    )
+    right_ht = right_ht.annotate_globals(
+        population_inference_pca_metrics=right_ht.globals
+    ).select("population_inference_pca_metrics")
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
+    left_ht = left_ht.transmute(
+        ukbb_meta=left_ht.ukbb_meta.annotate(
+            self_reported_ancestry=left_ht.self_reported_ancestry
+        )
+    )
 
     logger.info("Creating checkpoint")
     left_ht = left_ht.checkpoint(
@@ -131,7 +122,9 @@ def main(args):
     logger.info(
         "Reading hard filters HT, renaming hard filters struct to sample_filters, and joining with meta HT"
     )
-    right_ht = hl.read_table(hard_filters_ht_path(data_source, freeze))
+    right_ht = hl.read_table(hard_filters_ht_path(data_source, freeze)).select(
+        "hard_filters"
+    )
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
     left_ht = left_ht.transmute(sample_filters=left_ht.hard_filters)
 
@@ -139,36 +132,54 @@ def main(args):
         "Reading in related samples to drop HT and preparing to annotate meta HT's sample_filter struct with relatedness booleans"
     )
     related_samples_to_drop_ht = hl.read_table(related_drop_path(data_source, freeze))
-    relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
-    relatedness_ht = relatedness_ht.filter(relatedness_ht.relationship != UNRELATED)
-    relatedness_ht = relatedness_ht.select("relationship", s=relatedness_ht.i.s).union(
-        relatedness_ht.select("relationship", s=relatedness_ht.j.s)
-    )
-    relatedness_ht = relatedness_ht.group_by(relatedness_ht.s).aggregate(
-        relationship=hl.agg.collect_as_set(relatedness_ht.relationship)
+    relatedness_ht = get_relatedness_set_ht(
+        hl.read_table(relatedness_ht_path(data_source, freeze))
     )
     related_samples_to_drop_ht = related_samples_to_drop_ht.annotate(
-        relationship=relatedness_ht[related_samples_to_drop_ht.s].relationship
+        relationships=relatedness_ht[related_samples_to_drop_ht.s].relationships
     )
+
+    # Annotating meta HT with related filter booleans
+    # Any sample that is hard filtered will have missing values for these bools
+    # Any sample that was filtered for relatedness will have True for sample_filters.related
+    # If a filtered related sample had a relationship with a higher degree than second-degree (duplicate, parent-child, sibling),
+    # that filter will also be True
     left_ht = left_ht.annotate(
         sample_filters=left_ht.sample_filters.annotate(
-            related=related_samples_to_drop_ht[left_ht.s].relationship.contains(
-                SECOND_DEGREE_RELATIVES
+            related=hl.if_else(
+                left_ht.sample_filters.hard_filtered,
+                hl.null(hl.tbool),
+                hl.is_defined(related_samples_to_drop_ht[left_ht.key]),
             ),
-            duplicate=related_samples_to_drop_ht[left_ht.s].relationship.contains(
-                DUPLICATE_OR_TWINS
+            duplicate=get_relationship_filter_expr(
+                left_ht.sample_filters.hard_filtered,
+                DUPLICATE_OR_TWINS,
+                related_samples_to_drop_ht[left_ht.key].relationships,
             ),
-            parent_child=related_samples_to_drop_ht[left_ht.s].relationship.contains(
-                PARENT_CHILD
+            parent_child=get_relationship_filter_expr(
+                left_ht.sample_filters.hard_filtered,
+                PARENT_CHILD,
+                related_samples_to_drop_ht[left_ht.key].relationships,
             ),
-            sibling=related_samples_to_drop_ht[left_ht.s].relationship.contains(
-                SIBLINGS
+            sibling=get_relationship_filter_expr(
+                left_ht.sample_filters.hard_filtered,
+                SIBLINGS,
+                related_samples_to_drop_ht[left_ht.key].relationships,
             ),
+        )
+    )
+    left_ht = left_ht.annotate(
+        relatedness_inference=hl.struct(
+            relationships=relatedness_ht[left_ht.s].relationship,
         )
     )
 
     logger.info("Adding relatedness globals (cutoffs)")
-    left_ht = left_ht.annotate_globals(**related_samples_to_drop_ht.index_globals())
+    left_ht = left_ht.annotate_globals(
+        relatedness_inference_cutoffs=hl.struct(
+            **related_samples_to_drop_ht.index_globals()
+        )
+    )
 
     logger.info(logging_statement.format("outlier HT"))
     right_ht = hl.read_table(
@@ -178,6 +189,9 @@ def main(args):
             args.pop_assignment_method,
             args.platform_assignment_method,
         )
+    )
+    right_ht = right_ht.transmute_globals(
+        outlier_detection_metrics=right_ht.qc_metrics_stats
     )
     left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
     left_ht = left_ht.transmute(
@@ -211,7 +225,7 @@ def main(args):
         sample_filters=left_ht.sample_filters.annotate(
             release=hl.if_else(
                 (
-                    hl.is_defined(left_ht.pharma_meta.batch)
+                    hl.is_defined(left_ht.ukbb_meta.batch)
                     & left_ht.sample_filters.high_quality
                 ),
                 True,
@@ -221,10 +235,14 @@ def main(args):
     )
 
     logger.info("Annotating control samples")
-    left_ht = left_ht.annotate(control=(hl.literal(TRUTH_SAMPLES).contains(left_ht.s)))
+    left_ht = left_ht.annotate(
+        sample_filters=left_ht.sample_filters.annotate(
+            control=(hl.literal(TRUTH_SAMPLES).contains(left_ht.s))
+        )
+    )
     logger.info(
         "Release and control sample counts:"
-        f"{left_ht.aggregate(hl.struct(release=hl.agg.count_where(left_ht.sample_filters.release), control=hl.agg.count_where(left_ht.control)))}"
+        f"{left_ht.aggregate(hl.struct(release=hl.agg.count_where(left_ht.sample_filters.release), control=hl.agg.count_where(left_ht.sample_filters.control)))}"
     )
 
     logger.info("Removing duplicate samples and writing out meta ht")
@@ -233,6 +251,7 @@ def main(args):
     left_ht = left_ht.checkpoint(
         meta_ht_path(data_source, freeze), overwrite=args.overwrite
     )
+    left_ht.summarize()
     logger.info(f"Final count: {left_ht.count()}")
     logger.info("Complete")
 
@@ -269,5 +288,13 @@ if __name__ == "__main__":
         help="Overwrite all data from this subset (default: False)",
         action="store_true",
     )
+    parser.add_argument(
+        "--slack_channel", help="Slack channel to post results and notifications to",
+    )
     args = parser.parse_args()
-    main(args)
+
+    if args.slack_channel:
+        with slack_notifications(slack_token, args.slack_channel):
+            main(args)
+    else:
+        main(args)
