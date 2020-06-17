@@ -97,7 +97,7 @@ def main(args):
         logger.info("Annotating population assignments...")
         pop_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
         sample_qc_ht = sample_qc_ht.annotate(
-            qc_pop=pop_ht[sample_qc_ht.key][pop_assignment_method]
+            qc_pop=pop_ht[sample_qc_ht.key][pop_assignment_method].pop
         )
         logger.info("Annotating inferred platform assignments...")
         platform_ht = hl.read_table(
@@ -217,8 +217,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pop_assignment_method",
         help="Population assignment method to use for stratification",
-        default="hybrid_pop",
-        choices=["gnomad_pc_project_pop", "HDBSCAN_pop_cluster", "hybrid_pop"],
+        default="hybrid_pop_data",
+        choices=["gnomad_pc_project_pop_data", "hybrid_pop_data"],
     )
     parser.add_argument(
         "--filtering_qc_metrics",
