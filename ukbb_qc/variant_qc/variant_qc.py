@@ -18,7 +18,7 @@ from gnomad.variant_qc.random_forest import (
     pretty_print_runs,
     save_model,
 )
-from ukbb_qc.resources.basics import capture_ht_path, get_ukbb_data
+from ukbb_qc.resources.basics import capture_ht_path, get_checkpoint_path, get_ukbb_data
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import (
     info_ht_path,
@@ -61,6 +61,8 @@ def create_rf_ht(
     freeze: int,
     impute_features_by_variant_type: bool = True,
     group: str = "raw",
+    n_partitions: int = 5000,
+    checkpoint_path: Optional[str] = None,
 ) -> hl.Table:
     """
     Creates a Table with all necessary annotations for the random forest model.
@@ -161,8 +163,9 @@ def create_rf_ht(
         ac=ht.ac_release_samples_adj,
     )
 
-    ht = ht.repartition(5000, shuffle=False)
-    ht = ht.persist()
+    ht = ht.repartition(n_partitions, shuffle=False)
+    if checkpoint_path:
+        ht = ht.checkpoint(checkpoint_path, overwrite=True)
 
     if impute_features_by_variant_type:
         ht = median_impute_features(ht, {"variant_type": ht.variant_type})
@@ -262,6 +265,7 @@ def generate_final_rf_ht(
     ht: hl.Table,
     ac0_filter_expr: hl.expr.BooleanExpression,
     ts_ac_filter_expr: hl.expr.BooleanExpression,
+    mono_allelic_fiter_expr: hl.expr.BooleanExpression,
     snp_cutoff: Union[int, float],
     indel_cutoff: Union[int, float],
     determine_cutoff_from_bin: bool = False,
@@ -278,6 +282,7 @@ def generate_final_rf_ht(
     :param ht: RF result table from `rf.apply_rf_model` to prepare as the final RF Table
     :param ac0_filter_expr: Expression that indicates if a variant should be filtered as allele count 0 (AC0)
     :param ts_ac_filter_expr: Expression in `ht` that indicates if a variant is a transmitted singleton
+    :param mono_allelic_fiter_expr: Expression indicating if a variant is mono-allelic
     :param snp_cutoff: RF probability or bin (if `determine_cutoff_from_bin` True) to use for SNP variant QC filter
     :param indel_cutoff: RF probability or bin (if `determine_cutoff_from_bin` True) to use for indel variant QC filter
     :param determine_cutoff_from_bin: If True the RF probability will be determined using bin info in `aggregated_bin_ht`
@@ -331,6 +336,7 @@ def generate_final_rf_ht(
         ht.InbreedingCoeff < inbreeding_coeff_cutoff, False
     )
     filters["AC0"] = ac0_filter_expr
+    filters["MonoAllelic"] = mono_allelic_fiter_expr
 
     ht = ht.annotate(filters=add_filters_expr(filters=filters))
 
@@ -371,6 +377,8 @@ def main(args):
             freeze,
             impute_features_by_variant_type=not args.impute_features_no_variant_type,
             group="adj" if args.adj else "raw",
+            n_partitions=n_partitions,
+            checkpoint_path=get_checkpoint_path(data_source, freeze, "rf_annotation"),
         )
         ht.write(
             rf_annotated_path(data_source, freeze, args.adj), overwrite=args.overwrite
@@ -509,17 +517,15 @@ def main(args):
                 f"Could not find binned HT for RF  run {args.run_hash} ({aggregated_bin_ht}). Please run create_ranked_scores.py for that hash."
             )
 
-        # Add an annotation indicating variants that are within a capture interval or are mono-allelic
+        # Add an annotation indicating variants that are within a capture interval
         capture_ht = hl.read_table(capture_ht_path(data_source))
-        ht = ht.annotate(
-            mono_allelic = freq_ht[ht.key].freq[1].AF == 1 | freq_ht[ht.key].freq[1].AF == 0,
-            in_capture_interval = hl.is_defined(capture_ht[ht.key]),
-        )
+        ht = ht.annotate(in_capture_interval=hl.is_defined(capture_ht[ht.key]))
 
         ht = generate_final_rf_ht(
             ht,
             ac0_filter_expr=freq_ht[ht.key].freq[0].AC == 0,
             ts_ac_filter_expr=freq_ht[ht.key].freq[1].AC == 2,
+            mono_allelic_fiter_expr=(freq_ht[ht.key].freq[1].AF == 1) | (freq_ht[ht.key].freq[1].AF== 0),
             snp_cutoff=args.snp_cutoff,
             indel_cutoff=args.indel_cutoff,
             determine_cutoff_from_bin=args.treat_cutoff_as_prob,
@@ -552,21 +558,11 @@ if __name__ == "__main__":
         help="Run hash. Created by --train_rf and only needed for --apply_rf without running --train_rf",
         required=False,
     )
-    parser.add_argument(
-        "--snp_cutoff", help="Percentile to set RF cutoff", type=float, default=90.0
-    )
-    parser.add_argument(
-        "--indel_cutoff", help="Percentile to set RF cutoff", type=float, default=80.0
-    )
-    parser.add_argument(
-        "--treat_cutoff_as_prob",
-        help="If set snp_cutoff and indel_cutoff will be probability rather than percentile ",
-        action="store_true",
-    )
+
     actions = parser.add_argument_group("Actions")
     actions.add_argument(
         "--list_rf_runs",
-        help="Lists all previous RF runs, along with their hash,  parameters and testing results.",
+        help="Lists all previous RF runs, along with their hash, parameters and testing results.",
         action="store_true",
     )
     actions.add_argument(
@@ -579,12 +575,19 @@ if __name__ == "__main__":
         "--apply_rf", help="Applies RF model to the data", action="store_true"
     )
     actions.add_argument("--finalize", help="Write final RF model", action="store_true")
-    annotate_params = parser.add_argument_group("Annotate features params")
+
+    annotate_params = parser.add_argument_group("Annotate features parameters")
     annotate_params.add_argument(
         "--impute_features_no_variant_type",
         help="If set, feature imputation is NOT split by variant type.",
         action="store_true",
     )
+    annotate_params.add_argument(
+        "--n_partitions",
+        help="Desired number of partitions for annotated RF Table",
+        type=int,
+    )
+
     rf_params = parser.add_argument_group("Random Forest parameters")
     rf_params.add_argument(
         "--fp_to_tp",
@@ -611,6 +614,7 @@ if __name__ == "__main__":
         default=5,
         type=int,
     )
+
     training_params = parser.add_argument_group("Training data parameters")
     training_params.add_argument(
         "--adj", help="Use adj genotypes.", action="store_true"
@@ -644,6 +648,18 @@ if __name__ == "__main__":
         action="store_true",
     )
 
+    finalize_params = parser.add_argument_group("Finalize RF Table parameters")
+    finalize_params.add_argument(
+        "--snp_cutoff", help="Percentile to set RF cutoff", type=float, default=90.0
+    )
+    finalize_params.add_argument(
+        "--indel_cutoff", help="Percentile to set RF cutoff", type=float, default=80.0
+    )
+    finalize_params.add_argument(
+        "--treat_cutoff_as_prob",
+        help="If set snp_cutoff and indel_cutoff will be probability rather than percentile ",
+        action="store_true",
+    )
     args = parser.parse_args()
 
     if not args.run_hash and not args.train_rf and args.apply_rf:
