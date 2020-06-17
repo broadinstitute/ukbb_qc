@@ -25,6 +25,7 @@ from ukbb_qc.resources.sample_qc import (
     qc_ht_path,
     qc_mt_path,
 )
+from ukbb_qc.slack_creds import slack_token
 from ukbb_qc.utils.utils import remove_hard_filter_samples
 
 
