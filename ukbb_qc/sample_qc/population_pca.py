@@ -16,7 +16,7 @@ from gnomad.utils.liftover import (
     get_liftover_genome,
     lift_data,
 )
-from gnomad.utils.slack import try_slack
+from gnomad.utils.slack import slack_notifications
 from gnomad.utils.sparse_mt import densify_sites
 from gnomad_qc.v2.resources.basics import get_gnomad_meta
 from gnomad_qc.v2.resources.sample_qc import (
@@ -42,6 +42,7 @@ from ukbb_qc.resources.sample_qc import (
     qc_temp_data_prefix,
     related_drop_path,
 )
+from ukbb_qc.slack_creds import slack_token
 from ukbb_qc.utils.utils import remove_hard_filter_samples
 
 
@@ -500,6 +501,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.slack_channel:
-        try_slack(args.slack_channel, main, args)
+        with slack_notifications(slack_token, args.slack_channel):
+            main(args)
     else:
         main(args)

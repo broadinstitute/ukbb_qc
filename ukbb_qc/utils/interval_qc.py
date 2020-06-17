@@ -5,7 +5,7 @@ from typing import List
 import hail as hl
 
 from gnomad.utils.filtering import filter_to_autosomes
-from gnomad.utils.slack import try_slack
+from gnomad.utils.slack import slack_notifications
 from ukbb_qc.resources.basics import (
     capture_ht_path,
     get_ukbb_data,
@@ -13,6 +13,7 @@ from ukbb_qc.resources.basics import (
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import callrate_mt_path, interval_qc_path, sex_ht_path
+from ukbb_qc.slack_creds import slack_token
 from ukbb_qc.utils.sparse_utils import compute_interval_callrate_dp_mt
 
 
@@ -244,6 +245,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.slack_channel:
-        try_slack(args.slack_channel, main, args)
+        with slack_notifications(slack_token, args.slack_channel):
+            main(args)
     else:
         main(args)
