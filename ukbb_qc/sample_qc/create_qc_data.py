@@ -7,7 +7,7 @@ from gnomad.sample_qc.pipeline import get_qc_mt
 from gnomad.utils.annotations import get_adj_expr, get_lowqual_expr
 from gnomad.utils.filtering import filter_to_autosomes
 from gnomad.utils.file_utils import file_exists
-from gnomad.utils.slack import try_slack
+from gnomad.utils.slack import slack_notifications
 from gnomad.utils.sparse_mt import densify_sites, get_as_info_expr, get_site_info_expr
 from ukbb_qc.resources.basics import (
     get_checkpoint_path,
@@ -17,6 +17,7 @@ from ukbb_qc.resources.basics import (
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import qc_ht_path, qc_mt_path, qc_sites_path
+from ukbb_qc.slack_creds import slack_token
 from ukbb_qc.utils.utils import get_qc_mt_sites
 
 
@@ -221,6 +222,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.slack_channel:
-        try_slack(args.slack_channel, main, args)
+        with slack_notifications(slack_token, args.slack_channel):
+            main(args)
     else:
         main(args)
