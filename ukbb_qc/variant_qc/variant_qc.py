@@ -94,6 +94,8 @@ def create_rf_ht(
     :param int freeze: One of the data freezes
     :param bool impute_features_by_variant_type: Whether to impute features median by variant type
     :param str group: Whether to use 'raw' or 'adj' genotypes
+    :param int n_partitions: Number of partitions to use for final annotated table
+    :param str checkpoint_path: Optional checkpoint path for the Table before median imputation and/or aggregate summary
     :return: Hail Table ready for RF
     :rtype: Table
     """
@@ -377,7 +379,7 @@ def main(args):
             freeze,
             impute_features_by_variant_type=not args.impute_features_no_variant_type,
             group="adj" if args.adj else "raw",
-            n_partitions=n_partitions,
+            n_partitions=args.n_partitions,
             checkpoint_path=get_checkpoint_path(data_source, freeze, "rf_annotation"),
         )
         ht.write(
