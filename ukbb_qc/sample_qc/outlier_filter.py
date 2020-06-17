@@ -9,7 +9,7 @@ from gnomad.utils.filtering import (
     filter_low_conf_regions,
     filter_to_autosomes,
 )
-from gnomad.utils.slack import try_slack
+from gnomad.utils.slack import slack_notifications
 from ukbb_qc.resources.basics import (
     array_sample_map_ht_path,
     get_ukbb_data,
@@ -22,6 +22,7 @@ from ukbb_qc.resources.sample_qc import (
     platform_pop_outlier_ht_path,
     qc_temp_data_prefix,
 )
+from ukbb_qc.slack_creds import slack_token
 from ukbb_qc.utils.utils import annotate_interval_qc_filter, remove_hard_filter_samples
 
 
@@ -238,6 +239,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.slack_channel:
-        try_slack(args.slack_channel, main, args)
+        with slack_notifications(slack_token, args.slack_channel):
+            main(args)
     else:
         main(args)
