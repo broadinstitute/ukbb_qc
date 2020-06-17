@@ -8,7 +8,6 @@ from gnomad.sample_qc.relatedness import (
     PARENT_CHILD,
     SIBLINGS,
 )
-from gnomad.slack_creds import slack_token
 from gnomad.utils.slack import slack_notifications
 from ukbb_qc.resources.basics import (
     array_sample_map_ht_path,
@@ -29,6 +28,7 @@ from ukbb_qc.resources.sample_qc import (
     meta_ht_path,
 )
 from ukbb_qc.resources.variant_qc import TRUTH_SAMPLES
+from ukbb_qc.slack_creds import slack_token
 from ukbb_qc.utils.utils import (
     get_age_ht,
     get_relationship_filter_expr,
