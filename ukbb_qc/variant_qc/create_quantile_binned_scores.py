@@ -29,12 +29,7 @@ logger.setLevel(logging.INFO)
 
 
 def create_quantile_bin_ht(
-    data_source: str,
-    freeze: int,
-    metric: str,
-    n_bins: int,
-    n_partitions: int = 5000,
-    overwrite: bool = False,
+    data_source: str, freeze: int, metric: str, n_bins: int, overwrite: bool = False
 ) -> None:
     """
     Creates a table with quantile bin annotations added for a RF run and writes it to its correct location in annotations.
@@ -43,7 +38,6 @@ def create_quantile_bin_ht(
     :param int freeze: One of the data freezes
     :param str metric: Which data/run hash is being created
     :param n_bins: Number of bins to bin the data into
-    :param n_partitions: Number of partitions to repartition the HT to
     :param bool overwrite: Should output files be overwritten if present
     :return: Nothing
     :rtype: None
@@ -160,30 +154,42 @@ def main(args):
     else:
         metric = args.run_hash
 
-    if args.create_quantile_bin_ht:
-        create_quantile_bin_ht(
-            data_source, freeze, metric, args.n_bins, args.n_partitions, args.overwrite
-        )
-    if args.run_sanity_checks:
-        ht = hl.read_table(score_quantile_bin_path(metric, data_source, freeze))
-        logger.info("Running sanity checks...")
-        print(
-            ht.aggregate(
-                hl.struct(
-                    was_split=hl.agg.counter(ht.was_split),
-                    has_biallelic_rank=hl.agg.counter(hl.is_defined(ht.biallelic_bin)),
-                    was_singleton=hl.agg.counter(ht.singleton),
-                    has_singleton_rank=hl.agg.counter(hl.is_defined(ht.singleton_bin)),
-                    was_split_singleton=hl.agg.counter(ht.singleton & ~ht.was_split),
-                    has_biallelic_singleton_rank=hl.agg.counter(
-                        hl.is_defined(ht.biallelic_singleton_bin)
-                    ),
+    try:
+
+        if args.create_quantile_bin_ht:
+            create_quantile_bin_ht(
+                data_source, freeze, metric, args.n_bins, args.overwrite
+            )
+        if args.run_sanity_checks:
+            ht = hl.read_table(score_quantile_bin_path(metric, data_source, freeze))
+            logger.info("Running sanity checks...")
+            print(
+                ht.aggregate(
+                    hl.struct(
+                        was_split=hl.agg.counter(ht.was_split),
+                        has_biallelic_rank=hl.agg.counter(
+                            hl.is_defined(ht.biallelic_bin)
+                        ),
+                        was_singleton=hl.agg.counter(ht.singleton),
+                        has_singleton_rank=hl.agg.counter(
+                            hl.is_defined(ht.singleton_bin)
+                        ),
+                        was_split_singleton=hl.agg.counter(
+                            ht.singleton & ~ht.was_split
+                        ),
+                        has_biallelic_singleton_rank=hl.agg.counter(
+                            hl.is_defined(ht.biallelic_singleton_bin)
+                        ),
+                    )
                 )
             )
-        )
-    # Note: Use only workers, it typically crashes with premptibles
-    if args.create_aggregated_bin_ht:
-        create_grouped_bin_ht(data_source, freeze, metric, args.overwrite)
+        # Note: Use only workers, it typically crashes with premptibles
+        if args.create_aggregated_bin_ht:
+            create_grouped_bin_ht(data_source, freeze, metric, args.overwrite)
+
+    finally:
+        logger.info("Copying hail log to logging bucket...")
+        hl.copy_log(logging_path(data_source, freeze))
 
 
 if __name__ == "__main__":
@@ -214,12 +220,6 @@ if __name__ == "__main__":
         "--create_quantile_bin_ht",
         help="When set, creates file annotated with quantile bin based on vqsr/RF run hash score.",
         action="store_true",
-    )
-    parser.add_argument(
-        "--n_partitions",
-        help="Desired number of partitions for output quantile_bin_ht Table",
-        default=5000,
-        type=int,
     )
     parser.add_argument(
         "--run_sanity_checks",
