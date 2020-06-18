@@ -2,7 +2,7 @@ import argparse
 import json
 import logging
 import sys
-from typing import Dict, List
+from typing import Dict, List, Optional, Union
 import uuid
 
 import hail as hl
@@ -108,7 +108,7 @@ def create_rf_ht(
     ht = get_ukbb_data(data_source, freeze).rows()
 
     inbreeding_ht = hl.read_table(
-        var_annotations_ht_path("inbreeding_coeff", data_source, freeze)
+        var_annotations_ht_path("inbreeding_coefficient", data_source, freeze)
     )
     trio_stats_ht = hl.read_table(
         var_annotations_ht_path("trio_stats", data_source, freeze)
@@ -373,6 +373,7 @@ def main(args):
 
     data_source = "broad"
     freeze = args.freeze
+    test_intervals = args.test_intervals
 
     try:
         if args.list_rf_runs:
@@ -404,7 +405,14 @@ def main(args):
             while run_hash in rf_runs:
                 run_hash = str(uuid.uuid4())[:8]
 
-            ht = hl.read_table(rf_annotated_path(data_source, freeze, args.adj))
+            full_ht = hl.read_table(rf_annotated_path(data_source, freeze, args.adj))
+
+            if args.interval_qc_filter:
+                interval_filter_expr = full_ht.interval_qc_pass
+            else:
+                interval_filter_expr = True
+
+            ht = full_ht.filter(interval_filter_expr)
 
             if args.vqsr_training:
                 vqsr_ht = hl.read_table(
@@ -414,36 +422,31 @@ def main(args):
                         freeze,
                     )
                 )
-                ht = ht.annotate(
+                ht =  ht.annotate(
                     vqsr_POSITIVE_TRAIN_SITE=vqsr_ht[ht.key].info.POSITIVE_TRAIN_SITE,
                     vqsr_NEGATIVE_TRAIN_SITE=vqsr_ht[ht.key].info.NEGATIVE_TRAIN_SITE,
                 )
-                tp_expr = ht.vqsr_POSITIVE_TRAIN_SITE
-                fp_expr = ht.vqsr_NEGATIVE_TRAIN_SITE
+                tp_expr =  ht.vqsr_POSITIVE_TRAIN_SITE
+                fp_expr =  ht.vqsr_NEGATIVE_TRAIN_SITE
             else:
-                fp_expr = ht.fail_hard_filters
-                tp_expr = ht.omni | ht.mills
+                fp_expr =  ht.fail_hard_filters
+                tp_expr =  ht.omni |  ht.mills
                 if not args.no_array_con_common:
-                    tp_expr = tp_expr | ht.ukbb_array_con_common
+                    tp_expr = tp_expr |  ht.ukbb_array_con_common
                 if not args.no_transmitted_singletons:
-                    tp_expr = tp_expr | ht.transmitted_singleton
+                    tp_expr = tp_expr |  ht.transmitted_singleton
                 if not args.no_sibling_singletons:
-                    tp_expr = tp_expr | ht.sibling_singleton
+                    tp_expr = tp_expr |  ht.sibling_singleton
 
-                if args.test_intervals:
-                    if isinstance(args.test_intervals, str):
-                        test_intervals = [args.test_intervals]
+                if test_intervals:
+                    if isinstance(test_intervals, str):
+                        test_intervals = [test_intervals]
                     test_intervals = [
-                        hl.parse_locus_interval(x) for x in args.test_intervals
+                        hl.parse_locus_interval(x, reference_genome='GRCh38') for x in test_intervals
                     ]
 
-            if args.interval_qc_filter:
-                interval_filter_expr = ht.interval_qc_pass
-            else:
-                interval_filter_expr = True
-
             ht, rf_model = train_rf_model(
-                ht.filter(interval_filter_expr),
+                ht,
                 rf_features=FEATURES,
                 tp_expr=tp_expr,
                 fp_expr=fp_expr,
@@ -462,6 +465,8 @@ def main(args):
                 overwrite=args.overwrite,
             )
 
+            logger.info("Joining original RF Table with training information")
+            ht = full_ht.join(ht, how= "left")
             ht = ht.checkpoint(
                 rf_path(data_source, freeze, data="training", run_hash=run_hash),
                 overwrite=args.overwrite,
@@ -606,6 +611,7 @@ if __name__ == "__main__":
         "--n_partitions",
         help="Desired number of partitions for annotated RF Table",
         type=int,
+        default=5000,
     )
 
     rf_params = parser.add_argument_group("Random Forest parameters")
