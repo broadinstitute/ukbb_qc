@@ -125,7 +125,7 @@ def generate_frequency_data(
     logger.info("Filtering related samples...")
     mt = mt.filter_cols(~mt.meta.sample_filters.related)
 
-    '''logger.info("Calculating InbreedingCoefficient...")
+    logger.info("Calculating InbreedingCoefficient...")
     # NOTE: This is not the ideal location to calculate this, but added here to avoid another densify
     ht = mt.annotate_rows(InbreedingCoeff=bi_allelic_site_inbreeding_expr(mt.GT)).rows()
     ht = ht.select("InbreedingCoeff")
@@ -133,7 +133,7 @@ def generate_frequency_data(
     ht.write(
         var_annotations_ht_path("inbreeding_coefficient", data_source, freeze),
         overwrite=overwrite,
-    )'''
+    )
 
     logger.info("Generating frequency data...")
     mt = annotate_freq(
@@ -149,19 +149,14 @@ def generate_frequency_data(
     faf, faf_meta = faf_expr(mt.freq, mt.freq_meta, mt.locus, pops_to_remove_for_popmax)
     popmax = pop_max_expr(mt.freq, mt.freq_meta, pops_to_remove_for_popmax)
     logger.info("Calculating faf and popmax...")
-    mt = mt.annotate_rows(
-        faf=faf,
-        popmax=popmax,
-    )
+    mt = mt.annotate_rows(faf=faf, popmax=popmax,)
 
     # Add cohort frequency to last index of freq struct
     # Also add cohort frequency meta to freq_meta globals
-    mt = mt.select_rows(
-        "faf",
-        "popmax",
-        freq=mt.freq.extend(mt.cohort_freq),
+    mt = mt.select_rows("faf", "popmax", freq=mt.freq.extend(mt.cohort_freq),)
+    mt = mt.select_globals(
+        faf_meta=faf_meta, freq_meta=mt.freq_meta.extend(mt.cohort_freq_meta)
     )
-    mt = mt.select_globals(faf_meta=faf_meta, freq_meta=mt.freq_meta.extend(mt.cohort_freq_meta))
 
     logger.info("Getting hists")
     mt = get_hists(mt, freeze)
@@ -234,28 +229,7 @@ def main(args):
         )
 
         # Read in hardcalls
-        mt = get_ukbb_data(data_source, freeze, key_by_locus_and_alleles=True, split=False, raw=True, repartition=True, n_partitions=30000, meta_root="meta")
-
-        # Split mt, add adj annotation, and adjust sex ploidies
-        from gnomad.utils.annotations import annotate_adj
-        from gnomad.sample_qc.sex import adjust_sex_ploidy
-        from ukbb_qc.resources.sample_qc import meta_ht_path
-        '''mt = hl.experimental.sparse_split_multi(mt)
-        mt = annotate_adj(
-            mt.select_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype),
-            haploid_adj_dp=5,
-        )
-        mt = mt.select_entries(
-            "GT", "GQ", "adj", "END", "DP", "AD"
-        )  
-        mt = adjust_sex_ploidy(mt, mt.sex_karyotype, male_str="XY", female_str="XX")
-        mt = mt.select_cols().naive_coalesce(10000)
-        mt = mt.checkpoint('gs://broad-ukbb/broad.freeze_6/temp/hardcalls.mt', overwrite=True)'''
-        mt = hl.read_matrix_table('gs://broad-ukbb/broad.freeze_6/temp/hardcalls.mt')
-        meta_ht = hl.read_table(meta_ht_path(data_source, freeze))
-        mt = mt.annotate_cols(**{'meta': meta_ht[mt.s]})
-        mt.describe()
-
+        mt = get_ukbb_data(data_source, freeze, meta_root="meta")
 
         if args.compute_frequency:
             logger.info("Densifying...")
