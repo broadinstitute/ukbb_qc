@@ -13,7 +13,7 @@ from gnomad.utils.annotations import (
     pop_max_expr,
 )
 from gnomad.utils.slack import slack_notifications
-from ukbb_qc.resources.basics import get_ukbb_data
+from ukbb_qc.resources.basics import get_ukbb_data, logging_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 from ukbb_qc.slack_creds import slack_token
@@ -48,11 +48,13 @@ def generate_cohort_frequency_data(
         f"Filtering to {pops} to calculate cohort frequency (includes related samples)..."
     )
     pops = hl.literal(pops)
-    mt = mt.filter_cols(pops.contains(pop_expr))
+    mt = mt.annotate_cols(_pop=pop_expr, _sex=sex_expr)
+    mt = mt.filter_cols(pops.contains(mt._pop))
     mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
 
     logger.info("Generating frequency data...")
-    mt = annotate_freq(mt, sex_expr=sex_expr)
+    mt = annotate_freq(mt, sex_expr=mt._sex)
+    mt = mt.drop("_pop", "_sex")
     mt = mt.select_rows(cohort_freq=mt.freq)
     cohort_freq_meta = hl.eval(mt.freq_meta)
     for i in range(len(cohort_freq_meta)):
@@ -75,6 +77,7 @@ def generate_frequency_data(
     platform_strata: bool = False,
     tranche: bool = False,
     platform_expr: Optional[hl.expr.StringExpression] = None,
+    n_partitions: int = 5000,
 ) -> hl.Table:
     """
     Generates frequency struct annotation containing AC, AF, AN, and homozygote count for input dataset stratified by population.
@@ -98,6 +101,7 @@ def generate_frequency_data(
     :param bool tranche: Whether to use tranche (as a proxy for platform) instead of inferred platform.
     :param bool calculate_by_tranche: Whether to calculate frequencies per tranche.
     :param hl.expr.StringExpression platform_expr: Expression containing platform or tranche information. Required if platform_strata is set.
+    :param int n_partitions: Desired number of partitions for inbreeding coefficient HT. Default is 5000.
     :return: Table with frequency annotations in struct named `freq` and metadata in globals named `freq_meta`.
     :rtype: Table
     """
@@ -114,47 +118,50 @@ def generate_frequency_data(
     mt = generate_cohort_frequency_data(
         mt,
         cohort_frequency_pops,
-        mt.meta.gnomad_pc_project_data.pop,
+        mt.meta.gnomad_pc_project_pop_data.pop,
         mt.meta.sex_imputation.sex_karyotype,
     )
 
     logger.info("Filtering related samples...")
     mt = mt.filter_cols(~mt.meta.sample_filters.related)
 
-    logger.info("Calculating InbreedingCoefficient...")
+    '''logger.info("Calculating InbreedingCoefficient...")
     # NOTE: This is not the ideal location to calculate this, but added here to avoid another densify
     ht = mt.annotate_rows(InbreedingCoeff=bi_allelic_site_inbreeding_expr(mt.GT)).rows()
     ht = ht.select("InbreedingCoeff")
+    ht = ht.naive_coalesce(n_partitions)
     ht.write(
         var_annotations_ht_path("inbreeding_coefficient", data_source, freeze),
         overwrite=overwrite,
-    )
+    )'''
 
     logger.info("Generating frequency data...")
     mt = annotate_freq(
         mt,
         sex_expr=mt.meta.sex_imputation.sex_karyotype,
-        pop_expr=mt.meta.gnomad_pc_project_data.pop,
+        pop_expr=mt.meta.gnomad_pc_project_pop_data.pop,
         subpop_expr=mt.meta.hybrid_pop_data.pop,
         additional_strata_expr=additional_strata_expr,
     )
 
-    # Add cohort frequency to last index of freq struct
-    # Also add cohort frequency meta to freq_meta globals
-    freq_expr = mt.freq.extend(mt.cohort_freq)
-    freq_meta = mt.freq_meta.extend(mt.cohort_freq_meta)
-    mt = mt.select_globals()
-
     # NOTE: faf and popmax are calculated on freq, not freq_expr
     # We do not want to include relateds when calculating faf and popmax
-    logger.info("Calculating faf...")
     faf, faf_meta = faf_expr(mt.freq, mt.freq_meta, mt.locus, pops_to_remove_for_popmax)
-    mt = mt.select_rows(
-        freq=freq_expr,
+    popmax = pop_max_expr(mt.freq, mt.freq_meta, pops_to_remove_for_popmax)
+    logger.info("Calculating faf and popmax...")
+    mt = mt.annotate_rows(
         faf=faf,
-        popmax=pop_max_expr(mt.freq, mt.freq_meta, pops_to_remove_for_popmax),
+        popmax=popmax,
     )
-    mt = mt.annotate_globals(faf_meta=faf_meta, freq_meta=freq_meta)
+
+    # Add cohort frequency to last index of freq struct
+    # Also add cohort frequency meta to freq_meta globals
+    mt = mt.select_rows(
+        "faf",
+        "popmax",
+        freq=mt.freq.extend(mt.cohort_freq),
+    )
+    mt = mt.select_globals(faf_meta=faf_meta, freq_meta=mt.freq_meta.extend(mt.cohort_freq_meta))
 
     logger.info("Getting hists")
     mt = get_hists(mt, freeze)
@@ -214,63 +221,92 @@ def join_gnomad(ht: hl.Table, data_type: str) -> hl.Table:
 def main(args):
 
     hl.init(log="/frequency_generation.log", default_reference="GRCh38")
-
+    hl._set_flags(max_leader_scans="200")
     data_source = "broad"
     freeze = args.freeze
-    pops_to_remove_for_popmax = set(args.pops_to_remove_for_popmax.split(","))
-    cohort_frequency_pops = set(args.pops_to_include_for_cohort.split(","))
-    logger.info(
-        f"Excluding {pops_to_remove_for_popmax} from popmax and faf calculations"
-        f"Including {cohort_frequency_pops} in cohort frequency calculations"
-    )
 
-    # Read in hardcalls
-    mt = get_ukbb_data(data_source, freeze, meta_root="meta")
-
-    if args.compute_frequency:
-        logger.info("Densifying...")
-        mt = hl.experimental.densify(mt)
-        mt = mt.filter_rows(hl.len(mt.alleles) > 1)
-
-        # Filter to high quality UKBB samples only
-        mt = mt.filter_cols(mt.meta.sample_filters.high_quality)
-        mt = mt.filter_cols(hl.is_defined(mt.meta.ukbb_meta.batch))
-        mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
-
-        if args.by_tranche:
-            platform_expr = mt.meta.ukbb_meta.batch
-        elif args.by_platform:
-            platform_expr = mt.meta.platform_inference.qc_platform
-        else:
-            platform_expr = None
-
-        logger.info("Calculating frequencies")
-        ht = generate_frequency_data(
-            mt,
-            data_source,
-            freeze,
-            pops_to_remove_for_popmax,
-            cohort_frequency_pops,
-            args.overwrite,
-            args.by_platform,
-            args.by_tranche,
-            platform_expr,
+    try:
+        pops_to_remove_for_popmax = set(args.pops_to_remove_for_popmax.split(","))
+        cohort_frequency_pops = set(args.pops_to_include_for_cohort.split(","))
+        logger.info(
+            f"Excluding {pops_to_remove_for_popmax} from popmax and faf calculations"
+            f"Including {cohort_frequency_pops} in cohort frequency calculations"
         )
 
-        ht = ht.repartition(args.n_partitions)
-        ht = ht.checkpoint(
-            var_annotations_ht_path("ukb_freq", data_source, freeze), args.overwrite
-        )
+        # Read in hardcalls
+        mt = get_ukbb_data(data_source, freeze, key_by_locus_and_alleles=True, split=False, raw=True, repartition=True, n_partitions=30000, meta_root="meta")
 
-    if args.join_gnomad:
-        ht = hl.read_table(var_annotations_ht_path("ukb_freq", data_source, freeze))
-
-        logger.info("Joining UKBB ht to gnomAD exomes and genomes liftover hts")
-        ht = join_gnomad(ht, "exomes")
-        ht = join_gnomad(ht, "genomes")
-        ht.write(
-            var_annotations_ht_path("join_freq", data_source, freeze), args.overwrite,
+        # Split mt, add adj annotation, and adjust sex ploidies
+        from gnomad.utils.annotations import annotate_adj
+        from gnomad.sample_qc.sex import adjust_sex_ploidy
+        from ukbb_qc.resources.sample_qc import meta_ht_path
+        '''mt = hl.experimental.sparse_split_multi(mt)
+        mt = annotate_adj(
+            mt.select_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype),
+            haploid_adj_dp=5,
         )
+        mt = mt.select_entries(
+            "GT", "GQ", "adj", "END", "DP", "AD"
+        )  
+        mt = adjust_sex_ploidy(mt, mt.sex_karyotype, male_str="XY", female_str="XX")
+        mt = mt.select_cols().naive_coalesce(10000)
+        mt = mt.checkpoint('gs://broad-ukbb/broad.freeze_6/temp/hardcalls.mt', overwrite=True)'''
+        mt = hl.read_matrix_table('gs://broad-ukbb/broad.freeze_6/temp/hardcalls.mt')
+        meta_ht = hl.read_table(meta_ht_path(data_source, freeze))
+        mt = mt.annotate_cols(**{'meta': meta_ht[mt.s]})
+        mt.describe()
+
+
+        if args.compute_frequency:
+            logger.info("Densifying...")
+            mt = hl.experimental.densify(mt)
+            mt = mt.filter_rows(hl.len(mt.alleles) > 1)
+
+            # Filter to high quality UKBB samples only
+            mt = mt.filter_cols(mt.meta.sample_filters.high_quality)
+            mt = mt.filter_cols(hl.is_defined(mt.meta.ukbb_meta.batch))
+            mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
+
+            if args.by_tranche:
+                platform_expr = mt.meta.ukbb_meta.batch
+            elif args.by_platform:
+                platform_expr = mt.meta.platform_inference.qc_platform
+            else:
+                platform_expr = None
+
+            logger.info("Calculating frequencies")
+            ht = generate_frequency_data(
+                mt,
+                data_source,
+                freeze,
+                pops_to_remove_for_popmax,
+                cohort_frequency_pops,
+                args.overwrite,
+                args.by_platform,
+                args.by_tranche,
+                platform_expr,
+                args.n_partitions,
+            )
+
+            ht = ht.naive_coalesce(args.n_partitions)
+            ht = ht.checkpoint(
+                var_annotations_ht_path("ukb_freq", data_source, freeze), args.overwrite
+            )
+
+        if args.join_gnomad:
+            ht = hl.read_table(var_annotations_ht_path("ukb_freq", data_source, freeze))
+
+            logger.info("Joining UKBB ht to gnomAD exomes and genomes liftover hts")
+            ht = join_gnomad(ht, "exomes")
+            ht = join_gnomad(ht, "genomes")
+            ht.write(
+                var_annotations_ht_path("join_freq", data_source, freeze),
+                args.overwrite,
+            )
+
+    finally:
+        logger.info("Copying hail log to logging bucket...")
+        hl.copy_log(logging_path(data_source, freeze))
 
 
 if __name__ == "__main__":
@@ -281,7 +317,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--n_partitions",
-        help="Desired number of partitions for output HT",
+        help="Desired number of partitions for output HTs",
         default=5000,
         type=int,
     )
