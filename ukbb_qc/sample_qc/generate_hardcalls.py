@@ -6,9 +6,8 @@ import hail as hl
 from gnomad.sample_qc.pipeline import annotate_sex
 from gnomad.sample_qc.sex import adjust_sex_ploidy
 from gnomad.utils.annotations import add_variant_type, annotate_adj
-from gnomad.utils.slack import slack_notifications
+from gnomad.utils.slack import try_slack
 from ukbb_qc.resources.basics import (
-    get_checkpoint_path,
     get_ukbb_data,
     get_ukbb_data_path,
     logging_path,
@@ -16,8 +15,6 @@ from ukbb_qc.resources.basics import (
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import f_stat_sites_path, sex_ht_path
 from ukbb_qc.resources.variant_qc import var_annotations_ht_path
-from ukbb_qc.slack_creds import slack_token
-from ukbb_qc.utils.utils import get_array_sex_ht
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -52,31 +49,7 @@ def main(args):
                 aaf_expr="AF",
                 gt_expr="LGT",
             )
-            # Checkpointing here because annotate_sex does a few slow computations (including sex ploidy imputation)
-            sex_ht = sex_ht.checkpoint(
-                get_checkpoint_path(data_source, freeze, name="temp_sex")
-            )
-
-            logger.info("Comparing imputed and reported sex...")
-            array_sex_ht = get_array_sex_ht(freeze)
-            sex_ht = sex_ht.annotate(array_sex=array_sex_ht[sex_ht.key].array_sex)
-            sex_ht = sex_ht.repartition(args.n_partitions)
             sex_ht.write(sex_ht_path(data_source, freeze), overwrite=True)
-
-            mismatch = sex_ht.filter(
-                ((sex_ht.sex_karyotype == "XX") | (sex_ht.sex_karyotype == "XY"))
-                & (sex_ht.sex_karyotype != sex_ht.array_sex)
-            )
-            if mismatch.count() != 0:
-                mismatch = mismatch.annotate(
-                    inferred_reported=mismatch.sex_karyotype + mismatch.array_sex
-                )
-                mismatch_counts = mismatch.aggregate(
-                    hl.agg.counter(mismatch.inferred_reported)
-                )
-                logger.warning(
-                    f"Some inferred sexes don't match with reported sex! Counts (inferred_reported): {mismatch_counts}"
-                )
         # NOTE: check distributions here before continuing with hardcalls
 
         if args.write_hardcalls:
@@ -88,7 +61,7 @@ def main(args):
                 split=False,
                 raw=True,
                 repartition=args.repartition,
-                n_partitions=args.raw_partitions,
+                n_partitions=args.n_partitions,
             )
             sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
 
@@ -108,7 +81,7 @@ def main(args):
                 haploid_adj_dp=5,
             )
             mt = mt.select_entries(
-                "GT", "adj", "END",
+                "GT", "GQ", "DP", "GQ", "adj", "END",
             )  # Note: this is different from gnomAD hardcalls file because no PGT or PID
             mt = adjust_sex_ploidy(mt, mt.sex_karyotype, male_str="XY", female_str="XX")
             mt = mt.select_cols().naive_coalesce(args.n_partitions)
@@ -169,12 +142,8 @@ if __name__ == "__main__":
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int,
     )
     parser.add_argument(
-        "--n_partitions", help="Desired number of partitions for output.", type=int,
-    )
-    parser.add_argument(
-        "--raw_partitions",
-        help="Desired number of partitions for raw sparse MT. Used to repartition raw MT on read (necessary only for tranche 3/freeze 6/300K!)",
-        default=30000,
+        "--n_partitions",
+        help="Desired number of partitions for output. Also used to repartition raw MT on read (necessary only for tranche 3/freeze 6/300K!",
         type=int,
     )
     parser.add_argument(
@@ -188,7 +157,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.slack_channel:
-        with slack_notifications(slack_token, args.slack_channel):
-            main(args)
+        try_slack(args.slack_channel, main, args)
     else:
         main(args)
