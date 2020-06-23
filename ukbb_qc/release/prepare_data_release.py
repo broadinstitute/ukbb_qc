@@ -2,14 +2,16 @@ import argparse
 import logging
 import pickle
 from typing import Dict, List, Union
+
 import hail as hl
-from gnomad.resources.grch37.gnomad import POP_NAMES
-from gnomad.resources.grch38.intervals import lcr
-from gnomad.resources.grch38.reference_data import dbsnp
-from gnomad.utils.sample_qc import add_filters_expr
-from gnomad.utils.generic import get_reference_genome, rep_on_read
-from gnomad.utils.gnomad_functions import filter_to_adj
+
+from gnomad.resources.grch37.gnomad import (
+    POP_NAMES,
+)  # Note: this is in gnomad twice? Importing from larger dict
+from gnomad.resources.grch38.reference_data import dbsnp, lcr_intervals
 from gnomad.utils.annotations import qual_hist_expr, age_hists_expr
+from gnomad.utils.generic import get_reference_genome
+from gnomad.utils.slack import slack_notifications
 from gnomad_qc.v2.variant_qc.prepare_data_release import (
     FAF_POPS,
     GROUPS,
@@ -28,8 +30,11 @@ from gnomad_qc.v2.variant_qc.prepare_data_release import (
 from gnomad_qc.v2.variant_qc.prepare_data_release import (
     NFE_SUBPOPS as GNOMAD_NFE_SUBPOPS,
 )
-from ukbb_qc.resources import *
-from ukbb_qc.utils.constants import *
+from ukbb_qc.resources.basics import logging_path
+
+# from ukbb_qc.utils.constants import *
+from ukbb_qc.slack_creds import slack_token
+from ukbb_qc.utils.utils import get_age_ht
 
 
 logging.basicConfig(
@@ -41,58 +46,61 @@ logger.setLevel(logging.INFO)
 
 
 def flag_problematic_regions(
-    t: Union[hl.MatrixTable, hl.Table]
-) -> Union[hl.MatrixTable, hl.Table]:
+    t: Union[hl.Table, hl.MatrixTable]
+) -> Union[hl.Table, hl.MatrixTable]:
     """
     Annotate HT/MT with `region_flag` struct. Struct contains flags for problematic regions.
-    Also adds annotation whether region is non_par (for VCF export purposes only).
-    NOTE: No hg38 resources for decoy, segdup, or self chain yet.
+    
+    .. note:: 
 
-    :param Table/MatrixTable t: Input Table/MatrixTable
-    :return: Table/MatrixTable with `region_flag` set and `non_par` row annotations.
-    :rtype: Table/MatrixTable
+        No hg38 resources for decoy, segdup, or self chain yet.
+
+    :param Table/MatrixTable t: Input Table/MatrixTable.
+    :return: Table/MatrixTable with `region_flag` struct row annotation.
+    :rtype: Union[hl.Table, hl.MatrixTable]
     """
-    lcr_intervals = lcr.ht()
-    region_filters = {
-        "lcr": hl.is_defined(lcr_intervals[t.locus]),
-        "fail_interval_qc": ~(t.rf.interval_qc_pass),
-    }
+    lcr_intervals = lcr_intervals.ht()
 
     if isinstance(t, hl.Table):
-        t = t.annotate(region_flag=add_filters_expr(region_filters, None))
+        t = t.annotate(
+            region_flag=hl.struct(
+                lcr=hl.is_defined(lcr_intervals[t.locus]),
+                fail_interval_qc=~(t.rf.interval_qc_pass),
+            )
+        )
     else:
-        t = t.annotate_rows(region_flag=add_filters_expr(region_filters, None))
-
+        t = t.annotate_rows(
+            region_flag=hl.struct(
+                lcr=hl.is_defined(lcr_intervals[t.locus]),
+                fail_interval_qc=~(t.rf.interval_qc_pass),
+            )
+        )
     return t
 
 
 def prepare_annotations(
     mt: hl.MatrixTable,
     freq_ht: hl.Table,
-    unrelated_freq_ht: hl.Table,
     rf_ht: hl.Table,
     vep_ht: hl.Table,
-    hist_ht: hl.Table,
     index_dict: Dict,
     allele_ht: hl.Table,
     vqsr_ht: hl.Table,
 ) -> hl.MatrixTable:
     """
-    Join all Tables with variant annotations, keeping only variants with nonzero AC
+    Join all Tables with variant annotations, keeping only variants with non-zero AC.
 
-    :param MatrixTable mt: MatrixTable to be annotated
-    :param Table freq_ht: Table with cohort frequency annotations
-    :param Table unrelated_freq_ht: Table with frequency annotations calculated only on unrelated samples
-    :param Table rf_ht: Table with random forest variant annotations
-    :param Table vep_ht: Table with VEP variant annotations
-    :param Table hist_ht: Table with quality histogram annotations
-    :param dict index_dict: Dictionary containing index values for each entry in the frequency HT array, keyed by metadata label
-    :param Table allele_ht: Table containing allele annotations
-    :param Table vqsr_ht: Table containing vqsr annotations
-    :return: Table containing joined annotations
-    :rtype: Table
+    :param MatrixTable mt: MatrixTable to be annotated.
+    :param Table freq_ht: Table with frequency annotations.
+    :param Table rf_ht: Table with random forest variant annotations.
+    :param Table vep_ht: Table with VEP variant annotations.
+    :param dict index_dict: Dictionary containing index values for each entry in the frequency Table freq array, keyed by metadata label.
+    :param Table allele_ht: Table containing allele annotations.
+    :param Table vqsr_ht: Table containing VQSR annotations.
+    :return: Table containing joined annotations.
+    :rtype: hl.Table
     """
-    logger.info("Removing unnecessary annotations from annotation tables")
+    logger.info("Removing unnecessary annotations from annotation Tables...")
     rf_ht = rf_ht.select(
         "info_FS",
         "inbreeding_coeff",
@@ -113,16 +121,10 @@ def prepare_annotations(
         "filters",
     )
     vep_ht = vep_ht.transmute(vep=vep_ht.vep.drop("colocated_variants"))
-    hist_ht = hist_ht.select(
-        "gq_hist_alt", "gq_hist_all", "dp_hist_alt", "dp_hist_all", "ab_hist_alt"
+
+    logger.info(
+        "Removing unnecessary fields from VQSR HT and splitting AS annotations..."
     )
-    # rename nonsplit_alleles to original_alleles -- only necessary in tranche 2, this will be renamed moving forwards
-    allele_ht = allele_ht.transmute(
-        allele_data=allele_ht.allele_data.annotate(
-            original_alleles=allele_ht.allele_data.nonsplit_alleles
-        ).drop("nonsplit_alleles")
-    )
-    logger.info("Removing unnecessary fields from vqsr ht and splitting AS annotations")
     vqsr_ht = vqsr_ht.transmute(
         info=vqsr_ht.info.select(
             "NEGATIVE_TRAIN_SITE",
@@ -144,69 +146,54 @@ def prepare_annotations(
         )
     )
     vqsr_ht = vqsr_ht.annotate(info=vqsr_ht.info.annotate(qual=vqsr_ht.qual))
+    freq_ht = freq_ht.drop(
+        "InbreedingCoeff"
+    )  # NOTE: Will need to drop InbreedingCoeff annotation here in 500K, but this isn't present in 300K
 
-    logger.info("Filtering out low QUAL variants")
+    logger.info("Filtering out low QUAL variants...")
     mt = mt.filter_rows(~vqsr_ht[mt.row_key].filters.contains("LowQual"))
     logger.info(f"Count after filtering out low QUAL variants {mt.count()}")
 
-    logger.info(
-        f"Unrelated freq_ht count before filtering out chrM: {unrelated_freq_ht.count()}"
-    )
-    unrelated_freq_ht = hl.filter_intervals(
-        unrelated_freq_ht, [hl.parse_locus_interval("chrM")], keep=False
+    logger.info(f"Frequency HT before filtering out chrM and AC < 1: {freq_ht.count()}")
+    freq_ht = hl.filter_intervals(
+        freq_ht, [hl.parse_locus_interval("chrM")], keep=False
     )
     raw_idx = index_dict["raw"]
-    unrelated_freq_ht = unrelated_freq_ht.filter(
-        unrelated_freq_ht.freq[raw_idx].AC <= 0, keep=False
-    )
+    freq_ht = freq_ht.filter(freq_ht.freq[raw_idx].AC <= 0, keep=False)
     logger.info(
-        f"Unrelated freq_ht count after filtering out chrM and AC <= 1: {unrelated_freq_ht.count()}"
+        f"Frequency HT count after filtering out chrM and AC < 1: {freq_ht.count()}"
     )
 
-    logger.info("Annotating mt with rf ht and flagging problematic regions")
+    logger.info(
+        "Annotating MT with random forest HT and flagging problematic regions..."
+    )
     mt = mt.annotate_rows(rf=rf_ht[mt.row_key])
     mt = flag_problematic_regions(mt)
     mt = mt.transmute_rows(rf=mt.rf.drop("interval_qc_pass"))
 
-    logger.info("Annotating cohort frequencies")
+    logger.info("Annotating MT with frequency information...")
     mt = mt.annotate_rows(**freq_ht[mt.row_key])
-    mt = mt.transmute_rows(cohort_freq=mt.freq)
     mt = mt.annotate_globals(**freq_ht.index_globals())
-    mt = mt.transmute_globals(cohort_freq_meta=mt.freq_meta)
-
-    logger.info("Annotating unrelated frequencies")
-    mt = mt.annotate_rows(**unrelated_freq_ht[mt.row_key])
-    mt = mt.annotate_globals(**unrelated_freq_ht.index_globals())
-
-    logger.info("Creating adj quality hists")
-    mt_filt = filter_to_adj(mt)
-    mt_filt = mt_filt.select_rows()
-    mt_filt = mt_filt.annotate_rows(
-        **qual_hist_expr(mt_filt.GT, mt_filt.GQ, mt_filt.DP, mt_filt.AD)
-    )
-    ht = mt_filt.rows()
-    mt = mt.annotate_rows(adj_qual_hists=ht[mt.row_key])
 
     dbsnp_ht = dbsnp.ht().select("rsid")
     mt = mt.annotate_rows(
-        qual_hists=hist_ht[mt.row_key],
         vep=vep_ht[mt.row_key].vep,
         allele_info=allele_ht[mt.row_key].allele_data,
         vqsr=vqsr_ht[mt.row_key].info,
         rsid=dbsnp_ht[mt.row_key],
     )
     mt = mt.annotate_globals(rf_globals=rf_ht.index_globals())
-    logger.info(f"mt count: {mt.count()}")
+    logger.info(f"MT count: {mt.count()}")
     return mt
 
 
 def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expression]:
     """
-    Make Hail expression for variant annotations to be included in VCF INFO
+    Makes Hail expression for variant annotations to be included in VCF INFO field.
 
-    :param Table/MatrixTable t: Table/MatrixTable containing variant annotations to be reformatted for VCF export
-    :return: Dictionary containing Hail expressions for relevant INFO annotations
-    :rtype: Dict of str: Expression
+    :param Table/MatrixTable t: Table/MatrixTable containing variant annotations to be reformatted for VCF export.
+    :return: Dictionary containing Hail expressions for relevant INFO annotations.
+    :rtype: Dict[str, hl.expr.Expression]
     """
     info_dict = {
         "FS": t.rf.info_FS,
@@ -223,8 +210,8 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
         "AS_VarDP": t.vqsr.AS_VarDP,
         "AS_VQSLOD": t.vqsr.AS_VQSLOD,
         "AS_VQSR_culprit": t.vqsr.AS_culprit,
-        "lcr": t.region_flag.contains("lcr"),
-        "fail_interval_qc": t.region_flag.contains("fail_interval_qc"),
+        "lcr": t.region_flag.lcr,
+        "fail_interval_qc": t.region_flag.fail_interval_qc,
         "nonpar": t.nonpar,
         "rf_positive_label": t.rf.tp,
         "rf_negative_label": t.rf.fail_hard_filters,
@@ -264,15 +251,15 @@ def make_freq_meta_index_dict(
     freq_meta: List[str], gnomad: bool, faf: bool
 ) -> Dict[str, int]:
     """
-    Make dictionary of the entries in the frequency array annotation, where keys are the grouping combinations and the values
-    are the 0-based integer indices
+    Makes a dictionary of the entries in the frequency array annotation, where keys are the grouping combinations and the values
+    are the 0-based integer indices.
 
-    :param list of str freq_meta: Ordered list containing string entries describing all the grouping combinations contained in the
-        frequency array annotation
-    :param bool gnomad: Whether to index a list from gnomAD
+    :param List[str] freq_meta: Ordered list containing string entries describing all the grouping combinations contained in the
+        frequency array annotation.
+    :param bool gnomad: Whether to index a list from gnomAD.
     :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
         of each grouping entry in the frequency array
-    :rtype: Dict of str: int
+    :rtype: Dict[str, int]
     """
     index_dict = index_globals(freq_meta, dict(group=GROUPS))
 
@@ -307,24 +294,24 @@ def make_freq_meta_index_dict(
 
 
 def make_info_dict(
-    prefix,
-    label_groups=None,
-    bin_edges=None,
-    faf=False,
-    popmax=False,
-    age_hist_data=None,
+    prefix: str,
+    label_groups: Dict[str, str] = None,
+    bin_edges: Dict[str, str] = None,
+    faf: bool = False,
+    popmax: bool = False,
+    age_hist_data: str = None,
 ) -> Dict[str, str]:
     """
-    Generate dictionary of Number and Description attributes to be used in the VCF header
+    Generate dictionary of Number and Description attributes used for the VCF header during export.
     
-    :param str prefix: gnomAD or empty (empty is for UKB)
+    :param str prefix: gnomAD or empty (empty is for UKBB).
     :param dict label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
-        e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"])
-    :param dict bin_edges: Dictionary keyed by annotation type, with values that reflect the bin edges corresponding to the annotation
-    :param bool faf: If True, use alternate logic to auto-populate dictionary values associated with filter allele frequency annotations
-    :param bool popmax: If True, use alternate logic to auto-populate dictionary values associated with popmax annotations
-    :param str age_hist_data: Pipe-delimited string of age histograms, from get_age_distributions (somewhat required if popmax == True)
-    :return: Dictionary keyed by VCF INFO annotations, where values are Dictionaries of Number and Description attributes
+        e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
+    :param dict bin_edges: Dictionary keyed by annotation type, with values that reflect the bin edges corresponding to the annotation.
+    :param bool faf: If True, use alternate logic to auto-populate dictionary values associated with filter allele frequency annotation.s
+    :param bool popmax: If True, use alternate logic to auto-populate dictionary values associated with popmax annotations.
+    :param str age_hist_data: Pipe-delimited string of age histograms, from get_age_distributions (required if popmax is set and prefix is empty).
+    :return: Dictionary keyed by VCF INFO annotations, where values are dictionaries of Number and Description attributes.
     :rtype: Dict of str: (Dict of str: str)
     """
     info_dict = dict()
@@ -335,7 +322,7 @@ def make_info_dict(
         else:
             popmax_text = ""
 
-            # only create age hist dict for UKB
+            # Only create age hist dictionary for UKBB
             age_hist_dict = {
                 "age_hist_het_bin_freq": {
                     "Number": "A",
@@ -367,31 +354,23 @@ def make_info_dict(
         popmax_dict = {
             f"{prefix}popmax": {
                 "Number": "A",
-                "Description": "Population with maximum AF{}".format(popmax_text),
+                "Description": f"Population with maximum AF{popmax_text}",
             },
             f"{prefix}AC_popmax": {
                 "Number": "A",
-                "Description": "Allele count in the population with the maximum AF{}".format(
-                    popmax_text
-                ),
+                "Description": f"Allele count in the population with the maximum AF{popmax_text}",
             },
             f"{prefix}AN_popmax": {
                 "Number": "A",
-                "Description": "Total number of alleles in the population with the maximum AF{}".format(
-                    popmax_text
-                ),
+                "Description": f"Total number of alleles in the population with the maximum AF{popmax_text}",
             },
             f"{prefix}AF_popmax": {
                 "Number": "A",
-                "Description": "Maximum allele frequency across populations (excluding samples of Ashkenazi, Finnish, and indeterminate ancestry){}".format(
-                    popmax_text
-                ),
+                "Description": f"Maximum allele frequency across populations (excluding samples of Ashkenazi, Finnish, and indeterminate ancestry){popmax_text}",
             },
             f"{prefix}nhomalt_popmax": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals in the population with the maximum allele frequency{}".format(
-                    popmax_text
-                ),
+                "Description": f"Count of homozygous individuals in the population with the maximum allele frequency{popmax_text}",
             },
         }
         info_dict.update(popmax_dict)
@@ -461,14 +440,14 @@ def make_info_dict(
     return info_dict
 
 
-def make_hist_bin_edges_expr(ht) -> Dict[str, str]:
+def make_hist_bin_edges_expr(ht: hl.Table) -> Dict[str, str]:
     """
-    Create dictionary containing variant histogram annotations and their associated bin edges, formatted into a string
-    separated by pipe delimiters
+    Create dictionarys containing variant histogram annotations and their associated bin edges, formatted into a string
+    separated by pipe delimiters.
 
-    :param Table ht: Table containing histogram variant annotations
-    :return: Dictionary keyed by histogram annotation name, with corresponding reformatted bin edges for values
-    :rtype: Dict of str: str
+    :param Table ht: Table containing histogram variant annotations.
+    :return: Dictionary keyed by histogram annotation name, with corresponding reformatted bin edges for values.
+    :rtype: Dict[str, str]
     """
     edges_dict = {
         "het": "|".join(
@@ -480,7 +459,7 @@ def make_hist_bin_edges_expr(ht) -> Dict[str, str]:
     }
     for hist in HISTS:
 
-        # parse both hists calculated on raw and adj data
+        # Parse hists calculated on both raw and adj-filtered data
         for prefix in ["adj_qual_hists", "qual_hists"]:
             hist_field = f"{prefix}.{hist}"
             hist_name = hist
@@ -502,7 +481,7 @@ def make_index_dict(
     t: Union[hl.MatrixTable, hl.Table], freq_meta_str: str, faf: bool = False
 ) -> Dict[str, int]:
     """
-    Create a look-up Dictionary for entries contained in the frequency annotation array
+    Create a look-up Dictionary for entries contained in the frequency annotation array.
 
     :param Table ht: Table or MatrixTable containing freq_meta global annotation to be indexed
     :param str freq_meta: freq_meta global annotation to be indexed (freq_meta, gnomad_exomes_freq_meta, or gnomad_genomes_freq_meta)
@@ -564,12 +543,13 @@ def make_hist_dict(bin_edges: Dict, adj: bool) -> Dict[str, str]:
     return header_hist_dict
 
 
-def make_filter_dict(ht):
+def make_filter_dict(ht: hl.Table) -> Dict[str, str]:
     """
-    Generate dictionary of Number and Description attributes to be used in the VCF header, specifically for FILTER annotations
-    :param Table ht: Table containing global annotations of the Random Forests SNP and indel cutoffs
-    :return: Dictionary keyed by VCF FILTER annotations, where values are Dictionaries of Number and Description attributes
-    :rtype: Dict of str: (Dict of str: str)
+    Generates dictionary of Number and Description attributes to be used in the VCF header, specifically for FILTER annotations.
+
+    :param Table ht: Table containing global annotations of the Random Forests SNP and indel cutoffs.
+    :return: Dictionary keyed by VCF FILTER annotations, where values are Dictionaries of Number and Description attributes.
+    :rtype: Dict[str, str]
     """
     snp_cutoff = hl.eval(ht.globals.rf_globals.rf_snv_cutoff)
     indel_cutoff = hl.eval(ht.globals.rf_globals.rf_indel_cutoff)
@@ -593,17 +573,17 @@ def unfurl_nested_annotations(
 ) -> Dict[str, hl.expr.Expression]:
     """
     Create dictionary keyed by the variant annotation labels to be extracted from variant annotation arrays, where the values
-    of the dictionary are Hail Expressions describing how to access the corresponding values
+    of the dictionary are Hail Expressions describing how to access the corresponding values.
 
-    :param Table/MatrixTable t: Hail Table/MatrixTable containing the nested variant annotation arrays to be unfurled
-    :param bool gnomad: Whether the annotations are from gnomAD
-    :param bool genome: Whether the annotations are from genome data (relevant only to gnomAD data)
-    :return: Dictionary containing variant annotations and their corresponding values
-    :rtype: Dict of str: Expression
+    :param Table/MatrixTable t: Table/MatrixTable containing the nested variant annotation arrays to be unfurled.
+    :param bool gnomad: Whether the annotations are from gnomAD.
+    :param bool genome: Whether the annotations are from genome data (relevant only to gnomAD data).
+    :return: Dictionary containing variant annotations and their corresponding values.
+    :rtype: Dict[str, hl.expr.Expression]
     """
     expr_dict = dict()
 
-    # set variables to locate necessary fields, compute freq index dicts, and compute faf index dict for UKB
+    # Set variables to locate necessary fields, compute freq index dicts, and compute faf index dict for UKB
     if gnomad:
         if genome:
             faf = "gnomad_genomes_faf"
@@ -629,7 +609,7 @@ def unfurl_nested_annotations(
         popmax = "popmax"
         freq_idx = make_index_dict(t, "freq_meta")
 
-    # unfurl freq index dict
+    # Unfurl freq index dict
     for k, i in freq_idx.items():
         entry = k.split("_")
 
@@ -744,17 +724,21 @@ def unfurl_nested_annotations(
 
 
 def make_combo_header_text(
-    preposition, group_types, combo_fields, prefix, faf=False
+    preposition: str,
+    group_types: List[str],
+    combo_fields: List[str],
+    prefix: str,
+    faf: bool = False,
 ) -> str:
     """
     Programmatically generate text to populate the VCF header description for a given variant annotation with specific groupings and subset
 
-    :param str preposition: Relevant preposition to precede automatically generated text
-    :param list of str group_types: List of grouping types, e.g. "sex" or "pop"
-    :param list of str combo_fields: List of the specific values for each grouping type, for which the text is being generated
-    :param str prefix: gnomad_exomes or gnomad_genomes
-    :param bool faf: If True, use alternate logic to automatically populate descriptions for filter allele frequency annotations
-    :return: String with automatically generated description text for a given set of combo fields
+    :param str preposition: Relevant preposition to precede automatically generated text.
+    :param list of str group_types: List of grouping types, e.g. "sex" or "pop".
+    :param list of str combo_fields: List of the specific values for each grouping type, for which the text is being generated.
+    :param str prefix: gnomad_exomes or gnomad_genomes.
+    :param bool faf: If True, use alternate logic to automatically populate descriptions for filter allele frequency annotations.
+    :return: String with automatically generated description text for a given set of combo fields.
     :rtype: str
     """
     combo_dict = dict(zip(group_types, combo_fields))
@@ -789,14 +773,14 @@ def make_combo_header_text(
 
 
 def set_female_y_metrics_to_na(
-    t: Union[hl.MatrixTable, hl.Table]
-) -> Union[hl.MatrixTable, hl.Table]:
+    t: Union[hl.Table, hl.MatrixTable]
+) -> Union[hl.Table, hl.MatrixTable]:
     """
-    Set AC, AN, and nhomalt Y variant annotations for females to NA (instead of 0)
+    Set AC, AN, and nhomalt Y variant annotations for females to NA (instead of 0).
 
-    :param Table/MatrixTable t: Table/MatrixTable containing female variant annotations
-    :return: Table/MatrixTable with reset annotations
-    :rtype: Table/MatrixTable
+    :param Table/MatrixTable t: Table/MatrixTable containing female variant annotations.
+    :return: Table/MatrixTable with reset annotations.
+    :rtype: hl.Table/hl.MatrixTable
     """
     metrics = list(t.row.info)
     female_metrics = [x for x in metrics if "_female" in x]
@@ -829,45 +813,18 @@ def set_female_y_metrics_to_na(
     )
 
 
-def get_age_distributions(data_source, freeze) -> str:
+def get_age_distributions(ht: hl.Table) -> str:
     """
-    Get background distribution of age (field 21022 is age at recruitment)
+    Get background distribution of sample ages (using field 21022, age at recruitment).
 
-    :param str data_source: One of regeneron or broad
-    :param int freeze: One of data freezes
-    :return: pipe-delimited string with ages in pre-determined bins (<30, 30-35, ..., 75-80, 80+)
+    :param Table ht: Table containing samples and sample ages.
+    :return: Pipe-delimited string with ages in pre-determined bins (<30, 30-35, ..., 75-80, 80+).
     :rtype: str
     """
-    ukbb_phenotypes = hl.import_table(ukbb_phenotype_path, impute=True)
-    ukbb_phenotypes = ukbb_phenotypes.key_by(s_old=hl.str(ukbb_phenotypes["f.eid"]))
-    ukbb_age = ukbb_phenotypes.select("f.21022.0.0")
-    sample_map_ht = hl.read_table(array_sample_map_ht(data_source, freeze))
-    sample_map_ht = sample_map_ht.key_by("ukbb_app_26041_id")
-    ukbb_age = ukbb_age.key_by(s=sample_map_ht[ukbb_age.key].s)
-
-    age_hist_data = ukbb_age.aggregate(hl.agg.hist(ukbb_age["f.21022.0.0"], 30, 80, 10))
+    age_hist_data = ht.aggregate(hl.agg.hist(ht.age, 30, 80, 10))
     age_hist_data.bin_freq.insert(0, age_hist_data.n_smaller)
     age_hist_data.bin_freq.append(age_hist_data.n_larger)
     return age_hist_data.bin_freq
-
-
-def get_age_hists(data_source, freeze) -> hl.Table:
-    """
-    Get age hists for het and hom variants (field 21022 is age at recruitment)
-
-    :param str data_source: One of regeneron or broad
-    :param int freeze: One of data freezes
-    :return: Table with age hists
-    :rtype: Table
-    """
-    ukbb_phenotypes = hl.import_table(ukbb_phenotype_path, impute=True)
-    ukbb_phenotypes = ukbb_phenotypes.key_by(s_old=hl.str(ukbb_phenotypes["f.eid"]))
-    ukbb_age = ukbb_phenotypes.select("f.21022.0.0")
-    ukbb_age = ukbb_age.transmute(age=ukbb_age["f.21022.0.0"])
-    mt = get_ukbb_data(data_source, freeze, adj=False, split=True, meta_root="meta")
-    mt = mt.annotate_cols(**ukbb_age[mt.meta.ukbb_app_26041_id])
-    mt = mt.annotate_rows(**age_hists_expr(mt.adj, mt.GT, mt.age))
-    return mt.rows()
 
 
 def sample_sum_check(
@@ -875,19 +832,19 @@ def sample_sum_check(
     prefix: str,
     label_groups: Dict[str, List[str]],
     verbose: bool,
-    subpop=None,
+    subpop: bool = None,
 ) -> None:
     """
     Compute afresh the sum of annotations for a specified group of annotations, and compare to the annotated version;
-    display results from checking the sum of the specified annotations in the terminal
+    display results from checking the sum of the specified annotations in the terminal.
 
-    :param Table ht: Hail Table containing annotations to be summed
+    :param Table ht: Table containing annotations to be summed.
     :param str prefix: Subset of gnomAD
     :param dict label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
-        e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"])
+        e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
     :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
-        show only top values of annotations that fail checks
-    :param str subpop: Subpop abbreviation, supplied only if subpopulations are included in the annotation groups being checked
+        show only top values of annotations that fail checks.
+    :param str subpop: Subpop abbreviation, supplied only if subpopulations are included in the annotation groups being checked.
     :rtype: None
     """
     combo_AC = [ht.info[f"{prefix}AC_{x}"] for x in make_label_combos(label_groups)]
@@ -941,7 +898,10 @@ def sample_sum_check(
 
 
 def sanity_check_mt(
-    mt: hl.MatrixTable, subsets, missingness_threshold=0.5, verbose=False
+    mt: hl.MatrixTable,
+    subsets: List[str],
+    missingness_threshold: float = 0.5,
+    verbose: bool = False,
 ) -> None:
     """
     Perform a battery of sanity checks on a specified group of subsets in a Hail Table containing variant annotations;
@@ -950,7 +910,7 @@ def sanity_check_mt(
     checks on sex-chromosome annotations; and summaries of % missingness in variant annotations
 
     :param MatrixTable mt: MatrixTable containing variant annotations to check
-    :param list of str subsets: List of subsets to be checked
+    :param List[str] subsets: List of subsets to be checked
     :param bool verbose: If True, display top values of relevant annotations being checked, regardless of whether check
         conditions are violated; if False, display only top values of relevant annotations if check conditions are violated
     :return: Terminal display of results from the battery of sanity checks
@@ -1324,408 +1284,433 @@ def sanity_check_mt(
 
 
 def main(args):
-    hl.init(log="/release.log", default_reference="GRCh38")
 
+    hl.init(log="/release.log", default_reference="GRCh38")
     data_source = args.data_source
     freeze = args.freeze
 
-    if args.prepare_internal_mt:
+    try:
+        if args.prepare_internal_mt:
 
-        logger.info("Getting age hist data")
-        age_hist_data = get_age_distributions(data_source, freeze)
+            logger.info("Getting age hist data")
+            age_hist_data = get_age_distributions(get_age_ht(freeze))
 
-        logger.info("Getting raw mt")
-        # NOTE reading in raw to return all samples/variants with fields for adj
-        # mt = get_ukbb_data(data_source, freeze, split=False, raw=True, meta_root='meta')
-        mt = rep_on_read(
-            get_ukbb_data_path(data_source, freeze, hardcalls=False, split=False), 30000
-        )
-
-        logger.info(
-            "Dropping gVCF info (selecting all other entries) and keying by locus/alleles"
-        )
-        mt = mt.select_entries(
-            "DP", "GQ", "LA", "LAD", "LGT", "LPGT", "LPL", "MIN_DP", "PID", "RGQ", "SB"
-        )
-        mt = mt.key_rows_by("locus", "alleles")
-
-        logger.info("Splitting raw mt")
-        mt = hl.experimental.sparse_split_multi(mt)
-        mt = mt.select_entries(
-            "GT", "GQ", "DP", "AD", "MIN_DP", "PGT", "PID", "PL", "SB"
-        )
-
-        logger.info("Reading in all variant annotation tables")
-        freq_ht = hl.read_table(
-            var_annotations_ht_path(data_source, freeze, "cohort_freq")
-        )
-        unrelated_freq_ht = hl.read_table(
-            var_annotations_ht_path(data_source, freeze, "join_freq_hybrid_unrelated")
-        )
-        rf_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, "rf"))
-        vep_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, "vep"))
-        hist_ht = hl.read_table(
-            var_annotations_ht_path(data_source, freeze, "qual_hists")
-        )
-        allele_ht = hl.read_table(
-            var_annotations_ht_path(data_source, freeze, "allele_data")
-        )
-        vqsr_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, "vqsr"))
-
-        logger.info("Adding annotations...")
-        mt = prepare_annotations(
-            mt,
-            freq_ht,
-            unrelated_freq_ht,
-            rf_ht,
-            vep_ht,
-            hist_ht,
-            make_index_dict(freq_ht, freq_meta),
-            allele_ht,
-            vqsr_ht,
-        )
-        mt = mt.annotate_globals(age_distribution=age_hist_data)
-        mt.write(release_mt_path(data_source, freeze), args.overwrite)
-
-    if args.prepare_vcf_mt:
-        logger.info("Starting VCF process")
-        mt = hl.read_matrix_table(release_mt_path(data_source, freeze))
-
-        logger.info("Dropping cohort frequencies")
-        mt = mt.drop("cohort_freq", "cohort_freq_meta")
-
-        logger.info("Adding missing filters field (tranche 2 fix)")
-        rf_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, "rf"))
-        rf_ht = rf_ht.select("filters")
-        mt = mt.annotate_rows(**rf_ht[mt.row_key])
-
-        logger.info("Adding missing qual field (tranche 2 fix)")
-        vqsr_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, "vqsr"))
-        vqsr_ht = vqsr_ht.select("qual")
-        mt = mt.annotate_rows(**vqsr_ht[mt.row_key])
-
-        logger.info("Adding age hists (tranche 2 fix)")
-        hists_ht = get_age_hists(data_source, freeze)
-        hists_ht = hists_ht.select("age_hist_het", "age_hist_hom")
-        mt = mt.annotate_rows(**hists_ht[mt.row_key])
-
-        bin_edges = make_hist_bin_edges_expr(mt.rows())
-
-        logger.info("Getting age hist data")
-        age_hist_data = hl.eval(mt.age_distribution)
-
-        logger.info("Making INFO dict for VCF")
-        subset_list = ["", "gnomad_exomes_", "gnomad_genomes_"]  # empty for ukbb
-        for subset in subset_list:
-            INFO_DICT.update(make_info_dict(subset, dict(group=GROUPS)))
-            INFO_DICT.update(make_info_dict(subset, dict(group=["adj"], sex=SEXES)))
-            INFO_DICT.update(make_info_dict(subset, dict(group=["adj"]), faf=True))
-            INFO_DICT.update(
-                make_info_dict(subset, dict(group=["adj"], sex=SEXES), faf=True)
+            logger.info("Getting raw mt")
+            # NOTE reading in raw to return all samples/variants with fields for adj
+            # mt = get_ukbb_data(data_source, freeze, split=False, raw=True, meta_root='meta')
+            mt = rep_on_read(
+                get_ukbb_data_path(data_source, freeze, hardcalls=False, split=False),
+                30000,
             )
 
-            if "gnomad" in subset:
-                INFO_DICT.update(
-                    make_info_dict(subset, dict(group=["adj"], pop=GNOMAD_POPS))
-                )
-                INFO_DICT.update(make_info_dict(subset, popmax=True))
-                INFO_DICT.update(
-                    make_info_dict(
-                        subset, dict(group=["adj"], pop=GNOMAD_POPS, sex=SEXES)
-                    )
-                )
-                INFO_DICT.update(
-                    make_info_dict(
-                        subset,
-                        dict(group=["adj"], pop=["nfe"], subpop=GNOMAD_NFE_SUBPOPS),
-                    )
-                )
-                INFO_DICT.update(
-                    make_info_dict(
-                        subset,
-                        dict(group=["adj"], pop=["eas"], subpop=GNOMAD_EAS_SUBPOPS),
-                    )
-                )
-                INFO_DICT.update(
-                    make_info_dict(
-                        subset, dict(group=["adj"], pop=GNOMAD_FAF_POPS), faf=True
-                    )
-                )
-                INFO_DICT.update(
-                    make_info_dict(
-                        subset,
-                        dict(group=["adj"], pop=GNOMAD_FAF_POPS, sex=SEXES),
-                        faf=True,
-                    )
-                )
-
-            else:
-                INFO_DICT.update(
-                    make_info_dict(
-                        subset,
-                        bin_edges=bin_edges,
-                        popmax=True,
-                        age_hist_data="|".join(str(x) for x in age_hist_data),
-                    )
-                )
-                INFO_DICT.update(make_info_dict(subset, dict(group=["adj"], pop=POPS)))
-                INFO_DICT.update(
-                    make_info_dict(subset, dict(group=["adj"], pop=POPS, sex=SEXES))
-                )
-                INFO_DICT.update(
-                    make_info_dict(subset, dict(group=["adj"], pop=FAF_POPS), faf=True)
-                )
-                INFO_DICT.update(
-                    make_info_dict(
-                        subset, dict(group=["adj"], pop=FAF_POPS, sex=SEXES), faf=True
-                    )
-                )
-        INFO_DICT.update(make_hist_dict(bin_edges, adj=False))
-
-        # Adjust keys to remove adj tags before exporting to VCF
-        # new_info_dict = {i.replace('_adj', '').replace('adj_', '').replace('_adj_', '').replace('.', '_').replace('raw_', ''): j for i,j in INFO_DICT.items()}
-        new_info_dict = {
-            i.replace("adj_", "").replace("_adj", "").replace("_adj_", ""): j
-            for i, j in INFO_DICT.items()
-        }
-        new_info_dict.update(make_hist_dict(bin_edges, adj=True))
-        logger.info(new_info_dict["faf95"])
-        logger.info(new_info_dict["gnomad_exomes_faf95"])
-        logger.info(new_info_dict["faf95_nfe"])
-        logger.info(new_info_dict["faf95_nfe_male"])
-        logger.info(new_info_dict["faf95_0"])
-        logger.info(new_info_dict["gnomad_exomes_popmax"])
-        logger.info(new_info_dict["gnomad_exomes_AC_popmax"])
-        logger.info(new_info_dict["dp_hist_alt_adj_bin_freq"])
-        logger.info(new_info_dict["dp_hist_alt_bin_freq"])
-        logger.info(new_info_dict["AC"])
-        logger.info(new_info_dict["AC_raw"])
-        logger.info(new_info_dict["AC_nfe"])
-        logger.info(new_info_dict["gnomad_exomes_AC"])
-
-        # add non par annotation back
-        mt = mt.annotate_rows(nonpar=(mt.locus.in_x_nonpar() | mt.locus.in_y_nonpar()))
-
-        logger.info("Constructing INFO field")
-        mt = mt.annotate_rows(info=hl.struct(**make_info_expr(mt)))
-        mt = mt.annotate_rows(
-            info=mt.info.annotate(
-                **unfurl_nested_annotations(mt, gnomad=False, genome=False)
+            logger.info(
+                "Dropping gVCF info (selecting all other entries) and keying by locus/alleles"
             )
-        )
-        mt = mt.annotate_rows(
-            info=mt.info.annotate(
-                **unfurl_nested_annotations(mt, gnomad=True, genome=True)
+            mt = mt.select_entries(
+                "DP",
+                "GQ",
+                "LA",
+                "LAD",
+                "LGT",
+                "LPGT",
+                "LPL",
+                "MIN_DP",
+                "PID",
+                "RGQ",
+                "SB",
             )
-        )
-        mt = mt.annotate_rows(
-            info=mt.info.annotate(
-                **unfurl_nested_annotations(mt, gnomad=True, genome=False)
+            mt = mt.key_rows_by("locus", "alleles")
+
+            logger.info("Splitting raw mt")
+            mt = hl.experimental.sparse_split_multi(mt)
+            mt = mt.select_entries(
+                "GT", "GQ", "DP", "AD", "MIN_DP", "PGT", "PID", "PL", "SB"
             )
-        )
-        mt = set_female_y_metrics_to_na(mt)
 
-        # Select relevant fields for VCF export
-        mt = mt.select_rows("info", "filters", "rsid", "qual")
-
-        # Add VEP annotations
-        # TODO: After 200K release change this to use vep_csq annotation on the vep HT
-        vep_csq_ht = hl.read_table(
-            var_annotations_ht_path(data_source, freeze, "vep_csq")
-        )
-        new_info_dict.update(
-            {"vep": {"Description": hl.eval(vep_csq_ht.globals.vep_csq_header)}}
-        )
-        header_dict = {
-            "info": new_info_dict,
-            "filter": make_filter_dict(mt.rows()),
-            "format": FORMAT_DICT,
-        }
-
-        logger.info("Saving header dict to pickle")
-        pickle_file = (
-            f"gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/header_dict.pickle"
-        )
-        with hl.hadoop_open(pickle_file, "wb") as p:
-            pickle.dump(header_dict, p, protocol=pickle.HIGHEST_PROTOCOL)
-        mt = mt.annotate_rows(info=mt.info.annotate(vep=vep_csq_ht[mt.row_key].vep))
-        mt.write(release_mt_path(data_source, freeze, temp=True), args.overwrite)
-
-    if args.sanity_check:
-        subset_list = ["", "gnomad_exomes_", "gnomad_genomes_"]
-        mt = hl.read_matrix_table(release_mt_path(data_source, freeze, temp=True))
-        mt = set_female_y_metrics_to_na(mt)
-        sanity_check_mt(
-            mt, subset_list, missingness_threshold=0.5, verbose=args.verbose
-        )
-
-    if args.prepare_browser_ht:
-        mt = hl.read_matrix_table(release_mt_path(data_source, freeze))
-        logger.info(f"mt count: {mt.count()}")
-
-        logger.info("Adding missing filters field (tranche 2 fix)")
-        rf_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, "rf"))
-        rf_ht = rf_ht.select("filters")
-        mt = mt.annotate_rows(**rf_ht[mt.row_key])
-
-        logger.info("Adding missing qual field (tranche 2 fix)")
-        vqsr_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, "vqsr"))
-        vqsr_ht = vqsr_ht.select("qual")
-        mt = mt.annotate_rows(**vqsr_ht[mt.row_key])
-
-        logger.info("Adding age hists (tranche 2 fix)")
-        hists_ht = get_age_hists(data_source, freeze)
-        hists_ht = hists_ht.select("age_hist_het", "age_hist_hom")
-        mt = mt.annotate_rows(**hists_ht[mt.row_key])
-
-        logger.info("Adding rsids (tranche 2 fix)")
-        dbsnp_ht = dbsnp.ht().select("rsid")
-        mt = mt.drop("rsid")
-        mt = mt.annotate_rows(**dbsnp_ht[mt.row_key])
-
-        ht = mt.rows()
-        logger.info(f"ht count: {ht.count()}")
-        ht = ht.naive_coalesce(20000)
-        ht.write(release_ht_path(data_source, freeze), args.overwrite)
-
-    if args.prepare_release_vcf:
-
-        mt = hl.read_matrix_table(release_mt_path(data_source, freeze, temp=True))
-        logger.info("Reading header dict from pickle")
-        pickle_file = (
-            f"gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/header_dict.pickle"
-        )
-        with hl.hadoop_open(pickle_file, "rb") as p:
-            header_dict = pickle.load(p)
-
-        # tranche 2 set female faf on chrY to NA fix
-        mt = set_female_y_metrics_to_na(mt)
-
-        # tranche 2 dbsnp fix
-        dbsnp_ht = dbsnp.ht().select("rsid")
-        mt = mt.drop("rsid")
-        mt = mt.annotate_rows(**dbsnp_ht[mt.row_key])
-
-        # Reformat names to remove "adj_" (this is a carryover from code that labeled everything "gnomad")
-        row_annots = list(mt.row.info)
-        new_row_annots = []
-        for x in row_annots:
-            if "hist" not in x:
-                x = (
-                    x.replace("adj_", "",)
-                    .replace("_adj", "")
-                    .replace("_adj_", "")
-                    .replace("raw_", "")
+            logger.info("Reading in all variant annotation tables")
+            freq_ht = hl.read_table(
+                var_annotations_ht_path(data_source, freeze, "cohort_freq")
+            )
+            unrelated_freq_ht = hl.read_table(
+                var_annotations_ht_path(
+                    data_source, freeze, "join_freq_hybrid_unrelated"
                 )
-            new_row_annots.append(x)
+            )
+            rf_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, "rf"))
+            vep_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, "vep"))
+            hist_ht = hl.read_table(
+                var_annotations_ht_path(data_source, freeze, "qual_hists")
+            )
+            allele_ht = hl.read_table(
+                var_annotations_ht_path(data_source, freeze, "allele_data")
+            )
+            vqsr_ht = hl.read_table(
+                var_annotations_ht_path(data_source, freeze, "vqsr")
+            )
 
-        info_annot_mapping = dict(
-            zip(new_row_annots, [mt.info[f"{x}"] for x in row_annots])
-        )
+            logger.info("Adding annotations...")
+            mt = prepare_annotations(
+                mt,
+                freq_ht,
+                unrelated_freq_ht,
+                rf_ht,
+                vep_ht,
+                hist_ht,
+                make_index_dict(freq_ht, freq_meta),
+                allele_ht,
+                vqsr_ht,
+            )
+            mt = mt.annotate_globals(age_distribution=age_hist_data)
+            mt.write(release_mt_path(data_source, freeze), args.overwrite)
 
-        # Confirm all VCF fields/descriptions are present before exporting
-        missing_fields = []
-        missing_descriptions = []
-        for item in ["info", "filters", "format"]:
-            if item == "info":
-                annots = new_row_annots
-            elif item == "format":
-                annots = list(mt.entry)
-            else:
-                item = "filter"
-                annot_mt = mt.explode_rows(mt.filters)
-                annots = list(
-                    annot_mt.aggregate_rows(hl.agg.collect_as_set(annot_mt.filters))
+        if args.prepare_vcf_mt:
+            logger.info("Starting VCF process")
+            mt = hl.read_matrix_table(release_mt_path(data_source, freeze))
+
+            logger.info("Dropping cohort frequencies")
+            mt = mt.drop("cohort_freq", "cohort_freq_meta")
+
+            logger.info("Adding missing filters field (tranche 2 fix)")
+            rf_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, "rf"))
+            rf_ht = rf_ht.select("filters")
+            mt = mt.annotate_rows(**rf_ht[mt.row_key])
+
+            logger.info("Adding missing qual field (tranche 2 fix)")
+            vqsr_ht = hl.read_table(
+                var_annotations_ht_path(data_source, freeze, "vqsr")
+            )
+            vqsr_ht = vqsr_ht.select("qual")
+            mt = mt.annotate_rows(**vqsr_ht[mt.row_key])
+
+            bin_edges = make_hist_bin_edges_expr(mt.rows())
+
+            logger.info("Getting age hist data")
+            age_hist_data = hl.eval(mt.age_distribution)
+
+            logger.info("Making INFO dict for VCF")
+            subset_list = ["", "gnomad_exomes_", "gnomad_genomes_"]  # empty for ukbb
+            for subset in subset_list:
+                INFO_DICT.update(make_info_dict(subset, dict(group=GROUPS)))
+                INFO_DICT.update(make_info_dict(subset, dict(group=["adj"], sex=SEXES)))
+                INFO_DICT.update(make_info_dict(subset, dict(group=["adj"]), faf=True))
+                INFO_DICT.update(
+                    make_info_dict(subset, dict(group=["adj"], sex=SEXES), faf=True)
                 )
 
-            temp_missing_fields = []
-            temp_missing_descriptions = []
-            for field in annots:
-                try:
-                    description = header_dict[item][field]
-                    if len(description) == 0:
-                        logger.warn(
-                            f"{field} in mt info field has empty description in VCF header!"
+                if "gnomad" in subset:
+                    INFO_DICT.update(
+                        make_info_dict(subset, dict(group=["adj"], pop=GNOMAD_POPS))
+                    )
+                    INFO_DICT.update(make_info_dict(subset, popmax=True))
+                    INFO_DICT.update(
+                        make_info_dict(
+                            subset, dict(group=["adj"], pop=GNOMAD_POPS, sex=SEXES)
                         )
-                        temp_missing_descriptions.append(field)
-                except KeyError:
-                    logger.warn(
-                        f"{field} in mt info field does not exist in VCF header!"
                     )
-                    if "hist" not in field:  # some hists are not exported
-                        temp_missing_fields.append(field)
+                    INFO_DICT.update(
+                        make_info_dict(
+                            subset,
+                            dict(group=["adj"], pop=["nfe"], subpop=GNOMAD_NFE_SUBPOPS),
+                        )
+                    )
+                    INFO_DICT.update(
+                        make_info_dict(
+                            subset,
+                            dict(group=["adj"], pop=["eas"], subpop=GNOMAD_EAS_SUBPOPS),
+                        )
+                    )
+                    INFO_DICT.update(
+                        make_info_dict(
+                            subset, dict(group=["adj"], pop=GNOMAD_FAF_POPS), faf=True
+                        )
+                    )
+                    INFO_DICT.update(
+                        make_info_dict(
+                            subset,
+                            dict(group=["adj"], pop=GNOMAD_FAF_POPS, sex=SEXES),
+                            faf=True,
+                        )
+                    )
 
-            missing_fields.extend(temp_missing_fields)
-            missing_descriptions.extend(temp_missing_descriptions)
-        if len(missing_fields) != 0 or len(missing_descriptions) != 0:
-            logger.error(
-                "Some fields are either missing or missing descriptions in the VCF header! Please reconcile."
+                else:
+                    INFO_DICT.update(
+                        make_info_dict(
+                            subset,
+                            bin_edges=bin_edges,
+                            popmax=True,
+                            age_hist_data="|".join(str(x) for x in age_hist_data),
+                        )
+                    )
+                    INFO_DICT.update(
+                        make_info_dict(subset, dict(group=["adj"], pop=POPS))
+                    )
+                    INFO_DICT.update(
+                        make_info_dict(subset, dict(group=["adj"], pop=POPS, sex=SEXES))
+                    )
+                    INFO_DICT.update(
+                        make_info_dict(
+                            subset, dict(group=["adj"], pop=FAF_POPS), faf=True
+                        )
+                    )
+                    INFO_DICT.update(
+                        make_info_dict(
+                            subset,
+                            dict(group=["adj"], pop=FAF_POPS, sex=SEXES),
+                            faf=True,
+                        )
+                    )
+            INFO_DICT.update(make_hist_dict(bin_edges, adj=False))
+
+            # Adjust keys to remove adj tags before exporting to VCF
+            # new_info_dict = {i.replace('_adj', '').replace('adj_', '').replace('_adj_', '').replace('.', '_').replace('raw_', ''): j for i,j in INFO_DICT.items()}
+            new_info_dict = {
+                i.replace("adj_", "").replace("_adj", "").replace("_adj_", ""): j
+                for i, j in INFO_DICT.items()
+            }
+            new_info_dict.update(make_hist_dict(bin_edges, adj=True))
+            logger.info(new_info_dict["faf95"])
+            logger.info(new_info_dict["gnomad_exomes_faf95"])
+            logger.info(new_info_dict["faf95_nfe"])
+            logger.info(new_info_dict["faf95_nfe_male"])
+            logger.info(new_info_dict["faf95_0"])
+            logger.info(new_info_dict["gnomad_exomes_popmax"])
+            logger.info(new_info_dict["gnomad_exomes_AC_popmax"])
+            logger.info(new_info_dict["dp_hist_alt_adj_bin_freq"])
+            logger.info(new_info_dict["dp_hist_alt_bin_freq"])
+            logger.info(new_info_dict["AC"])
+            logger.info(new_info_dict["AC_raw"])
+            logger.info(new_info_dict["AC_nfe"])
+            logger.info(new_info_dict["gnomad_exomes_AC"])
+
+            # add non par annotation back
+            mt = mt.annotate_rows(
+                nonpar=(mt.locus.in_x_nonpar() | mt.locus.in_y_nonpar())
             )
-            return
 
-        mt = mt.transmute_rows(info=hl.struct(**info_annot_mapping))
-
-        # Rearrange INFO field in desired ordering
-        drop_hists = (
-            [x + "_n_smaller" for x in HISTS]
-            + [x + "_bin_edges" for x in HISTS]
-            + [x + "_n_larger" for x in HISTS if "dp_" not in x]
-        )
-        drop_hists.extend(
-            [x + "_adj_n_smaller" for x in HISTS]
-            + [x + "_adj_bin_edges" for x in HISTS]
-            + [x + "_adj_n_larger" for x in HISTS if "dp_" not in x]
-            + ["age_hist_hom_bin_edges", "age_hist_het_bin_edges"]
-        )
-
-        mt = mt.annotate_rows(
-            info=mt.info.select(
-                "AC",
-                "AN",
-                "AF",
-                "rf_tp_probability",
-                *mt.info.drop("AC", "AN", "AF", "rf_tp_probability", *drop_hists),
+            logger.info("Constructing INFO field")
+            mt = mt.annotate_rows(info=hl.struct(**make_info_expr(mt)))
+            mt = mt.annotate_rows(
+                info=mt.info.annotate(
+                    **unfurl_nested_annotations(mt, gnomad=False, genome=False)
+                )
             )
-        )
-
-        if args.per_chromosome:
-            # Export VCFs by chromosome
-            mt = mt.key_rows_by(
-                locus=hl.locus(mt.locus.contig, mt.locus.position), alleles=mt.alleles
+            mt = mt.annotate_rows(
+                info=mt.info.annotate(
+                    **unfurl_nested_annotations(mt, gnomad=True, genome=True)
+                )
             )
-            mt.describe()
+            mt = mt.annotate_rows(
+                info=mt.info.annotate(
+                    **unfurl_nested_annotations(mt, gnomad=True, genome=False)
+                )
+            )
+            mt = set_female_y_metrics_to_na(mt)
 
-            logger.info(f"full mt count: {mt.count()}")
-            # NOTE: need to run this on all workers
-            rg = get_reference_genome(mt.locus)
-            contigs = rg.contigs[:24]  # autosomes + X/Y
-            logger.info(f"Contigs: {contigs}")
+            # Select relevant fields for VCF export
+            mt = mt.select_rows("info", "filters", "rsid", "qual")
 
-            for contig in contigs:
-                contig_mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
-                logger.info(f"{contig} mt count: {contig_mt.count()}")
+            # Add VEP annotations
+            # TODO: After 200K release change this to use vep_csq annotation on the vep HT
+            vep_csq_ht = hl.read_table(
+                var_annotations_ht_path(data_source, freeze, "vep_csq")
+            )
+            new_info_dict.update(
+                {"vep": {"Description": hl.eval(vep_csq_ht.globals.vep_csq_header)}}
+            )
+            header_dict = {
+                "info": new_info_dict,
+                "filter": make_filter_dict(mt.rows()),
+                "format": FORMAT_DICT,
+            }
+
+            logger.info("Saving header dict to pickle")
+            pickle_file = (
+                f"gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/header_dict.pickle"
+            )
+            with hl.hadoop_open(pickle_file, "wb") as p:
+                pickle.dump(header_dict, p, protocol=pickle.HIGHEST_PROTOCOL)
+            mt = mt.annotate_rows(info=mt.info.annotate(vep=vep_csq_ht[mt.row_key].vep))
+            mt.write(release_mt_path(data_source, freeze, temp=True), args.overwrite)
+
+        if args.sanity_check:
+            subset_list = ["", "gnomad_exomes_", "gnomad_genomes_"]
+            mt = hl.read_matrix_table(release_mt_path(data_source, freeze, temp=True))
+            mt = set_female_y_metrics_to_na(mt)
+            sanity_check_mt(
+                mt, subset_list, missingness_threshold=0.5, verbose=args.verbose
+            )
+
+        if args.prepare_browser_ht:
+            mt = hl.read_matrix_table(release_mt_path(data_source, freeze))
+            logger.info(f"mt count: {mt.count()}")
+
+            logger.info("Adding missing filters field (tranche 2 fix)")
+            rf_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, "rf"))
+            rf_ht = rf_ht.select("filters")
+            mt = mt.annotate_rows(**rf_ht[mt.row_key])
+
+            logger.info("Adding missing qual field (tranche 2 fix)")
+            vqsr_ht = hl.read_table(
+                var_annotations_ht_path(data_source, freeze, "vqsr")
+            )
+            vqsr_ht = vqsr_ht.select("qual")
+            mt = mt.annotate_rows(**vqsr_ht[mt.row_key])
+
+            logger.info("Adding rsids (tranche 2 fix)")
+            dbsnp_ht = dbsnp.ht().select("rsid")
+            mt = mt.drop("rsid")
+            mt = mt.annotate_rows(**dbsnp_ht[mt.row_key])
+
+            ht = mt.rows()
+            logger.info(f"ht count: {ht.count()}")
+            ht = ht.naive_coalesce(20000)
+            ht.write(release_ht_path(data_source, freeze), args.overwrite)
+
+        if args.prepare_release_vcf:
+
+            mt = hl.read_matrix_table(release_mt_path(data_source, freeze, temp=True))
+            logger.info("Reading header dict from pickle")
+            pickle_file = (
+                f"gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/header_dict.pickle"
+            )
+            with hl.hadoop_open(pickle_file, "rb") as p:
+                header_dict = pickle.load(p)
+
+            # tranche 2 set female faf on chrY to NA fix
+            mt = set_female_y_metrics_to_na(mt)
+
+            # tranche 2 dbsnp fix
+            dbsnp_ht = dbsnp.ht().select("rsid")
+            mt = mt.drop("rsid")
+            mt = mt.annotate_rows(**dbsnp_ht[mt.row_key])
+
+            # Reformat names to remove "adj_" (this is a carryover from code that labeled everything "gnomad")
+            row_annots = list(mt.row.info)
+            new_row_annots = []
+            for x in row_annots:
+                if "hist" not in x:
+                    x = (
+                        x.replace("adj_", "",)
+                        .replace("_adj", "")
+                        .replace("_adj_", "")
+                        .replace("raw_", "")
+                    )
+                new_row_annots.append(x)
+
+            info_annot_mapping = dict(
+                zip(new_row_annots, [mt.info[f"{x}"] for x in row_annots])
+            )
+
+            # Confirm all VCF fields/descriptions are present before exporting
+            missing_fields = []
+            missing_descriptions = []
+            for item in ["info", "filters", "format"]:
+                if item == "info":
+                    annots = new_row_annots
+                elif item == "format":
+                    annots = list(mt.entry)
+                else:
+                    item = "filter"
+                    annot_mt = mt.explode_rows(mt.filters)
+                    annots = list(
+                        annot_mt.aggregate_rows(hl.agg.collect_as_set(annot_mt.filters))
+                    )
+
+                temp_missing_fields = []
+                temp_missing_descriptions = []
+                for field in annots:
+                    try:
+                        description = header_dict[item][field]
+                        if len(description) == 0:
+                            logger.warn(
+                                f"{field} in mt info field has empty description in VCF header!"
+                            )
+                            temp_missing_descriptions.append(field)
+                    except KeyError:
+                        logger.warn(
+                            f"{field} in mt info field does not exist in VCF header!"
+                        )
+                        if "hist" not in field:  # some hists are not exported
+                            temp_missing_fields.append(field)
+
+                missing_fields.extend(temp_missing_fields)
+                missing_descriptions.extend(temp_missing_descriptions)
+            if len(missing_fields) != 0 or len(missing_descriptions) != 0:
+                logger.error(
+                    "Some fields are either missing or missing descriptions in the VCF header! Please reconcile."
+                )
+                return
+
+            mt = mt.transmute_rows(info=hl.struct(**info_annot_mapping))
+
+            # Rearrange INFO field in desired ordering
+            drop_hists = (
+                [x + "_n_smaller" for x in HISTS]
+                + [x + "_bin_edges" for x in HISTS]
+                + [x + "_n_larger" for x in HISTS if "dp_" not in x]
+            )
+            drop_hists.extend(
+                [x + "_adj_n_smaller" for x in HISTS]
+                + [x + "_adj_bin_edges" for x in HISTS]
+                + [x + "_adj_n_larger" for x in HISTS if "dp_" not in x]
+                + ["age_hist_hom_bin_edges", "age_hist_het_bin_edges"]
+            )
+
+            mt = mt.annotate_rows(
+                info=mt.info.select(
+                    "AC",
+                    "AN",
+                    "AF",
+                    "rf_tp_probability",
+                    *mt.info.drop("AC", "AN", "AF", "rf_tp_probability", *drop_hists),
+                )
+            )
+
+            if args.per_chromosome:
+                # Export VCFs by chromosome
+                mt = mt.key_rows_by(
+                    locus=hl.locus(mt.locus.contig, mt.locus.position),
+                    alleles=mt.alleles,
+                )
+                mt.describe()
+
+                logger.info(f"full mt count: {mt.count()}")
+                # NOTE: need to run this on all workers
+                rg = get_reference_genome(mt.locus)
+                contigs = rg.contigs[:24]  # autosomes + X/Y
+                logger.info(f"Contigs: {contigs}")
+
+                for contig in contigs:
+                    contig_mt = hl.filter_intervals(
+                        mt, [hl.parse_locus_interval(contig)]
+                    )
+                    logger.info(f"{contig} mt count: {contig_mt.count()}")
+                    hl.export_vcf(
+                        contig_mt,
+                        release_vcf_path(data_source, freeze, contig=contig),
+                        metadata=header_dict,
+                    )
+
+            if args.h_per_shard:
+                # Filter to autosomes + X/Y (remove chrM)
+                rg = get_reference_genome(mt.locus)
+                contigs = hl.parse_locus_interval(
+                    f"{reference.contigs[0]}-{reference.contigs[23]}",
+                    reference_genome=rg,
+                )
+                mt = hl.filter_intervals(mt, [contigs])
+
+                # Export sharded VCF
+                mt = mt.naive_coalesce(5000)
                 hl.export_vcf(
-                    contig_mt,
-                    release_vcf_path(data_source, freeze, contig=contig),
+                    mt,
+                    release_vcf_path(data_source, freeze),
+                    parallel="header_per_shard",
                     metadata=header_dict,
                 )
-
-        if args.h_per_shard:
-            # Filter to autosomes + X/Y (remove chrM)
-            rg = get_reference_genome(mt.locus)
-            contigs = hl.parse_locus_interval(
-                f"{reference.contigs[0]}-{reference.contigs[23]}", reference_genome=rg
-            )
-            mt = hl.filter_intervals(mt, [contigs])
-
-            # Export sharded VCF
-            mt = mt.naive_coalesce(5000)
-            hl.export_vcf(
-                mt,
-                release_vcf_path(data_source, freeze),
-                parallel="header_per_shard",
-                metadata=header_dict,
-            )
+    finally:
+        logger.info("Copying hail log to logging bucket...")
+        hl.copy_log(logging_path(data_source, freeze))
 
 
 if __name__ == "__main__":
@@ -1779,6 +1764,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.slack_channel:
-        try_slack(args.slack_channel, main, args)
+        with slack_notifications(slack_token, args.slack_channel):
+            main(args)
     else:
         main(args)
