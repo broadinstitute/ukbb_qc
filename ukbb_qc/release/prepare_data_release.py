@@ -9,7 +9,6 @@ from gnomad.resources.grch37.gnomad import (
     POP_NAMES,
 )  # Note: this is in gnomad twice? Importing from larger dict
 from gnomad.resources.grch38.reference_data import dbsnp, lcr_intervals
-from gnomad.utils.annotations import qual_hist_expr, age_hists_expr
 from gnomad.utils.generic import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 from gnomad_qc.v2.variant_qc.prepare_data_release import (
@@ -30,10 +29,17 @@ from gnomad_qc.v2.variant_qc.prepare_data_release import (
 from gnomad_qc.v2.variant_qc.prepare_data_release import (
     NFE_SUBPOPS as GNOMAD_NFE_SUBPOPS,
 )
-from ukbb_qc.resources.basics import logging_path
-
-# from ukbb_qc.utils.constants import *
+from ukbb_qc.resources.basics import (
+    get_ukbb_data,
+    logging_path,
+    release_ht_path,
+    release_mt_path,
+    release_vcf_path,
+)
+from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
+from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 from ukbb_qc.slack_creds import slack_token
+from ukbb_qc.utils.constants import FORMAT_DICT, INFO_DICT
 from ukbb_qc.utils.utils import get_age_ht
 
 
@@ -59,19 +65,19 @@ def flag_problematic_regions(
     :return: Table/MatrixTable with `region_flag` struct row annotation.
     :rtype: Union[hl.Table, hl.MatrixTable]
     """
-    lcr_intervals = lcr_intervals.ht()
+    lcr_ht = lcr_intervals.ht()
 
     if isinstance(t, hl.Table):
         t = t.annotate(
             region_flag=hl.struct(
-                lcr=hl.is_defined(lcr_intervals[t.locus]),
+                lcr=hl.is_defined(lcr_ht[t.locus]),
                 fail_interval_qc=~(t.rf.interval_qc_pass),
             )
         )
     else:
         t = t.annotate_rows(
             region_flag=hl.struct(
-                lcr=hl.is_defined(lcr_intervals[t.locus]),
+                lcr=hl.is_defined(lcr_ht[t.locus]),
                 fail_interval_qc=~(t.rf.interval_qc_pass),
             )
         )
@@ -270,7 +276,7 @@ def make_freq_meta_index_dict(
         index_dict.update(index_globals(freq_meta, dict(group=GROUPS, sex=SEXES)))
         if gnomad:
             index_dict.update(
-                index_globals(freq_meta, dict(group=GROUPS, pop=GNOMAD_POPS))
+                index_globals(freq_meta, dict(group=GROUPS, pop=POP_NAMES))
             )
             index_dict.update(
                 index_globals(
@@ -461,7 +467,6 @@ def make_hist_bin_edges_expr(ht: hl.Table) -> Dict[str, str]:
 
         # Parse hists calculated on both raw and adj-filtered data
         for prefix in ["adj_qual_hists", "qual_hists"]:
-            hist_field = f"{prefix}.{hist}"
             hist_name = hist
             if "adj" in prefix:
                 hist_name = f"{hist}_adj"
@@ -478,14 +483,13 @@ def make_hist_bin_edges_expr(ht: hl.Table) -> Dict[str, str]:
 
 
 def make_index_dict(
-    t: Union[hl.MatrixTable, hl.Table], freq_meta_str: str, faf: bool = False
+    t: Union[hl.MatrixTable, hl.Table], freq_meta_str: str
 ) -> Dict[str, int]:
     """
     Create a look-up Dictionary for entries contained in the frequency annotation array.
 
     :param Table ht: Table or MatrixTable containing freq_meta global annotation to be indexed
     :param str freq_meta: freq_meta global annotation to be indexed (freq_meta, gnomad_exomes_freq_meta, or gnomad_genomes_freq_meta)
-    :param bool faf: Whether to make faf index dict 
     :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
         of each grouping entry in the frequency array
     :rtype: Dict of str: int
@@ -605,7 +609,7 @@ def unfurl_nested_annotations(
     else:
         faf = "faf"
         freq = "freq"
-        faf_idx = make_index_dict(t, "faf_meta", faf=True)
+        faf_idx = make_index_dict(t, "faf_meta")
         popmax = "popmax"
         freq_idx = make_index_dict(t, "freq_meta")
 
@@ -616,24 +620,24 @@ def unfurl_nested_annotations(
         # skip gnomad subsets
         if entry[0] == "non" or entry[0] == "controls":
             continue
+
+        if gnomad:
+            prefix = gnomad_prefix
         else:
-            if gnomad:
-                prefix = gnomad_prefix
-            else:
-                prefix = entry[0]
+            prefix = entry[0]
 
-            if entry == ["raw"] or entry == ["gnomad", "raw"]:
-                combo_fields = ["raw"]
-            else:
-                combo_fields = ["adj"] + entry[1:]
+        if entry == ["raw"] or entry == ["gnomad", "raw"]:
+            combo_fields = ["raw"]
+        else:
+            combo_fields = ["adj"] + entry[1:]
 
-            combo = "_".join(combo_fields)
-            combo_dict = {
-                f"{prefix}_AC_{combo}": t[freq][i].AC,
-                f"{prefix}_AN_{combo}": t[freq][i].AN,
-                f"{prefix}_AF_{combo}": t[freq][i].AF,
-                f"{prefix}_nhomalt_{combo}": t[freq][i].homozygote_count,
-            }
+        combo = "_".join(combo_fields)
+        combo_dict = {
+            f"{prefix}_AC_{combo}": t[freq][i].AC,
+            f"{prefix}_AN_{combo}": t[freq][i].AN,
+            f"{prefix}_AF_{combo}": t[freq][i].AF,
+            f"{prefix}_nhomalt_{combo}": t[freq][i].homozygote_count,
+        }
         expr_dict.update(combo_dict)
 
     ## Unfurl FAF index dict
@@ -646,36 +650,36 @@ def unfurl_nested_annotations(
         # skip gnomad subsets
         if entry[0] == "non" or entry[0] == "controls":
             continue
+
+        combo_fields = ["adj"] + entry[1:]
+        combo = "_".join(combo_fields)
+
+        if gnomad:
+            prefix = gnomad_prefix
+
+            combo_dict = {
+                f"{prefix}_faf95_{combo}": hl.or_missing(
+                    hl.set(t[faf][i].meta.values()) == set(combo_fields),
+                    t[faf][i].faf95,
+                ),
+                f"{prefix}_faf99_{combo}": hl.or_missing(
+                    hl.set(t[faf][i].meta.values()) == set(combo_fields),
+                    t[faf][i].faf99,
+                ),
+            }
+
         else:
-            combo_fields = ["adj"] + entry[1:]
-            combo = "_".join(combo_fields)
-
-            if gnomad:
-                prefix = gnomad_prefix
-
-                combo_dict = {
-                    f"{prefix}_faf95_{combo}": hl.or_missing(
-                        hl.set(t[faf][i].meta.values()) == set(combo_fields),
-                        t[faf][i].faf95,
-                    ),
-                    f"{prefix}_faf99_{combo}": hl.or_missing(
-                        hl.set(t[faf][i].meta.values()) == set(combo_fields),
-                        t[faf][i].faf99,
-                    ),
-                }
-
-            else:
-                # NOTE: need to compute UKB separately because UKB no longer has faf meta bundled into faf
-                combo_dict = {
-                    f"faf95_{combo}": hl.or_missing(
-                        hl.set(hl.eval(t.faf_meta[i].values())) == set(entry),
-                        t[faf][i].faf95,
-                    ),
-                    f"faf99_{combo}": hl.or_missing(
-                        hl.set(hl.eval(t.faf_meta[i].values())) == set(entry),
-                        t[faf][i].faf99,
-                    ),
-                }
+            # NOTE: need to compute UKB separately because UKB no longer has faf meta bundled into faf
+            combo_dict = {
+                f"faf95_{combo}": hl.or_missing(
+                    hl.set(hl.eval(t.faf_meta[i].values())) == set(entry),
+                    t[faf][i].faf95,
+                ),
+                f"faf99_{combo}": hl.or_missing(
+                    hl.set(hl.eval(t.faf_meta[i].values())) == set(entry),
+                    t[faf][i].faf99,
+                ),
+            }
         expr_dict.update(combo_dict)
 
     ## Unfurl popmax
@@ -756,9 +760,6 @@ def make_combo_header_text(
     if "pop" in combo_dict.keys():
         header_text = header_text + f" of {POP_NAMES[combo_dict['pop']]} ancestry"
 
-    if "gnomad" not in prefix:
-        header_text = header_text
-
     if "gnomad" in prefix:
         header_text = header_text + " in gnomAD"
 
@@ -784,7 +785,7 @@ def set_female_y_metrics_to_na(
     """
     metrics = list(t.row.info)
     female_metrics = [x for x in metrics if "_female" in x]
-    faf_female_metrics = [x for x in female_metrics if ("faf" in x)]
+    faf_female_metrics = [x for x in female_metrics if "faf" in x]
     female_metrics = [
         x for x in female_metrics if ("nhomalt" in x) or ("AC" in x) or ("AN" in x)
     ]
@@ -950,6 +951,7 @@ def sanity_check_mt(
         .aggregate(**make_filters_sanity_check_expr(ht))
         .order_by(hl.desc("n"))
     )
+    ht_filter_check2.show()
 
     ht_filter_check3 = (
         ht.group_by(ht.info.allele_type, ht.in_problematic_region)
@@ -1152,7 +1154,7 @@ def sanity_check_mt(
         found = []
         for i in pop_adjusted:
             if subset == "gnomad":
-                for z in GNOMAD_POPS:
+                for z in POP_NAMES:
                     if z in i:
                         found.append(z)
             else:
@@ -1161,13 +1163,13 @@ def sanity_check_mt(
                         found.append(z)
         missing_pops = set(POPS) - set(found)
         if len(missing_pops) != 0:
-            logger.warn(f"Missing {missing_pops} pops in {subset} subset!")
+            logger.warning(f"Missing {missing_pops} pops in {subset} subset!")
 
         if subset == "gnomad":
-            sample_sum_check(ht, subset, dict(group=["adj"], pop=GNOMAD_POPS), verbose)
+            sample_sum_check(ht, subset, dict(group=["adj"], pop=POP_NAMES), verbose)
             sample_sum_check(ht, subset, dict(group=["adj"], sex=SEXES), verbose)
             sample_sum_check(
-                ht, subset, dict(group=["adj"], pop=GNOMAD_POPS, sex=SEXES), verbose
+                ht, subset, dict(group=["adj"], pop=POP_NAMES, sex=SEXES), verbose
             )
 
             # Adjust subpops to those found in subset
@@ -1195,7 +1197,7 @@ def sanity_check_mt(
                 sample_sum_check(
                     ht,
                     subset,
-                    dict(group=["adj"], pop=["eas"], subpop=EAS_NFE_SUBPOPS),
+                    dict(group=["adj"], pop=["eas"], subpop=GNOMAD_EAS_SUBPOPS),
                     verbose,
                     subpop="eas",
                 )
@@ -1298,9 +1300,14 @@ def main(args):
             logger.info("Getting raw mt")
             # NOTE reading in raw to return all samples/variants with fields for adj
             # mt = get_ukbb_data(data_source, freeze, split=False, raw=True, meta_root='meta')
-            mt = rep_on_read(
-                get_ukbb_data_path(data_source, freeze, hardcalls=False, split=False),
-                30000,
+            mt = get_ukbb_data(
+                data_source,
+                freeze,
+                key_by_locus_and_alleles=args.key_by_locus_and_alleles,
+                split=False,
+                raw=True,
+                repartition=args.repartition,
+                n_partitions=args.raw_partitions,
             )
 
             logger.info(
@@ -1356,7 +1363,7 @@ def main(args):
                 rf_ht,
                 vep_ht,
                 hist_ht,
-                make_index_dict(freq_ht, freq_meta),
+                make_index_dict(freq_ht, "freq_meta"),
                 allele_ht,
                 vqsr_ht,
             )
@@ -1399,12 +1406,12 @@ def main(args):
 
                 if "gnomad" in subset:
                     INFO_DICT.update(
-                        make_info_dict(subset, dict(group=["adj"], pop=GNOMAD_POPS))
+                        make_info_dict(subset, dict(group=["adj"], pop=POP_NAMES))
                     )
                     INFO_DICT.update(make_info_dict(subset, popmax=True))
                     INFO_DICT.update(
                         make_info_dict(
-                            subset, dict(group=["adj"], pop=GNOMAD_POPS, sex=SEXES)
+                            subset, dict(group=["adj"], pop=POP_NAMES, sex=SEXES)
                         )
                     )
                     INFO_DICT.update(
@@ -1421,13 +1428,13 @@ def main(args):
                     )
                     INFO_DICT.update(
                         make_info_dict(
-                            subset, dict(group=["adj"], pop=GNOMAD_FAF_POPS), faf=True
+                            subset, dict(group=["adj"], pop=FAF_POPS), faf=True
                         )
                     )
                     INFO_DICT.update(
                         make_info_dict(
                             subset,
-                            dict(group=["adj"], pop=GNOMAD_FAF_POPS, sex=SEXES),
+                            dict(group=["adj"], pop=FAF_POPS, sex=SEXES),
                             faf=True,
                         )
                     )
@@ -1622,12 +1629,12 @@ def main(args):
                     try:
                         description = header_dict[item][field]
                         if len(description) == 0:
-                            logger.warn(
+                            logger.warning(
                                 f"{field} in mt info field has empty description in VCF header!"
                             )
                             temp_missing_descriptions.append(field)
                     except KeyError:
-                        logger.warn(
+                        logger.warning(
                             f"{field} in mt info field does not exist in VCF header!"
                         )
                         if "hist" not in field:  # some hists are not exported
@@ -1695,8 +1702,7 @@ def main(args):
                 # Filter to autosomes + X/Y (remove chrM)
                 rg = get_reference_genome(mt.locus)
                 contigs = hl.parse_locus_interval(
-                    f"{reference.contigs[0]}-{reference.contigs[23]}",
-                    reference_genome=rg,
+                    f"{rg.contigs[0]}-{rg.contigs[23]}", reference_genome=rg,
                 )
                 mt = hl.filter_intervals(mt, [contigs])
 
@@ -1724,6 +1730,22 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
+    )
+    parser.add_argument(
+        "--key_by_locus_and_alleles",
+        help="Re-key raw MatrixTable by locus and alleles. REQUIRED only for tranche 3/300K dataset.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--repartition",
+        help="Repartition raw MatrixTable on read. REQUIRED only for tranche 3/300K dataset",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--raw_partitions",
+        help="Number of desired partitions for raw MatrixTable. Only used for tranche 3/300K dataset",
+        default=30000,
+        type=int,
     )
     parser.add_argument(
         "--prepare_internal_mt",
