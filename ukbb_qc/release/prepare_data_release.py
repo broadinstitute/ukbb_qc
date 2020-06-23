@@ -1293,13 +1293,11 @@ def main(args):
 
     try:
         if args.prepare_internal_mt:
-
-            logger.info("Getting age hist data")
+            logger.info("Getting age hist data...")
             age_hist_data = get_age_distributions(get_age_ht(freeze))
 
-            logger.info("Getting raw mt")
-            # NOTE reading in raw to return all samples/variants with fields for adj
-            # mt = get_ukbb_data(data_source, freeze, split=False, raw=True, meta_root='meta')
+            logger.info("Getting raw MT and dropping all unnecessary entries...")
+            # NOTE reading in raw to be able to return all samples/variants
             mt = get_ukbb_data(
                 data_source,
                 freeze,
@@ -1308,12 +1306,7 @@ def main(args):
                 raw=True,
                 repartition=args.repartition,
                 n_partitions=args.raw_partitions,
-            )
-
-            logger.info(
-                "Dropping gVCF info (selecting all other entries) and keying by locus/alleles"
-            )
-            mt = mt.select_entries(
+            ).select_entries(
                 "DP",
                 "GQ",
                 "LA",
@@ -1326,28 +1319,19 @@ def main(args):
                 "RGQ",
                 "SB",
             )
-            mt = mt.key_rows_by("locus", "alleles")
 
-            logger.info("Splitting raw mt")
+            logger.info("Splitting raw MT...")
             mt = hl.experimental.sparse_split_multi(mt)
             mt = mt.select_entries(
                 "GT", "GQ", "DP", "AD", "MIN_DP", "PGT", "PID", "PL", "SB"
             )
 
-            logger.info("Reading in all variant annotation tables")
+            logger.info("Reading in all variant annotation tables...")
             freq_ht = hl.read_table(
-                var_annotations_ht_path(data_source, freeze, "cohort_freq")
-            )
-            unrelated_freq_ht = hl.read_table(
-                var_annotations_ht_path(
-                    data_source, freeze, "join_freq_hybrid_unrelated"
-                )
+                var_annotations_ht_path(data_source, freeze, "join_freq")
             )
             rf_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, "rf"))
             vep_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, "vep"))
-            hist_ht = hl.read_table(
-                var_annotations_ht_path(data_source, freeze, "qual_hists")
-            )
             allele_ht = hl.read_table(
                 var_annotations_ht_path(data_source, freeze, "allele_data")
             )
@@ -1359,10 +1343,8 @@ def main(args):
             mt = prepare_annotations(
                 mt,
                 freq_ht,
-                unrelated_freq_ht,
                 rf_ht,
                 vep_ht,
-                hist_ht,
                 make_index_dict(freq_ht, "freq_meta"),
                 allele_ht,
                 vqsr_ht,
@@ -1371,30 +1353,21 @@ def main(args):
             mt.write(release_mt_path(data_source, freeze), args.overwrite)
 
         if args.prepare_vcf_mt:
-            logger.info("Starting VCF process")
+            logger.info("Starting VCF process...")
             mt = hl.read_matrix_table(release_mt_path(data_source, freeze))
 
-            logger.info("Dropping cohort frequencies")
-            mt = mt.drop("cohort_freq", "cohort_freq_meta")
+            logger.info("Dropping cohort frequencies (last index of freq)...")
+            mt = mt.annotate_rows(freq=mt.freq[-1])
+            freq_meta = mt.freq_meta[-1]
+            mt = mt.annotate_globals(freq_meta=mt.freq_meta[-1])
 
-            logger.info("Adding missing filters field (tranche 2 fix)")
-            rf_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, "rf"))
-            rf_ht = rf_ht.select("filters")
-            mt = mt.annotate_rows(**rf_ht[mt.row_key])
-
-            logger.info("Adding missing qual field (tranche 2 fix)")
-            vqsr_ht = hl.read_table(
-                var_annotations_ht_path(data_source, freeze, "vqsr")
-            )
-            vqsr_ht = vqsr_ht.select("qual")
-            mt = mt.annotate_rows(**vqsr_ht[mt.row_key])
-
+            logger.info("Making histogram bin edges...")
             bin_edges = make_hist_bin_edges_expr(mt.rows())
 
-            logger.info("Getting age hist data")
+            logger.info("Getting age hist data...")
             age_hist_data = hl.eval(mt.age_distribution)
 
-            logger.info("Making INFO dict for VCF")
+            logger.info("Making INFO dict for VCF...")
             subset_list = ["", "gnomad_exomes_", "gnomad_genomes_"]  # empty for ukbb
             for subset in subset_list:
                 INFO_DICT.update(make_info_dict(subset, dict(group=GROUPS)))
@@ -1745,6 +1718,12 @@ if __name__ == "__main__":
         "--raw_partitions",
         help="Number of desired partitions for raw MatrixTable. Only used for tranche 3/300K dataset",
         default=30000,
+        type=int,
+    )
+    parser.add_argument(
+        "--n_partitions",
+        help="Number of desired partitions for output Tables",
+        default=10000,
         type=int,
     )
     parser.add_argument(
