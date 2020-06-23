@@ -69,15 +69,12 @@ def generate_cohort_frequency_data(
 
 def generate_frequency_data(
     mt: hl.MatrixTable,
-    data_source: str,
     freeze: int,
     pops_to_remove_for_popmax: List[str],
     cohort_frequency_pops: List[str],
-    overwrite: bool,
     platform_strata: bool = False,
     tranche: bool = False,
     platform_expr: Optional[hl.expr.StringExpression] = None,
-    n_partitions: int = 5000,
 ) -> hl.Table:
     """
     Generates frequency struct annotation containing AC, AF, AN, and homozygote count for input dataset stratified by population.
@@ -92,16 +89,13 @@ def generate_frequency_data(
         However, cohort frequency (frequency including all related samples) data is generated using hybrid population labels.
 
     :param MatrixTable mt: Input MatrixTable.
-    :param str data_source: One of "regeneron" or "broad".
     :param int freeze: One of the data freezes.
     :param list pops_to_remove_for_popmax: List of populations to exclude from popmax calculations. 
     :param list cohort_frequency_pops: List of populations to include in cohort frequency calculations.
-    :param bool overwrite: Whether to overwrite data.
     :param bool platform_strata: Whether to calculate frequencies per platform or tranche as proxy for platform.
     :param bool tranche: Whether to use tranche (as a proxy for platform) instead of inferred platform.
     :param bool calculate_by_tranche: Whether to calculate frequencies per tranche.
     :param hl.expr.StringExpression platform_expr: Expression containing platform or tranche information. Required if platform_strata is set.
-    :param int n_partitions: Desired number of partitions for inbreeding coefficient HT. Default is 5000.
     :return: Table with frequency annotations in struct named `freq` and metadata in globals named `freq_meta`.
     :rtype: Table
     """
@@ -128,12 +122,6 @@ def generate_frequency_data(
     logger.info("Calculating InbreedingCoefficient...")
     # NOTE: This is not the ideal location to calculate this, but added here to avoid another densify
     ht = mt.annotate_rows(InbreedingCoeff=bi_allelic_site_inbreeding_expr(mt.GT)).rows()
-    ht = ht.select("InbreedingCoeff")
-    ht = ht.naive_coalesce(n_partitions)
-    ht.write(
-        var_annotations_ht_path("inbreeding_coefficient", data_source, freeze),
-        overwrite=overwrite,
-    )
 
     logger.info("Generating frequency data...")
     mt = annotate_freq(
@@ -149,11 +137,13 @@ def generate_frequency_data(
     faf, faf_meta = faf_expr(mt.freq, mt.freq_meta, mt.locus, pops_to_remove_for_popmax)
     popmax = pop_max_expr(mt.freq, mt.freq_meta, pops_to_remove_for_popmax)
     logger.info("Calculating faf and popmax...")
-    mt = mt.annotate_rows(faf=faf, popmax=popmax,)
+    mt = mt.annotate_rows(faf=faf, popmax=popmax)
 
     # Add cohort frequency to last index of freq struct
     # Also add cohort frequency meta to freq_meta globals
-    mt = mt.select_rows("faf", "popmax", freq=mt.freq.extend(mt.cohort_freq),)
+    mt = mt.select_rows(
+        "InbreedingCoeff", "faf", "popmax", freq=mt.freq.extend(mt.cohort_freq),
+    )
     mt = mt.select_globals(
         faf_meta=faf_meta, freq_meta=mt.freq_meta.extend(mt.cohort_freq_meta)
     )
@@ -251,15 +241,12 @@ def main(args):
             logger.info("Calculating frequencies")
             ht = generate_frequency_data(
                 mt,
-                data_source,
                 freeze,
                 pops_to_remove_for_popmax,
                 cohort_frequency_pops,
-                args.overwrite,
                 args.by_platform,
                 args.by_tranche,
                 platform_expr,
-                args.n_partitions,
             )
 
             ht = ht.naive_coalesce(args.n_partitions)
