@@ -110,6 +110,9 @@ def create_rf_ht(
     inbreeding_ht = hl.read_table(
         var_annotations_ht_path("inbreeding_coefficient", data_source, freeze)
     )
+    inbreeding_ht = inbreeding_ht.annotate(
+        InbreedingCoeff=hl.or_missing(~hl.is_nan(inbreeding_ht.InbreedingCoeff), inbreeding_ht.InbreedingCoeff)
+    )
     trio_stats_ht = hl.read_table(
         var_annotations_ht_path("trio_stats", data_source, freeze)
     )
@@ -168,6 +171,7 @@ def create_rf_ht(
         singleton=ht.ac_release_samples_raw == 1,
         ac_raw=ht.ac_release_samples_raw,
         ac=ht.ac_release_samples_adj,
+        ac_qc_samples_unrelated_raw=ht.ac_qc_samples_unrelated_raw,
     )
 
     ht = ht.repartition(n_partitions, shuffle=False)
@@ -374,7 +378,10 @@ def main(args):
     data_source = "broad"
     freeze = args.freeze
     test_intervals = args.test_intervals
-
+    features = FEATURES
+    if args.no_inbreeding_coeff:
+        features.remove("InbreedingCoeff")
+    print(features)
     try:
         if args.list_rf_runs:
             logger.info(f"RF runs for {data_source}.freeze_{freeze}:")
@@ -405,14 +412,7 @@ def main(args):
             while run_hash in rf_runs:
                 run_hash = str(uuid.uuid4())[:8]
 
-            full_ht = hl.read_table(rf_annotated_path(data_source, freeze, args.adj))
-
-            if args.interval_qc_filter:
-                interval_filter_expr = full_ht.interval_qc_pass
-            else:
-                interval_filter_expr = True
-
-            ht = full_ht.filter(interval_filter_expr)
+            ht = hl.read_table(rf_annotated_path(data_source, freeze, args.adj))
 
             if args.vqsr_training:
                 vqsr_ht = hl.read_table(
@@ -438,23 +438,31 @@ def main(args):
                 if not args.no_sibling_singletons:
                     tp_expr = tp_expr |  ht.sibling_singleton
 
-                if test_intervals:
-                    if isinstance(test_intervals, str):
-                        test_intervals = [test_intervals]
-                    test_intervals = [
-                        hl.parse_locus_interval(x, reference_genome='GRCh38') for x in test_intervals
-                    ]
+            if test_intervals:
+                if isinstance(test_intervals, str):
+                    test_intervals = [test_intervals]
+                test_intervals = [
+                    hl.parse_locus_interval(x, reference_genome='GRCh38') for x in test_intervals
+                ]
 
-            ht, rf_model = train_rf_model(
-                ht,
-                rf_features=FEATURES,
-                tp_expr=tp_expr,
-                fp_expr=fp_expr,
+            ht = ht.annotate(tp=tp_expr, fp=fp_expr)
+
+            if args.interval_qc_filter:
+                interval_filter_expr = ht.interval_qc_pass
+            else:
+                interval_filter_expr = True
+
+            rf_ht = ht.filter(interval_filter_expr)
+            rf_ht, rf_model = train_rf_model(
+                rf_ht,
+                rf_features=features,
+                tp_expr=rf_ht.tp,
+                fp_expr=rf_ht.fp,
                 fp_to_tp=args.fp_to_tp,
                 num_trees=args.num_trees,
                 max_depth=args.max_depth,
                 test_expr=hl.literal(test_intervals).any(
-                    lambda interval: interval.contains(ht.locus)
+                    lambda interval: interval.contains(rf_ht.locus)
                 ),
             )
 
@@ -466,7 +474,7 @@ def main(args):
             )
 
             logger.info("Joining original RF Table with training information")
-            ht = full_ht.join(ht, how= "left")
+            ht = ht.join(rf_ht, how= "left")
             ht = ht.checkpoint(
                 rf_path(data_source, freeze, data="training", run_hash=run_hash),
                 overwrite=args.overwrite,
@@ -482,7 +490,7 @@ def main(args):
                 array_con_common=not args.no_array_con_common,
                 adj=args.adj,
                 vqsr_training=args.vqsr_training,
-                test_intervals=hl.eval(ht.test_intervals),
+                test_intervals=args.test_intervals,
                 features_importance=hl.eval(ht.features_importance),
                 test_results=hl.eval(ht.test_results),
             )
@@ -495,19 +503,16 @@ def main(args):
         else:
             run_hash = args.run_hash
 
-        if args.apply_rf:
             logger.info(
                 f"Applying RF model {run_hash} to {data_source}.freeze_{freeze}."
             )
-
             rf_model = load_model(
                 rf_path(data_source, freeze, data="model", run_hash=run_hash)
             )
             ht = hl.read_table(
                 rf_path(data_source, freeze, data="training", run_hash=run_hash)
             )
-
-            ht = apply_rf_model(ht, rf_model, FEATURES, label=LABEL_COL)
+            ht = apply_rf_model(ht, rf_model, features, label=LABEL_COL)
 
             logger.info("Finished applying RF model")
             ht = ht.annotate_globals(rf_hash=run_hash)
@@ -517,7 +522,7 @@ def main(args):
             )
 
             ht_summary = ht.group_by(
-                "tp", TRAIN_COL, LABEL_COL, PREDICTION_COL
+                "tp", "fp", TRAIN_COL, LABEL_COL, PREDICTION_COL
             ).aggregate(n=hl.agg.count())
             ht_summary.show(n=20)
 
@@ -651,6 +656,7 @@ if __name__ == "__main__":
     training_params.add_argument(
         "--vqsr_type",
         help="If a string is provided the VQSR training annotations will be used for training.",
+        default="AS",
         type=str,
     )
     training_params.add_argument(
@@ -670,6 +676,11 @@ if __name__ == "__main__":
     )
     training_params.add_argument(
         "--interval_qc_filter",
+        help="Should interval QC be applied before RF training.",
+        action="store_true",
+    )
+    training_params.add_argument(
+        "--no_inbreeding_coeff",
         help="Should interval QC be applied before RF training.",
         action="store_true",
     )
