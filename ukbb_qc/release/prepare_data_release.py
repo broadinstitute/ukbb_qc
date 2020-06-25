@@ -30,6 +30,7 @@ from gnomad_qc.v2.variant_qc.prepare_data_release import (
     NFE_SUBPOPS as GNOMAD_NFE_SUBPOPS,
 )
 from ukbb_qc.resources.basics import (
+    capture_ht_path,
     get_ukbb_data,
     logging_path,
     release_ht_path,
@@ -55,7 +56,9 @@ def flag_problematic_regions(
     t: Union[hl.Table, hl.MatrixTable]
 ) -> Union[hl.Table, hl.MatrixTable]:
     """
-    Annotate HT/MT with `region_flag` struct. Struct contains flags for problematic regions.
+    Annotate HT/MT with `region_flag` struct. 
+
+    Struct contains flags for problematic regions and whether variant is in capture interval.
     
     .. note:: 
 
@@ -66,12 +69,14 @@ def flag_problematic_regions(
     :rtype: Union[hl.Table, hl.MatrixTable]
     """
     lcr_ht = lcr_intervals.ht()
+    capture_ht = hl.read_table(capture_ht_path("broad"))
 
     if isinstance(t, hl.Table):
         t = t.annotate(
             region_flag=hl.struct(
                 lcr=hl.is_defined(lcr_ht[t.locus]),
                 fail_interval_qc=~(t.rf.interval_qc_pass),
+                in_capture_region=hl.is_defined(capture_ht[t.locus]),
             )
         )
     else:
@@ -79,6 +84,7 @@ def flag_problematic_regions(
             region_flag=hl.struct(
                 lcr=hl.is_defined(lcr_ht[t.locus]),
                 fail_interval_qc=~(t.rf.interval_qc_pass),
+                in_capture_region=hl.is_defined(capture_ht[t.locus]),
             )
         )
     return t
