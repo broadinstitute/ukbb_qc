@@ -486,9 +486,9 @@ def make_index_dict(
     freq_meta = hl.eval(t.globals[freq_meta_str])
     # check if indexing gnomAD data
     if "gnomad" in freq_meta_str:
-        index_dict = (freq_meta, gnomad=True)
+        index_dict = make_freq_meta_index_dict(freq_meta, gnomad=True)
     else:
-        index_dict = (freq_meta, gnomad=False)
+        index_dict = make_freq_meta_index_dict(freq_meta, gnomad=False)
     return index_dict
 
 
@@ -1364,17 +1364,21 @@ def main(args):
                 INFO_DICT.update(
                     make_info_dict(subset, dict(group=["adj"], sex=SEXES), faf=True)
                 )
+                INFO_DICT.update(make_info_dict(subset, dict(group=["adj"], pop=POPS)))
+                INFO_DICT.update(
+                    make_info_dict(subset, dict(group=["adj"], pop=POPS, sex=SEXES))
+                )
+                INFO_DICT.update(
+                    make_info_dict(subset, dict(group=["adj"], pop=FAF_POPS), faf=True)
+                )
+                INFO_DICT.update(
+                    make_info_dict(
+                        subset, dict(group=["adj"], pop=FAF_POPS, sex=SEXES), faf=True,
+                    )
+                )
 
                 if "gnomad" in subset:
-                    INFO_DICT.update(
-                        make_info_dict(subset, dict(group=["adj"], pop=POP_NAMES))
-                    )
                     INFO_DICT.update(make_info_dict(subset, popmax=True))
-                    INFO_DICT.update(
-                        make_info_dict(
-                            subset, dict(group=["adj"], pop=POP_NAMES, sex=SEXES)
-                        )
-                    )
                     INFO_DICT.update(
                         make_info_dict(
                             subset,
@@ -1387,18 +1391,6 @@ def main(args):
                             dict(group=["adj"], pop=["eas"], subpop=GNOMAD_EAS_SUBPOPS),
                         )
                     )
-                    INFO_DICT.update(
-                        make_info_dict(
-                            subset, dict(group=["adj"], pop=FAF_POPS), faf=True
-                        )
-                    )
-                    INFO_DICT.update(
-                        make_info_dict(
-                            subset,
-                            dict(group=["adj"], pop=FAF_POPS, sex=SEXES),
-                            faf=True,
-                        )
-                    )
 
                 else:
                     INFO_DICT.update(
@@ -1407,24 +1399,6 @@ def main(args):
                             bin_edges=bin_edges,
                             popmax=True,
                             age_hist_data="|".join(str(x) for x in age_hist_data),
-                        )
-                    )
-                    INFO_DICT.update(
-                        make_info_dict(subset, dict(group=["adj"], pop=POPS))
-                    )
-                    INFO_DICT.update(
-                        make_info_dict(subset, dict(group=["adj"], pop=POPS, sex=SEXES))
-                    )
-                    INFO_DICT.update(
-                        make_info_dict(
-                            subset, dict(group=["adj"], pop=FAF_POPS), faf=True
-                        )
-                    )
-                    INFO_DICT.update(
-                        make_info_dict(
-                            subset,
-                            dict(group=["adj"], pop=FAF_POPS, sex=SEXES),
-                            faf=True,
                         )
                     )
             INFO_DICT.update(make_hist_dict(bin_edges, adj=False))
@@ -1436,21 +1410,8 @@ def main(args):
                 for i, j in INFO_DICT.items()
             }
             new_info_dict.update(make_hist_dict(bin_edges, adj=True))
-            logger.info(new_info_dict["faf95"])
-            logger.info(new_info_dict["gnomad_exomes_faf95"])
-            logger.info(new_info_dict["faf95_nfe"])
-            logger.info(new_info_dict["faf95_nfe_male"])
-            logger.info(new_info_dict["faf95_0"])
-            logger.info(new_info_dict["gnomad_exomes_popmax"])
-            logger.info(new_info_dict["gnomad_exomes_AC_popmax"])
-            logger.info(new_info_dict["dp_hist_alt_adj_bin_freq"])
-            logger.info(new_info_dict["dp_hist_alt_bin_freq"])
-            logger.info(new_info_dict["AC"])
-            logger.info(new_info_dict["AC_raw"])
-            logger.info(new_info_dict["AC_nfe"])
-            logger.info(new_info_dict["gnomad_exomes_AC"])
 
-            # add non par annotation back
+            # Add non-PAR annotation
             mt = mt.annotate_rows(
                 nonpar=(mt.locus.in_x_nonpar() | mt.locus.in_y_nonpar())
             )
@@ -1485,7 +1446,7 @@ def main(args):
                 "format": FORMAT_DICT,
             }
 
-            logger.info("Saving header dict to pickle")
+            logger.info("Saving header dict to pickle...")
             pickle_file = (
                 f"gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/header_dict.pickle"
             )
@@ -1515,20 +1476,12 @@ def main(args):
         if args.prepare_release_vcf:
 
             mt = hl.read_matrix_table(release_mt_path(data_source, freeze, temp=True))
-            logger.info("Reading header dict from pickle")
+            logger.info("Reading header dict from pickle...")
             pickle_file = (
                 f"gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/header_dict.pickle"
             )
             with hl.hadoop_open(pickle_file, "rb") as p:
                 header_dict = pickle.load(p)
-
-            # tranche 2 set female faf on chrY to NA fix
-            mt = set_female_y_metrics_to_na(mt)
-
-            # tranche 2 dbsnp fix
-            dbsnp_ht = dbsnp.ht().select("rsid")
-            mt = mt.drop("rsid")
-            mt = mt.annotate_rows(**dbsnp_ht[mt.row_key])
 
             # Reformat names to remove "adj_" (this is a carryover from code that labeled everything "gnomad")
             row_annots = list(mt.row.info)
@@ -1576,11 +1529,12 @@ def main(args):
                         logger.warning(
                             f"{field} in mt info field does not exist in VCF header!"
                         )
-                        if "hist" not in field:  # some hists are not exported
+                        if "hist" not in field:  # NOTE: some hists are not exported
                             temp_missing_fields.append(field)
 
                 missing_fields.extend(temp_missing_fields)
                 missing_descriptions.extend(temp_missing_descriptions)
+
             if len(missing_fields) != 0 or len(missing_descriptions) != 0:
                 logger.error(
                     "Some fields are either missing or missing descriptions in the VCF header! Please reconcile."
@@ -1612,15 +1566,15 @@ def main(args):
                 )
             )
 
+            # Export VCFs by chromosome
             if args.per_chromosome:
-                # Export VCFs by chromosome
                 mt = mt.key_rows_by(
                     locus=hl.locus(mt.locus.contig, mt.locus.position),
                     alleles=mt.alleles,
                 )
                 mt.describe()
 
-                logger.info(f"full mt count: {mt.count()}")
+                logger.info(f"VCF MT count: {mt.count()}")
                 # NOTE: need to run this on all workers
                 rg = get_reference_genome(mt.locus)
                 contigs = rg.contigs[:24]  # autosomes + X/Y
@@ -1630,7 +1584,7 @@ def main(args):
                     contig_mt = hl.filter_intervals(
                         mt, [hl.parse_locus_interval(contig)]
                     )
-                    logger.info(f"{contig} mt count: {contig_mt.count()}")
+                    logger.info(f"{contig} MT count: {contig_mt.count()}")
                     hl.export_vcf(
                         contig_mt,
                         release_vcf_path(data_source, freeze, contig=contig),
