@@ -255,9 +255,7 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
     return info_dict
 
 
-def make_freq_meta_index_dict(
-    freq_meta: List[str], gnomad: bool, faf: bool
-) -> Dict[str, int]:
+def make_freq_meta_index_dict(freq_meta: List[str], gnomad: bool) -> Dict[str, int]:
     """
     Makes a dictionary of the entries in the frequency array annotation, where keys are the grouping combinations and the values
     are the 0-based integer indices.
@@ -271,29 +269,21 @@ def make_freq_meta_index_dict(
     """
     index_dict = index_globals(freq_meta, dict(group=GROUPS))
 
-    if faf:
-        index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=FAF_POPS)))
+    index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=POPS)))
+    index_dict.update(index_globals(freq_meta, dict(group=GROUPS, sex=SEXES)))
+    index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=POPS, sex=SEXES)))
 
-    else:
-        index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=POPS)))
-        index_dict.update(index_globals(freq_meta, dict(group=GROUPS, sex=SEXES)))
+    if gnomad:
         index_dict.update(
-            index_globals(freq_meta, dict(group=GROUPS, pop=POPS, sex=SEXES))
+            index_globals(
+                freq_meta, dict(group=GROUPS, pop=["nfe"], subpop=GNOMAD_NFE_SUBPOPS),
+            )
         )
-
-        if gnomad:
-            index_dict.update(
-                index_globals(
-                    freq_meta,
-                    dict(group=GROUPS, pop=["nfe"], subpop=GNOMAD_NFE_SUBPOPS),
-                )
+        index_dict.update(
+            index_globals(
+                freq_meta, dict(group=GROUPS, pop=["eas"], subpop=GNOMAD_EAS_SUBPOPS),
             )
-            index_dict.update(
-                index_globals(
-                    freq_meta,
-                    dict(group=GROUPS, pop=["eas"], subpop=GNOMAD_EAS_SUBPOPS),
-                )
-            )
+        )
 
     return index_dict
 
@@ -496,9 +486,9 @@ def make_index_dict(
     freq_meta = hl.eval(t.globals[freq_meta_str])
     # check if indexing gnomAD data
     if "gnomad" in freq_meta_str:
-        index_dict = make_freq_meta_index_dict(freq_meta, gnomad=True, faf=False)
+        index_dict = (freq_meta, gnomad=True)
     else:
-        index_dict = make_freq_meta_index_dict(freq_meta, gnomad=False, faf=False)
+        index_dict = (freq_meta, gnomad=False)
     return index_dict
 
 
@@ -1357,7 +1347,6 @@ def main(args):
 
             logger.info("Dropping cohort frequencies (last index of freq)...")
             mt = mt.annotate_rows(freq=mt.freq[-1])
-            freq_meta = mt.freq_meta[-1]
             mt = mt.annotate_globals(freq_meta=mt.freq_meta[-1])
 
             logger.info("Making histogram bin edges...")
