@@ -399,10 +399,12 @@ def get_hists(mt: hl.MatrixTable, freeze: int) -> hl.MatrixTable:
     logger.info("Getting age hists...")
     age_ht = get_age_ht(freeze)
     mt = mt.annotate_cols(age=age_ht[mt.col_key].age)
-    mt = mt.annotate_rows(qual_hists=age_hists_expr(mt.adj, mt.GT, mt.age))
+    mt = mt.annotate_rows(**age_hists_expr(mt.adj, mt.GT, mt.age))
 
     logger.info("Annotating with qual hists (on raw data)...")
-    mt = mt.annotate_rows(**qual_hist_expr(mt.GT, mt.GQ, mt.DP, mt.AD))
+    mt = mt.annotate_rows(
+        qual_hists=hl.struct(**qual_hist_expr(mt.GT, mt.GQ, mt.DP, mt.AD))
+    )
 
     logger.info("Annotating with qual hists (adj)...")
     mt_filt = filter_to_adj(mt)
