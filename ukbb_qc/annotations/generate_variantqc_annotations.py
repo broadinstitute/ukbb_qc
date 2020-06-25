@@ -96,7 +96,7 @@ def main(args):
             mt = hl.experimental.densify(mt)
 
             mt = hl.trio_matrix(mt, pedigree=ped, complete_trios=True)
-            trio_stats_ht = generate_trio_stats(mt)
+            trio_stats_ht = generate_trio_stats(mt, bi_allelic_only=False)
             trio_stats_ht.naive_coalesce(n_partitions).write(
                 var_annotations_ht_path("trio_stats", data_source, freeze),
                 overwrite=overwrite,
@@ -109,7 +109,7 @@ def main(args):
             mt = get_ukbb_data(data_source, freeze)
 
             relatedness_ht = hl.read_table(relatedness_ht_path(data_source, freeze))
-            sib_stats_ht = generate_sib_stats(mt, relatedness_ht)
+            sib_stats_ht = generate_sib_stats(mt, relatedness_ht, bi_allelic_only=False)
             sib_stats_ht.naive_coalesce(n_partitions).write(
                 var_annotations_ht_path("sib_stats", data_source, freeze),
                 overwrite=overwrite,
