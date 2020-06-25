@@ -275,11 +275,13 @@ def make_freq_meta_index_dict(
         index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=FAF_POPS)))
 
     else:
+        index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=POPS)))
         index_dict.update(index_globals(freq_meta, dict(group=GROUPS, sex=SEXES)))
+        index_dict.update(
+            index_globals(freq_meta, dict(group=GROUPS, pop=POPS, sex=SEXES))
+        )
+
         if gnomad:
-            index_dict.update(
-                index_globals(freq_meta, dict(group=GROUPS, pop=POP_NAMES))
-            )
             index_dict.update(
                 index_globals(
                     freq_meta,
@@ -291,11 +293,6 @@ def make_freq_meta_index_dict(
                     freq_meta,
                     dict(group=GROUPS, pop=["eas"], subpop=GNOMAD_EAS_SUBPOPS),
                 )
-            )
-        else:
-            index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=POPS)))
-            index_dict.update(
-                index_globals(freq_meta, dict(group=GROUPS, pop=POPS, sex=SEXES))
             )
 
     return index_dict
