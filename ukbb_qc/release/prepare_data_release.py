@@ -127,6 +127,8 @@ def prepare_annotations(
         "filters",
     )
     vep_ht = vep_ht.transmute(vep=vep_ht.vep.drop("colocated_variants"))
+    # NOTE: will need to nest qual hist fields under qual_hists struct for 300K
+    # gq_hist_alt, gq_hist_all, dp_hist_alt, dp_hist_all, ab_hist_alt
 
     logger.info(
         "Removing unnecessary fields from VQSR HT and splitting AS annotations..."
@@ -186,7 +188,7 @@ def prepare_annotations(
         vep=vep_ht[mt.row_key].vep,
         allele_info=allele_ht[mt.row_key].allele_data,
         vqsr=vqsr_ht[mt.row_key].info,
-        rsid=dbsnp_ht[mt.row_key],
+        rsid=dbsnp_ht[mt.row_key].rsid,
     )
     mt = mt.annotate_globals(rf_globals=rf_ht.index_globals())
     logger.info(f"MT count: {mt.count()}")
@@ -1297,7 +1299,7 @@ def main(args):
             age_hist_data = get_age_distributions(get_age_ht(freeze))
 
             logger.info("Getting raw MT and dropping all unnecessary entries...")
-            # NOTE reading in raw to be able to return all samples/variants
+            # NOTE: reading in raw MatrixTable to be able to return all samples/variants
             mt = get_ukbb_data(
                 data_source,
                 freeze,
@@ -1489,14 +1491,8 @@ def main(args):
             # Select relevant fields for VCF export
             mt = mt.select_rows("info", "filters", "rsid", "qual")
 
-            # Add VEP annotations
-            # TODO: After 200K release change this to use vep_csq annotation on the vep HT
-            vep_csq_ht = hl.read_table(
-                var_annotations_ht_path(data_source, freeze, "vep_csq")
-            )
-            new_info_dict.update(
-                {"vep": {"Description": hl.eval(vep_csq_ht.globals.vep_csq_header)}}
-            )
+            # NOTE: will need to pull this header from the common code for 300K (it wasn't added to the vep ht)
+            new_info_dict.update({"vep": {"Description": hl.eval(mt.vep_csq_header)}})
             header_dict = {
                 "info": new_info_dict,
                 "filter": make_filter_dict(mt.rows()),
@@ -1509,7 +1505,7 @@ def main(args):
             )
             with hl.hadoop_open(pickle_file, "wb") as p:
                 pickle.dump(header_dict, p, protocol=pickle.HIGHEST_PROTOCOL)
-            mt = mt.annotate_rows(info=mt.info.annotate(vep=vep_csq_ht[mt.row_key].vep))
+            mt = mt.annotate_rows(info=mt.info.annotate(vep=mt.vep_csq))
             mt.write(release_mt_path(data_source, freeze, temp=True), args.overwrite)
 
         if args.sanity_check:
@@ -1522,28 +1518,12 @@ def main(args):
 
         if args.prepare_browser_ht:
             mt = hl.read_matrix_table(release_mt_path(data_source, freeze))
-            logger.info(f"mt count: {mt.count()}")
-
-            logger.info("Adding missing filters field (tranche 2 fix)")
-            rf_ht = hl.read_table(var_annotations_ht_path(data_source, freeze, "rf"))
-            rf_ht = rf_ht.select("filters")
-            mt = mt.annotate_rows(**rf_ht[mt.row_key])
-
-            logger.info("Adding missing qual field (tranche 2 fix)")
-            vqsr_ht = hl.read_table(
-                var_annotations_ht_path(data_source, freeze, "vqsr")
-            )
-            vqsr_ht = vqsr_ht.select("qual")
-            mt = mt.annotate_rows(**vqsr_ht[mt.row_key])
-
-            logger.info("Adding rsids (tranche 2 fix)")
-            dbsnp_ht = dbsnp.ht().select("rsid")
-            mt = mt.drop("rsid")
-            mt = mt.annotate_rows(**dbsnp_ht[mt.row_key])
+            logger.info(f"Release MT count: {mt.count()}")
 
             ht = mt.rows()
-            logger.info(f"ht count: {ht.count()}")
-            ht = ht.naive_coalesce(20000)
+            logger.info(f"Release HT count: {ht.count()}")
+
+            ht = ht.naive_coalesce(args.n_partitions)
             ht.write(release_ht_path(data_source, freeze), args.overwrite)
 
         if args.prepare_release_vcf:
@@ -1693,7 +1673,7 @@ def main(args):
 
 
 if __name__ == "__main__":
-    
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
