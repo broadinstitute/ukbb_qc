@@ -1597,7 +1597,7 @@ def main(args):
                         metadata=header_dict,
                     )
 
-            if args.h_per_shard:
+            if args.parallelize:
                 # Filter to autosomes + X/Y (remove chrM)
                 rg = get_reference_genome(mt.locus)
                 contigs = hl.parse_locus_interval(
@@ -1669,14 +1669,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--prepare_release_vcf", help="Prepare release VCF", action="store_true"
     )
-    parser.add_argument(
+    export_opts = parser.add_mutually_exclusive_group("Options for how to export VCF")
+    export_opts.add_argument(
         "--per_chromosome",
         help="Prepare release VCFs per chromosome",
         action="store_true",
     )
-    parser.add_argument(
-        "--h_per_shard",
-        help="Parallelize release VCF export using header_per_shard",
+    export_opts.add_argument(
+        "--parallelize",
+        help="Parallelize VCF export by exporting sharded VCF",
         action="store_true",
     )
     parser.add_argument(
