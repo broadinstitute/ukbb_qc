@@ -8,7 +8,7 @@ import hail as hl
 from gnomad.resources.grch37.gnomad import (
     POP_NAMES,
 )  # Note: this is in gnomad twice? Importing from larger dict
-from gnomad.resources.grch38.reference_data import dbsnp, lcr_intervals
+from gnomad.resources.grch38.reference_data import dbsnp
 from gnomad.utils.generic import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 from gnomad_qc.v2.variant_qc.prepare_data_release import (
@@ -19,7 +19,6 @@ from gnomad_qc.v2.variant_qc.prepare_data_release import (
     SEXES,
     SORT_ORDER,
     generic_field_check,
-    index_globals,
     make_filters_sanity_check_expr,
     make_label_combos,
 )
@@ -30,18 +29,14 @@ from gnomad_qc.v2.variant_qc.prepare_data_release import (
     NFE_SUBPOPS as GNOMAD_NFE_SUBPOPS,
 )
 from ukbb_qc.resources.basics import (
-    capture_ht_path,
-    get_ukbb_data,
     logging_path,
-    release_ht_path,
     release_mt_path,
     release_vcf_path,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
-from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 from ukbb_qc.slack_creds import slack_token
 from ukbb_qc.utils.constants import FORMAT_DICT, INFO_DICT
-from ukbb_qc.utils.utils import get_age_ht
+from ukbb_qc.utils.utils import make_index_dict
 
 
 logging.basicConfig(
@@ -50,7 +45,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("data_release")
 logger.setLevel(logging.INFO)
-
 
 
 def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expression]:
@@ -111,39 +105,6 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
             }
             info_dict.update(hist_dict)
     return info_dict
-
-
-def make_freq_meta_index_dict(freq_meta: List[str], gnomad: bool) -> Dict[str, int]:
-    """
-    Makes a dictionary of the entries in the frequency array annotation, where keys are the grouping combinations and the values
-    are the 0-based integer indices.
-
-    :param List[str] freq_meta: Ordered list containing string entries describing all the grouping combinations contained in the
-        frequency array annotation.
-    :param bool gnomad: Whether to index a list from gnomAD.
-    :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
-        of each grouping entry in the frequency array
-    :rtype: Dict[str, int]
-    """
-    index_dict = index_globals(freq_meta, dict(group=GROUPS))
-
-    index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=POPS)))
-    index_dict.update(index_globals(freq_meta, dict(group=GROUPS, sex=SEXES)))
-    index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=POPS, sex=SEXES)))
-
-    if gnomad:
-        index_dict.update(
-            index_globals(
-                freq_meta, dict(group=GROUPS, pop=["nfe"], subpop=GNOMAD_NFE_SUBPOPS),
-            )
-        )
-        index_dict.update(
-            index_globals(
-                freq_meta, dict(group=GROUPS, pop=["eas"], subpop=GNOMAD_EAS_SUBPOPS),
-            )
-        )
-
-    return index_dict
 
 
 def make_info_dict(
@@ -327,27 +288,6 @@ def make_hist_bin_edges_expr(ht: hl.Table) -> Dict[str, str]:
                 )
             )
     return edges_dict
-
-
-def make_index_dict(
-    t: Union[hl.MatrixTable, hl.Table], freq_meta_str: str
-) -> Dict[str, int]:
-    """
-    Create a look-up Dictionary for entries contained in the frequency annotation array.
-
-    :param Table ht: Table or MatrixTable containing freq_meta global annotation to be indexed
-    :param str freq_meta: freq_meta global annotation to be indexed (freq_meta, gnomad_exomes_freq_meta, or gnomad_genomes_freq_meta)
-    :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
-        of each grouping entry in the frequency array
-    :rtype: Dict of str: int
-    """
-    freq_meta = hl.eval(t.globals[freq_meta_str])
-    # check if indexing gnomAD data
-    if "gnomad" in freq_meta_str:
-        index_dict = make_freq_meta_index_dict(freq_meta, gnomad=True)
-    else:
-        index_dict = make_freq_meta_index_dict(freq_meta, gnomad=False)
-    return index_dict
 
 
 def make_hist_dict(bin_edges: Dict, adj: bool) -> Dict[str, str]:
@@ -659,20 +599,6 @@ def set_female_y_metrics_to_na(
         if isinstance(t, hl.Table)
         else t.annotate_rows(info=t.info.annotate(**female_metrics_dict))
     )
-
-
-def get_age_distributions(ht: hl.Table) -> str:
-    """
-    Get background distribution of sample ages (using field 21022, age at recruitment).
-
-    :param Table ht: Table containing samples and sample ages.
-    :return: Pipe-delimited string with ages in pre-determined bins (<30, 30-35, ..., 75-80, 80+).
-    :rtype: str
-    """
-    age_hist_data = ht.aggregate(hl.agg.hist(ht.age, 30, 80, 10))
-    age_hist_data.bin_freq.insert(0, age_hist_data.n_smaller)
-    age_hist_data.bin_freq.append(age_hist_data.n_larger)
-    return age_hist_data.bin_freq
 
 
 def sample_sum_check(
@@ -1139,7 +1065,7 @@ def main(args):
     freeze = args.freeze
 
     try:
-        
+
         if args.prepare_vcf_mt:
             logger.info("Starting VCF process...")
             mt = hl.read_matrix_table(release_mt_path(data_source, freeze))
