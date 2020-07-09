@@ -381,6 +381,7 @@ def get_relationship_filter_expr(
     )
 
 
+# Release-related resources
 def get_hists(mt: hl.MatrixTable, freeze: int) -> hl.MatrixTable:
     """
     Gets age (at recruitment; field 21022) and qual hists for UKBB.
@@ -413,3 +414,17 @@ def get_hists(mt: hl.MatrixTable, freeze: int) -> hl.MatrixTable:
     ht = mt_filt.rows()
     mt = mt.annotate_rows(adj_qual_hists=ht[mt.row_key])
     return mt
+
+
+def get_age_distributions(ht: hl.Table) -> str:
+    """
+    Get background distribution of sample ages (using field 21022, age at recruitment).
+
+    :param Table ht: Table containing samples and sample ages.
+    :return: Pipe-delimited string with ages in pre-determined bins (<30, 30-35, ..., 75-80, 80+).
+    :rtype: str
+    """
+    age_hist_data = ht.aggregate(hl.agg.hist(ht.age, 30, 80, 10))
+    age_hist_data.bin_freq.insert(0, age_hist_data.n_smaller)
+    age_hist_data.bin_freq.append(age_hist_data.n_larger)
+    return age_hist_data.bin_freq
