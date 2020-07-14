@@ -281,6 +281,7 @@ def generate_final_rf_ht(
     indel_cutoff: Union[int, float],
     determine_cutoff_from_bin: bool = False,
     aggregated_bin_ht: Optional[hl.Table] = None,
+    bin_id: hl.expr.Int32Expression = 'bin',
     inbreeding_coeff_cutoff: float = INBREEDING_COEFF_HARD_CUTOFF,
 ) -> hl.Table:
     """
@@ -298,6 +299,7 @@ def generate_final_rf_ht(
     :param indel_cutoff: RF probability or bin (if `determine_cutoff_from_bin` True) to use for indel variant QC filter
     :param determine_cutoff_from_bin: If True the RF probability will be determined using bin info in `aggregated_bin_ht`
     :param aggregated_bin_ht: File with aggregate counts of variants based on quantile bins
+    :param bin_id: Name of bin to use in the 'bin_id' column of `aggregated_bin_ht` to use to determine probability cutoff
     :param inbreeding_coeff_cutoff: InbreedingCoeff hard filter to use for variants
     :return: Finalized random forest Table annotated with variant filters
     """
@@ -306,7 +308,7 @@ def generate_final_rf_ht(
         snp_rf_cutoff, indel_rf_cutoff = aggregated_bin_ht.aggregate(
             [
                 hl.agg.filter(
-                    snv & (aggregated_bin_ht.bin == snp_cutoff),
+                    snv & (aggregated_bin_ht.bin_id == bin_id) & (aggregated_bin_ht.bin == cutoff),
                     hl.agg.min(aggregated_bin_ht.min_score),
                 )
                 for snv, cutoff in [
@@ -325,9 +327,6 @@ def generate_final_rf_ht(
         snp_cutoff_global = hl.struct(min_score=snp_cutoff)
         indel_cutoff_global = hl.struct(min_score=indel_cutoff)
 
-    ht = ht.annotate_globals(
-        rf_snv_cutoff=snp_cutoff_global, rf_indel_cutoff=indel_cutoff_global
-    )
 
     # Add filters to RF HT
     filters = dict()
@@ -337,10 +336,10 @@ def generate_final_rf_ht(
 
     filters["RF"] = (
         hl.is_snp(ht.alleles[0], ht.alleles[1])
-        & (ht.rf_probability["TP"] < ht.rf_snv_cutoff.min_score)
+        & (ht.rf_probability["TP"] < snp_cutoff_global.min_score)
     ) | (
         ~hl.is_snp(ht.alleles[0], ht.alleles[1])
-        & (ht.rf_probability["TP"] < ht.rf_indel_cutoff.min_score)
+        & (ht.rf_probability["TP"] < indel_cutoff_global.min_score)
     )
 
     filters["InbreedingCoeff"] = hl.or_else(
@@ -349,7 +348,6 @@ def generate_final_rf_ht(
     filters["AC0"] = ac0_filter_expr
     filters["MonoAllelic"] = mono_allelic_fiter_expr
 
-    ht = ht.annotate(filters=add_filters_expr(filters=filters))
 
     # Fix annotations for release
     annotations_expr = {
@@ -367,7 +365,12 @@ def generate_final_rf_ht(
             }
         )
 
-    ht = ht.transmute(**annotations_expr)
+    ht = ht.transmute(filters=add_filters_expr(filters=filters),
+                     **annotations_expr)
+
+    ht = ht.annotate_globals(
+        rf_snv_cutoff=snp_cutoff_global, rf_indel_cutoff=indel_cutoff_global
+    )
 
     return ht
 
@@ -381,7 +384,7 @@ def main(args):
     features = FEATURES
     if args.no_inbreeding_coeff:
         features.remove("InbreedingCoeff")
-    print(features)
+
     try:
         if args.list_rf_runs:
             logger.info(f"RF runs for {data_source}.freeze_{freeze}:")
@@ -503,6 +506,7 @@ def main(args):
         else:
             run_hash = args.run_hash
 
+        if args.apply_rf:
             logger.info(
                 f"Applying RF model {run_hash} to {data_source}.freeze_{freeze}."
             )
@@ -534,36 +538,34 @@ def main(args):
                 var_annotations_ht_path("ukb_freq", data_source, freeze)
             )
 
-            aggregated_bin_ht = score_quantile_bin_path(
-                args.run_hash, data_source, freeze, aggregated=True
-            )
-            if not file_exists(aggregated_bin_ht):
+            aggregated_bin_path = score_quantile_bin_path(args.run_hash, data_source, freeze, aggregated=True)
+            if not file_exists(aggregated_bin_path):
                 sys.exit(
-                    f"Could not find binned HT for RF  run {args.run_hash} ({aggregated_bin_ht}). Please run create_ranked_scores.py for that hash."
+                    f"Could not find binned HT for RF  run {args.run_hash} ({aggregated_bin_path}). Please run create_ranked_scores.py for that hash."
                 )
+            aggregated_bin_ht = hl.read_table(aggregated_bin_path)
 
             # Add an annotation indicating variants that are within a capture interval
             capture_ht = hl.read_table(capture_ht_path(data_source))
-            ht = ht.annotate(in_capture_interval=hl.is_defined(capture_ht[ht.key]))
-
+            ht = ht.annotate(in_capture_interval=hl.is_defined(capture_ht[ht.locus]))
+            freq = freq_ht[ht.key]
             ht = generate_final_rf_ht(
                 ht,
-                ac0_filter_expr=freq_ht[ht.key].freq[0].AC == 0,
-                ts_ac_filter_expr=freq_ht[ht.key].freq[1].AC == 2,
-                mono_allelic_fiter_expr=(freq_ht[ht.key].freq[1].AF == 1)
-                | (freq_ht[ht.key].freq[1].AF == 0),
+                ac0_filter_expr=freq.freq[0].AC == 0,
+                ts_ac_filter_expr=freq.freq[1].AC == 1,
+                mono_allelic_fiter_expr=(freq.freq[1].AF == 1)
+                | (freq.freq[1].AF == 0),
                 snp_cutoff=args.snp_cutoff,
                 indel_cutoff=args.indel_cutoff,
-                determine_cutoff_from_bin=args.treat_cutoff_as_prob,
+                determine_cutoff_from_bin=not args.treat_cutoff_as_prob,
                 aggregated_bin_ht=aggregated_bin_ht,
+                bin_id='interval_bin' if args.interval_qc_bin else 'bin',
                 inbreeding_coeff_cutoff=INBREEDING_COEFF_HARD_CUTOFF,
             )
             # This column is added by the RF module based on a 0.5 threshold which doesn't correspond to what we use
             ht = ht.drop(ht[PREDICTION_COL])
 
-            ht.describe()
-            ht.show(20)
-            ht.write(var_annotations_ht_path(data_source, freeze, "rf"), args.overwrite)
+            ht.write(var_annotations_ht_path("rf", data_source, freeze), args.overwrite)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -695,6 +697,11 @@ if __name__ == "__main__":
     finalize_params.add_argument(
         "--treat_cutoff_as_prob",
         help="If set snp_cutoff and indel_cutoff will be probability rather than percentile ",
+        action="store_true",
+    )
+    training_params.add_argument(
+        "--interval_qc_bin",
+        help="If not treating cutoffs as a probability, should interval QC bin be used instead of overall bin.",
         action="store_true",
     )
     args = parser.parse_args()
