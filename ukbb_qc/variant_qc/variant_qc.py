@@ -111,7 +111,9 @@ def create_rf_ht(
         var_annotations_ht_path("inbreeding_coefficient", data_source, freeze)
     )
     inbreeding_ht = inbreeding_ht.annotate(
-        InbreedingCoeff=hl.or_missing(~hl.is_nan(inbreeding_ht.InbreedingCoeff), inbreeding_ht.InbreedingCoeff)
+        InbreedingCoeff=hl.or_missing(
+            ~hl.is_nan(inbreeding_ht.InbreedingCoeff), inbreeding_ht.InbreedingCoeff
+        )
     )
     trio_stats_ht = hl.read_table(
         var_annotations_ht_path("trio_stats", data_source, freeze)
@@ -281,7 +283,7 @@ def generate_final_rf_ht(
     indel_cutoff: Union[int, float],
     determine_cutoff_from_bin: bool = False,
     aggregated_bin_ht: Optional[hl.Table] = None,
-    bin_id: hl.expr.Int32Expression = 'bin',
+    bin_id: hl.expr.Int32Expression = "bin",
     inbreeding_coeff_cutoff: float = INBREEDING_COEFF_HARD_CUTOFF,
 ) -> hl.Table:
     """
@@ -308,7 +310,9 @@ def generate_final_rf_ht(
         snp_rf_cutoff, indel_rf_cutoff = aggregated_bin_ht.aggregate(
             [
                 hl.agg.filter(
-                    snv & (aggregated_bin_ht.bin_id == bin_id) & (aggregated_bin_ht.bin == cutoff),
+                    snv
+                    & (aggregated_bin_ht.bin_id == bin_id)
+                    & (aggregated_bin_ht.bin == cutoff),
                     hl.agg.min(aggregated_bin_ht.min_score),
                 )
                 for snv, cutoff in [
@@ -326,7 +330,6 @@ def generate_final_rf_ht(
     else:
         snp_cutoff_global = hl.struct(min_score=snp_cutoff)
         indel_cutoff_global = hl.struct(min_score=indel_cutoff)
-
 
     # Add filters to RF HT
     filters = dict()
@@ -348,7 +351,6 @@ def generate_final_rf_ht(
     filters["AC0"] = ac0_filter_expr
     filters["MonoAllelic"] = mono_allelic_fiter_expr
 
-
     # Fix annotations for release
     annotations_expr = {
         "tp": hl.or_else(ht.tp, False),
@@ -365,8 +367,7 @@ def generate_final_rf_ht(
             }
         )
 
-    ht = ht.transmute(filters=add_filters_expr(filters=filters),
-                     **annotations_expr)
+    ht = ht.transmute(filters=add_filters_expr(filters=filters), **annotations_expr)
 
     ht = ht.annotate_globals(
         rf_snv_cutoff=snp_cutoff_global, rf_indel_cutoff=indel_cutoff_global
@@ -425,27 +426,28 @@ def main(args):
                         freeze,
                     )
                 )
-                ht =  ht.annotate(
+                ht = ht.annotate(
                     vqsr_POSITIVE_TRAIN_SITE=vqsr_ht[ht.key].info.POSITIVE_TRAIN_SITE,
                     vqsr_NEGATIVE_TRAIN_SITE=vqsr_ht[ht.key].info.NEGATIVE_TRAIN_SITE,
                 )
-                tp_expr =  ht.vqsr_POSITIVE_TRAIN_SITE
-                fp_expr =  ht.vqsr_NEGATIVE_TRAIN_SITE
+                tp_expr = ht.vqsr_POSITIVE_TRAIN_SITE
+                fp_expr = ht.vqsr_NEGATIVE_TRAIN_SITE
             else:
-                fp_expr =  ht.fail_hard_filters
-                tp_expr =  ht.omni |  ht.mills
+                fp_expr = ht.fail_hard_filters
+                tp_expr = ht.omni | ht.mills
                 if not args.no_array_con_common:
-                    tp_expr = tp_expr |  ht.ukbb_array_con_common
+                    tp_expr = tp_expr | ht.ukbb_array_con_common
                 if not args.no_transmitted_singletons:
-                    tp_expr = tp_expr |  ht.transmitted_singleton
+                    tp_expr = tp_expr | ht.transmitted_singleton
                 if not args.no_sibling_singletons:
-                    tp_expr = tp_expr |  ht.sibling_singleton
+                    tp_expr = tp_expr | ht.sibling_singleton
 
             if test_intervals:
                 if isinstance(test_intervals, str):
                     test_intervals = [test_intervals]
                 test_intervals = [
-                    hl.parse_locus_interval(x, reference_genome='GRCh38') for x in test_intervals
+                    hl.parse_locus_interval(x, reference_genome="GRCh38")
+                    for x in test_intervals
                 ]
 
             ht = ht.annotate(tp=tp_expr, fp=fp_expr)
@@ -477,7 +479,7 @@ def main(args):
             )
 
             logger.info("Joining original RF Table with training information")
-            ht = ht.join(rf_ht, how= "left")
+            ht = ht.join(rf_ht, how="left")
             ht = ht.checkpoint(
                 rf_path(data_source, freeze, data="training", run_hash=run_hash),
                 overwrite=args.overwrite,
@@ -538,7 +540,9 @@ def main(args):
                 var_annotations_ht_path("ukb_freq", data_source, freeze)
             )
 
-            aggregated_bin_path = score_quantile_bin_path(args.run_hash, data_source, freeze, aggregated=True)
+            aggregated_bin_path = score_quantile_bin_path(
+                args.run_hash, data_source, freeze, aggregated=True
+            )
             if not file_exists(aggregated_bin_path):
                 sys.exit(
                     f"Could not find binned HT for RF  run {args.run_hash} ({aggregated_bin_path}). Please run create_ranked_scores.py for that hash."
@@ -553,13 +557,12 @@ def main(args):
                 ht,
                 ac0_filter_expr=freq.freq[0].AC == 0,
                 ts_ac_filter_expr=freq.freq[1].AC == 1,
-                mono_allelic_fiter_expr=(freq.freq[1].AF == 1)
-                | (freq.freq[1].AF == 0),
+                mono_allelic_fiter_expr=(freq.freq[1].AF == 1) | (freq.freq[1].AF == 0),
                 snp_cutoff=args.snp_cutoff,
                 indel_cutoff=args.indel_cutoff,
                 determine_cutoff_from_bin=not args.treat_cutoff_as_prob,
                 aggregated_bin_ht=aggregated_bin_ht,
-                bin_id='interval_bin' if args.interval_qc_bin else 'bin',
+                bin_id="interval_bin" if args.interval_qc_bin else "bin",
                 inbreeding_coeff_cutoff=INBREEDING_COEFF_HARD_CUTOFF,
             )
             # This column is added by the RF module based on a 0.5 threshold which doesn't correspond to what we use
