@@ -135,7 +135,7 @@ def create_grouped_bin_ht(
         n_clinvar_path=hl.agg.count_where(parent_ht.clinvar_path),
         n_ukbb_array_con_common=hl.agg.count_where(parent_ht.ukbb_array_con_common),
         n_sib_singletons=hl.agg.count_where(parent_ht.sibling_singleton),
-        **score_bin_agg(grouped_binned_ht, trio_stats_ht=trio_stats_ht),
+        **score_bin_agg(grouped_binned_ht, fam_stats_ht=trio_stats_ht),
     )
 
     agg_ht.write(
