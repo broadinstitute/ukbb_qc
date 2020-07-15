@@ -382,9 +382,6 @@ def main(args):
     data_source = "broad"
     freeze = args.freeze
     test_intervals = args.test_intervals
-    features = FEATURES
-    if args.no_inbreeding_coeff:
-        features.remove("InbreedingCoeff")
 
     try:
         if args.list_rf_runs:
@@ -411,6 +408,10 @@ def main(args):
             )
 
         if args.train_rf:
+            features = FEATURES
+            if args.no_inbreeding_coeff:
+                features.remove("InbreedingCoeff")
+
             run_hash = str(uuid.uuid4())[:8]
             rf_runs = get_rf_runs(rf_run_hash_path(data_source, freeze))
             while run_hash in rf_runs:
@@ -518,6 +519,7 @@ def main(args):
             ht = hl.read_table(
                 rf_path(data_source, freeze, data="training", run_hash=run_hash)
             )
+            features = hl.eval(ht.features)
             ht = apply_rf_model(ht, rf_model, features, label=LABEL_COL)
 
             logger.info("Finished applying RF model")
@@ -686,7 +688,7 @@ if __name__ == "__main__":
     )
     training_params.add_argument(
         "--no_inbreeding_coeff",
-        help="Should interval QC be applied before RF training.",
+        help="Train RF without inbreeding coefficient as a feature.",
         action="store_true",
     )
 
