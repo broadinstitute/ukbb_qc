@@ -393,7 +393,7 @@ def get_relationship_filter_expr(
     )
 
 
-# Release-related resources
+# Release-related utils
 def get_hists(mt: hl.MatrixTable, freeze: int) -> hl.MatrixTable:
     """
     Gets age (at recruitment; field 21022) and qual hists for UKBB.
@@ -415,7 +415,7 @@ def get_hists(mt: hl.MatrixTable, freeze: int) -> hl.MatrixTable:
     mt = mt.annotate_rows(**age_hists_expr(mt.adj, mt.GT, mt.age))
 
     logger.info("Annotating with qual hists (on raw data)...")
-    mt = mt.annotate_rows(**qual_hist_expr(mt.GT, mt.GQ, mt.DP, mt.AD))
+    mt = mt.annotate_rows(qual_hists=qual_hist_expr(mt.GT, mt.GQ, mt.DP, mt.AD))
 
     logger.info("Annotating with qual hists (adj)...")
     mt_filt = filter_to_adj(mt)
@@ -442,7 +442,9 @@ def get_age_distributions(ht: hl.Table) -> str:
     return age_hist_data.bin_freq
 
 
-def make_freq_meta_index_dict(freq_meta: List[str], gnomad: bool) -> Dict[str, int]:
+def make_freq_meta_index_dict(
+    freq_meta: List[str], gnomad: bool, subpop: List[str]
+) -> Dict[str, int]:
     """
     Makes a dictionary of the entries in the frequency array annotation, where keys are the grouping combinations and the values
     are the 0-based integer indices.
@@ -450,6 +452,7 @@ def make_freq_meta_index_dict(freq_meta: List[str], gnomad: bool) -> Dict[str, i
     :param List[str] freq_meta: Ordered list containing string entries describing all the grouping combinations contained in the
         frequency array annotation.
     :param bool gnomad: Whether to index a list from gnomAD.
+    :param List[str] subpops: List of subpops in frequency array.
     :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
         of each grouping entry in the frequency array
     :rtype: Dict[str, int]
@@ -459,6 +462,9 @@ def make_freq_meta_index_dict(freq_meta: List[str], gnomad: bool) -> Dict[str, i
     index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=POPS)))
     index_dict.update(index_globals(freq_meta, dict(group=GROUPS, sex=SEXES)))
     index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=POPS, sex=SEXES)))
+    index_dict.update(
+        index_globals(freq_meta, dict(group=GROUPS, pop=POPS, subpop=subpops))
+    )
 
     if gnomad:
         index_dict.update(
