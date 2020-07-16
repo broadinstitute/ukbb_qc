@@ -366,7 +366,7 @@ def release_mt_path(data_source: str, freeze: int, temp: bool = False) -> str:
     :rtype: str
     """
     tag = ".temp" if temp else ""
-    return f"{get_release_path(data_source, freeze)}/mt/{data_source}.freeze_{freeze}.nested{tag}.mt"
+    return f"gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/{data_source}.freeze_{freeze}{tag}.mt"
 
 
 def release_ht_path(data_source: str, freeze: int) -> str:

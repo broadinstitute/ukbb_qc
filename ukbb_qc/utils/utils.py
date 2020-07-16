@@ -443,7 +443,7 @@ def get_age_distributions(ht: hl.Table) -> str:
 
 
 def make_freq_meta_index_dict(
-    freq_meta: List[str], gnomad: bool, subpop: List[str]
+    freq_meta: List[str], gnomad: bool, subpops: List[str]
 ) -> Dict[str, int]:
     """
     Makes a dictionary of the entries in the frequency array annotation, where keys are the grouping combinations and the values
@@ -482,13 +482,14 @@ def make_freq_meta_index_dict(
 
 
 def make_index_dict(
-    t: Union[hl.MatrixTable, hl.Table], freq_meta_str: str
+    t: Union[hl.MatrixTable, hl.Table], freq_meta_str: str, subpops: List[str]
 ) -> Dict[str, int]:
     """
     Create a look-up Dictionary for entries contained in the frequency annotation array.
 
     :param Table ht: Table or MatrixTable containing freq_meta global annotation to be indexed
     :param str freq_meta: freq_meta global annotation to be indexed (freq_meta, gnomad_exomes_freq_meta, or gnomad_genomes_freq_meta)
+    :param List[str] subpops: List of subpops in frequency array.
     :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
         of each grouping entry in the frequency array
     :rtype: Dict of str: int
@@ -496,7 +497,7 @@ def make_index_dict(
     freq_meta = hl.eval(t.globals[freq_meta_str])
     # check if indexing gnomAD data
     if "gnomad" in freq_meta_str:
-        index_dict = make_freq_meta_index_dict(freq_meta, gnomad=True)
+        index_dict = make_freq_meta_index_dict(freq_meta, gnomad=True, subpops=subpops)
     else:
-        index_dict = make_freq_meta_index_dict(freq_meta, gnomad=False)
+        index_dict = make_freq_meta_index_dict(freq_meta, gnomad=False, subpops=subpops)
     return index_dict
