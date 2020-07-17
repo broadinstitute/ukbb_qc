@@ -33,7 +33,7 @@ def generate_cohort_frequency_data(
     pops: List[str],
     pop_expr: hl.expr.StringExpression,
     sex_expr: hl.expr.StringExpression,
-) -> hl.MatrixTable:
+) -> hl.Table:
     """
     Generates frequency struct annotation containing AC, AF, AN, and homozygote count for all individuals of specified ancestry from input dataset.
 
@@ -64,7 +64,7 @@ def generate_cohort_frequency_data(
             update_dict = {"group": "cohort"}
         cohort_freq_meta[i].update(update_dict)
     mt = mt.annotate_globals(cohort_freq_meta=cohort_freq_meta)
-    return mt.select_globals("cohort_freq_meta")
+    return mt.select_globals("cohort_freq_meta").rows()
 
 
 def generate_frequency_data(
@@ -109,19 +109,22 @@ def generate_frequency_data(
         additional_strata_expr = None
 
     logger.info("Generating cohort frequency data...")
-    mt = generate_cohort_frequency_data(
+    cohort_ht = generate_cohort_frequency_data(
         mt,
         cohort_frequency_pops,
         mt.meta.gnomad_pc_project_pop_data.pop,
         mt.meta.sex_imputation.sex_karyotype,
     )
+    mt = mt.annotate_rows(cohort_freq=cohort_ht[mt.row_key].cohort_freq)
+    mt = mt.annotate_globals(**cohort_ht.index_globals())
 
     logger.info("Filtering related samples...")
     mt = mt.filter_cols(~mt.meta.sample_filters.related)
 
     logger.info("Calculating InbreedingCoefficient...")
     # NOTE: This is not the ideal location to calculate this, but added here to avoid another densify
-    ht = mt.annotate_rows(InbreedingCoeff=bi_allelic_site_inbreeding_expr(mt.GT)).rows()
+    mt = mt.annotate_rows(InbreedingCoeff=bi_allelic_site_inbreeding_expr(mt.GT))
+    mt.describe()
 
     logger.info("Generating frequency data...")
     mt = annotate_freq(
