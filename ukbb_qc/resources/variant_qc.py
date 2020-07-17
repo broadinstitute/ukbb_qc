@@ -3,6 +3,7 @@ from typing import Any, Dict, Optional, Union
 
 from gnomad.resources.resource_utils import DataException
 import gnomad.resources.grch38 as grch38
+from gnomad.utils.file_utils import file_exists
 from .resource_utils import CURRENT_FREEZE, CURRENT_HAIL_VERSION, DATA_SOURCES, FREEZES
 
 
@@ -21,6 +22,10 @@ TRUTH_SAMPLES = [SYNDIP, NA12878]
 List containing string representation for truth samples (syndip, NA12878)
 """
 
+TRUTH_SAMPLE_NAMES = ["syndip", "na12878"]
+"""
+List containing names for truth samples (syndip, NA12878)
+"""
 
 def clinvar_pathogenic_ht_path(version: str) -> str:
     """
@@ -79,10 +84,10 @@ def get_truth_sample_data(
         raise DataException("This truth sample is not present")
 
     truth_samples_info = truth_samples[truth_sample]
-    if (data_type not in truth_samples_info) or (
+    if (data_type not in truth_samples_info) and (
         data_type == "callset_truth_mt"
         and not file_exists(
-            f"{truth_sample_mt_path(data_source, freeze, truth_sample)}_SUCCESS"
+            f"{truth_sample_mt_path(truth_sample, data_source, freeze)}"
         )
     ):
         raise DataException(
@@ -91,7 +96,7 @@ def get_truth_sample_data(
 
     if data_type == "callset_truth_mt":
         return hl.read_matrix_table(
-            truth_sample_mt_path(data_source, freeze, truth_sample)
+            truth_sample_mt_path(truth_sample, data_source, freeze)
         )
     else:
         return truth_samples_info[data_type]
