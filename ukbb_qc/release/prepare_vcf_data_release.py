@@ -29,6 +29,7 @@ from gnomad_qc.v2.variant_qc.prepare_data_release import (
 )
 from ukbb_qc.resources.basics import (
     logging_path,
+    release_header_path,
     release_mt_path,
     release_vcf_path,
 )
@@ -1027,12 +1028,13 @@ def main(args):
     hl.init(log="/release.log", default_reference="GRCh38")
     data_source = "broad"
     freeze = args.freeze
+    tranche_data = (data_source, freeze)
 
     try:
 
         if args.prepare_vcf_mt:
             logger.info("Starting VCF process...")
-            mt = hl.read_matrix_table(release_mt_path(data_source, freeze))
+            mt = hl.read_matrix_table(release_mt_path(*tranche_data))
 
             logger.info("Dropping cohort frequencies (last index of freq)...")
             mt = mt.annotate_rows(freq=mt.freq[-1])
@@ -1134,17 +1136,14 @@ def main(args):
             }
 
             logger.info("Saving header dict to pickle...")
-            pickle_file = (
-                f"gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/header_dict.pickle"
-            )
-            with hl.hadoop_open(pickle_file, "wb") as p:
+            with hl.hadoop_open(release_header_path(*tranche_data), "wb") as p:
                 pickle.dump(header_dict, p, protocol=pickle.HIGHEST_PROTOCOL)
             mt = mt.annotate_rows(info=mt.info.annotate(vep=mt.vep_csq))
-            mt.write(release_mt_path(data_source, freeze, temp=True), args.overwrite)
+            mt.write(release_mt_path(*tranche_data, temp=True), args.overwrite)
 
         if args.sanity_check:
             subset_list = ["", "gnomad_exomes_", "gnomad_genomes_"]
-            mt = hl.read_matrix_table(release_mt_path(data_source, freeze, temp=True))
+            mt = hl.read_matrix_table(release_mt_path(*tranche_data, temp=True))
             mt = set_female_y_metrics_to_na(mt)
             sanity_check_mt(
                 mt, subset_list, missingness_threshold=0.5, verbose=args.verbose
@@ -1155,12 +1154,9 @@ def main(args):
                 logger.error("Need to choose how to export the release VCF. Exiting...")
                 sys.exit(1)
 
-            mt = hl.read_matrix_table(release_mt_path(data_source, freeze, temp=True))
+            mt = hl.read_matrix_table(release_mt_path(*tranche_data, temp=True))
             logger.info("Reading header dict from pickle...")
-            pickle_file = (
-                f"gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/header_dict.pickle"
-            )
-            with hl.hadoop_open(pickle_file, "rb") as p:
+            with hl.hadoop_open(release_header_path(*tranche_data), "rb") as p:
                 header_dict = pickle.load(p)
 
             # Reformat names to remove "adj_" (this is a carryover from code that labeled everything "gnomad")
@@ -1260,7 +1256,7 @@ def main(args):
                     )
                     hl.export_vcf(
                         contig_mt,
-                        release_vcf_path(data_source, freeze, contig=contig),
+                        release_vcf_path(*tranche_data, contig=contig),
                         metadata=header_dict,
                     )
 
@@ -1269,13 +1265,13 @@ def main(args):
                 mt = mt.naive_coalesce(5000)
                 hl.export_vcf(
                     mt,
-                    release_vcf_path(data_source, freeze),
+                    release_vcf_path(*tranche_data),
                     parallel="header_per_shard",
                     metadata=header_dict,
                 )
     finally:
         logger.info("Copying hail log to logging bucket...")
-        hl.copy_log(logging_path(data_source, freeze))
+        hl.copy_log(logging_path(*tranche_data))
 
 
 if __name__ == "__main__":
