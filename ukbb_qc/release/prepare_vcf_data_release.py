@@ -6,10 +6,8 @@ from typing import Dict, List, Union
 
 import hail as hl
 
-from gnomad.resources.grch37.gnomad import (
-    POP_NAMES,
-)  # Note: this is in gnomad twice? Importing from larger dict
 from gnomad.resources.grch38.reference_data import dbsnp
+from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.utils.generic import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 from gnomad_qc.v2.variant_qc.prepare_data_release import (
@@ -1128,8 +1126,6 @@ def main(args):
 
             # Select relevant fields for VCF export
             mt = mt.select_rows("info", "filters", "rsid", "qual")
-
-            # NOTE: will need to pull this header from the common code for 300K (it wasn't added to the vep ht)
             new_info_dict.update({"vep": {"Description": hl.eval(mt.vep_csq_header)}})
             header_dict = {
                 "info": new_info_dict,
