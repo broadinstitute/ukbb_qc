@@ -28,6 +28,7 @@ from gnomad_qc.v2.variant_qc.prepare_data_release import (
     NFE_SUBPOPS as GNOMAD_NFE_SUBPOPS,
 )
 from ukbb_qc.resources.basics import (
+    get_checkpoint_path,
     logging_path,
     release_header_path,
     release_mt_path,
@@ -1244,16 +1245,25 @@ def main(args):
 
             # Export VCFs by chromosome
             if args.per_chromosome:
+                mt_path = get_checkpoint_path(*tranche_data, name="final_vcf", mt=True)
+                mt = mt.write(mt_path)
+
                 logger.info(f"VCF MT count: {mt.count()}")
-                # NOTE: need to run this on all workers
                 rg = get_reference_genome(mt.locus)
                 contigs = rg.contigs[:24]  # autosomes + X/Y
                 logger.info(f"Contigs: {contigs}")
 
                 for contig in contigs:
-                    contig_mt = hl.filter_intervals(
+                    # Faster way to filter to a contig
+                    # TODO: Confirm with hail team if this is the fastest method for this
+                    mt = hl.read_matrix_table(mt_path)
+                    mt = hl.filter_intervals(
                         mt, [hl.parse_locus_interval(contig)]
                     )
+                    mt._calculate_new_partitions(10000)
+                    intervals = [i for i in intervals if i.start.locus.contig==contig]
+                    mt = hl.read_matrix_table(mt_path, _intervals=intervals)
+
                     hl.export_vcf(
                         contig_mt,
                         release_vcf_path(*tranche_data, contig=contig),
