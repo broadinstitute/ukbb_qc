@@ -393,6 +393,18 @@ def release_var_hist_path(data_source: str, freeze: int) -> str:
     return f"{get_release_path(data_source, freeze)}/json/{data_source}.freeze_{freeze}.json"
 
 
+def release_header_path(data_source: str, freeze: int) -> str:
+    """
+    Fetch path to pickle file containing VCF header dictionary.
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :return: Filepath for header dictionary pickle
+    :rtype: str
+    """
+    return f"gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/header_dict.pickle"
+
+
 def release_vcf_path(data_source: str, freeze: int, contig: str = None) -> str:
     """
     Fetch bucket for release (variant-only) VCFs
