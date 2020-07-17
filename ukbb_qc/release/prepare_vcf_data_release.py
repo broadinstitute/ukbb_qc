@@ -200,54 +200,30 @@ def make_info_dict(
                 combo_dict = {
                     f"{prefix}AC_{combo}": {
                         "Number": "A",
-                        "Description": "Alternate allele count{}".format(
-                            make_combo_header_text(
-                                "for", group_types, combo_fields, prefix
-                            )
-                        ),
+                        "Description": f"Alternate allele count{make_combo_header_text('for', group_types, combo_fields, prefix)}",
                     },
                     f"{prefix}AN_{combo}": {
                         "Number": "1",
-                        "Description": "Total number of alleles{}".format(
-                            make_combo_header_text(
-                                "in", group_types, combo_fields, prefix
-                            )
-                        ),
+                        "Description": f"Total number of alleles{make_combo_header_text('in', group_types, combo_fields, prefix)}",
                     },
                     f"{prefix}AF_{combo}": {
                         "Number": "A",
-                        "Description": "Alternate allele frequency{}".format(
-                            make_combo_header_text(
-                                "in", group_types, combo_fields, prefix
-                            )
-                        ),
+                        "Description": f"Alternate allele frequency{make_combo_header_text('in', group_types, combo_fields, prefix)}",
                     },
                     f"{prefix}nhomalt_{combo}": {
                         "Number": "A",
-                        "Description": "Count of homozygous individuals{}".format(
-                            make_combo_header_text(
-                                "in", group_types, combo_fields, prefix
-                            )
-                        ),
+                        "Description": f"Count of homozygous individuals{make_combo_header_text('in', group_types, combo_fields, prefix)}",
                     },
                 }
             else:
                 combo_dict = {
                     f"{prefix}faf95_{combo}": {
                         "Number": "A",
-                        "Description": "Filtering allele frequency (using Poisson 95% CI) {}".format(
-                            make_combo_header_text(
-                                "for", group_types, combo_fields, prefix, faf=True
-                            )
-                        ),
+                        "Description": f"Filtering allele frequency (using Poisson 95% CI) {make_combo_header_text('for', group_types, combo_fields, prefix, faf=True)}",
                     },
                     f"{prefix}faf99_{combo}": {
                         "Number": "A",
-                        "Description": "Filtering allele frequency (using Poisson 99% CI) {}".format(
-                            make_combo_header_text(
-                                "for", group_types, combo_fields, prefix, faf=True
-                            )
-                        ),
+                        "Description": f"Filtering allele frequency (using Poisson 99% CI) {make_combo_header_text('for', group_types, combo_fields, prefix, faf=True)}",
                     },
                 }
             info_dict.update(combo_dict)
@@ -350,9 +326,7 @@ def make_filter_dict(ht: hl.Table) -> Dict[str, str]:
         },
         "InbreedingCoeff": {"Description": "InbreedingCoeff < -0.3"},
         "RF": {
-            "Description": "Failed random forest filtering thresholds of {0}, {1} (probabilities of being a true positive variant) for SNPs, indels".format(
-                snp_cutoff.min_score, indel_cutoff.min_score
-            )
+            "Description": f"Failed random forest filtering thresholds of {np_cutoff.min_score}, {indel_cutoff.min_score} (probabilities of being a true positive variant) for SNPs, indels"
         },
         "PASS": {"Description": "Passed all variant filters"},
     }
@@ -896,7 +870,7 @@ def sanity_check_mt(
             ),
         )
     )
-    logger.info(freq_counts)
+    logger.info(f"Frequency spot check counts: {freq_counts}")
 
     logger.info("SAMPLE SUM CHECKS:")
     for subset in subsets:
@@ -1031,12 +1005,6 @@ def sanity_check_mt(
         )
 
     logger.info("MISSINGNESS CHECKS:")
-
-    # tranche 2 dbsnp fix
-    dbsnp_ht = dbsnp.ht().select("rsid")
-    ht = ht.drop("rsid")
-    ht = ht.annotate(**dbsnp_ht[ht.key])
-
     metrics_frac_missing = {}
     for x in info_metrics:
         metrics_frac_missing[x] = hl.agg.sum(hl.is_missing(ht.info[x])) / n_sites
@@ -1046,16 +1014,13 @@ def sanity_check_mt(
 
     n_fail = 0
     for metric, value in dict(output).items():
+        message = f"missingness check for {metric}: {100 * value}%missing"
         if value > missingness_threshold:
-            logger.info(
-                "FAILED missing check for {}: {}% missing".format(metric, 100 * value)
-            )
+            logger.info(f"FAILED {message}")
             n_fail += 1
         else:
-            logger.info(
-                "Missingness check for {}: {}% missing".format(metric, 100 * value)
-            )
-    logger.info("{} missing metrics checks failed".format(n_fail))
+            logger.info(f"Passed {message}")
+    logger.info(f"{n_fail} missing metrics checks failed")
 
 
 def main(args):
