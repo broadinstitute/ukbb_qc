@@ -139,7 +139,7 @@ def main(args):
                     ht,
                     metric_ht,
                     args.n_bins,
-                    add_bin={"interval_bin": ht.interval_qc_pass},
+                    add_bins={"interval_bin": ht.interval_qc_pass},
                 )
                 ht.write(
                     binned_concordance_path(truth_sample, metric, *tranche_data),
