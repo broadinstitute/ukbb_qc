@@ -1,6 +1,7 @@
 import argparse
 import logging
 import pickle
+import sys
 from typing import Dict, List, Union
 
 import hail as hl
@@ -1154,6 +1155,10 @@ def main(args):
             )
 
         if args.prepare_release_vcf:
+            if not args.per_chromosome and not args.parallelize:
+                logger.error("Need to choose how to export the release VCF. Exiting...")
+                sys.exit(1)
+
             mt = hl.read_matrix_table(release_mt_path(data_source, freeze, temp=True))
             logger.info("Reading header dict from pickle...")
             pickle_file = (
@@ -1247,12 +1252,6 @@ def main(args):
 
             # Export VCFs by chromosome
             if args.per_chromosome:
-                mt = mt.key_rows_by(
-                    locus=hl.locus(mt.locus.contig, mt.locus.position),
-                    alleles=mt.alleles,
-                )
-                mt.describe()
-
                 logger.info(f"VCF MT count: {mt.count()}")
                 # NOTE: need to run this on all workers
                 rg = get_reference_genome(mt.locus)
@@ -1263,22 +1262,14 @@ def main(args):
                     contig_mt = hl.filter_intervals(
                         mt, [hl.parse_locus_interval(contig)]
                     )
-                    logger.info(f"{contig} MT count: {contig_mt.count()}")
                     hl.export_vcf(
                         contig_mt,
                         release_vcf_path(data_source, freeze, contig=contig),
                         metadata=header_dict,
                     )
 
+            # Export sharded VCF
             if args.parallelize:
-                # Filter to autosomes + X/Y (remove chrM)
-                rg = get_reference_genome(mt.locus)
-                contigs = hl.parse_locus_interval(
-                    f"{rg.contigs[0]}-{rg.contigs[23]}", reference_genome=rg,
-                )
-                mt = hl.filter_intervals(mt, [contigs])
-
-                # Export sharded VCF
                 mt = mt.naive_coalesce(5000)
                 hl.export_vcf(
                     mt,
