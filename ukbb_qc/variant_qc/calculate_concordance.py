@@ -7,7 +7,6 @@ from gnomad.utils.filtering import filter_low_conf_regions
 from gnomad.utils.slack import slack_notifications
 from gnomad.variant_qc.evaluation import (
     compute_binned_truth_sample_concordance,
-    compute_quantile_bin,
     create_truth_sample_ht,
 )
 from ukbb_qc.resources.basics import capture_ht_path, get_checkpoint_path, get_ukbb_data
@@ -22,6 +21,8 @@ from ukbb_qc.resources.variant_qc import (
     truth_sample_mt_path,
     var_annotations_ht_path,
 )
+from ukbb_qc.slack_creds import slack_token
+
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("calculate_concordance")
@@ -78,7 +79,7 @@ def main(args):
             )
 
             # remove low quality sites
-            mt = mt.filter_rows(~info_ht[mt.row_key].lowqual)
+            mt = mt.filter_rows(~info_ht[mt.row_key].AS_lowqual)
 
             ht = create_truth_sample_ht(mt, truth_mt, truth_hc_intervals)
             ht.write(
@@ -133,7 +134,6 @@ def main(args):
                     interval_qc_pass=metric_ht[ht.key].interval_qc_pass,
                 )
 
-                # TODO: add interval_global_rank and interval_truth_sample_rank using ht.interval_qc_pass
                 ht = compute_binned_truth_sample_concordance(
                     ht,
                     metric_ht,
