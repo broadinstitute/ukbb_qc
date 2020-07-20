@@ -10,7 +10,7 @@ from gnomad.resources.grch38.reference_data import dbsnp
 from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.utils.generic import get_reference_genome
 from gnomad.utils.slack import slack_notifications
-from gnomad.utils.vcf import FORMAT_DICT, make_vcf_filter_dict
+from gnomad.utils.vcf import FORMAT_DICT, INFO_DICT, make_vcf_filter_dict
 from gnomad_qc.v2.variant_qc.prepare_data_release import (
     FAF_POPS,
     GROUPS,
@@ -37,7 +37,6 @@ from ukbb_qc.resources.basics import (
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.slack_creds import slack_token
-from ukbb_qc.utils.constants import FORMAT_DICT, INFO_DICT
 from ukbb_qc.utils.utils import make_index_dict
 
 
