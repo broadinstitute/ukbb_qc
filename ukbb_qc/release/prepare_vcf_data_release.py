@@ -10,6 +10,7 @@ from gnomad.resources.grch38.reference_data import dbsnp
 from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.utils.generic import get_reference_genome
 from gnomad.utils.slack import slack_notifications
+from gnomad.utils.vcf import make_vcf_filter_dict
 from gnomad_qc.v2.variant_qc.prepare_data_release import (
     FAF_POPS,
     GROUPS,
@@ -309,32 +310,6 @@ def make_hist_dict(bin_edges: Dict, adj: bool) -> Dict[str, str]:
 
         header_hist_dict.update(hist_dict)
     return header_hist_dict
-
-
-def make_vcf_filter_dict(
-    ht: hl.Table, snp_cutoff: float, indel_cutoff: float, inbreeding_cutoff: float
-) -> Dict[str, str]:
-    """
-    Generates dictionary of Number and Description attributes to be used in the VCF header, specifically for FILTER annotations.
-
-    :param Table ht: Table containing global annotations of the Random Forests SNP and indel cutoffs.
-    :param float snp_cutoff: Minimum SNP cutoff score from random forest model.
-    :param float indel_cutoff: Minimum indel cutoff score from random forest model.
-    :param float inbreeding_cutoff: Inbreeding coefficient hard cutoff.
-    :return: Dictionary keyed by VCF FILTER annotations, where values are Dictionaries of Number and Description attributes.
-    :rtype: Dict[str, str]
-    """
-    filter_dict = {
-        "AC0": {
-            "Description": "Allele count is zero after filtering out low-confidence genotypes (GQ < 20; DP < 10; and AB < 0.2 for het calls)"
-        },
-        "InbreedingCoeff": {"Description": f"InbreedingCoeff < {inbreeding_cutoff}"},
-        "RF": {
-            "Description": f"Failed random forest filtering thresholds of {snp_cutoff}, {indel_cutoff} (probabilities of being a true positive variant) for SNPs, indels"
-        },
-        "PASS": {"Description": "Passed all variant filters"},
-    }
-    return filter_dict
 
 
 def unfurl_nested_annotations(
@@ -1135,7 +1110,7 @@ def main(args):
             new_info_dict.update({"vep": {"Description": hl.eval(mt.vep_csq_header)}})
             header_dict = {
                 "info": new_info_dict,
-                "filter": make_filter_dict(mt.rows()),
+                "filter": make_vcf_filter_dict(mt.rows(), mt.rf_globals.snp_cutoff.min_score, mt.rf_globals.indel_cutoff.min_score, mt.rf_globals.inbreeding_cutoff),
                 "format": FORMAT_DICT,
             }
 
