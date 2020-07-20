@@ -10,7 +10,7 @@ from gnomad.resources.grch38.reference_data import dbsnp
 from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.utils.generic import get_reference_genome
 from gnomad.utils.slack import slack_notifications
-from gnomad.utils.vcf import make_vcf_filter_dict
+from gnomad.utils.vcf import FORMAT_DICT, make_vcf_filter_dict
 from gnomad_qc.v2.variant_qc.prepare_data_release import (
     FAF_POPS,
     GROUPS,
@@ -1110,7 +1110,12 @@ def main(args):
             new_info_dict.update({"vep": {"Description": hl.eval(mt.vep_csq_header)}})
             header_dict = {
                 "info": new_info_dict,
-                "filter": make_vcf_filter_dict(mt.rows(), mt.rf_globals.snp_cutoff.min_score, mt.rf_globals.indel_cutoff.min_score, mt.rf_globals.inbreeding_cutoff),
+                "filter": make_vcf_filter_dict(
+                    mt.rows(),
+                    mt.rf_globals.snp_cutoff.min_score,
+                    mt.rf_globals.indel_cutoff.min_score,
+                    mt.rf_globals.inbreeding_cutoff,
+                ),
                 "format": FORMAT_DICT,
             }
 
