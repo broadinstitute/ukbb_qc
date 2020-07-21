@@ -14,6 +14,7 @@ from gnomad.utils.vcf import (
     add_as_info_dict,
     ALLELE_TYPE_FIELDS,
     AS_FIELDS,
+    ENTRIES,
     FAF_POPS,
     FORMAT_DICT,
     generic_field_check,
@@ -29,6 +30,7 @@ from gnomad.utils.vcf import (
     SITE_FIELDS,
     SEXES,
     SORT_ORDER,
+    SPARSE_ENTRIES,
     VQSR_FIELDS,
 )
 from gnomad.utils.vcf import EAS_SUBPOPS as GNOMAD_EAS_SUBPOPS
@@ -41,6 +43,7 @@ from ukbb_qc.resources.basics import (
     release_vcf_path,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
+from ukbb_qc.resources.variant_qc import info_ht_path
 from ukbb_qc.slack_creds import slack_token
 from ukbb_qc.utils.constants import INTERVAL_QC_PARAMETERS
 from ukbb_qc.utils.utils import make_index_dict
@@ -1024,7 +1027,34 @@ def main(args):
 
         if args.prepare_vcf_mt:
             logger.info("Starting VCF process...")
-            mt = hl.read_matrix_table(release_mt_path(*tranche_data))
+            logger.info("Getting raw MT and dropping all unnecessary entries...")
+
+            # NOTE: reading in raw MatrixTable to be able to return all samples/variants
+            mt = get_ukbb_data(
+                data_source,
+                freeze,
+                key_by_locus_and_alleles=args.key_by_locus_and_alleles,
+                split=False,
+                raw=True,
+                repartition=args.repartition,
+                n_partitions=args.raw_partitions,
+            ).select_entries(*SPARSE_ENTRIES)
+
+            logger.info("Splitting raw MT...")
+            mt = hl.experimental.sparse_split_multi(mt)
+            mt = mt.select_entries(*ENTRIES)
+
+            logger.info("Removing low QUAL variants...")
+            info_ht = hl.read_table(info_ht_path(data_source, freeze))
+            mt = mt.filter_rows(
+                (hl.agg.any(mt.GT.is_non_ref() | hl.is_defined(mt.END)))
+                & (~info_ht[mt.row_key].AS_lowqual)
+            )
+
+            logger.info("Reading in release HT and annotating onto raw MT...")
+            ht = hl.read_matrix_table(release_ht_path(*tranche_data))
+            mt = mt.annotate_rows(**ht[mt.row_key])
+            mt = mt.annotate_globals(**ht.index_globals())
 
             logger.info("Dropping cohort frequencies (last index of freq)...")
             mt = mt.annotate_rows(freq=mt.freq[-1])
@@ -1135,7 +1165,7 @@ def main(args):
             with hl.hadoop_open(release_header_path(*tranche_data), "wb") as p:
                 pickle.dump(header_dict, p, protocol=pickle.HIGHEST_PROTOCOL)
             mt = mt.annotate_rows(info=mt.info.annotate(vep=mt.vep_csq))
-            mt.write(release_mt_path(*tranche_data, temp=True), args.overwrite)
+            mt.write(release_mt_path(*tranche_data), args.overwrite)
 
         if args.sanity_check:
             subset_list = ["", "gnomad_exomes_", "gnomad_genomes_"]
