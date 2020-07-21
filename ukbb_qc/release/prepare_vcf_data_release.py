@@ -11,7 +11,7 @@ from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.utils.generic import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 from gnomad.utils.vcf import (
-    add_as_info_dict,
+    add_as_vcf_info_dict,
     ALLELE_TYPE_FIELDS,
     AS_FIELDS,
     ENTRIES,
@@ -57,14 +57,14 @@ logger = logging.getLogger("data_release")
 logger.setLevel(logging.INFO)
 
 
-# Add capture region, interval QC, and sibling singletons to INFO_DICT
-INFO_DICT["in_capture_region"] = {
+# Add capture region, interval QC, and sibling singletons to vcf_info_dict
+vcf_info_dict["in_capture_region"] = {
     "Description": "Variant falls within an exome capture region"
 }
-INFO_DICT["fail_interval_qc"] = {
+vcf_info_dict["fail_interval_qc"] = {
     "Description": f"Variant falls within a region where less than {INTERVAL_QC_PARAMETERS[0]}% of samples had a mean coverage of {INTERVAL_QC_PARAMETERS[1]}X"
 }
-INFO_DICT["sibling_singleton"] = {
+vcf_info_dict["sibling_singleton"] = {
     "Description": "Variant was a callset-wide doubleton that was present only within a sibling pair"
 }
 
@@ -74,6 +74,9 @@ REGION_TYPE_FIELDS.append("fail_interval_qc", "in_capture_region")
 
 # Add sibling singletons to SITE_FIELDS
 SITE_FIELDS.append("sibling_singleton")
+
+# Make subset list (used in properly filling out VCF header descriptions and naming VCF info fields)
+SUBSET_LIST = ["", "gnomad_exomes", "gnomad_genomes"]  # empty for ukbb
 
 
 def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expression]:
@@ -85,23 +88,23 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
     :rtype: Dict[str, hl.expr.Expression]
     """
     # Start info dict with region_flag and allele_info fields
-    info_dict = {}
+    vcf_info_dict = {}
     for field in ALLELE_TYPE_FIELDS:
-        info_dict[field] = t["allele_info"][f"{field}"]
+        vcf_info_dict[field] = t["allele_info"][f"{field}"]
     for field in REGION_TYPE_FIELDS:
-        info_dict[field] = t["region_flag"][f"{field}"]
+        vcf_info_dict[field] = t["region_flag"][f"{field}"]
 
-    # Add site-level annotations to info_dict
+    # Add site-level annotations to vcf_info_dict
     for field in SITE_FIELDS:
-        info_dict[field] = t["info"][f"{field}"]
+        vcf_info_dict[field] = t["info"][f"{field}"]
     for field in RF_FIELDS:
-        info_dict[field] = t["rf"][f"{field}"]
+        vcf_info_dict[field] = t["rf"][f"{field}"]
     for field in VQSR_FIELDS:
-        info_dict[field] = t["vqsr"][f"{field}"]
+        vcf_info_dict[field] = t["vqsr"][f"{field}"]
 
     # Add AS annotations to info dict
     for field in AS_FIELDS:
-        info_dict[field] = t["info"][f"{field}"]
+        vcf_info_dict[field] = t["info"][f"{field}"]
 
     for hist in HISTS:
         for prefix in ["adj_qual_hists", "qual_hists"]:
@@ -119,131 +122,8 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
                 f"{hist_name}_n_smaller": t[prefix][hist].n_smaller,
                 f"{hist_name}_n_larger": t[prefix][hist].n_larger,
             }
-            info_dict.update(hist_dict)
-    return info_dict
-
-
-def make_info_dict(
-    prefix: str,
-    label_groups: Dict[str, str] = None,
-    bin_edges: Dict[str, str] = None,
-    faf: bool = False,
-    popmax: bool = False,
-    age_hist_data: str = None,
-) -> Dict[str, str]:
-    """
-    Generate dictionary of Number and Description attributes used for the VCF header during export.
-    
-    :param str prefix: gnomAD or empty (empty is for UKBB).
-    :param dict label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
-        e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
-    :param dict bin_edges: Dictionary keyed by annotation type, with values that reflect the bin edges corresponding to the annotation.
-    :param bool faf: If True, use alternate logic to auto-populate dictionary values associated with filter allele frequency annotation.s
-    :param bool popmax: If True, use alternate logic to auto-populate dictionary values associated with popmax annotations.
-    :param str age_hist_data: Pipe-delimited string of age histograms, from get_age_distributions (required if popmax is set and prefix is empty).
-    :return: Dictionary keyed by VCF INFO annotations, where values are dictionaries of Number and Description attributes.
-    :rtype: Dict of str: (Dict of str: str)
-    """
-    info_dict = dict()
-
-    if popmax:
-        if "gnomad" in prefix:
-            popmax_text = " in gnomAD"
-        else:
-            popmax_text = ""
-
-            # Only create age hist dictionary for UKBB
-            age_hist_dict = {
-                "age_hist_het_bin_freq": {
-                    "Number": "A",
-                    "Description": f"Histogram of ages of heterozygous individuals; bin edges are: {bin_edges['het']}; total number of individuals of any genotype bin: {age_hist_data}",
-                },
-                "age_hist_het_n_smaller": {
-                    "Number": "A",
-                    "Description": "Count of age values falling below lowest histogram bin edge for heterozygous individuals",
-                },
-                "age_hist_het_n_larger": {
-                    "Number": "A",
-                    "Description": "Count of age values falling above highest histogram bin edge for heterozygous individuals",
-                },
-                "age_hist_hom_bin_freq": {
-                    "Number": "A",
-                    "Description": f"Histogram of ages of homozygous alternate individuals; bin edges are: {bin_edges['hom']}; total number of individuals of any genotype bin: {age_hist_data}",
-                },
-                "age_hist_hom_n_smaller": {
-                    "Number": "A",
-                    "Description": "Count of age values falling below lowest histogram bin edge for homozygous alternate individuals",
-                },
-                "age_hist_hom_n_larger": {
-                    "Number": "A",
-                    "Description": "Count of age values falling above highest histogram bin edge for homozygous alternate individuals",
-                },
-            }
-            info_dict.update(age_hist_dict)
-
-        popmax_dict = {
-            f"{prefix}popmax": {
-                "Number": "A",
-                "Description": f"Population with maximum AF{popmax_text}",
-            },
-            f"{prefix}AC_popmax": {
-                "Number": "A",
-                "Description": f"Allele count in the population with the maximum AF{popmax_text}",
-            },
-            f"{prefix}AN_popmax": {
-                "Number": "A",
-                "Description": f"Total number of alleles in the population with the maximum AF{popmax_text}",
-            },
-            f"{prefix}AF_popmax": {
-                "Number": "A",
-                "Description": f"Maximum allele frequency across populations (excluding samples of Ashkenazi, Finnish, and indeterminate ancestry){popmax_text}",
-            },
-            f"{prefix}nhomalt_popmax": {
-                "Number": "A",
-                "Description": f"Count of homozygous individuals in the population with the maximum allele frequency{popmax_text}",
-            },
-        }
-        info_dict.update(popmax_dict)
-
-    else:
-        group_types = sorted(label_groups.keys(), key=lambda x: SORT_ORDER.index(x))
-        combos = make_label_combos(label_groups)
-
-        for combo in combos:
-            combo_fields = combo.split("_")
-
-            if not faf:
-                combo_dict = {
-                    f"{prefix}AC_{combo}": {
-                        "Number": "A",
-                        "Description": f"Alternate allele count{make_combo_header_text('for', group_types, combo_fields, prefix)}",
-                    },
-                    f"{prefix}AN_{combo}": {
-                        "Number": "1",
-                        "Description": f"Total number of alleles{make_combo_header_text('in', group_types, combo_fields, prefix)}",
-                    },
-                    f"{prefix}AF_{combo}": {
-                        "Number": "A",
-                        "Description": f"Alternate allele frequency{make_combo_header_text('in', group_types, combo_fields, prefix)}",
-                    },
-                    f"{prefix}nhomalt_{combo}": {
-                        "Number": "A",
-                        "Description": f"Count of homozygous individuals{make_combo_header_text('in', group_types, combo_fields, prefix)}",
-                    },
-                }
-            else:
-                combo_dict = {
-                    f"{prefix}faf95_{combo}": {
-                        "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 95% CI) {make_combo_header_text('for', group_types, combo_fields, prefix, faf=True)}",
-                    },
-                    f"{prefix}faf99_{combo}": {
-                        "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 99% CI) {make_combo_header_text('for', group_types, combo_fields, prefix, faf=True)}",
-                    },
-                }
-            info_dict.update(combo_dict)
-    return info_dict
+            vcf_info_dict.update(hist_dict)
+    return vcf_info_dict
 
 
 def make_hist_bin_edges_expr(ht: hl.Table) -> Dict[str, str]:
@@ -1067,61 +947,77 @@ def main(args):
             age_hist_data = hl.eval(mt.age_distribution)
 
             logger.info("Making INFO dict for VCF...")
-            INFO_DICT.update(add_as_info_dict(INFO_DICT))
-            subset_list = ["", "gnomad_exomes_", "gnomad_genomes_"]  # empty for ukbb
-            for subset in subset_list:
-                INFO_DICT.update(make_info_dict(subset, dict(group=GROUPS)))
-                INFO_DICT.update(make_info_dict(subset, dict(group=["adj"], sex=SEXES)))
-                INFO_DICT.update(make_info_dict(subset, dict(group=["adj"]), faf=True))
-                INFO_DICT.update(
-                    make_info_dict(subset, dict(group=["adj"], sex=SEXES), faf=True)
+            vcf_info_dict = INFO_DICT
+            vcf_info_dict.update(add_as_vcf_info_dict(vcf_info_dict))
+
+            for subset in SUBSET_LIST:
+                vcf_info_dict.update(make_vcf_info_dict(subset, dict(group=GROUPS)))
+                vcf_info_dict.update(
+                    make_vcf_info_dict(subset, dict(group=["adj"], sex=SEXES))
                 )
-                INFO_DICT.update(make_info_dict(subset, dict(group=["adj"], pop=POPS)))
-                INFO_DICT.update(
-                    make_info_dict(subset, dict(group=["adj"], pop=POPS, sex=SEXES))
+                vcf_info_dict.update(
+                    make_vcf_info_dict(subset, dict(group=["adj"]), faf=True)
                 )
-                INFO_DICT.update(
-                    make_info_dict(subset, dict(group=["adj"], pop=FAF_POPS), faf=True)
+                vcf_info_dict.update(
+                    make_vcf_info_dict(subset, dict(group=["adj"], sex=SEXES), faf=True)
                 )
-                INFO_DICT.update(
-                    make_info_dict(
+                vcf_info_dict.update(
+                    make_vcf_info_dict(subset, dict(group=["adj"], pop=POPS))
+                )
+                vcf_info_dict.update(
+                    make_vcf_info_dict(subset, dict(group=["adj"], pop=POPS, sex=SEXES))
+                )
+                vcf_info_dict.update(
+                    make_vcf_info_dict(
+                        subset, dict(group=["adj"], pop=FAF_POPS), faf=True
+                    )
+                )
+                vcf_info_dict.update(
+                    make_vcf_info_dict(
                         subset, dict(group=["adj"], pop=FAF_POPS, sex=SEXES), faf=True,
                     )
                 )
 
                 if "gnomad" in subset:
-                    INFO_DICT.update(make_info_dict(subset, popmax=True))
-                    INFO_DICT.update(
-                        make_info_dict(
-                            subset,
-                            dict(group=["adj"], pop=["nfe"], subpop=GNOMAD_NFE_SUBPOPS),
+                    description_text = " in gnomAD"
+                    vcf_info_dict.update(
+                        make_vcf_info_dict(
+                            subset, popmax=True, description_text=description_text
                         )
                     )
-                    INFO_DICT.update(
-                        make_info_dict(
+                    vcf_info_dict.update(
+                        make_vcf_info_dict(
+                            subset,
+                            dict(group=["adj"], pop=["nfe"], subpop=GNOMAD_NFE_SUBPOPS),
+                            description_text=description_text,
+                        )
+                    )
+                    vcf_info_dict.update(
+                        make_vcf_info_dict(
                             subset,
                             dict(group=["adj"], pop=["eas"], subpop=GNOMAD_EAS_SUBPOPS),
+                            description_text=description_text,
                         )
                     )
 
                 else:
-                    INFO_DICT.update(
-                        make_info_dict(
+                    vcf_info_dict.update(
+                        make_vcf_info_dict(
                             subset,
                             bin_edges=bin_edges,
                             popmax=True,
                             age_hist_data="|".join(str(x) for x in age_hist_data),
                         )
                     )
-            INFO_DICT.update(make_hist_dict(bin_edges, adj=False))
+            vcf_info_dict.update(make_hist_dict(bin_edges, adj=False))
 
             # Adjust keys to remove adj tags before exporting to VCF
-            # new_info_dict = {i.replace('_adj', '').replace('adj_', '').replace('_adj_', '').replace('.', '_').replace('raw_', ''): j for i,j in INFO_DICT.items()}
-            new_info_dict = {
+            # new_vcf_info_dict = {i.replace('_adj', '').replace('adj_', '').replace('_adj_', '').replace('.', '_').replace('raw_', ''): j for i,j in vcf_info_dict.items()}
+            new_vcf_info_dict = {
                 i.replace("adj_", "").replace("_adj", "").replace("_adj_", ""): j
-                for i, j in INFO_DICT.items()
+                for i, j in vcf_info_dict.items()
             }
-            new_info_dict.update(make_hist_dict(bin_edges, adj=True))
+            new_vcf_info_dict.update(make_hist_dict(bin_edges, adj=True))
 
             # Add non-PAR annotation
             mt = mt.annotate_rows(
@@ -1149,9 +1045,11 @@ def main(args):
 
             # Select relevant fields for VCF export
             mt = mt.select_rows("info", "filters", "rsid", "qual")
-            new_info_dict.update({"vep": {"Description": hl.eval(mt.vep_csq_header)}})
+            new_vcf_info_dict.update(
+                {"vep": {"Description": hl.eval(mt.vep_csq_header)}}
+            )
             header_dict = {
-                "info": new_info_dict,
+                "info": new_vcf_info_dict,
                 "filter": make_vcf_filter_dict(
                     mt.rows(),
                     mt.rf_globals.snp_cutoff.min_score,
@@ -1168,11 +1066,10 @@ def main(args):
             mt.write(release_mt_path(*tranche_data), args.overwrite)
 
         if args.sanity_check:
-            subset_list = ["", "gnomad_exomes_", "gnomad_genomes_"]
             mt = hl.read_matrix_table(release_mt_path(*tranche_data, temp=True))
             mt = set_female_y_metrics_to_na(mt)
             sanity_check_mt(
-                mt, subset_list, missingness_threshold=0.5, verbose=args.verbose
+                mt, SUBSET_LIST, missingness_threshold=0.5, verbose=args.verbose
             )
 
         if args.prepare_release_vcf:
