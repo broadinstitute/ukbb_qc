@@ -354,19 +354,20 @@ def get_release_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return f"gs://broad-ukbb/{data_source}.freeze_{freeze}/release"
 
 
-def release_mt_path(data_source: str, freeze: int, temp: bool = False) -> str:
+def release_mt_path(data_source: str, freeze: int) -> str:
     """
-    Fetch filepath for release Hail MatrixTables
+    Fetch filepath for release Hail MatrixTable.
+
+    .. note::
+        Annotations in this MT are not nested into individual structs.
+        Instead, variant annotations are unfurled and listed under the info struct (in preparation for VCF export).
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
-    :param bool temp: If True, fetch Table in which nested variant annotations are unfurled but listed under 'info' rather
-        than at the top level; created as a checkpoint during VCF generation
     :return: Filepath for release MatrixTable
     :rtype: str
     """
-    tag = ".temp" if temp else ""
-    return f"gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/{data_source}.freeze_{freeze}{tag}.mt"
+    return f"gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/{data_source}.freeze_{freeze}.mt"
 
 
 def release_ht_path(data_source: str, freeze: int) -> str:
