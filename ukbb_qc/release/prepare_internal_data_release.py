@@ -54,7 +54,7 @@ def flag_problematic_regions(
     return hl.struct(
         lcr=hl.is_defined(lcr_ht[t.locus]),
         fail_interval_qc=~(t.rf.interval_qc_pass),
-        in_capture_region=tf.rf.in_capture_interval,
+        in_capture_region=t.rf.in_capture_interval,
     )
 
 
