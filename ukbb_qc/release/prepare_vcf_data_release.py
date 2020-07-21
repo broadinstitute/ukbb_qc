@@ -1073,6 +1073,10 @@ def main(args):
             )
 
         if args.prepare_release_vcf:
+
+            logger.warning(
+                "VCF export will densify! Make sure you have an autoscaling cluster."
+            )
             if not args.per_chromosome and not args.parallelize:
                 logger.error("Need to choose how to export the release VCF. Exiting...")
                 sys.exit(1)
@@ -1184,6 +1188,9 @@ def main(args):
                     intervals = [i for i in intervals if i.start.locus.contig == contig]
                     mt = hl.read_matrix_table(mt_path, _intervals=intervals)
 
+                    logger.info("Densifying and exporting VCF...")
+                    mt = hl.experimental.densify(mt)
+
                     hl.export_vcf(
                         contig_mt,
                         release_vcf_path(*tranche_data, contig=contig),
@@ -1192,7 +1199,11 @@ def main(args):
 
             # Export sharded VCF
             if args.parallelize:
-                mt = mt.naive_coalesce(5000)
+
+                logger.info("Densifying...")
+                mt = hl.experimental.densify(mt)
+                mt = mt.naive_coalesce(args.n_shards)
+
                 hl.export_vcf(
                     mt,
                     release_vcf_path(*tranche_data),
@@ -1235,6 +1246,11 @@ if __name__ == "__main__":
         "--parallelize",
         help="Parallelize VCF export by exporting sharded VCF",
         action="store_true",
+    )
+    parser.add_argument(
+        "--n_shards",
+        help="Desired number of shards for output VCF (if --parallelize is set)",
+        type=int,
     )
     parser.add_argument(
         "--slack_channel", help="Slack channel to post results and notifications to."
