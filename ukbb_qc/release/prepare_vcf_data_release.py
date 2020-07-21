@@ -10,24 +10,29 @@ from gnomad.resources.grch38.reference_data import dbsnp
 from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.utils.generic import get_reference_genome
 from gnomad.utils.slack import slack_notifications
-from gnomad.utils.vcf import FORMAT_DICT, INFO_DICT, make_vcf_filter_dict
-from gnomad_qc.v2.variant_qc.prepare_data_release import (
+from gnomad.utils.vcf import (
+    add_as_info_dict,
+    ALLELE_TYPE_FIELDS,
+    AS_FIELDS,
     FAF_POPS,
+    FORMAT_DICT,
+    generic_field_check,
     GROUPS,
     HISTS,
-    POPS,
-    SEXES,
-    SORT_ORDER,
-    generic_field_check,
+    INFO_DICT,
     make_filters_sanity_check_expr,
     make_label_combos,
+    make_vcf_filter_dict,
+    POPS,
+    REGION_TYPE_FIELDS,
+    RF_FIELDS,
+    SITE_FIELDS,
+    SEXES,
+    SORT_ORDER,
+    VQSR_FIELDS,
 )
-from gnomad_qc.v2.variant_qc.prepare_data_release import (
-    EAS_SUBPOPS as GNOMAD_EAS_SUBPOPS,
-)
-from gnomad_qc.v2.variant_qc.prepare_data_release import (
-    NFE_SUBPOPS as GNOMAD_NFE_SUBPOPS,
-)
+from gnomad.utils.vcf import EAS_SUBPOPS as GNOMAD_EAS_SUBPOPS
+from gnomad.utils.vcf import NFE_SUBPOPS as GNOMAD_NFE_SUBPOPS
 from ukbb_qc.resources.basics import (
     get_checkpoint_path,
     logging_path,
@@ -37,6 +42,7 @@ from ukbb_qc.resources.basics import (
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.slack_creds import slack_token
+from ukbb_qc.utils.constants import INTERVAL_QC_PARAMETERS
 from ukbb_qc.utils.utils import make_index_dict
 
 
@@ -48,6 +54,25 @@ logger = logging.getLogger("data_release")
 logger.setLevel(logging.INFO)
 
 
+# Add capture region, interval QC, and sibling singletons to INFO_DICT
+INFO_DICT["in_capture_region"] = {
+    "Description": "Variant falls within an exome capture region"
+}
+INFO_DICT["fail_interval_qc"] = {
+    "Description": f"Variant falls within a region where less than {INTERVAL_QC_PARAMETERS[0]}% of samples had a mean coverage of {INTERVAL_QC_PARAMETERS[1]}X"
+}
+INFO_DICT["sibling_singleton"] = {
+    "Description": "Variant was a callset-wide doubleton that was present only within a sibling pair"
+}
+
+# Add interval QC, capture region to REGION_TYPE_FIELDS
+REGION_TYPE_FIELDS.append("fail_interval_qc", "in_capture_region")
+# RF_FIELDS.append("interval_qc_pass")
+
+# Add sibling singletons to SITE_FIELDS
+SITE_FIELDS.append("sibling_singleton")
+
+
 def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expression]:
     """
     Makes Hail expression for variant annotations to be included in VCF INFO field.
@@ -56,38 +81,25 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
     :return: Dictionary containing Hail expressions for relevant INFO annotations.
     :rtype: Dict[str, hl.expr.Expression]
     """
-    info_dict = {
-        "FS": t.rf.info_FS,
-        "InbreedingCoeff": t.rf.inbreeding_coeff,
-        "MQ": t.rf.info_MQ,
-        "MQRankSum": t.rf.info_MQRankSum,
-        "QD": t.rf.info_QD,
-        "ReadPosRankSum": t.rf.info_ReadPosRankSum,
-        "SOR": t.rf.info_SOR,
-        "VQSR_POSITIVE_TRAIN_SITE": t.vqsr.POSITIVE_TRAIN_SITE,
-        "VQSR_NEGATIVE_TRAIN_SITE": t.vqsr.NEGATIVE_TRAIN_SITE,
-        "AS_BaseQRankSum": t.vqsr.AS_BaseQRankSum,
-        "VarDP": t.rf.info_VarDP,
-        "AS_VarDP": t.vqsr.AS_VarDP,
-        "AS_VQSLOD": t.vqsr.AS_VQSLOD,
-        "AS_VQSR_culprit": t.vqsr.AS_culprit,
-        "lcr": t.region_flag.lcr,
-        "fail_interval_qc": t.region_flag.fail_interval_qc,
-        "nonpar": t.nonpar,
-        "rf_positive_label": t.rf.tp,
-        "rf_negative_label": t.rf.fail_hard_filters,
-        "rf_label": t.rf.rf_label,
-        "rf_train": t.rf.rf_train,
-        "rf_tp_probability": t.rf.rf_probability,
-        "transmitted_singleton": t.rf.transmitted_singleton,
-        "variant_type": t.allele_info.variant_type,
-        "original_alleles": t.allele_info.original_alleles,
-        "allele_type": t.allele_info.allele_type,
-        "n_alt_alleles": t.allele_info.n_alt_alleles,
-        "was_mixed": t.allele_info.was_mixed,
-        "has_star": t.allele_info.has_star,
-        "pab_max": t.rf.pab_max,
-    }
+    # Start info dict with region_flag and allele_info fields
+    info_dict = {}
+    for field in ALLELE_TYPE_FIELDS:
+        info_dict[field] = t["allele_info"][f"{field}"]
+    for field in REGION_TYPE_FIELDS:
+        info_dict[field] = t["region_flag"][f"{field}"]
+
+    # Add site-level annotations to info_dict
+    for field in SITE_FIELDS:
+        info_dict[field] = t["info"][f"{field}"]
+    for field in RF_FIELDS:
+        info_dict[field] = t["rf"][f"{field}"]
+    for field in VQSR_FIELDS:
+        info_dict[field] = t["vqsr"][f"{field}"]
+
+    # Add AS annotations to info dict
+    for field in AS_FIELDS:
+        info_dict[field] = t["info"][f"{field}"]
+
     for hist in HISTS:
         for prefix in ["adj_qual_hists", "qual_hists"]:
             hist_name = hist
@@ -1025,6 +1037,7 @@ def main(args):
             age_hist_data = hl.eval(mt.age_distribution)
 
             logger.info("Making INFO dict for VCF...")
+            INFO_DICT.update(add_as_info_dict(INFO_DICT))
             subset_list = ["", "gnomad_exomes_", "gnomad_genomes_"]  # empty for ukbb
             for subset in subset_list:
                 INFO_DICT.update(make_info_dict(subset, dict(group=GROUPS)))
