@@ -23,6 +23,7 @@ from gnomad.utils.vcf import (
     INFO_DICT,
     make_filters_sanity_check_expr,
     make_hist_bin_edges_expr,
+    make_hist_dict,
     make_label_combos,
     make_vcf_filter_dict,
     REGION_TYPE_FIELDS,
@@ -126,50 +127,6 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
             }
             vcf_info_dict.update(hist_dict)
     return vcf_info_dict
-
-
-def make_hist_dict(bin_edges: Dict, adj: bool) -> Dict[str, str]:
-    """
-    Generate dictionary of Number and Description attributes to be used in the VCF header, specifically for histogram annotations
-
-    :param dict bin_edges: Dictionary keyed by histogram annotation name, with corresponding string-reformatted bin edges for values
-    :param bool adj: Whether to create a header dict for raw or adj qual hists
-    :return: Dictionary keyed by VCF INFO annotations, where values are Dictionaries of Number and Description attributes
-    :rtype: Dict of str: (Dict of str: str)
-    """
-    header_hist_dict = {}
-    for hist in HISTS:
-
-        # get hists for raw and adj data
-        if adj:
-            hist = f"{hist}_adj"
-
-        edges = bin_edges[hist]
-        hist_fields = hist.split("_")
-        hist_text = hist_fields[0].upper()
-
-        if hist_fields[2] == "alt":
-            hist_text = hist_text + " in heterozygous individuals"
-        if adj:
-            hist_text = hist_text + " calculated on high quality genotypes"
-
-        hist_dict = {
-            f"{hist}_bin_freq": {
-                "Number": "A",
-                "Description": f"Histogram for {hist_text}; bin edges are: {edges}",
-            },
-            f"{hist}_n_smaller": {
-                "Number": "A",
-                "Description": f"Count of {hist_fields[0].upper()} values falling below lowest histogram bin edge {hist_text}",
-            },
-            f"{hist}_n_larger": {
-                "Number": "A",
-                "Description": f"Count of {hist_fields[0].upper()} values falling above highest histogram bin edge {hist_text}",
-            },
-        }
-
-        header_hist_dict.update(hist_dict)
-    return header_hist_dict
 
 
 def unfurl_nested_annotations(
@@ -907,7 +864,7 @@ def main(args):
             mt = mt.annotate_globals(freq_meta=mt.freq_meta[-1])
 
             logger.info("Making histogram bin edges...")
-            bin_edges = make_hist_bin_edges_expr(mt.rows())
+            bin_edges = make_hist_bin_edges_expr(mt.rows(), prefix="")
 
             logger.info("Getting age hist data...")
             age_hist_data = hl.eval(mt.age_distribution)
