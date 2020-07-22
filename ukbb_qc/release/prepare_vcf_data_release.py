@@ -7,7 +7,7 @@ from typing import Dict, List, Union
 import hail as hl
 
 from gnomad.resources.grch38.reference_data import dbsnp
-from gnomad.sample_qc.ancestry import POP_NAMES
+from gnomad.sample_qc.ancestry import POP_NAMES, SUBPOPS
 from gnomad.utils.generic import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 from gnomad.utils.vcf import (
@@ -24,7 +24,6 @@ from gnomad.utils.vcf import (
     make_filters_sanity_check_expr,
     make_label_combos,
     make_vcf_filter_dict,
-    POPS,
     REGION_TYPE_FIELDS,
     RF_FIELDS,
     SITE_FIELDS,
@@ -33,8 +32,6 @@ from gnomad.utils.vcf import (
     SPARSE_ENTRIES,
     VQSR_FIELDS,
 )
-from gnomad.utils.vcf import EAS_SUBPOPS as GNOMAD_EAS_SUBPOPS
-from gnomad.utils.vcf import NFE_SUBPOPS as GNOMAD_NFE_SUBPOPS
 from ukbb_qc.resources.basics import (
     get_checkpoint_path,
     logging_path,
@@ -77,6 +74,10 @@ SITE_FIELDS.append("sibling_singleton")
 
 # Make subset list (used in properly filling out VCF header descriptions and naming VCF info fields)
 SUBSET_LIST = ["", "gnomad_exomes", "gnomad_genomes"]  # empty for ukbb
+
+# Get gnomAD subpop names
+GNOMAD_NFE_SUBPOPS = map(lambda x: x.lower(), SUBPOPS["NFE"])
+GNOMAD_EAS_SUBPOPS = map(lambda x: x.lower(), SUBPOPS["EAS"])
 
 
 def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expression]:
@@ -126,12 +127,13 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
     return vcf_info_dict
 
 
-def make_hist_bin_edges_expr(ht: hl.Table) -> Dict[str, str]:
+def make_hist_bin_edges_expr(ht: hl.Table, prefix: str = "gnomad_") -> Dict[str, str]:
     """
     Create dictionaries containing variant histogram annotations and their associated bin edges, formatted into a string
     separated by pipe delimiters.
 
     :param Table ht: Table containing histogram variant annotations.
+    :param str prefix: Prefix text for age histogram bin edges. Default is gnomad_.
     :return: Dictionary keyed by histogram annotation name, with corresponding reformatted bin edges for values.
     :rtype: Dict[str, str]
     """
@@ -146,17 +148,17 @@ def make_hist_bin_edges_expr(ht: hl.Table) -> Dict[str, str]:
     for hist in HISTS:
 
         # Parse hists calculated on both raw and adj-filtered data
-        for prefix in ["adj_qual_hists", "qual_hists"]:
+        for hist_type in ["adj_qual_hists", "qual_hists"]:
             hist_name = hist
-            if "adj" in prefix:
+            if "adj" in hist_type:
                 hist_name = f"{hist}_adj"
             edges_dict[hist_name] = (
                 "|".join(
-                    map(lambda x: f"{x:.2f}", ht.take(1)[0][prefix][hist].bin_edges)
+                    map(lambda x: f"{x:.2f}", ht.head(1)[hist_type][hist].collect()[0].bin_edges)
                 )
                 if "ab" in hist
                 else "|".join(
-                    map(lambda x: str(int(x)), ht.take(1)[0][prefix][hist].bin_edges)
+                    map(lambda x: str(int(x)), ht.head(1)[hist_type][hist].collect()[0].bin_edges)
                 )
             )
     return edges_dict
@@ -525,7 +527,7 @@ def sanity_check_mt(
     verbose: bool = False,
 ) -> None:
     """
-    Perform a battery of sanity checks on a specified group of subsets in a Hail Table containing variant annotations;
+    Perform a battery of sanity checks on a specified group of subsets in a MatrixTable containing variant annotations;
     includes summaries of % filter status for different partitions of variants; histogram outlier bin checks; checks on
     AC, AN, and AF annotations; checks that subgroup annotation values add up to the supergroup annotation values;
     checks on sex-chromosome annotations; and summaries of % missingness in variant annotations
@@ -778,10 +780,10 @@ def sanity_check_mt(
                     if z in i:
                         found.append(z)
             else:
-                for z in POPS:
+                for z in POPS_NAMES:
                     if z in i:
                         found.append(z)
-        missing_pops = set(POPS) - set(found)
+        missing_pops = set(POP_NAMES) - set(found)
         if len(missing_pops) != 0:
             logger.warning(f"Missing {missing_pops} pops in {subset} subset!")
 
@@ -823,10 +825,10 @@ def sanity_check_mt(
                 )
         else:
             subset = "adj_"  # hacky add; UKB fields are weirdly named adj_AC_adj
-            sample_sum_check(ht, subset, dict(group=["adj"], pop=POPS), verbose)
+            sample_sum_check(ht, subset, dict(group=["adj"], pop=POP_NAMES), verbose)
             sample_sum_check(ht, subset, dict(group=["adj"], sex=SEXES), verbose)
             sample_sum_check(
-                ht, subset, dict(group=["adj"], pop=POPS, sex=SEXES), verbose
+                ht, subset, dict(group=["adj"], pop=POP_NAMES, sex=SEXES), verbose
             )
 
     logger.info("SEX CHROMOSOME ANNOTATION CHECKS:")
@@ -962,10 +964,10 @@ def main(args):
                     make_vcf_info_dict(subset, dict(group=["adj"], sex=SEXES), faf=True)
                 )
                 vcf_info_dict.update(
-                    make_vcf_info_dict(subset, dict(group=["adj"], pop=POPS))
+                    make_vcf_info_dict(subset, dict(group=["adj"], pop=POP_NAMES))
                 )
                 vcf_info_dict.update(
-                    make_vcf_info_dict(subset, dict(group=["adj"], pop=POPS, sex=SEXES))
+                    make_vcf_info_dict(subset, dict(group=["adj"], pop=POP_NAMES, sex=SEXES))
                 )
                 vcf_info_dict.update(
                     make_vcf_info_dict(
@@ -1106,13 +1108,12 @@ def main(args):
             # Confirm all VCF fields/descriptions are present before exporting
             missing_fields = []
             missing_descriptions = []
-            for item in ["info", "filters", "format"]:
+            for item in ["info", "filter", "format"]:
                 if item == "info":
                     annots = new_row_annots
                 elif item == "format":
                     annots = list(mt.entry)
                 else:
-                    item = "filter"
                     annot_mt = mt.explode_rows(mt.filters)
                     annots = list(
                         annot_mt.aggregate_rows(hl.agg.collect_as_set(annot_mt.filters))
