@@ -515,7 +515,9 @@ def main(args):
             with hl.hadoop_open(release_header_path(*tranche_data), "rb") as p:
                 header_dict = pickle.load(p)
 
-            # Reformat names to remove "adj_" (this is a carryover from code that labeled everything "gnomad")
+            # Reformat names to remove "adj" pre-export
+            # All unlabled frequency information is assumed to be adj
+            # All raw frequency information is labeled "_raw"
             row_annots = list(mt.row.info)
             new_row_annots = []
             for x in row_annots:
