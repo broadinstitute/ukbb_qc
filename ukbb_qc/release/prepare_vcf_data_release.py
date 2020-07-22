@@ -30,6 +30,7 @@ from gnomad.utils.vcf import (
     REGION_TYPE_FIELDS,
     RF_FIELDS,
     SITE_FIELDS,
+    set_female_y_metrics_to_na,
     SEXES,
     SORT_ORDER,
     SPARSE_ENTRIES,
@@ -286,47 +287,6 @@ def unfurl_nested_annotations(
     return expr_dict
 
 
-def set_female_y_metrics_to_na(
-    t: Union[hl.Table, hl.MatrixTable]
-) -> Union[hl.Table, hl.MatrixTable]:
-    """
-    Set AC, AN, and nhomalt Y variant annotations for females to NA (instead of 0).
-
-    :param Table/MatrixTable t: Table/MatrixTable containing female variant annotations.
-    :return: Table/MatrixTable with reset annotations.
-    :rtype: hl.Table/hl.MatrixTable
-    """
-    metrics = list(t.row.info)
-    female_metrics = [x for x in metrics if "_female" in x]
-    faf_female_metrics = [x for x in female_metrics if "faf" in x]
-    female_metrics = [
-        x for x in female_metrics if ("nhomalt" in x) or ("AC" in x) or ("AN" in x)
-    ]
-
-    female_metrics_dict = {}
-    for metric in female_metrics:
-        female_metrics_dict.update(
-            {
-                f"{metric}": hl.cond(
-                    t.locus.contig == "chrY", hl.null(hl.tint32), t.info[f"{metric}"]
-                )
-            }
-        )
-    for metric in faf_female_metrics:
-        female_metrics_dict.update(
-            {
-                f"{metric}": hl.cond(
-                    t.locus.contig == "chrY", hl.null(hl.tfloat32), t.info[f"{metric}"]
-                )
-            }
-        )
-    return (
-        t.annotate(info=t.info.annotate(**female_metrics_dict))
-        if isinstance(t, hl.Table)
-        else t.annotate_rows(info=t.info.annotate(**female_metrics_dict))
-    )
-
-
 def main(args):
 
     hl.init(log="/release.log", default_reference="GRCh38")
@@ -471,7 +431,7 @@ def main(args):
                     **unfurl_nested_annotations(mt, gnomad=True, genome=False)
                 )
             )
-            mt = set_female_y_metrics_to_na(mt)
+            mt = mt.annotate_rows(**set_female_y_metrics_to_na(mt))
 
             # Select relevant fields for VCF export
             mt = mt.select_rows("info", "filters", "rsid", "qual")
@@ -496,7 +456,7 @@ def main(args):
 
         if args.sanity_check:
             mt = hl.read_matrix_table(release_mt_path(*tranche_data, temp=True))
-            mt = set_female_y_metrics_to_na(mt)
+            mt = mt.annotate_rows(**set_female_y_metrics_to_na(mt))
             sanity_check_release_mt(
                 mt, SUBSET_LIST, missingness_threshold=0.5, verbose=args.verbose
             )
