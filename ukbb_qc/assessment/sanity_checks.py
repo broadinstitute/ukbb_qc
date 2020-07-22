@@ -112,7 +112,7 @@ def sample_sum_check(
     display results from checking the sum of the specified annotations in the terminal.
 
     :param Table ht: Table containing annotations to be summed.
-    :param str prefix: Subset of gnomAD
+    :param str prefix: String indicating sample subset.
     :param dict label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
         e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
     :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
@@ -147,7 +147,7 @@ def sample_sum_check(
                     ht.info[f"{prefix}{subfield}_{group}"]
                     != ht[f"sum_{subfield}_{group}_{alt_groups}"]
                 ),
-                f"adj_{prefix}{subfield}_{group} = sum({subfield}_{group}_{alt_groups})",
+                f"{prefix}{subfield}_{group} = sum({subfield}_{group}_{alt_groups})",
                 [
                     f"info.{prefix}{subfield}_{group}",
                     f"sum_{subfield}_{group}_{alt_groups}",
