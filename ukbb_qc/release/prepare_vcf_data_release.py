@@ -22,6 +22,7 @@ from gnomad.utils.vcf import (
     HISTS,
     INFO_DICT,
     make_filters_sanity_check_expr,
+    make_hist_bin_edges_expr,
     make_label_combos,
     make_vcf_filter_dict,
     REGION_TYPE_FIELDS,
@@ -125,43 +126,6 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
             }
             vcf_info_dict.update(hist_dict)
     return vcf_info_dict
-
-
-def make_hist_bin_edges_expr(ht: hl.Table, prefix: str = "gnomad_") -> Dict[str, str]:
-    """
-    Create dictionaries containing variant histogram annotations and their associated bin edges, formatted into a string
-    separated by pipe delimiters.
-
-    :param Table ht: Table containing histogram variant annotations.
-    :param str prefix: Prefix text for age histogram bin edges. Default is gnomad_.
-    :return: Dictionary keyed by histogram annotation name, with corresponding reformatted bin edges for values.
-    :rtype: Dict[str, str]
-    """
-    edges_dict = {
-        "het": "|".join(
-            map(lambda x: f"{x:.1f}", ht.head(1).age_hist_het.collect()[0].bin_edges)
-        ),
-        "hom": "|".join(
-            map(lambda x: f"{x:.1f}", ht.head(1).age_hist_hom.collect()[0].bin_edges)
-        ),
-    }
-    for hist in HISTS:
-
-        # Parse hists calculated on both raw and adj-filtered data
-        for hist_type in ["adj_qual_hists", "qual_hists"]:
-            hist_name = hist
-            if "adj" in hist_type:
-                hist_name = f"{hist}_adj"
-            edges_dict[hist_name] = (
-                "|".join(
-                    map(lambda x: f"{x:.2f}", ht.head(1)[hist_type][hist].collect()[0].bin_edges)
-                )
-                if "ab" in hist
-                else "|".join(
-                    map(lambda x: str(int(x)), ht.head(1)[hist_type][hist].collect()[0].bin_edges)
-                )
-            )
-    return edges_dict
 
 
 def make_hist_dict(bin_edges: Dict, adj: bool) -> Dict[str, str]:
@@ -967,7 +931,9 @@ def main(args):
                     make_vcf_info_dict(subset, dict(group=["adj"], pop=POP_NAMES))
                 )
                 vcf_info_dict.update(
-                    make_vcf_info_dict(subset, dict(group=["adj"], pop=POP_NAMES, sex=SEXES))
+                    make_vcf_info_dict(
+                        subset, dict(group=["adj"], pop=POP_NAMES, sex=SEXES)
+                    )
                 )
                 vcf_info_dict.update(
                     make_vcf_info_dict(
