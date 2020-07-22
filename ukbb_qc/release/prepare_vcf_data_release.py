@@ -401,9 +401,7 @@ def main(args):
                     )
                 )
                 vcf_info_dict.update(
-                    make_info_dict(
-                        subset, dict(group=["adj"], pop=FAF_POPS), faf=True
-                    )
+                    make_info_dict(subset, dict(group=["adj"], pop=FAF_POPS), faf=True)
                 )
                 vcf_info_dict.update(
                     make_info_dict(
@@ -483,7 +481,6 @@ def main(args):
             header_dict = {
                 "info": new_vcf_info_dict,
                 "filter": make_vcf_filter_dict(
-                    mt.rows(),
                     mt.rf_globals.snp_cutoff.min_score,
                     mt.rf_globals.indel_cutoff.min_score,
                     mt.rf_globals.inbreeding_cutoff,
