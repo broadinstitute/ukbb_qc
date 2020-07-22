@@ -59,7 +59,7 @@ def flag_problematic_regions(
 
 
 def prepare_annotations(
-    mt: hl.MatrixTable,
+    ht: hl.Table,
     info_ht: hl.Table,
     freq_ht: hl.Table,
     rf_ht: hl.Table,
@@ -70,9 +70,7 @@ def prepare_annotations(
     """
     Join all Tables with variant annotations.
 
-    Also removes variants on chrM.
-
-    :param MatrixTable mt: MatrixTable to be annotated.
+    :param Table ht: Table to be annotated.
     :param Table freq_ht: Table with frequency annotations.
     :param Table rf_ht: Table with random forest variant annotations.
     :param Table vep_ht: Table with VEP variant annotations.
@@ -81,12 +79,6 @@ def prepare_annotations(
     :return: Table containing joined annotations.
     :rtype: hl.Table
     """
-    logger.info("Filtering out low QUAL variants...")
-    mt = mt.filter_rows(
-        (hl.agg.any(mt.GT.is_non_ref() | hl.is_defined(mt.END)))
-        & (~info_ht[mt.row_key].AS_lowqual)
-    )
-
     logger.info("Selecting annotations from annotation Tables...")
     info_fields = SITE_FIELDS + AS_FIELDS
     info_ht = info_ht.transmute(info=info_ht.info.select(*info_fields)).select(
@@ -108,33 +100,29 @@ def prepare_annotations(
     )  # NOTE: Will need to drop InbreedingCoeff annotation here in 500K, but this isn't present in 300K
     dbsnp_ht = dbsnp.ht().select("rsid")
 
-    freq_ht = hl.filter_intervals(
-        freq_ht, [hl.parse_locus_interval("chrM")], keep=False
-    )
-
     logger.info(
-        "Annotating MT with random forest HT and flagging problematic regions..."
+        "Annotating HT with random forest HT and flagging problematic regions..."
     )
-    mt = mt.annotate_rows(rf=rf_ht[mt.row_key])
-    mt = mt.annotate_rows(region_flag=flag_problematic_regions(mt))
-    mt = mt.transmute_rows(rf=mt.rf.drop("interval_qc_pass"))
+    ht = ht.annotate(rf=rf_ht[ht.key])
+    ht = ht.annotate_globals(rf_globals=rf_ht.index_globals())
+    ht = ht.annotate(region_flag=flag_problematic_regions(ht))
+    ht = ht.transmute(rf=ht.rf.drop("interval_qc_pass"))
 
-    logger.info("Annotating MT with frequency information...")
-    mt = mt.annotate_rows(**freq_ht[mt.row_key])
-    mt = mt.annotate_globals(**freq_ht.index_globals())
+    logger.info("Annotating HT with frequency information...")
+    ht = ht.annotate(**freq_ht[ht.row])
+    ht = ht.annotate(**freq_ht.index_globals())
 
-    logger.info("Annotating MT info, vep, allele_info, vqsr, rsid, and qual...")
-    mt = mt.annotate_rows(
-        info=info_ht[mt.row_key].info,
-        vep=vep_ht[mt.row_key].vep,
-        allele_info=allele_ht[mt.row_key].allele_data,
-        vqsr=vqsr_ht[mt.row_key].info,
-        rsid=dbsnp_ht[mt.row_key].rsid,
-        qual=info_ht[mt.row_key].qual,
+    logger.info("Annotating HT info, vep, allele_info, vqsr, rsid, and qual...")
+    ht = ht.annotate(
+        info=info_ht[ht.key].info,
+        vep=vep_ht[ht.key].vep,
+        allele_info=allele_ht[ht.key].allele_data,
+        vqsr=vqsr_ht[ht.key].info,
+        rsid=dbsnp_ht[ht.key].rsid,
+        qual=info_ht[ht.key].qual,
     )
-    mt = mt.annotate_globals(rf_globals=rf_ht.index_globals())
-    logger.info(f"Final MT count: {mt.count()}")
-    return mt
+    logger.info(f"Final HT count: {ht.count()}")
+    return ht
 
 
 def main(args):
@@ -160,8 +148,14 @@ def main(args):
         mt = hl.experimental.sparse_split_multi(mt)
         mt = mt.select_entries(*ENTRIES)
 
-        logger.info("Reading in all variant annotation tables...")
+        logger.info("Filtering out low QUAL variants and subsetting to rows...")
         info_ht = hl.read_table(info_ht_path(data_source, freeze))
+        ht = mt.filter_rows(~info_ht[mt.row_key].AS_lowqual).rows()
+
+        logger.info("Removing chrM...")
+        ht = hl.filter_intervals(ht, [hl.parse_locus_interval("chrM")], keep=False)
+
+        logger.info("Reading in all variant annotation tables...")
         freq_ht = hl.read_table(
             "join_freq", var_annotations_ht_path(data_source, freeze)
         )
@@ -173,14 +167,13 @@ def main(args):
         vqsr_ht = hl.read_table(var_annotations_ht_path("vqsr", data_source, freeze))
 
         logger.info("Adding annotations...")
-        mt = prepare_annotations(
-            mt, info_ht, freq_ht, rf_ht, vep_ht, allele_ht, vqsr_ht,
+        ht = prepare_annotations(
+            ht, info_ht, freq_ht, rf_ht, vep_ht, allele_ht, vqsr_ht,
         )
 
         logger.info("Getting age hist data...")
         age_hist_data = get_age_distributions(get_age_ht(freeze))
-        mt = mt.annotate_globals(age_distribution=age_hist_data)
-        ht = mt.rows()
+        ht = ht.annotate_globals(age_distribution=age_hist_data)
         ht = ht.naive_coalesce(args.n_partitions)
         ht.write(release_ht_path(data_source, freeze), args.overwrite)
 
