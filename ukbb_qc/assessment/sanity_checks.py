@@ -100,76 +100,6 @@ def sample_check(
 
 
 # Resources to check MT upon VCF export
-def sample_sum_check(
-    ht: hl.Table,
-    prefix: str,
-    label_groups: Dict[str, List[str]],
-    verbose: bool,
-    subpop: bool = None,
-) -> None:
-    """
-    Compute afresh the sum of annotations for a specified group of annotations, and compare to the annotated version;
-    display results from checking the sum of the specified annotations in the terminal.
-
-    :param Table ht: Table containing annotations to be summed.
-    :param str prefix: String indicating sample subset.
-    :param dict label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
-        e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
-    :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
-        show only top values of annotations that fail checks.
-    :param str subpop: Subpop abbreviation, supplied only if subpopulations are included in the annotation groups being checked.
-    :rtype: None
-    """
-    combo_AC = [ht.info[f"{prefix}AC_{x}"] for x in make_label_combos(label_groups)]
-    combo_AN = [ht.info[f"{prefix}AN_{x}"] for x in make_label_combos(label_groups)]
-    combo_nhomalt = [
-        ht.info[f"{prefix}nhomalt_{x}"] for x in make_label_combos(label_groups)
-    ]
-
-    group = label_groups.pop("group")[0]
-    alt_groups = "_".join(
-        sorted(label_groups.keys(), key=lambda x: SORT_ORDER.index(x))
-    )
-
-    annot_dict = {
-        f"sum_AC_{group}_{alt_groups}": hl.sum(combo_AC),
-        f"sum_AN_{group}_{alt_groups}": hl.sum(combo_AN),
-        f"sum_nhomalt_{group}_{alt_groups}": hl.sum(combo_nhomalt),
-    }
-
-    ht = ht.annotate(**annot_dict)
-
-    for subfield in ["AC", "AN", "nhomalt"]:
-        if not subpop:
-            generic_field_check(
-                ht,
-                (
-                    ht.info[f"{prefix}{subfield}_{group}"]
-                    != ht[f"sum_{subfield}_{group}_{alt_groups}"]
-                ),
-                f"{prefix}{subfield}_{group} = sum({subfield}_{group}_{alt_groups})",
-                [
-                    f"info.{prefix}{subfield}_{group}",
-                    f"sum_{subfield}_{group}_{alt_groups}",
-                ],
-                verbose,
-            )
-        else:
-            generic_field_check(
-                ht,
-                (
-                    ht.info[f"{prefix}{subfield}_{group}_{subpop}"]
-                    != ht[f"sum_{subfield}_{group}_{alt_groups}"]
-                ),
-                f"{prefix}{subfield}_{group}_{subpop} = sum({subfield}_{group}_{alt_groups})",
-                [
-                    f"info.{prefix}{subfield}_{group}_{subpop}",
-                    f"sum_{subfield}_{group}_{alt_groups}",
-                ],
-                verbose,
-            )
-
-
 def sanity_check_release_mt(
     mt: hl.MatrixTable,
     subsets: List[str],
@@ -177,10 +107,14 @@ def sanity_check_release_mt(
     verbose: bool = False,
 ) -> None:
     """
-    Perform a battery of sanity checks on a specified group of subsets in a MatrixTable containing variant annotations;
-    includes summaries of % filter status for different partitions of variants; histogram outlier bin checks; checks on
-    AC, AN, and AF annotations; checks that subgroup annotation values add up to the supergroup annotation values;
-    checks on sex-chromosome annotations; and summaries of % missingness in variant annotations
+    Perform a battery of sanity checks on a specified group of subsets in a MatrixTable containing variant annotations.
+
+    Includes:
+    - Summaries of % filter status for different partitions of variants
+    - Histogram outlier bin checks
+    - Checks on AC, AN, and AF annotations
+    - Checks that subgroup annotation values add up to the supergroup annotation values
+    - Checks on sex-chromosome annotations; and summaries of % missingness in variant annotations
 
     :param MatrixTable mt: MatrixTable containing variant annotations to check
     :param List[str] subsets: List of subsets to be checked
@@ -204,7 +138,7 @@ def sanity_check_release_mt(
         f"hl.agg.counter filters: {ht_explode.aggregate(hl.agg.counter(ht_explode.filters))}"
     )
     ht = ht.annotate(
-        is_filtered=ht.filters.length() > 0,
+        is_filtered=hl.len(ht.filters) > 0,
         in_problematic_region=hl.any(
             lambda x: x, [ht.info.lcr, ht.info.fail_interval_qc]
         ),
