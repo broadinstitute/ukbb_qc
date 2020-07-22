@@ -452,7 +452,7 @@ def make_freq_meta_index_dict(
 
     :param List[str] freq_meta: Ordered list containing string entries describing all the grouping combinations contained in the
         frequency array annotation.
-    :param bool gnomad: Whether to index a list from gnomAD.
+    :param bool gnomad: Whether to index a gnomAD sample freq_meta list.
     :param List[str] subpops: List of subpops in frequency array.
     :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
         of each grouping entry in the frequency array
