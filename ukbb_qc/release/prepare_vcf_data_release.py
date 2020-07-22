@@ -24,6 +24,7 @@ from gnomad.utils.vcf import (
     make_filters_sanity_check_expr,
     make_hist_bin_edges_expr,
     make_hist_dict,
+    make_info_dict,
     make_label_combos,
     make_vcf_filter_dict,
     REGION_TYPE_FIELDS,
@@ -285,52 +286,6 @@ def unfurl_nested_annotations(
     return expr_dict
 
 
-def make_combo_header_text(
-    preposition: str,
-    group_types: List[str],
-    combo_fields: List[str],
-    prefix: str,
-    faf: bool = False,
-) -> str:
-    """
-    Programmatically generate text to populate the VCF header description for a given variant annotation with specific groupings and subset
-
-    :param str preposition: Relevant preposition to precede automatically generated text.
-    :param list of str group_types: List of grouping types, e.g. "sex" or "pop".
-    :param list of str combo_fields: List of the specific values for each grouping type, for which the text is being generated.
-    :param str prefix: gnomad_exomes or gnomad_genomes.
-    :param bool faf: If True, use alternate logic to automatically populate descriptions for filter allele frequency annotations.
-    :return: String with automatically generated description text for a given set of combo fields.
-    :rtype: str
-    """
-    combo_dict = dict(zip(group_types, combo_fields))
-    header_text = " " + preposition
-
-    if "sex" in combo_dict.keys():
-        header_text = header_text + " " + combo_dict["sex"]
-
-    if faf:
-        header_text = header_text + " samples"
-
-    if "subpop" in combo_dict.keys():
-        header_text = header_text + f" of {POP_NAMES[combo_dict['subpop']]} ancestry"
-        combo_dict.pop("pop")
-    if "pop" in combo_dict.keys():
-        header_text = header_text + f" of {POP_NAMES[combo_dict['pop']]} ancestry"
-
-    if "gnomad" in prefix:
-        header_text = header_text + " in gnomAD"
-
-    if "group" in group_types:
-        if combo_dict["group"] == "raw":
-            header_text = header_text + ", before removing low-confidence genotypes"
-
-    if header_text == f" {preposition}":
-        header_text = ""
-
-    return header_text
-
-
 def set_female_y_metrics_to_na(
     t: Union[hl.Table, hl.MatrixTable]
 ) -> Union[hl.Table, hl.MatrixTable]:
@@ -427,31 +382,31 @@ def main(args):
             vcf_info_dict.update(add_as_vcf_info_dict(vcf_info_dict))
 
             for subset in SUBSET_LIST:
-                vcf_info_dict.update(make_vcf_info_dict(subset, dict(group=GROUPS)))
+                vcf_info_dict.update(make_info_dict(subset, dict(group=GROUPS)))
                 vcf_info_dict.update(
-                    make_vcf_info_dict(subset, dict(group=["adj"], sex=SEXES))
+                    make_info_dict(subset, dict(group=["adj"], sex=SEXES))
                 )
                 vcf_info_dict.update(
-                    make_vcf_info_dict(subset, dict(group=["adj"]), faf=True)
+                    make_info_dict(subset, dict(group=["adj"]), faf=True)
                 )
                 vcf_info_dict.update(
-                    make_vcf_info_dict(subset, dict(group=["adj"], sex=SEXES), faf=True)
+                    make_info_dict(subset, dict(group=["adj"], sex=SEXES), faf=True)
                 )
                 vcf_info_dict.update(
-                    make_vcf_info_dict(subset, dict(group=["adj"], pop=POP_NAMES))
+                    make_info_dict(subset, dict(group=["adj"], pop=POP_NAMES))
                 )
                 vcf_info_dict.update(
-                    make_vcf_info_dict(
+                    make_info_dict(
                         subset, dict(group=["adj"], pop=POP_NAMES, sex=SEXES)
                     )
                 )
                 vcf_info_dict.update(
-                    make_vcf_info_dict(
+                    make_info_dict(
                         subset, dict(group=["adj"], pop=FAF_POPS), faf=True
                     )
                 )
                 vcf_info_dict.update(
-                    make_vcf_info_dict(
+                    make_info_dict(
                         subset, dict(group=["adj"], pop=FAF_POPS, sex=SEXES), faf=True,
                     )
                 )
@@ -459,19 +414,19 @@ def main(args):
                 if "gnomad" in subset:
                     description_text = " in gnomAD"
                     vcf_info_dict.update(
-                        make_vcf_info_dict(
+                        make_info_dict(
                             subset, popmax=True, description_text=description_text
                         )
                     )
                     vcf_info_dict.update(
-                        make_vcf_info_dict(
+                        make_info_dict(
                             subset,
                             dict(group=["adj"], pop=["nfe"], subpop=GNOMAD_NFE_SUBPOPS),
                             description_text=description_text,
                         )
                     )
                     vcf_info_dict.update(
-                        make_vcf_info_dict(
+                        make_info_dict(
                             subset,
                             dict(group=["adj"], pop=["eas"], subpop=GNOMAD_EAS_SUBPOPS),
                             description_text=description_text,
@@ -480,7 +435,7 @@ def main(args):
 
                 else:
                     vcf_info_dict.update(
-                        make_vcf_info_dict(
+                        make_info_dict(
                             subset,
                             bin_edges=bin_edges,
                             popmax=True,
