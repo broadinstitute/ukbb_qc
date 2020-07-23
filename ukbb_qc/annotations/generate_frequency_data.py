@@ -41,8 +41,8 @@ def generate_cohort_frequency_data(
     :param list pops: Populations to include in frequency calculation.
     :param StringExpression pop_expr: Expression containing population information.
     :param StringExpression sex_expr: Expression containing sex karyotype information.
-    :return: MatrixTable with frequency annotations in struct named `cohort_freq` and metadata in globals named `freq_meta`.
-    :rtype: hl.MatrixTable
+    :return: Table with frequency annotations in struct named `cohort_freq` and metadata in globals named `freq_meta`.
+    :rtype: hl.Table
     """
     logger.info(
         f"Filtering to {pops} to calculate cohort frequency (includes related samples)..."
@@ -151,7 +151,7 @@ def generate_frequency_data(
         faf_meta=faf_meta, freq_meta=mt.freq_meta.extend(mt.cohort_freq_meta)
     )
 
-    logger.info("Getting hists")
+    logger.info("Getting quality histograms...")
     mt = get_hists(mt, freeze)
     return mt.rows()
 
@@ -209,7 +209,6 @@ def join_gnomad(ht: hl.Table, data_type: str) -> hl.Table:
 def main(args):
 
     hl.init(log="/frequency_generation.log", default_reference="GRCh38")
-    hl._set_flags(max_leader_scans="200")
     data_source = "broad"
     freeze = args.freeze
 
