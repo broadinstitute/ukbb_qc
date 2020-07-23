@@ -248,11 +248,14 @@ def main(args):
             logger.info("Getting quality histograms...")
             ht = get_hists(mt, freeze).rows()
             ht = ht.naive_coalesce(args.n_partitions)
-            ht = ht.checkpoint(
+            ht.write(
                 var_annotations_ht_path("ukb_freq", data_source, freeze), args.overwrite
             )
 
         if args.join_gnomad:
+            logger.warning(
+                "gnomAD data is in requester pays buckets! Make sure you have set up your cluster correctly"
+            )
             ht = hl.read_table(var_annotations_ht_path("ukb_freq", data_source, freeze))
 
             logger.info("Joining UKBB ht to gnomAD exomes and genomes liftover hts")
