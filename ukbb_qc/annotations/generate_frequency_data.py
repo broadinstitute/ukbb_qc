@@ -69,13 +69,12 @@ def generate_cohort_frequency_data(
 
 def generate_frequency_data(
     mt: hl.MatrixTable,
-    freeze: int,
     pops_to_remove_for_popmax: List[str],
     cohort_frequency_pops: List[str],
     platform_strata: bool = False,
     tranche: bool = False,
     platform_expr: Optional[hl.expr.StringExpression] = None,
-) -> hl.Table:
+) -> hl.MatrixTable:
     """
     Generates frequency struct annotation containing AC, AF, AN, and homozygote count for input dataset stratified by population.
 
@@ -96,8 +95,8 @@ def generate_frequency_data(
     :param bool tranche: Whether to use tranche (as a proxy for platform) instead of inferred platform.
     :param bool calculate_by_tranche: Whether to calculate frequencies per tranche.
     :param hl.expr.StringExpression platform_expr: Expression containing platform or tranche information. Required if platform_strata is set.
-    :return: Table with frequency annotations in struct named `freq` and metadata in globals named `freq_meta`.
-    :rtype: Table
+    :return: MatrixTable with frequency annotations in struct named `freq` and metadata in globals named `freq_meta`.
+    :rtype: hl.MatrixTable
     """
     if platform_strata:
         if tranche:
@@ -150,10 +149,7 @@ def generate_frequency_data(
     mt = mt.select_globals(
         faf_meta=faf_meta, freq_meta=mt.freq_meta.extend(mt.cohort_freq_meta)
     )
-
-    logger.info("Getting quality histograms...")
-    mt = get_hists(mt, freeze)
-    return mt.rows()
+    return mt
 
 
 def join_gnomad(ht: hl.Table, data_type: str) -> hl.Table:
@@ -241,9 +237,8 @@ def main(args):
                 platform_expr = None
 
             logger.info("Calculating frequencies")
-            ht = generate_frequency_data(
+            mt = generate_frequency_data(
                 mt,
-                freeze,
                 pops_to_remove_for_popmax,
                 cohort_frequency_pops,
                 args.by_platform,
@@ -251,6 +246,8 @@ def main(args):
                 platform_expr,
             )
 
+            logger.info("Getting quality histograms...")
+            ht = get_hists(mt, freeze).rows()
             ht = ht.naive_coalesce(args.n_partitions)
             ht = ht.checkpoint(
                 var_annotations_ht_path("ukb_freq", data_source, freeze), args.overwrite
