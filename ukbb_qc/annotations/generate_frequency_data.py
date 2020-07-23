@@ -123,7 +123,6 @@ def generate_frequency_data(
     logger.info("Calculating InbreedingCoefficient...")
     # NOTE: This is not the ideal location to calculate this, but added here to avoid another densify
     mt = mt.annotate_rows(InbreedingCoeff=bi_allelic_site_inbreeding_expr(mt.GT))
-    mt.describe()
 
     logger.info("Generating frequency data...")
     mt = annotate_freq(
