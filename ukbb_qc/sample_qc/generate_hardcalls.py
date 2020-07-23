@@ -52,6 +52,7 @@ def main(args):
                 aaf_expr="AF",
                 gt_expr="LGT",
             )
+
             # Checkpointing here because annotate_sex does a few slow computations (including sex ploidy imputation)
             sex_ht = sex_ht.checkpoint(
                 get_checkpoint_path(data_source, freeze, name="temp_sex")
@@ -77,7 +78,7 @@ def main(args):
                 logger.warning(
                     f"Some inferred sexes don't match with reported sex! Counts (inferred_reported): {mismatch_counts}"
                 )
-        # NOTE: check distributions here before continuing with hardcalls
+            # NOTE: check distributions here before continuing with hardcalls
 
         if args.write_hardcalls:
             logger.info("Generating split hardcalls...")
@@ -88,7 +89,7 @@ def main(args):
                 split=False,
                 raw=True,
                 repartition=args.repartition,
-                n_partitions=args.raw_partitions,
+                n_partitions=args.n_partitions,
             )
             sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
 
@@ -108,7 +109,7 @@ def main(args):
                 haploid_adj_dp=5,
             )
             mt = mt.select_entries(
-                "GT", "adj", "END",
+                "GT", "GQ", "DP", "AD", "adj", "END",
             )  # Note: this is different from gnomAD hardcalls file because no PGT or PID
             mt = adjust_sex_ploidy(mt, mt.sex_karyotype, male_str="XY", female_str="XX")
             mt = mt.select_cols().naive_coalesce(args.n_partitions)
@@ -166,15 +167,18 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
+        "--raw_partitions",
+        help="Number of desired partitions for the raw MT. Necessary only for 300K. Used only if --repartition is also specified",
+        default=30000,
+        type=int,
+    )
+    parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int,
     )
     parser.add_argument(
-        "--n_partitions", help="Desired number of partitions for output.", type=int,
-    )
-    parser.add_argument(
-        "--raw_partitions",
-        help="Desired number of partitions for raw sparse MT. Used to repartition raw MT on read (necessary only for tranche 3/freeze 6/300K!)",
-        default=30000,
+        "--n_partitions",
+        help="Desired number of partitions for output",
+        default=10000,
         type=int,
     )
     parser.add_argument(
