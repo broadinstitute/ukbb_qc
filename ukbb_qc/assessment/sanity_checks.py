@@ -159,18 +159,24 @@ def sanity_check_release_mt(
             hl.desc("n")
         ).show(n_rows, n_cols)
 
-    logger.info("Checking distributions of filtered variants amongst variant filters...")
+    logger.info(
+        "Checking distributions of filtered variants amongst variant filters..."
+    )
     _filter_agg_order(ht.group_by(ht.is_filtered))
 
     logger.info("Checking distributions of variant type amongst variant filters...")
     _filter_agg_order(ht.group_by(ht.info.allele_type))
 
-    logger.info("Checking distributions of variant type and region type amongst variant filters...")
+    logger.info(
+        "Checking distributions of variant type and region type amongst variant filters..."
+    )
     _filter_agg_order(
         ht.group_by(ht.info.allele_type, ht.in_problematic_region), 50, 140
     )
 
-    logger.info("Checking distributions of variant type, region type, and number of alt alleles amongst variant filters...")
+    logger.info(
+        "Checking distributions of variant type, region type, and number of alt alleles amongst variant filters..."
+    )
     _filter_agg_sanity_order(
         ht.group_by(
             ht.info.allele_type,
