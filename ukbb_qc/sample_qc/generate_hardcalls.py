@@ -6,7 +6,7 @@ import hail as hl
 from gnomad.sample_qc.pipeline import annotate_sex
 from gnomad.sample_qc.sex import adjust_sex_ploidy
 from gnomad.utils.annotations import add_variant_type, annotate_adj
-from gnomad.utils.slack import try_slack
+from gnomad.utils.slack import slack_notifications
 from ukbb_qc.resources.basics import (
     get_ukbb_data,
     get_ukbb_data_path,
@@ -139,11 +139,18 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
+        "--raw_partitions",
+        help="Number of desired partitions for the raw MT. Necessary only for 300K. Used only if --repartition is also specified",
+        default=30000,
+        type=int,
+    )
+    parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int,
     )
     parser.add_argument(
         "--n_partitions",
-        help="Desired number of partitions for output. Also used to repartition raw MT on read (necessary only for tranche 3/freeze 6/300K!",
+        help="Desired number of partitions for output",
+        default=10000,
         type=int,
     )
     parser.add_argument(
@@ -157,6 +164,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.slack_channel:
-        try_slack(args.slack_channel, main, args)
+        with slack_notifications(slack_token, args.slack_channel):
+            main(args)
     else:
         main(args)
