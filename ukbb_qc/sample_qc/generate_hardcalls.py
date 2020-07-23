@@ -89,7 +89,7 @@ def main(args):
                 split=False,
                 raw=True,
                 repartition=args.repartition,
-                n_partitions=args.n_partitions,
+                n_partitions=args.raw_partitions,
             )
             sex_ht = hl.read_table(sex_ht_path(data_source, freeze))
 
