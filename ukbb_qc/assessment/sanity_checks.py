@@ -2,6 +2,7 @@ import logging
 import hail as hl
 from typing import Tuple
 
+from gnomad.utils.vcf import sample_sum_check
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -144,36 +145,41 @@ def sanity_check_release_mt(
         ),
     )
 
-    # NOTE: make_filters_sanity_check_expr returns a dict with %ages of variants filtered
-    ht_filter_check1 = (
-        ht.group_by(ht.is_filtered)
-        .aggregate(**make_filters_sanity_check_expr(ht))
-        .order_by(hl.desc("n"))
-    )
-    ht_filter_check1.show()
+    def _filter_agg_order(grouped_ht, n_rows=None, n_cols=None) -> None:
+        """
+        Performs sanity checks to measure percentages of variants filtered under different conditions.
 
-    ht_filter_check2 = (
-        ht.group_by(ht.info.allele_type)
-        .aggregate(**make_filters_sanity_check_expr(ht))
-        .order_by(hl.desc("n"))
-    )
-    ht_filter_check2.show()
+        param hl.GroupedTable grouped_ht: Table grouped by condition of interest.
+        :param int n_rows: Number of rows to show.
+        :param int n_cols: Number of columns to show.
+        :return: None
+        """
+        # NOTE: make_filters_sanity_check_expr returns a dict with %ages of variants filtered
+        grouped_ht.aggregate(**make_filters_sanity_check_expr(ht)).order_by(
+            hl.desc("n")
+        ).show(n_rows, n_cols)
 
-    ht_filter_check3 = (
-        ht.group_by(ht.info.allele_type, ht.in_problematic_region)
-        .aggregate(**make_filters_sanity_check_expr(ht))
-        .order_by(hl.desc("n"))
-    )
-    ht_filter_check3.show(50, 140)
+    logger.info("Checking distributions of filtered variants amongst variant filters...")
+    _filter_agg_order(ht.group_by(ht.is_filtered))
 
-    ht_filter_check4 = (
+    logger.info("Checking distributions of variant type amongst variant filters...")
+    _filter_agg_order(ht.group_by(ht.info.allele_type))
+
+    logger.info("Checking distributions of variant type and region type amongst variant filters...")
+    _filter_agg_order(
+        ht.group_by(ht.info.allele_type, ht.in_problematic_region), 50, 140
+    )
+
+    logger.info("Checking distributions of variant type, region type, and number of alt alleles amongst variant filters...")
+    _filter_agg_sanity_order(
         ht.group_by(
-            ht.info.allele_type, ht.in_problematic_region, ht.info.n_alt_alleles
+            ht.info.allele_type,
+            ht.in_problematic_region,
+            ht.info.n_alt_alleles,
+            50,
+            140,
         )
-        .aggregate(**make_filters_sanity_check_expr(ht))
-        .order_by(hl.desc("n"))
     )
-    ht_filter_check4.show(50, 140)
 
     # NOTE: generic field check filters ht based on a certain condition and checks for the number of rows in ht that failed that condition
     # if the number of fails is 0, then the ht passes that check; otherwise it fails
@@ -255,35 +261,24 @@ def sanity_check_release_mt(
     logger.info("FREQUENCY CHECKS:")
     for subset in subsets:
         if subset == "":
-            logger.info("raw checks -- gnomad")
             for subfield in ["AC", "AN", "nhomalt"]:
-                generic_field_check(
-                    ht,
-                    (
-                        ht.info[f"gnomad_exomes_{subfield}_raw"]
-                        == ht.info[f"gnomad_genomes_{subfield}_raw"]
-                    ),
-                    f"gnomad_exomes_{subfield}_raw == gnomad_genomes_{subfield}_raw",
-                    [
-                        f"info.gnomad_exomes_{subfield}_raw",
-                        f"info.gnomad_genomes_{subfield}_raw",
-                    ],
-                    verbose,
-                )
-                logger.info("adj checks -- gnomad")
-                generic_field_check(
-                    ht,
-                    (
-                        ht.info[f"gnomad_exomes_{subfield}_adj"]
-                        == ht.info[f"gnomad_genomes_{subfield}_adj"]
-                    ),
-                    f"gnomad_exomes_{subfield}_adj == gnomad_genomes_{subfield}_adj",
-                    [
-                        f"info.gnomad_exomes_{subfield}_adj",
-                        f"info.gnomad_genomes_{subfield}_adj",
-                    ],
-                    verbose,
-                )
+
+                for group_type in ["adj", "raw"]:
+                    logger.info(f"{group_type} checks -- gnomad")
+
+                    generic_field_check(
+                        ht,
+                        (
+                            ht.info[f"gnomad_exomes_{subfield}_{group_type}"]
+                            == ht.info[f"gnomad_genomes_{subfield}_{group_type}"]
+                        ),
+                        f"gnomad_exomes_{subfield}_{group_type} == gnomad_genomes_{subfield}_{group_type}",
+                        [
+                            f"info.gnomad_exomes_{subfield}_{group_type}",
+                            f"info.gnomad_genomes_{subfield}_{group_type}",
+                        ],
+                        verbose,
+                    )
         else:
             for subfield in ["AC", "AN", "nhomalt"]:
                 logger.info("raw checks -- gnomad/ukb")
