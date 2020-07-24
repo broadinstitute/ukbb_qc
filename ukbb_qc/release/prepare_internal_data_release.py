@@ -8,10 +8,8 @@ from gnomad.resources.grch38.reference_data import dbsnp, lcr_intervals
 from gnomad.utils.slack import slack_notifications
 from gnomad.utils.vcf import (
     AS_FIELDS,
-    ENTRIES,
     RF_FIELDS,
     SITE_FIELDS,
-    SPARSE_ENTRIES,
     VQSR_FIELDS,
 )
 from ukbb_qc.resources.basics import (
@@ -130,41 +128,27 @@ def main(args):
     hl.init(log="/release.log", default_reference="GRCh38")
     data_source = "broad"
     freeze = args.freeze
+    tranche_data = (data_source, freeze)
 
     try:
-        logger.info("Getting raw MT and dropping all unnecessary entries...")
+        logger.info("Reading in hardcalls MT and subsetting to rows...")
         # NOTE: reading in raw MatrixTable to be able to return all samples/variants
-        mt = get_ukbb_data(
-            data_source,
-            freeze,
-            key_by_locus_and_alleles=args.key_by_locus_and_alleles,
-            split=False,
-            raw=True,
-            repartition=args.repartition,
-            n_partitions=args.raw_partitions,
-        ).select_entries(*SPARSE_ENTRIES)
+        ht = get_ukbb_data(*tranche_data).rows()
 
-        logger.info("Splitting raw MT...")
-        mt = hl.experimental.sparse_split_multi(mt)
-        mt = mt.select_entries(*ENTRIES)
-
-        logger.info("Filtering out low QUAL variants and subsetting to rows...")
-        info_ht = hl.read_table(info_ht_path(data_source, freeze))
-        ht = mt.filter_rows(~info_ht[mt.row_key].AS_lowqual).rows()
+        logger.info("Filtering out low QUAL variants...")
+        info_ht = hl.read_table(info_ht_path(*tranche_data))
+        info_ht = info_ht.filter(~info_ht.AS_lowqual)
+        ht = ht.filter(hl.is_defined(info_ht[ht.key]))
 
         logger.info("Removing chrM...")
         ht = hl.filter_intervals(ht, [hl.parse_locus_interval("chrM")], keep=False)
 
         logger.info("Reading in all variant annotation tables...")
-        freq_ht = hl.read_table(
-            "join_freq", var_annotations_ht_path(data_source, freeze)
-        )
-        rf_ht = hl.read_table(var_annotations_ht_path("rf", data_source, freeze))
-        vep_ht = hl.read_table(var_annotations_ht_path("vep", data_source, freeze))
-        allele_ht = hl.read_table(
-            var_annotations_ht_path("allele_data", data_source, freeze)
-        )
-        vqsr_ht = hl.read_table(var_annotations_ht_path("vqsr", data_source, freeze))
+        freq_ht = hl.read_table("join_freq", var_annotations_ht_path(*tranche_data))
+        rf_ht = hl.read_table(var_annotations_ht_path("rf", *tranche_data))
+        vep_ht = hl.read_table(var_annotations_ht_path("vep", *tranche_data))
+        allele_ht = hl.read_table(var_annotations_ht_path("allele_data", *tranche_data))
+        vqsr_ht = hl.read_table(var_annotations_ht_path("vqsr", *tranche_data))
 
         logger.info("Adding annotations...")
         ht = prepare_annotations(
@@ -175,11 +159,11 @@ def main(args):
         age_hist_data = get_age_distributions(get_age_ht(freeze))
         ht = ht.annotate_globals(age_distribution=age_hist_data)
         ht = ht.naive_coalesce(args.n_partitions)
-        ht.write(release_ht_path(data_source, freeze), args.overwrite)
+        ht.write(release_ht_path(*tranche_data), args.overwrite)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
-        hl.copy_log(logging_path(data_source, freeze))
+        hl.copy_log(logging_path(*tranche_data))
 
 
 if __name__ == "__main__":
