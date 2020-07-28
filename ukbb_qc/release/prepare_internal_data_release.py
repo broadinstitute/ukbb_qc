@@ -108,7 +108,7 @@ def prepare_annotations(
     ht = ht.annotate(rf=rf_ht[ht.key])
     ht = ht.annotate_globals(rf_globals=rf_ht.index_globals())
     ht = ht.annotate(region_flag=flag_problematic_regions(ht))
-    ht = ht.transmute(rf=ht.rf.drop("interval_qc_pass"))
+    ht = ht.transmute(rf=ht.rf.drop("interval_qc_pass", "in_capture_interval"))
 
     logger.info("Annotating HT with frequency information...")
     ht = ht.annotate(**freq_ht[ht.key])
