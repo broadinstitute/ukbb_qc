@@ -31,6 +31,14 @@ logger = logging.getLogger("data_release")
 logger.setLevel(logging.INFO)
 
 
+# Add interval QC pass to RF fields (to pull field from RF HT)
+ADDITIONAL_RF_FIELDS = ["in_capture_interval", "interval_qc_pass"]
+RF_FIELDS.extend(ADDITIONAL_RF_FIELDS)
+
+# Remove InbreedingCoeff from site fields (processed separately from other site fields)
+SITE_FIELDS.remove("InbreedingCoeff")
+
+
 def flag_problematic_regions(
     t: Union[hl.Table, hl.MatrixTable]
 ) -> hl.expr.StructExpression:
@@ -86,16 +94,12 @@ def prepare_annotations(
         info=info_ht.info.annotate(
             sibling_singleton=rf_ht[info_ht.key].sibling_singleton,
             transmitted_singleton=rf_ht[info_ht.key].transmitted_singleton,
+            InbreedingCoeff=freq_ht[info_ht.key].InbreedingCoeff,
         )
     )
     rf_ht = rf_ht.select(*RF_FIELDS)
     vep_ht = vep_ht.transmute(vep=vep_ht.vep.drop("colocated_variants"))
     vqsr_ht = vqsr_ht.transmute(info=vqsr_ht.info.select(*VQSR_FIELDS)).select("info")
-    # NOTE: will need to nest qual hist fields under qual_hists struct for 300K
-    # gq_hist_alt, gq_hist_all, dp_hist_alt, dp_hist_all, ab_hist_alt
-    freq_ht = freq_ht.drop(
-        "InbreedingCoeff"
-    )  # NOTE: Will need to drop InbreedingCoeff annotation here in 500K, but this isn't present in 300K
     dbsnp_ht = dbsnp.ht().select("rsid")
 
     logger.info(
@@ -107,7 +111,7 @@ def prepare_annotations(
     ht = ht.transmute(rf=ht.rf.drop("interval_qc_pass"))
 
     logger.info("Annotating HT with frequency information...")
-    ht = ht.annotate(**freq_ht[ht.row])
+    ht = ht.annotate(**freq_ht[ht.key])
     ht = ht.annotate(**freq_ht.index_globals())
 
     logger.info("Annotating HT info, vep, allele_info, vqsr, rsid, and qual...")
@@ -119,7 +123,6 @@ def prepare_annotations(
         rsid=dbsnp_ht[ht.key].rsid,
         qual=info_ht[ht.key].qual,
     )
-    logger.info(f"Final HT count: {ht.count()}")
     return ht
 
 
@@ -160,6 +163,7 @@ def main(args):
         ht = ht.annotate_globals(age_distribution=age_hist_data)
         ht = ht.naive_coalesce(args.n_partitions)
         ht.write(release_ht_path(*tranche_data), args.overwrite)
+        logger.info(f"Final HT count: {ht.count()}")
 
     finally:
         logger.info("Copying hail log to logging bucket...")
