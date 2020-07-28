@@ -27,7 +27,7 @@ from gnomad.utils.vcf import (
     make_info_dict,
     make_label_combos,
     make_vcf_filter_dict,
-    REGION_TYPE_FIELDS,
+    REGION_FLAG_FIELDS,
     RF_FIELDS,
     SITE_FIELDS,
     set_female_y_metrics_to_na,
@@ -70,8 +70,11 @@ vcf_info_dict["sibling_singleton"] = {
     "Description": "Variant was a callset-wide doubleton that was present only within a sibling pair"
 }
 
-# Add interval QC, capture region to REGION_TYPE_FIELDS
-REGION_TYPE_FIELDS.append("fail_interval_qc", "in_capture_region")
+# Add interval QC, capture region to REGION_FLAG_FIELDS and remove decoy, segdup
+INTERVAL_FIELDS = ["fail_interval_qc", "in_capture_region"]
+MISSING_REGION_FIELDS = ("decoy", "segdup")
+REGION_FLAG_FIELDS = [field for field in REGION_FLAG_FIELDS if field not in MISSING_REGION_FIELDS]
+REGION_FLAG_FIELDS.extend(INTERVAL_FIELDS)
 # RF_FIELDS.append("interval_qc_pass")
 
 # Add sibling singletons to SITE_FIELDS
@@ -97,7 +100,7 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
     vcf_info_dict = {}
     for field in ALLELE_TYPE_FIELDS:
         vcf_info_dict[field] = t["allele_info"][f"{field}"]
-    for field in REGION_TYPE_FIELDS:
+    for field in REGION_FLAG_FIELDS:
         vcf_info_dict[field] = t["region_flag"][f"{field}"]
 
     # Add site-level annotations to vcf_info_dict
@@ -339,6 +342,10 @@ def main(args):
 
             logger.info("Making INFO dict for VCF...")
             vcf_info_dict = INFO_DICT
+
+            # Remove decoy and segdup from info dict
+            vcf_info_dict.pop("decoy", None)
+            vcf_info_dict.pop("segdup", None)
             vcf_info_dict.update(add_as_vcf_info_dict(vcf_info_dict))
 
             for subset in SUBSET_LIST:
