@@ -112,7 +112,7 @@ def prepare_annotations(
 
     logger.info("Annotating HT with frequency information...")
     ht = ht.annotate(**freq_ht[ht.key])
-    ht = ht.annotate(**freq_ht.index_globals())
+    ht = ht.annotate_globals(**freq_ht.index_globals())
 
     logger.info("Annotating HT info, vep, allele_info, vqsr, rsid, and qual...")
     ht = ht.annotate(
