@@ -32,7 +32,7 @@ logger.setLevel(logging.INFO)
 
 
 # Add interval QC pass to RF fields (to pull field from RF HT)
-ADDITIONAL_RF_FIELDS = ["in_capture_interval", "interval_qc_pass"]
+ADDITIONAL_RF_FIELDS = ["filters", "in_capture_interval", "interval_qc_pass"]
 RF_FIELDS.extend(ADDITIONAL_RF_FIELDS)
 
 # Remove InbreedingCoeff from site fields (processed separately from other site fields)
