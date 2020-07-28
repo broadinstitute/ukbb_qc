@@ -1,5 +1,5 @@
 import logging
-from typing import Union
+from typing import Dict, List, Union
 
 import hail as hl
 
@@ -12,6 +12,18 @@ from gnomad.utils.annotations import (
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.filtering import filter_to_adj, filter_to_autosomes
 from gnomad.utils.reference_genome import get_reference_genome
+from gnomad_qc.v2.variant_qc.prepare_data_release import (
+    GROUPS,
+    POPS,
+    SEXES,
+    index_globals,
+)
+from gnomad_qc.v2.variant_qc.prepare_data_release import (
+    EAS_SUBPOPS as GNOMAD_EAS_SUBPOPS,
+)
+from gnomad_qc.v2.variant_qc.prepare_data_release import (
+    NFE_SUBPOPS as GNOMAD_NFE_SUBPOPS,
+)
 from ukbb_qc.load_data.utils import import_phenotype_ht
 from ukbb_qc.resources.basics import (
     array_sample_map_ht_path,
@@ -381,6 +393,7 @@ def get_relationship_filter_expr(
     )
 
 
+# Release-related utils
 def get_hists(mt: hl.MatrixTable, freeze: int) -> hl.MatrixTable:
     """
     Gets age (at recruitment; field 21022) and qual hists for UKBB.
@@ -402,7 +415,7 @@ def get_hists(mt: hl.MatrixTable, freeze: int) -> hl.MatrixTable:
     mt = mt.annotate_rows(**age_hists_expr(mt.adj, mt.GT, mt.age))
 
     logger.info("Annotating with qual hists (on raw data)...")
-    mt = mt.annotate_rows(**qual_hist_expr(mt.GT, mt.GQ, mt.DP, mt.AD))
+    mt = mt.annotate_rows(qual_hists=qual_hist_expr(mt.GT, mt.GQ, mt.DP, mt.AD))
 
     logger.info("Annotating with qual hists (adj)...")
     mt_filt = filter_to_adj(mt)
@@ -413,3 +426,79 @@ def get_hists(mt: hl.MatrixTable, freeze: int) -> hl.MatrixTable:
     ht = mt_filt.rows()
     mt = mt.annotate_rows(adj_qual_hists=ht[mt.row_key])
     return mt
+
+
+def get_age_distributions(ht: hl.Table, bins: List[int] = [30, 80, 10]) -> str:
+    """
+    Get background distribution of sample ages (using field 21022, age at recruitment).
+
+    :param Table ht: Table containing samples and sample ages.
+    :param List[int]: Desired bin edges and bin size. Default: [30, 80, 10].
+    :return: Pipe-delimited string with ages in bins (if using default bins: <30, 30-35, ..., 75-80, 80+).
+    :rtype: str
+    """
+    age_hist_data = ht.aggregate(hl.agg.hist(ht.age, *bins))
+    age_hist_data.bin_freq.insert(0, age_hist_data.n_smaller)
+    age_hist_data.bin_freq.append(age_hist_data.n_larger)
+    return age_hist_data.bin_freq
+
+
+def make_freq_meta_index_dict(
+    freq_meta: List[str], gnomad: bool, subpops: List[str]
+) -> Dict[str, int]:
+    """
+    Makes a dictionary of the entries in the frequency array annotation, where keys are the grouping combinations and the values
+    are the 0-based integer indices.
+
+    :param List[str] freq_meta: Ordered list containing string entries describing all the grouping combinations contained in the
+        frequency array annotation.
+    :param bool gnomad: Whether to index a gnomAD sample freq_meta list.
+    :param List[str] subpops: List of subpops in frequency array.
+    :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
+        of each grouping entry in the frequency array
+    :rtype: Dict[str, int]
+    """
+    index_dict = index_globals(freq_meta, dict(group=GROUPS))
+
+    index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=POPS)))
+    index_dict.update(index_globals(freq_meta, dict(group=GROUPS, sex=SEXES)))
+    index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=POPS, sex=SEXES)))
+    index_dict.update(
+        index_globals(freq_meta, dict(group=GROUPS, pop=POPS, subpop=subpops))
+    )
+
+    if gnomad:
+        index_dict.update(
+            index_globals(
+                freq_meta, dict(group=GROUPS, pop=["nfe"], subpop=GNOMAD_NFE_SUBPOPS),
+            )
+        )
+        index_dict.update(
+            index_globals(
+                freq_meta, dict(group=GROUPS, pop=["eas"], subpop=GNOMAD_EAS_SUBPOPS),
+            )
+        )
+
+    return index_dict
+
+
+def make_index_dict(
+    t: Union[hl.MatrixTable, hl.Table], freq_meta_str: str, subpops: List[str]
+) -> Dict[str, int]:
+    """
+    Create a look-up Dictionary for entries contained in the frequency annotation array.
+
+    :param Table ht: Table or MatrixTable containing freq_meta global annotation to be indexed
+    :param str freq_meta: freq_meta global annotation to be indexed (freq_meta, gnomad_exomes_freq_meta, or gnomad_genomes_freq_meta)
+    :param List[str] subpops: List of subpops in frequency array.
+    :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
+        of each grouping entry in the frequency array
+    :rtype: Dict of str: int
+    """
+    freq_meta = hl.eval(t.globals[freq_meta_str])
+    # check if indexing gnomAD data
+    if "gnomad" in freq_meta_str:
+        index_dict = make_freq_meta_index_dict(freq_meta, gnomad=True, subpops=subpops)
+    else:
+        index_dict = make_freq_meta_index_dict(freq_meta, gnomad=False, subpops=subpops)
+    return index_dict
