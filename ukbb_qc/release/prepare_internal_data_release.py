@@ -144,7 +144,7 @@ def main(args):
         ht = hl.filter_intervals(ht, [hl.parse_locus_interval("chrM")], keep=False)
 
         logger.info("Reading in all variant annotation tables...")
-        freq_ht = hl.read_table("join_freq", var_annotations_ht_path(*tranche_data))
+        freq_ht = hl.read_table(var_annotations_ht_path("join_freq", *tranche_data))
         rf_ht = hl.read_table(var_annotations_ht_path("rf", *tranche_data))
         vep_ht = hl.read_table(var_annotations_ht_path("vep", *tranche_data))
         allele_ht = hl.read_table(var_annotations_ht_path("allele_data", *tranche_data))
@@ -172,22 +172,6 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
-    )
-    parser.add_argument(
-        "--key_by_locus_and_alleles",
-        help="Re-key raw MatrixTable by locus and alleles. REQUIRED only for tranche 3/300K dataset.",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--repartition",
-        help="Repartition raw MatrixTable on read. REQUIRED only for tranche 3/300K dataset",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--raw_partitions",
-        help="Number of desired partitions for raw MatrixTable. Only used for tranche 3/300K dataset",
-        default=30000,
-        type=int,
     )
     parser.add_argument(
         "--n_partitions",
