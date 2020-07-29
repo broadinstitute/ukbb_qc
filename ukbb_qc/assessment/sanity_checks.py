@@ -1,8 +1,17 @@
 import logging
-import hail as hl
-from typing import Tuple
+from typing import Dict, List, Tuple
 
-from gnomad.utils.vcf import sample_sum_check
+import hail as hl
+
+from gnomad.resources.grch37.gnomad import SUBPOPS
+from gnomad.sample_qc.ancestry import POP_NAMES
+from gnomad.utils.vcf import (
+    generic_field_check,
+    HISTS,
+    make_filters_sanity_check_expr,
+    sample_sum_check,
+    SEXES,
+)
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -31,7 +40,7 @@ def summarize_mt(mt: hl.MatrixTable) -> hl.Struct:
         if var_summary.contigs[contig] == 0:
             logger.warning(f"{contig} has no variants called")
 
-    return var_summarysanity_check_ht
+    return var_summary
 
 
 def check_adj(
@@ -124,6 +133,10 @@ def sanity_check_release_mt(
     :return: Terminal display of results from the battery of sanity checks
     :rtype: None
     """
+    # Get gnomAD subpop names
+    GNOMAD_NFE_SUBPOPS = map(lambda x: x.lower(), SUBPOPS["NFE"])
+    GNOMAD_EAS_SUBPOPS = map(lambda x: x.lower(), SUBPOPS["EAS"])
+
     n_samples = mt.count_cols()
     ht = mt.rows()
     n_sites = ht.count()
@@ -177,7 +190,7 @@ def sanity_check_release_mt(
     logger.info(
         "Checking distributions of variant type, region type, and number of alt alleles amongst variant filters..."
     )
-    _filter_agg_sanity_order(
+    _filter_agg_order(
         ht.group_by(
             ht.info.allele_type,
             ht.in_problematic_region,
