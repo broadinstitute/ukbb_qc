@@ -1,4 +1,5 @@
 import argparse
+import json
 import logging
 import pickle
 import sys
@@ -6,8 +7,9 @@ from typing import Dict, List, Union
 
 import hail as hl
 
+from gnomad.resources.grch37.gnomad import SUBPOPS
 from gnomad.resources.grch38.reference_data import dbsnp
-from gnomad.sample_qc.ancestry import POP_NAMES, SUBPOPS
+from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.utils.generic import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 from gnomad.utils.vcf import (
@@ -92,6 +94,108 @@ SUBSET_LIST = ["", "gnomad_exomes", "gnomad_genomes"]  # empty for ukbb
 # Get gnomAD subpop names
 GNOMAD_NFE_SUBPOPS = map(lambda x: x.lower(), SUBPOPS["NFE"])
 GNOMAD_EAS_SUBPOPS = map(lambda x: x.lower(), SUBPOPS["EAS"])
+
+
+def populate_info_dict(
+    info_dict: Dict[str, Dict[str, str]] = INFO_DICT,
+    groups: List[str] = GROUPS,
+    sexes: List[str] = SEXES,
+    pops: List[str] = POP_NAMES,
+    faf_pops: List[str] = FAF_POPS,
+    gnomad_nfe_subpops: List[str] = GNOMAD_NFE_SUBPOPS,
+    gnomad_eas_subpops: List[str] = GNOMAD_EAS_SUBPOPS,
+    subpops: Dict[str, List[str]] = hybrid_pop_map,
+) -> Dict[str, Dict[str, str]]:
+    """
+    Calls `make_info_dict` and `make_hist_dict` to populate INFO dictionary with specific sexes, population names, and filtering allele frequency (faf) pops.
+
+    Used during VCF export.
+
+    Creates:
+        - INFO fields for age histograms (bin freq, n_smaller, and n_larger for heterozygous and homozygous variant carriers)
+        - INFO fields for popmax AC, AN, AF, nhomalt, and popmax population
+        - INFO fields for AC, AN, AF, nhomalt for each combination of sample population, sex, and subpopulation, both for adj and raw data
+        - INFO fields for filtering allele frequency (faf) annotations 
+        - INFO fields for variant histograms (hist_bin_freq, hist_n_smaller, hist_n_larger for each histogram)
+
+    :param Dict[str, Dict[str, str]] info_dict: INFO dict to be populated.
+    :param List[str] groups: List of sample groups [adj, raw]. Default is GROUPS.
+    :param List[str] sexes: List of sample sexes. Default is SEXES.
+    :param List[str] pop_names: List of sample global population names. Default is POP_NAMES.
+    :param List[str] faf_pops: List of faf population names. Default is FAF_POPS.
+    :param List[str] gnomad_nfe_subpops: List of nfe subpopulations in gnomAD. Default is GNOMAD_NFE_SUBPOPS.
+    :param List[str] gnomad_eas_subpops: List of eas subpopulations in gnomAD. Default is GNOMAD_EAS_SUBPOPS.
+    :param Dict[str, List[str]] hybrid_pop_name: Dictionary mapping hybrid population cluster names to gnomAD global populations.
+        Key: gnomAD population name, Values: List of hybrid population clusters.
+    :return: Populated dictionary to be used during VCF export.
+    :rtype: Dict[str, Dict[str, str]]
+    """
+    vcf_info_dict = info_dict
+
+    # Remove decoy and segdup from info dict
+    vcf_info_dict.pop("decoy", None)
+    vcf_info_dict.pop("segdup", None)
+    vcf_info_dict.update(add_as_vcf_info_dict(vcf_info_dict))
+
+    all_label_groups = [
+        dict(group=["adj"], sex=sexes),
+        dict(group=["adj"], pop=pops),
+        dict(group=["adj"], pop=pops, sex=sexes),
+    ]
+    faf_label_groups = [
+        dict(group=["adj"]),
+        dict(group=["adj"], sex=sexes),
+        dict(group=["adj"], pop=faf_pops),
+        dict(group=["adj"], pop=faf_pops, sex=sexes),
+    ]
+    for subset in subset_list:
+        make_info_dict(subset, dict(group=groups))
+
+        for label_group in all_label_groups:
+            make_info_dict(subset, label_group)
+        for label_group in faf_label_groups:
+            make_info_dict(subset, label_group, faf=True)
+
+        if "gnomad" in subset:
+            description_text = " in gnomAD"
+            vcf_info_dict.update(
+                make_info_dict(subset, popmax=True, description_text=description_text)
+            )
+            vcf_info_dict.update(
+                make_info_dict(
+                    subset,
+                    dict(group=["adj"], pop=["nfe"], subpop=gnomad_nfe_subpops),
+                    description_text=description_text,
+                )
+            )
+            vcf_info_dict.update(
+                make_info_dict(
+                    subset,
+                    dict(group=["adj"], pop=["eas"], subpop=gnomad_eas_subpops),
+                    description_text=description_text,
+                )
+            )
+        else:
+            vcf_info_dict.update(
+                make_info_dict(
+                    subset,
+                    bin_edges=bin_edges,
+                    popmax=True,
+                    age_hist_data="|".join(str(x) for x in age_hist_data),
+                )
+            )
+            for pop in hybrid_pop_map:
+                vcf_info_dict.update(
+                    make_info_dict(
+                        subset,
+                        dict(group=["adj"], pop=pop, subpop=hybrid_pop_map[pop]),
+                        description_text=description_text,
+                    )
+                )
+
+    for adj_bool in [True, False]:
+        vcf_info_dict.update(make_hist_dict(bin_edges, adj=adj_bool))
+    return vcf_info_dict
 
 
 def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expression]:
@@ -347,73 +451,7 @@ def main(args):
             age_hist_data = hl.eval(mt.age_distribution)
 
             logger.info("Making INFO dict for VCF...")
-            vcf_info_dict = INFO_DICT
-
-            # Remove decoy and segdup from info dict
-            vcf_info_dict.pop("decoy", None)
-            vcf_info_dict.pop("segdup", None)
-            vcf_info_dict.update(add_as_vcf_info_dict(vcf_info_dict))
-
-            for subset in SUBSET_LIST:
-                vcf_info_dict.update(make_info_dict(subset, dict(group=GROUPS)))
-                vcf_info_dict.update(
-                    make_info_dict(subset, dict(group=["adj"], sex=SEXES))
-                )
-                vcf_info_dict.update(
-                    make_info_dict(subset, dict(group=["adj"]), faf=True)
-                )
-                vcf_info_dict.update(
-                    make_info_dict(subset, dict(group=["adj"], sex=SEXES), faf=True)
-                )
-                vcf_info_dict.update(
-                    make_info_dict(subset, dict(group=["adj"], pop=POP_NAMES))
-                )
-                vcf_info_dict.update(
-                    make_info_dict(
-                        subset, dict(group=["adj"], pop=POP_NAMES, sex=SEXES)
-                    )
-                )
-                vcf_info_dict.update(
-                    make_info_dict(subset, dict(group=["adj"], pop=FAF_POPS), faf=True)
-                )
-                vcf_info_dict.update(
-                    make_info_dict(
-                        subset, dict(group=["adj"], pop=FAF_POPS, sex=SEXES), faf=True,
-                    )
-                )
-
-                if "gnomad" in subset:
-                    description_text = " in gnomAD"
-                    vcf_info_dict.update(
-                        make_info_dict(
-                            subset, popmax=True, description_text=description_text
-                        )
-                    )
-                    vcf_info_dict.update(
-                        make_info_dict(
-                            subset,
-                            dict(group=["adj"], pop=["nfe"], subpop=GNOMAD_NFE_SUBPOPS),
-                            description_text=description_text,
-                        )
-                    )
-                    vcf_info_dict.update(
-                        make_info_dict(
-                            subset,
-                            dict(group=["adj"], pop=["eas"], subpop=GNOMAD_EAS_SUBPOPS),
-                            description_text=description_text,
-                        )
-                    )
-
-                else:
-                    vcf_info_dict.update(
-                        make_info_dict(
-                            subset,
-                            bin_edges=bin_edges,
-                            popmax=True,
-                            age_hist_data="|".join(str(x) for x in age_hist_data),
-                        )
-                    )
-            vcf_info_dict.update(make_hist_dict(bin_edges, adj=False))
+            vcf_info_dict = populate_info_dict(hybrid_pop_map=args.hybrid_pop_map)
 
             # Adjust keys to remove adj tags before exporting to VCF
             new_vcf_info_dict = {
@@ -592,6 +630,14 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--prepare_vcf_mt", help="Use release mt to create vcf mt", action="store_true"
+    )
+    parser.add_argument(
+        "--hybrid_pop_map",
+        help="""
+            Dictionary mapping gnomAD PC project population names (keys) to list of hybrid population names\n.
+            E.g., '{"nfe": ["0", "2"], "afr": ["3", "4"]}'
+            """,
+        type=json.loads,
     )
     parser.add_argument(
         "--sanity_check", help="Run sanity checks function", action="store_true"
