@@ -8,7 +8,6 @@ from typing import Dict, List, Union
 import hail as hl
 
 from gnomad.resources.grch37.gnomad import SUBPOPS
-from gnomad.resources.grch38.reference_data import dbsnp
 from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.utils.generic import get_reference_genome
 from gnomad.utils.slack import slack_notifications
@@ -19,34 +18,31 @@ from gnomad.utils.vcf import (
     ENTRIES,
     FAF_POPS,
     FORMAT_DICT,
-    generic_field_check,
     GROUPS,
     HISTS,
     INFO_DICT,
-    make_filters_sanity_check_expr,
     make_hist_bin_edges_expr,
     make_hist_dict,
     make_info_dict,
-    make_label_combos,
     make_vcf_filter_dict,
     REGION_FLAG_FIELDS,
     RF_FIELDS,
     SITE_FIELDS,
     set_female_y_metrics_to_na,
     SEXES,
-    SORT_ORDER,
     SPARSE_ENTRIES,
     VQSR_FIELDS,
 )
 from ukbb_qc.assessment.sanity_checks import (
-    sample_sum_check,
     sanity_check_release_mt,
     vcf_field_check,
 )
 from ukbb_qc.resources.basics import (
     get_checkpoint_path,
+    get_ukbb_data,
     logging_path,
     release_header_path,
+    release_ht_path,
     release_mt_path,
     release_vcf_path,
 )
@@ -66,13 +62,14 @@ logger.setLevel(logging.INFO)
 
 
 # Add capture region, interval QC, and sibling singletons to vcf_info_dict
-vcf_info_dict["in_capture_region"] = {
+VCF_INFO_DICT = INFO_DICT
+VCF_INFO_DICT["in_capture_region"] = {
     "Description": "Variant falls within an exome capture region"
 }
-vcf_info_dict["fail_interval_qc"] = {
+VCF_INFO_DICT["fail_interval_qc"] = {
     "Description": f"Variant falls within a region where less than {INTERVAL_QC_PARAMETERS[0]}% of samples had a mean coverage of {INTERVAL_QC_PARAMETERS[1]}X"
 }
-vcf_info_dict["sibling_singleton"] = {
+VCF_INFO_DICT["sibling_singleton"] = {
     "Description": "Variant was a callset-wide doubleton that was present only within a sibling pair"
 }
 
@@ -97,14 +94,17 @@ GNOMAD_EAS_SUBPOPS = map(lambda x: x.lower(), SUBPOPS["EAS"])
 
 
 def populate_info_dict(
-    info_dict: Dict[str, Dict[str, str]] = INFO_DICT,
+    subpops: Dict[str, List[str]],
+    bin_edges: Dict[str, str],
+    age_hist_data: str,
+    info_dict: Dict[str, Dict[str, str]] = VCF_INFO_DICT,
+    subset_list: List[str] = SUBSET_LIST,
     groups: List[str] = GROUPS,
     sexes: List[str] = SEXES,
     pops: List[str] = POP_NAMES,
     faf_pops: List[str] = FAF_POPS,
     gnomad_nfe_subpops: List[str] = GNOMAD_NFE_SUBPOPS,
     gnomad_eas_subpops: List[str] = GNOMAD_EAS_SUBPOPS,
-    subpops: Dict[str, List[str]] = hybrid_pop_map,
 ) -> Dict[str, Dict[str, str]]:
     """
     Calls `make_info_dict` and `make_hist_dict` to populate INFO dictionary with specific sexes, population names, and filtering allele frequency (faf) pops.
@@ -118,16 +118,18 @@ def populate_info_dict(
         - INFO fields for filtering allele frequency (faf) annotations 
         - INFO fields for variant histograms (hist_bin_freq, hist_n_smaller, hist_n_larger for each histogram)
 
+    :param Dict[str, List[str]] subpops: Dictionary mapping hybrid population cluster names to gnomAD global populations.
+        Key: gnomAD population name, Values: List of hybrid population clusters.
+    :param Dict[str, str] bin_edges: Dictionary of variant annotation histograms and their associated bin edges.
+    :param str age_hist_data: Pipe-delimited string of age histograms, from `get_age_distributions`.
     :param Dict[str, Dict[str, str]] info_dict: INFO dict to be populated.
+    :param List[str] subset_list: List of sample subsets in dataset. Default is SUBSET_LIST.
     :param List[str] groups: List of sample groups [adj, raw]. Default is GROUPS.
     :param List[str] sexes: List of sample sexes. Default is SEXES.
     :param List[str] pop_names: List of sample global population names. Default is POP_NAMES.
     :param List[str] faf_pops: List of faf population names. Default is FAF_POPS.
     :param List[str] gnomad_nfe_subpops: List of nfe subpopulations in gnomAD. Default is GNOMAD_NFE_SUBPOPS.
     :param List[str] gnomad_eas_subpops: List of eas subpopulations in gnomAD. Default is GNOMAD_EAS_SUBPOPS.
-    :param Dict[str, List[str]] hybrid_pop_name: Dictionary mapping hybrid population cluster names to gnomAD global populations.
-        Key: gnomAD population name, Values: List of hybrid population clusters.
-    :return: Populated dictionary to be used during VCF export.
     :rtype: Dict[str, Dict[str, str]]
     """
     vcf_info_dict = info_dict
@@ -184,11 +186,11 @@ def populate_info_dict(
                     age_hist_data="|".join(str(x) for x in age_hist_data),
                 )
             )
-            for pop in hybrid_pop_map:
+            for pop in subpops:
                 vcf_info_dict.update(
                     make_info_dict(
                         subset,
-                        dict(group=["adj"], pop=pop, subpop=hybrid_pop_map[pop]),
+                        dict(group=["adj"], pop=pop, subpop=subpops[pop]),
                         description_text=description_text,
                     )
                 )
@@ -451,7 +453,11 @@ def main(args):
             age_hist_data = hl.eval(mt.age_distribution)
 
             logger.info("Making INFO dict for VCF...")
-            vcf_info_dict = populate_info_dict(hybrid_pop_map=args.hybrid_pop_map)
+            vcf_info_dict = populate_info_dict(
+                subpops=args.hybrid_pop_map,
+                bin_edges=bin_edges,
+                age_hist_data=age_hist_data,
+            )
 
             # Adjust keys to remove adj tags before exporting to VCF
             new_vcf_info_dict = {
@@ -607,7 +613,7 @@ def main(args):
                     mt = hl.experimental.densify(mt)
 
                     hl.export_vcf(
-                        contig_mt,
+                        mt,
                         release_vcf_path(*tranche_data, contig=contig),
                         metadata=header_dict,
                     )
