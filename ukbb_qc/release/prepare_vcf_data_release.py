@@ -466,17 +466,26 @@ def main(args):
             )
 
             logger.info("Constructing INFO field")
+            # Add variant annotations to INFO field
+            # This adds annotations from:
+            #   RF struct, VQSR struct, allele_info struct,
+            #   info struct (site and allele-specific annotations),
+            #   region_flag struct, and
+            #   qual_hists/adj_qual_hists structs.
             mt = mt.annotate_rows(info=hl.struct(**make_info_expr(mt)))
+            # Unfurl nested UKBB frequency annotations and add to INFO field
             mt = mt.annotate_rows(
                 info=mt.info.annotate(
                     **unfurl_nested_annotations(mt, gnomad=False, genome=False)
                 )
             )
+            # Unfurl nested gnomAD genome frequency annotations and add to info field
             mt = mt.annotate_rows(
                 info=mt.info.annotate(
                     **unfurl_nested_annotations(mt, gnomad=True, genome=True)
                 )
             )
+            # Unfurl nested gnomAD exome frequency annotations and add to info field
             mt = mt.annotate_rows(
                 info=mt.info.annotate(
                     **unfurl_nested_annotations(mt, gnomad=True, genome=False)
