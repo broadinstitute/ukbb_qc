@@ -110,43 +110,24 @@ def sample_check(
 
 
 # Resources to check MT upon VCF export
-def sanity_check_release_mt(
-    mt: hl.MatrixTable,
-    subsets: List[str],
-    missingness_threshold: float = 0.5,
-    verbose: bool = False,
-) -> None:
+def filters_sanity_check(ht: hl.Table) -> None:
     """
-    Perform a battery of sanity checks on a specified group of subsets in a MatrixTable containing variant annotations.
+    Summarizes variants filtered under various conditions in input Table.
 
-    Includes:
-    - Summaries of % filter status for different partitions of variants
-    - Histogram outlier bin checks
-    - Checks on AC, AN, and AF annotations
-    - Checks that subgroup annotation values add up to the supergroup annotation values
-    - Checks on sex-chromosome annotations; and summaries of % missingness in variant annotations
+    Summarizes counts for:
+        - Total number of variants
+        - Fraction of variants removed by any filter
+        - Fraction of variants removed because of InbreedingCoefficient filter in combination with any other filter
+        - Fraction of varinats removed because of AC0 filter in combination with any other filter
+        - Fraction of variants removed because of random forest filtering in combination with any other filter
+        - Fraction of variants removed only because of InbreedingCoefficient filter
+        - Fraction of variants removed only because of AC0 filter
+        - Fraction of variants removed only because of random forest filtering
 
-    :param MatrixTable mt: MatrixTable containing variant annotations to check
-    :param List[str] subsets: List of subsets to be checked
-    :param bool verbose: If True, display top values of relevant annotations being checked, regardless of whether check
-        conditions are violated; if False, display only top values of relevant annotations if check conditions are violated
-    :return: Terminal display of results from the battery of sanity checks
+    :param hl.Table ht: Input Table.
+    :return: None
     :rtype: None
     """
-    # Get gnomAD subpop names
-    GNOMAD_NFE_SUBPOPS = map(lambda x: x.lower(), SUBPOPS["NFE"])
-    GNOMAD_EAS_SUBPOPS = map(lambda x: x.lower(), SUBPOPS["EAS"])
-
-    n_samples = mt.count_cols()
-    ht = mt.rows()
-    n_sites = ht.count()
-    contigs = ht.aggregate(hl.agg.collect_as_set(ht.locus.contig))
-    logger.info(f"Found {n_sites} sites in contigs {contigs} in {n_samples} samples")
-    info_metrics = list(ht.row.info)
-    non_info_metrics = list(ht.row)
-    non_info_metrics.remove("info")
-
-    logger.info("VARIANT FILTER SUMMARIES:")
     ht_explode = ht.explode(ht.filters)
     logger.info(
         f"hl.agg.counter filters: {ht_explode.aggregate(hl.agg.counter(ht_explode.filters))}"
@@ -200,19 +181,27 @@ def sanity_check_release_mt(
         )
     )
 
-    # NOTE: generic field check filters ht based on a certain condition and checks for the number of rows in ht that failed that condition
-    # if the number of fails is 0, then the ht passes that check; otherwise it fails
-    # its inputs are:
-    #   ht, condition expression (the condition to be filtered to), check description (name of check),
-    #   display fields (fields of ht to show), verbose (show values of checks that pass; default is to only show when they fail)
-    logger.info("HISTOGRAM CHECKS:")
-    for hist in HISTS:
+
+def histograms_sanity_check(
+    ht: hl.Table, verbose: bool, hists: List[str] = HISTS
+) -> None:
+    """
+    Checks the number of variants that have nonzero values in their _n_smaller and n_larger bins of quality histograms.
+
+    :param hl.Table ht: Input Table.
+    :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
+        show only top values of annotations that fail checks.
+    :param List[str] hists: List of variant annotation histograms.
+    :return: None
+    :rtype: None
+    """
+    for hist in hists:
         for suffix in ["", "adj"]:
             if suffix == "adj":
-                logger.info("Checking adj qual hists")
+                logger.info("Checking adj qual hists...")
                 hist = f"{hist}_{suffix}"
             else:
-                logger.info("Checking raw qual hists")
+                logger.info("Checking raw qual hists...")
 
             # Check subfield == 0
             generic_field_check(
@@ -234,7 +223,23 @@ def sanity_check_release_mt(
                     verbose,
                 )
 
-    logger.info("RAW AND ADJ CHECKS:")
+
+def raw_and_adj_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool):
+    """
+    Performs sanity checks on raw and adj data in input Table.
+
+    Checks that:
+        - Raw AC, AN, AF are not 0
+        - Adj AC, AN, AF are not 0
+        - Raw values for AC, AN, nhomalt in each sample subset are greater than or equal to their corresponding adj values
+
+    :param hl.Table ht: Input Table.
+    :param List[str] subsets: List of sample subsets.
+    :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
+        show only top values of annotations that fail checks.
+    :return: None
+    :rtype: None
+    """
     for subfield in ["AC", "AN", "AF"]:
         # Check AC, AN, AF > 0
         generic_field_check(
@@ -277,7 +282,28 @@ def sanity_check_release_mt(
                     verbose,
                 )
 
-    logger.info("FREQUENCY CHECKS:")
+
+def frequency_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool) -> None:
+    """
+    Performs sanity checks on frequency data in input Table.
+
+    Checks:
+        - Number of sites where gnomAD exome frequency is equal to the gnomAD genome frequency (both raw and adj)
+        - Number of sites where the UKBB exome frequency is equal to the gnomAD exome frequency (both raw and adj)
+        - Number of sites where the UKBB exome frequency is equal to the gnomAD genome frequency (both raw and adj)
+
+    Also performs small spot checks:
+        - Counts total number of sites where the gnomAD exome allele count annotation is defined (both raw and adj)
+        - Counts total number of sites where the gnomAD genome allele count annotation is defined (both raw and adj)
+        - Counts total number of sites where the UKBB exome allele count annotation is defined (both raw and adj)
+        
+    :param hl.Table ht: Input Table.
+    :param List[str] subsets: List of sample subsets.
+    :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
+        show only top values of annotations that fail checks.
+    :return: None
+    :rtype: None
+    """
     for subset in subsets:
         if subset == "":
             for subfield in ["AC", "AN", "nhomalt"]:
@@ -345,7 +371,30 @@ def sanity_check_release_mt(
     )
     logger.info(f"Frequency spot check counts: {freq_counts}")
 
-    logger.info("SAMPLE SUM CHECKS:")
+
+def sample_sum_sanity_checks(
+    ht: hl.Table, subsets: List[str], info_metrics: List[str], verbose: bool
+) -> None:
+    """
+    Performs sanity checks on sample sums in input Table.
+
+    Computes afresh the sum of annotations for a specified group of annotations, and compare to the annotated version;
+    displays results from checking the sum of the specified annotations in the terminal.
+
+    Also checks that annotations for all expected sample populations are present (both for gnomAD and UKBB).
+
+    :param hl.Table ht: Input Table.
+    :param List[str] subsets: List of sample subsets.
+    :param List[str] info_metrics: List of metrics in info struct of input Table.
+    :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
+        show only top values of annotations that fail checks.
+    :return: None
+    :rtype: None
+    """
+    # Get gnomAD subpop names
+    GNOMAD_NFE_SUBPOPS = map(lambda x: x.lower(), SUBPOPS["NFE"])
+    GNOMAD_EAS_SUBPOPS = map(lambda x: x.lower(), SUBPOPS["EAS"])
+
     for subset in subsets:
         # Check if pops are present
         if subset == "gnomad":
@@ -429,7 +478,26 @@ def sanity_check_release_mt(
                 ht, subset, dict(group=["adj"], pop=POP_NAMES, sex=SEXES), verbose
             )
 
-    logger.info("SEX CHROMOSOME ANNOTATION CHECKS:")
+
+def sex_chr_sanity_checks(
+    ht: hl.Table, info_metrics: List[str], contigs: List[str], verbose: bool
+) -> None:
+    """
+    Performs sanity checks for annotations on the sex chromosomes.
+
+    Checks:
+        - That metrics for chrY variants in female samples are NA and not 0
+        - That metrics for non-PAR chrX variants in male samples are 0
+        - That nhomalt counts are equal to female nhomalt counts for all non-PAR chrX variants
+
+    :param hl.Table ht: Input Table.
+    :param List[str] info_metrics: List of metrics in info struct of input Table.
+    :param List[str] contigs: List of contigs present in input Table.
+    :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
+        show only top values of annotations that fail checks.
+    :return: None
+    :rtype: None
+    """
     female_metrics = [x for x in info_metrics if "_female" in x]
     male_metrics = [x for x in info_metrics if "_male" in x]
 
@@ -477,7 +545,27 @@ def sanity_check_release_mt(
             verbose,
         )
 
-    logger.info("MISSINGNESS CHECKS:")
+
+def missingness_sanity_checks(
+    ht: hl.Table,
+    info_metrics: List[str],
+    non_info_metrics: List[str],
+    n_sites: int,
+    missingness_threshold: float,
+) -> None:
+    """
+
+    :param hl.Table ht: Input Table.
+    :param List[str] info_metrics: List of metrics in info struct of input Table.
+    :param List[str] non_info_metrics: List of row annotations minus info struct from input Table.
+    :param int n_sites: Number of sites in input Table.
+    :param float missingness_threshold: Upper cutoff for allowed amount of missingness.
+    :return: None
+    :rtype: None
+    """
+    logger.info(
+        f"Missingness threshold (upper cutoff for what is allowed for missingness checks: {missingness_threshold}"
+    )
     metrics_frac_missing = {}
     for x in info_metrics:
         metrics_frac_missing[x] = hl.agg.sum(hl.is_missing(ht.info[x])) / n_sites
@@ -494,6 +582,72 @@ def sanity_check_release_mt(
         else:
             logger.info(f"Passed {message}")
     logger.info(f"{n_fail} missing metrics checks failed")
+
+
+def sanity_check_release_mt(
+    mt: hl.MatrixTable,
+    subsets: List[str],
+    missingness_threshold: float = 0.5,
+    verbose: bool = False,
+) -> None:
+    """
+    Perform a battery of sanity checks on a specified group of subsets in a MatrixTable containing variant annotations.
+
+    Includes:
+    - Summaries of % filter status for different partitions of variants
+    - Histogram outlier bin checks
+    - Checks on AC, AN, and AF annotations
+    - Checks that subgroup annotation values add up to the supergroup annotation values
+    - Checks on sex-chromosome annotations; and summaries of % missingness in variant annotations
+
+    :param MatrixTable mt: MatrixTable containing variant annotations to check.
+    :param List[str] subsets: List of subsets to be checked.
+    :param float missingness_threshold: Upper cutoff for allowed amount of missingness. Default is 0.5
+    :param bool verbose: If True, display top values of relevant annotations being checked, regardless of whether check
+        conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
+    :return: None (terminal display of results from the battery of sanity checks).
+    :rtype: None
+    """
+    # Perform basic checks -- number of variants, number of contigs, number of samples
+    logger.info("BASIC SUMMARY OF INPUT TABLE:")
+    n_samples = mt.count_cols()
+    ht = mt.rows()
+    n_sites = ht.count()
+    contigs = ht.aggregate(hl.agg.collect_as_set(ht.locus.contig))
+    logger.info(f"Found {n_sites} sites in contigs {contigs} in {n_samples} samples")
+
+    logger.info("VARIANT FILTER SUMMARIES:")
+    filters_sanity_check(ht)
+
+    # NOTE: generic_field_check filters HT based on a certain condition and checks for the number of rows in HT that failed that condition
+    # if the number of fails is 0, then the ht passes that check; otherwise it fails
+    # its inputs are:
+    #   HT, condition expression (the condition to be filtered to), check description (name of check),
+    #   display fields (fields of HT to show), verbose (show values of checks that pass; default is to only show when they fail)
+    logger.info("HISTOGRAM CHECKS:")
+    histograms_sanity_check(ht, verbose=verbose)
+
+    logger.info("RAW AND ADJ CHECKS:")
+    raw_and_adj_sanity_checks(ht, subsets, verbose)
+
+    logger.info("FREQUENCY CHECKS:")
+    frequency_sanity_checks(ht, subsets, verbose)
+
+    # Pull row annotations from HT
+    info_metrics = list(ht.row.info)
+    non_info_metrics = list(ht.row)
+    non_info_metrics.remove("info")
+
+    logger.info("SAMPLE SUM CHECKS:")
+    sample_sum_sanity_checks(ht, subsets, info_metrics, verbose)
+
+    logger.info("SEX CHROMOSOME ANNOTATION CHECKS:")
+    sex_chr_sanity_checks(ht, info_metrics, contigs, verbose)
+
+    logger.info("MISSINGNESS CHECKS:")
+    missingness_sanity_checks(
+        ht, info_metrics, non_info_metrics, n_sites, missingness_threshold
+    )
 
 
 def vcf_field_check(
