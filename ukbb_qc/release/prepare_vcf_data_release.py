@@ -36,7 +36,11 @@ from gnomad.utils.vcf import (
     SPARSE_ENTRIES,
     VQSR_FIELDS,
 )
-from ukbb_qc.assessment.sanity_checks import sample_sum_check, sanity_check_release_mt
+from ukbb_qc.assessment.sanity_checks import (
+    sample_sum_check,
+    sanity_check_release_mt,
+    vcf_field_check,
+)
 from ukbb_qc.resources.basics import (
     get_checkpoint_path,
     logging_path,
@@ -73,7 +77,9 @@ vcf_info_dict["sibling_singleton"] = {
 # Add interval QC, capture region to REGION_FLAG_FIELDS and remove decoy, segdup
 INTERVAL_FIELDS = ["fail_interval_qc", "in_capture_region"]
 MISSING_REGION_FIELDS = ("decoy", "segdup")
-REGION_FLAG_FIELDS = [field for field in REGION_FLAG_FIELDS if field not in MISSING_REGION_FIELDS]
+REGION_FLAG_FIELDS = [
+    field for field in REGION_FLAG_FIELDS if field not in MISSING_REGION_FIELDS
+]
 REGION_FLAG_FIELDS.extend(INTERVAL_FIELDS)
 # RF_FIELDS.append("interval_qc_pass")
 
@@ -501,44 +507,9 @@ def main(args):
                 zip(new_row_annots, [mt.info[f"{x}"] for x in row_annots])
             )
 
-            # Confirm all VCF fields/descriptions are present before exporting
-            missing_fields = []
-            missing_descriptions = []
-            for item in ["info", "filter", "format"]:
-                if item == "info":
-                    annots = new_row_annots
-                elif item == "format":
-                    annots = list(mt.entry)
-                else:
-                    annot_mt = mt.explode_rows(mt.filters)
-                    annots = list(
-                        annot_mt.aggregate_rows(hl.agg.collect_as_set(annot_mt.filters))
-                    )
-
-                temp_missing_fields = []
-                temp_missing_descriptions = []
-                for field in annots:
-                    try:
-                        description = header_dict[item][field]
-                        if len(description) == 0:
-                            logger.warning(
-                                f"{field} in mt info field has empty description in VCF header!"
-                            )
-                            temp_missing_descriptions.append(field)
-                    except KeyError:
-                        logger.warning(
-                            f"{field} in mt info field does not exist in VCF header!"
-                        )
-                        if "hist" not in field:  # NOTE: some hists are not exported
-                            temp_missing_fields.append(field)
-
-                missing_fields.extend(temp_missing_fields)
-                missing_descriptions.extend(temp_missing_descriptions)
-
-            if len(missing_fields) != 0 or len(missing_descriptions) != 0:
-                logger.error(
-                    "Some fields are either missing or missing descriptions in the VCF header! Please reconcile."
-                )
+            # Confirm all VCF fields and descriptions are present
+            if not vcf_field_check(mt, header_dict, new_row_annots, list(mt.entry)):
+                logger.error("Did not pass VCF field check.")
                 return
 
             mt = mt.transmute_rows(info=hl.struct(**info_annot_mapping))
