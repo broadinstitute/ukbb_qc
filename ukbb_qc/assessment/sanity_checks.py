@@ -31,7 +31,7 @@ def summarize_mt(mt: hl.MatrixTable) -> hl.Struct:
         if var_summary.contigs[contig] == 0:
             logger.warning(f"{contig} has no variants called")
 
-    return var_summary
+    return var_summarysanity_check_ht
 
 
 def check_adj(
@@ -365,7 +365,7 @@ def sanity_check_release_mt(
                     if z in i:
                         found.append(z)
             else:
-                for z in POPS_NAMES:
+                for z in POP_NAMES:
                     if z in i:
                         found.append(z)
         missing_pops = set(POP_NAMES) - set(found)
@@ -481,3 +481,74 @@ def sanity_check_release_mt(
         else:
             logger.info(f"Passed {message}")
     logger.info(f"{n_fail} missing metrics checks failed")
+
+
+def vcf_field_check(
+    mt: hl.MatrixTable,
+    header_dict: Dict[str, Dict[str, Dict[str, str]]],
+    row_annotations: List[str],
+    entry_annotations: List[str],
+    hists: List[str] = HISTS,
+) -> bool:
+    """
+    Checks that all VCF fields and descriptions are present in input MatrixTable and VCF header dictionary.
+
+    :param hl.MatrixTable mt: Input MatrixTable to be exported to VCF.
+    :param Dict[str, Dict[str, Dict[str, str]]] header_dict: VCF header dictionary.
+    :param List[str] row_annotations: List of row annotations in MatrixTable.
+    :param List[str] entry_annotations: List of entry annotations in MatrixTable.
+    :param List[str] hists: List of variant histogram annotations. Default is HISTS.
+    :return: Bool with whether all expected fields and descriptions are present.
+    :rtype: bool
+    """
+    # Confirm all VCF fields/descriptions are present before exporting
+    hist_fields = []
+    for hist in hists:
+        hist_fields.extend(
+            [f"{hist}_bin_freq", f"{hist}_n_smaller", f"{hist}_n_larger"]
+        )
+        hist_fields.extend(
+            [f"{hist}_adj_bin_freq", f"{hist}_adj_n_smaller", f"{hist}_adj_n_larger"]
+        )
+
+    missing_fields = []
+    missing_descriptions = []
+    for item in ["info", "format", "filter"]:
+        if item == "info":
+            annots = row_annotations
+        elif item == "format":
+            annots = entry_annotations
+        else:
+            annot_mt = mt.explode_rows(mt.filters)
+            annots = list(
+                annot_mt.aggregate_rows(hl.agg.collect_as_set(annot_mt.filters))
+            )
+
+        temp_missing_fields = []
+        temp_missing_descriptions = []
+        for field in annots:
+            try:
+                description = header_dict[item][field]
+                if len(description) == 0:
+                    logger.warning(
+                        f"{field} in MT info field has empty description in VCF header!"
+                    )
+                    temp_missing_descriptions.append(field)
+            except KeyError:
+                logger.warning(
+                    f"{field} in MT info field does not exist in VCF header!"
+                )
+                # NOTE: some hists are not exported
+                if field not in hist_fields:
+                    temp_missing_fields.append(field)
+
+        missing_fields.extend(temp_missing_fields)
+        missing_descriptions.extend(temp_missing_descriptions)
+
+    if len(missing_fields) != 0 or len(missing_descriptions) != 0:
+        logger.error(
+            "Some fields are either missing or missing descriptions in the VCF header! Please reconcile."
+        )
+        return False
+
+    return True
