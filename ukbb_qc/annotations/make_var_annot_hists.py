@@ -31,7 +31,7 @@ ANNOTATIONS_HISTS = {
     "VarDP": (1, 9, 32),
     "AS_VQSLOD": (-30, 30, 60),
     "rf_tp_probability": (0, 1, 50),
-    "pab_max": (0, 1, 50),
+    "AS_pab_max": (0, 1, 50),
 }
 
 
@@ -40,26 +40,14 @@ def main(args):
     hl.init(log="/variant_histograms.log", default_reference="GRCh38")
     data_source = "broad"
     freeze = args.freeze
+    tranche_data = (data_source, freeze)
 
     # NOTE: histogram aggregations on these metrics are done on the entire callset (not just PASS variants), on raw data
-    metrics = [
-        "FS",
-        "InbreedingCoeff",
-        "MQ",
-        "MQRankSum",
-        "QD",
-        "ReadPosRankSum",
-        "SOR",
-        # "BaseQRankSum" NOTE: this was removed from vcf export for ukbb tranche 2 and therefore release mt/ht
-        "VarDP",
-        "rf_probability",  # this is allele specific
-        "pab_max",
-        "AS_VQSLOD",  # also allele-specific
-    ]
+    metrics = list(ANNOTATIONS_HISTS.keys())
 
     try:
         logger.info("Reading in release HT")
-        ht = hl.read_table(release_ht_path(data_source, freeze)).select_globals()
+        ht = hl.read_table(release_ht_path(*tranche_data)).select_globals()
 
         # Select annotations and move necessary annotations into info struct
         # get_annotations_hists checks within ht.info (should this be changed?)
@@ -67,17 +55,17 @@ def main(args):
             qual=ht.qual,
             freq=ht.freq,
             info=hl.struct(
-                FS=ht.rf.info_FS,
-                InbreedingCoeff=ht.rf.inbreeding_coeff,
+                FS=ht.rf.info.FS,
+                InbreedingCoeff=ht.info.InbreedingCoeff,
                 MQ=ht.rf.info_MQ,
-                MQRankSum=ht.rf.info_MQRankSum,
-                QD=ht.rf.info_QD,
-                ReadPosRankSum=ht.rf.info_ReadPosRankSum,
-                SOR=ht.rf.info_SOR,
-                VarDP=ht.rf.info_VarDP,
-                rf_probability=ht.rf.rf_probability,
-                pab_max=ht.rf.pab_max,
-                AS_VQSLOD=hl.float(ht.vqsr.AS_VQSLOD[0]),
+                MQRankSum=ht.info.MQRankSum,
+                QD=ht.rf.info.QD,
+                ReadPosRankSum=ht.info.ReadPosRankSum,
+                SOR=ht.rf.info.SOR,
+                VarDP=ht.rf.info.VarDP,
+                rf_tp_probability=ht.rf.rf_probability,
+                AS_pab_max=ht.info.AS_pab_max,
+                AS_VQSLOD=hl.float(ht.vqsr.AS_VQSLOD),
             ),
         )
 
@@ -87,13 +75,14 @@ def main(args):
         # NOTE: this is code was run on gnomAD v2 and has not been run since
         if args.first_pass:
             logger.info(
-                "Evaluating minimum and maximum values for each metric of interest"
+                "Evaluating minimum and maximum values for each metric of interest, and \
+                caps maximum value at 1e10"
             )
             minmax_dict = {}
             for metric in metrics:
                 minmax_dict[metric] = hl.struct(
                     min=hl.agg.min(ht[metric]),
-                    max=hl.cond(
+                    max=hl.if_else(
                         hl.agg.max(ht[metric]) < 1e10, hl.agg.max(ht[metric]), 1e10
                     ),
                 )
@@ -123,11 +112,11 @@ def main(args):
             )
 
             logger.info("Writing output")
-            with hl.hadoop_open(release_var_hist_path(data_source, freeze), "w") as f:
+            with hl.hadoop_open(release_var_hist_path(*tranche_data), "w") as f:
                 f.write(hl.eval(hl.json(hists)))
     finally:
         logger.info("Copying hail log to logging bucket...")
-        hl.copy_log(logging_path(data_source, freeze))
+        hl.copy_log(logging_path(*tranche_data))
 
 
 if __name__ == "__main__":
@@ -138,7 +127,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--first_pass",
-        help="Determine min/max values for each variant metric (to be used in hand-tooled histogram ranges",
+        help="Determine min/max values for each variant metric (to be used in hand-tooled histogram ranges)",
         action="store_true",
     )
     parser.add_argument(
