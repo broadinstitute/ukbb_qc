@@ -277,7 +277,7 @@ def raw_and_adj_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool):
                         ht.info[f"{subset}{subfield}_raw"]
                         < ht.info[f"{subset}{subfield}_adj"]
                     ),
-                    f"{subset}{subfield}_raw >= {subfield}_adj",
+                    f"{subset}{subfield}_raw >= {subset}{subfield}_adj",
                     [f"info.{subset}{subfield}_raw", f"info.{subset}{subfield}_adj"],
                     verbose,
                 )
@@ -422,17 +422,14 @@ def sample_sum_sanity_checks(
         ]
         found = []
         for i in pop_adjusted:
-            if subset == "gnomad":
-                for z in POP_NAMES:
-                    if z in i:
-                        found.append(z)
-            else:
-                for z in POP_NAMES:
-                    if z in i:
-                        found.append(z)
+            for z in POP_NAMES:
+                if z in i:
+                    found.append(z)
         missing_pops = set(POP_NAMES) - set(found)
         if len(missing_pops) != 0:
             logger.warning(f"Missing {missing_pops} pops in {subset} subset!")
+        for pop in found:
+            logger.info(f"{pop} was found {found.count(pop)} times")
 
         if subset == "gnomad":
             sample_sum_check(ht, subset, dict(group=["adj"], pop=POP_NAMES), verbose)
@@ -554,6 +551,9 @@ def missingness_sanity_checks(
     missingness_threshold: float,
 ) -> None:
     """
+    Checks amount of missingness in all row annotations.
+
+    Prints metric to terminal if more than missingness_threshold% of annotations for that metric are missing.
 
     :param hl.Table ht: Input Table.
     :param List[str] info_metrics: List of metrics in info struct of input Table.
@@ -564,7 +564,7 @@ def missingness_sanity_checks(
     :rtype: None
     """
     logger.info(
-        f"Missingness threshold (upper cutoff for what is allowed for missingness checks: {missingness_threshold}"
+        f"Missingness threshold (upper cutoff for what is allowed for missingness checks): {missingness_threshold}"
     )
     metrics_frac_missing = {}
     for x in info_metrics:
@@ -575,7 +575,7 @@ def missingness_sanity_checks(
 
     n_fail = 0
     for metric, value in dict(output).items():
-        message = f"missingness check for {metric}: {100 * value}%missing"
+        message = f"missingness check for {metric}: {100 * value}% missing"
         if value > missingness_threshold:
             logger.info(f"FAILED {message}")
             n_fail += 1
@@ -716,6 +716,8 @@ def vcf_field_check(
         logger.error(
             "Some fields are either missing or missing descriptions in the VCF header! Please reconcile."
         )
+        logger.error(f"Fields: {missing_fields}")
+        logger.error(f"Descriptions: {missing_descriptions}")
         return False
 
     return True
