@@ -276,21 +276,23 @@ def unfurl_nested_annotations(
         freq_idx = make_index_dict(t, "freq_meta")
 
     # Unfurl freq index dict
+    # Cycles through each key and index (e.g., k=adj_afr, i=31)
     for k, i in freq_idx.items():
         prefix = ""
-        entry = k.split("_")
-
-        # skip gnomad subsets
-        if entry[0] == "non" or entry[0] == "controls":
-            continue
-
         if gnomad:
             prefix = f"{gnomad_prefix}_"
 
-        if entry == ["raw"] or entry == ["gnomad", "raw"]:
-            combo_fields = ["raw"]
+        # Split key to split group (adj, raw) and pop entry
+        # e.g., split 'adj_afr' into ['adj', 'afr']
+        entry = k.split("_")
+
+        # Add 'adj' and 'raw' tags to combo_fields
+        if entry == ["raw"]:
+            combo_fields = entry
         else:
-            combo_fields = entry[1:] + ["adj"]
+            # Add 'adj' tag AFTER all other entries
+            # e.g., if entry is ['adj', 'afr'], set combo fields to ['afr', 'adj']
+            combo_fields = entry[1:] + [entry[0]]
 
         combo = "_".join(combo_fields)
         combo_dict = {
@@ -308,10 +310,7 @@ def unfurl_nested_annotations(
     ) in faf_idx.items():  # NOTE: faf annotations are all done on adj-only groupings
         entry = k.split("_")
 
-        # skip gnomad subsets
-        if entry[0] == "non" or entry[0] == "controls":
-            continue
-
+        # Create combo_fields in same way as above ([pop, adj])
         combo_fields = entry[1:] + ["adj"]
         combo = "_".join(combo_fields)
 
@@ -342,7 +341,7 @@ def unfurl_nested_annotations(
             }
         expr_dict.update(combo_dict)
 
-    ## Unfurl popmax
+    # Unfurl popmax
     if gnomad:
         prefix = f"{gnomad_prefix}_"
     else:
