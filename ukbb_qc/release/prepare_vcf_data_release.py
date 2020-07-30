@@ -80,7 +80,6 @@ REGION_FLAG_FIELDS = [
     field for field in REGION_FLAG_FIELDS if field not in MISSING_REGION_FIELDS
 ]
 REGION_FLAG_FIELDS.extend(INTERVAL_FIELDS)
-# RF_FIELDS.append("interval_qc_pass")
 
 # Add sibling singletons to SITE_FIELDS
 SITE_FIELDS.append("sibling_singleton")
@@ -194,9 +193,6 @@ def populate_info_dict(
                         description_text=description_text,
                     )
                 )
-
-    for adj_bool in [True, False]:
-        vcf_info_dict.update(make_hist_dict(bin_edges, adj=adj_bool))
     return vcf_info_dict
 
 
@@ -264,22 +260,13 @@ def unfurl_nested_annotations(
 
     # Set variables to locate necessary fields, compute freq index dicts, and compute faf index dict for UKB
     if gnomad:
-        if genome:
-            faf = "gnomad_genomes_faf"
-            freq = "gnomad_genomes_freq"
-            faf_idx = hl.eval(t.gnomad_genomes_faf_index_dict)
-            gnomad_prefix = "gnomad_genomes"
-            popmax = "gnomad_genomes_popmax"
-            freq_idx = make_index_dict(t, "gnomad_genomes_freq_meta")
-
-        else:
-            faf = "gnomad_exomes_faf"
-            freq = "gnomad_exomes_freq"
-            freq_idx = "gnomad_exomes_freq_index_dict"
-            faf_idx = hl.eval(t.gnomad_exomes_faf_index_dict)
-            gnomad_prefix = "gnomad_exomes"
-            popmax = "gnomad_exomes_popmax"
-            freq_idx = make_index_dict(t, "gnomad_exomes_freq_meta")
+        data_type = "genomes" if genome else "exomes"
+        gnomad_prefix = f"gnomad_{data_type}"
+        popmax = f"{gnomad_prefix}_popmax"
+        faf = f"{gnomad_prefix}_faf"
+        freq = f"{gnomad_prefix}_freq"
+        faf_idx = hl.eval(t.globals[f"{gnomad_prefix}_faf_index_dict"])
+        freq_idx = make_index_dict(t, f"{gnomad_prefix}_freq_meta")
 
     else:
         faf = "faf"
@@ -433,7 +420,10 @@ def main(args):
             logger.info("Removing low QUAL variants...")
             info_ht = hl.read_table(info_ht_path(data_source, freeze))
             mt = mt.filter_rows(
-                (hl.agg.any(mt.GT.is_non_ref() | hl.is_defined(mt.END)))
+                (
+                    (hl.len(mt.alleles) == 1)
+                    | ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
+                )
                 & (~info_ht[mt.row_key].AS_lowqual)
             )
 
@@ -442,7 +432,9 @@ def main(args):
             mt = mt.annotate_rows(**ht[mt.row_key])
             mt = mt.annotate_globals(**ht.index_globals())
 
-            logger.info("Dropping cohort frequencies (last index of freq)...")
+            logger.info(
+                "Dropping cohort frequencies (necessary only for internal use; at last index of freq struct)..."
+            )
             mt = mt.annotate_rows(freq=mt.freq[-1])
             mt = mt.annotate_globals(freq_meta=mt.freq_meta[-1])
 
@@ -459,11 +451,18 @@ def main(args):
                 age_hist_data=age_hist_data,
             )
 
+            # Update INFO dict with quality histograms on raw data
+            vcf_info_dict.update(make_hist_dict(bin_edges, adj=False))
+
             # Adjust keys to remove adj tags before exporting to VCF
             new_vcf_info_dict = {
                 i.replace("adj_", "").replace("_adj", "").replace("_adj_", ""): j
                 for i, j in vcf_info_dict.items()
             }
+
+            # Add descriptions for quality histograms on adj data here
+            # Needs to be done after replacing all the "adj" strings
+            # This to avoid duplicating descriptions for raw/adj qual hists
             new_vcf_info_dict.update(make_hist_dict(bin_edges, adj=True))
 
             # Add non-PAR annotation
@@ -521,8 +520,7 @@ def main(args):
             mt.write(release_mt_path(*tranche_data), args.overwrite)
 
         if args.sanity_check:
-            mt = hl.read_matrix_table(release_mt_path(*tranche_data, temp=True))
-            mt = mt.annotate_rows(**set_female_y_metrics_to_na(mt))
+            mt = hl.read_matrix_table(release_mt_path(*tranche_data))
             sanity_check_release_mt(
                 mt, SUBSET_LIST, missingness_threshold=0.5, verbose=args.verbose
             )
@@ -536,7 +534,7 @@ def main(args):
                 logger.error("Need to choose how to export the release VCF. Exiting...")
                 sys.exit(1)
 
-            mt = hl.read_matrix_table(release_mt_path(*tranche_data, temp=True))
+            mt = hl.read_matrix_table(release_mt_path(*tranche_data))
             logger.info("Reading header dict from pickle...")
             with hl.hadoop_open(release_header_path(*tranche_data), "rb") as p:
                 header_dict = pickle.load(p)
@@ -605,8 +603,7 @@ def main(args):
                     # TODO: Confirm with hail team if this is the fastest method for this
                     mt = hl.read_matrix_table(mt_path)
                     mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
-                    mt._calculate_new_partitions(10000)
-                    intervals = [i for i in intervals if i.start.locus.contig == contig]
+                    intervals = mt._calculate_new_partitions(10000)
                     mt = hl.read_matrix_table(mt_path, _intervals=intervals)
 
                     logger.info("Densifying and exporting VCF...")
