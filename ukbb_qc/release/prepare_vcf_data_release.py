@@ -1,5 +1,4 @@
 import argparse
-import json
 import logging
 import pickle
 import sys
@@ -117,8 +116,7 @@ def populate_info_dict(
         - INFO fields for filtering allele frequency (faf) annotations 
         - INFO fields for variant histograms (hist_bin_freq, hist_n_smaller, hist_n_larger for each histogram)
 
-    :param Dict[str, List[str]] subpops: Dictionary mapping hybrid population cluster names to gnomAD global populations.
-        Key: gnomAD population name, Values: List of hybrid population clusters.
+    :param List[str] subpops: List of all UKBB subpops (possible hybrid population cluster names).
     :param Dict[str, str] bin_edges: Dictionary of variant annotation histograms and their associated bin edges.
     :param str age_hist_data: Pipe-delimited string of age histograms, from `get_age_distributions`.
     :param Dict[str, Dict[str, str]] info_dict: INFO dict to be populated.
@@ -189,7 +187,7 @@ def populate_info_dict(
                 vcf_info_dict.update(
                     make_info_dict(
                         subset,
-                        dict(group=["adj"], pop=pop, subpop=subpops[pop]),
+                        dict(group=["adj"], pop=pop, subpop=subpops),
                         description_text=description_text,
                     )
                 )
@@ -244,7 +242,7 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
 
 
 def unfurl_nested_annotations(
-    t: Union[hl.MatrixTable, hl.Table], gnomad: bool, genome: bool
+    t: Union[hl.MatrixTable, hl.Table], gnomad: bool, genome: bool, subpops: List[str]
 ) -> Dict[str, hl.expr.Expression]:
     """
     Create dictionary keyed by the variant annotation labels to be extracted from variant annotation arrays, where the values
@@ -253,6 +251,7 @@ def unfurl_nested_annotations(
     :param Table/MatrixTable t: Table/MatrixTable containing the nested variant annotation arrays to be unfurled.
     :param bool gnomad: Whether the annotations are from gnomAD.
     :param bool genome: Whether the annotations are from genome data (relevant only to gnomAD data).
+    :param List[str] subpops: List of all UKBB subpops (possible hybrid population cluster names). 
     :return: Dictionary containing variant annotations and their corresponding values.
     :rtype: Dict[str, hl.expr.Expression]
     """
@@ -266,14 +265,16 @@ def unfurl_nested_annotations(
         faf = f"{gnomad_prefix}_faf"
         freq = f"{gnomad_prefix}_freq"
         faf_idx = hl.eval(t.globals[f"{gnomad_prefix}_faf_index_dict"])
-        freq_idx = make_index_dict(t, f"{gnomad_prefix}_freq_meta")
+        freq_idx = make_index_dict(
+            t, f"{gnomad_prefix}_freq_meta", [GNOMAD_NFE_SUBPOPS + GNOMAD_EAS_SUBPOPS]
+        )
 
     else:
         faf = "faf"
         freq = "freq"
-        faf_idx = make_index_dict(t, "faf_meta")
+        faf_idx = make_index_dict(t, "faf_meta", subpops)
         popmax = "popmax"
-        freq_idx = make_index_dict(t, "freq_meta")
+        freq_idx = make_index_dict(t, "freq_meta", subpops)
 
     # Unfurl freq index dict
     # Cycles through each key and index (e.g., k=adj_afr, i=31)
@@ -393,6 +394,7 @@ def main(args):
     data_source = "broad"
     freeze = args.freeze
     tranche_data = (data_source, freeze)
+    hybrid_pops = args.hybrid_pops.split(",")
 
     try:
 
@@ -444,9 +446,7 @@ def main(args):
 
             logger.info("Making INFO dict for VCF...")
             vcf_info_dict = populate_info_dict(
-                subpops=args.hybrid_pop_map,
-                bin_edges=bin_edges,
-                age_hist_data=age_hist_data,
+                subpops=hybrid_pops, bin_edges=bin_edges, age_hist_data=age_hist_data,
             )
 
             # Update INFO dict with quality histograms on raw data
@@ -479,19 +479,25 @@ def main(args):
             # Unfurl nested UKBB frequency annotations and add to INFO field
             mt = mt.annotate_rows(
                 info=mt.info.annotate(
-                    **unfurl_nested_annotations(mt, gnomad=False, genome=False)
+                    **unfurl_nested_annotations(
+                        mt, gnomad=False, genome=False, subpops=hybrid_pops
+                    )
                 )
             )
             # Unfurl nested gnomAD genome frequency annotations and add to info field
             mt = mt.annotate_rows(
                 info=mt.info.annotate(
-                    **unfurl_nested_annotations(mt, gnomad=True, genome=True)
+                    **unfurl_nested_annotations(
+                        mt, gnomad=True, genome=True, subpops=hybrid_pops
+                    )
                 )
             )
             # Unfurl nested gnomAD exome frequency annotations and add to info field
             mt = mt.annotate_rows(
                 info=mt.info.annotate(
-                    **unfurl_nested_annotations(mt, gnomad=True, genome=False)
+                    **unfurl_nested_annotations(
+                        mt, gnomad=True, genome=False, subpops=hybrid_pops
+                    )
                 )
             )
             mt = mt.annotate_rows(**set_female_y_metrics_to_na(mt))
@@ -642,12 +648,8 @@ if __name__ == "__main__":
         "--prepare_vcf_mt", help="Use release mt to create vcf mt", action="store_true"
     )
     parser.add_argument(
-        "--hybrid_pop_map",
-        help="""
-            Dictionary mapping gnomAD PC project population names (keys) to list of hybrid population names\n.
-            E.g., '{"nfe": ["0", "2"], "afr": ["3", "4"]}'
-            """,
-        type=json.loads,
+        "--hybrid_pops",
+        help="Comma-separated list of all possible hybrid populations (used as subpopulations in frequency annotations)",
     )
     parser.add_argument(
         "--sanity_check", help="Run sanity checks function", action="store_true"
