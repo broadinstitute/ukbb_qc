@@ -277,6 +277,7 @@ def unfurl_nested_annotations(
 
     # Unfurl freq index dict
     for k, i in freq_idx.items():
+        prefix = ""
         entry = k.split("_")
 
         # skip gnomad subsets
@@ -284,21 +285,19 @@ def unfurl_nested_annotations(
             continue
 
         if gnomad:
-            prefix = gnomad_prefix
-        else:
-            prefix = entry[0]
+            prefix = f"{gnomad_prefix}_"
 
         if entry == ["raw"] or entry == ["gnomad", "raw"]:
             combo_fields = ["raw"]
         else:
-            combo_fields = ["adj"] + entry[1:]
+            combo_fields = entry[1:] + ["adj"]
 
         combo = "_".join(combo_fields)
         combo_dict = {
-            f"{prefix}_AC_{combo}": t[freq][i].AC,
-            f"{prefix}_AN_{combo}": t[freq][i].AN,
-            f"{prefix}_AF_{combo}": t[freq][i].AF,
-            f"{prefix}_nhomalt_{combo}": t[freq][i].homozygote_count,
+            f"{prefix}AC_{combo}": t[freq][i].AC,
+            f"{prefix}AN_{combo}": t[freq][i].AN,
+            f"{prefix}AF_{combo}": t[freq][i].AF,
+            f"{prefix}nhomalt_{combo}": t[freq][i].homozygote_count,
         }
         expr_dict.update(combo_dict)
 
@@ -313,18 +312,17 @@ def unfurl_nested_annotations(
         if entry[0] == "non" or entry[0] == "controls":
             continue
 
-        combo_fields = ["adj"] + entry[1:]
+        combo_fields = entry[1:] + ["adj"]
         combo = "_".join(combo_fields)
 
         if gnomad:
-            prefix = gnomad_prefix
-
+            prefix = f"{gnomad_prefix}_"
             combo_dict = {
-                f"{prefix}_faf95_{combo}": hl.or_missing(
+                f"{prefix}faf95_{combo}": hl.or_missing(
                     hl.set(t[faf][i].meta.values()) == set(combo_fields),
                     t[faf][i].faf95,
                 ),
-                f"{prefix}_faf99_{combo}": hl.or_missing(
+                f"{prefix}faf99_{combo}": hl.or_missing(
                     hl.set(t[faf][i].meta.values()) == set(combo_fields),
                     t[faf][i].faf99,
                 ),
@@ -346,9 +344,10 @@ def unfurl_nested_annotations(
 
     ## Unfurl popmax
     if gnomad:
-        prefix = gnomad_prefix + "_"
+        prefix = f"{gnomad_prefix}_"
     else:
         prefix = ""
+
     if gnomad and not genome:
         idx = hl.eval(t.globals["gnomad_exomes_popmax_index_dict"]["gnomad"])
         combo_dict = {
