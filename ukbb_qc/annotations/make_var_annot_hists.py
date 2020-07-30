@@ -20,19 +20,27 @@ logger.setLevel(logging.INFO)
 
 
 ANNOTATIONS_HISTS = {
-    "FS": (0, 50, 50),
+    "AS_FS": (0, 50, 50),
     "InbreedingCoeff": (-0.25, 0.25, 50),
-    "MQ": (0, 80, 40),
-    "MQRankSum": (-15, 15, 60),
-    "QD": (0, 40, 40),
-    "ReadPosRankSum": (-15, 15, 60),
-    "SOR": (0, 10, 50),
-    #'BaseQRankSum': (-15, 15, 60),
-    "VarDP": (1, 9, 32),
+    "AS_MQ": (0, 80, 40),
+    "AS_MQRankSum": (-15, 15, 60),
+    "AS_QD": (0, 40, 40),
+    "AS_ReadPosRankSum": (-15, 15, 60),
+    "AS_SOR": (0, 10, 50),
+    "AS_BaseQRankSum": (-15, 15, 60),
+    "AS_VarDP": (1, 9, 32),
     "AS_VQSLOD": (-30, 30, 60),
     "rf_tp_probability": (0, 1, 50),
     "AS_pab_max": (0, 1, 50),
 }
+"""
+Dictionary of metric names and their histogram values (start, end, bins).
+"""
+
+LOG10_ANNOTATIONS = ["AS_VarDP"]
+"""
+List of annotations to log scale when creating histograms. 
+"""
 
 
 def main(args):
@@ -49,28 +57,19 @@ def main(args):
         logger.info("Reading in release HT")
         ht = hl.read_table(release_ht_path(*tranche_data)).select_globals()
 
-        # Select annotations and move necessary annotations into info struct
-        # get_annotations_hists checks within ht.info (should this be changed?)
-        ht = ht.select(
-            qual=ht.qual,
-            freq=ht.freq,
-            info=hl.struct(
-                FS=ht.rf.info.FS,
-                InbreedingCoeff=ht.info.InbreedingCoeff,
-                MQ=ht.rf.info_MQ,
-                MQRankSum=ht.info.MQRankSum,
-                QD=ht.rf.info.QD,
-                ReadPosRankSum=ht.info.ReadPosRankSum,
-                SOR=ht.rf.info.SOR,
-                VarDP=ht.rf.info.VarDP,
+        # Move necessary annotations into info struct
+        ht = ht.annotate(
+            info=ht.info.annotate(
                 rf_tp_probability=ht.rf.rf_probability,
-                AS_pab_max=ht.info.AS_pab_max,
                 AS_VQSLOD=hl.float(ht.vqsr.AS_VQSLOD),
-            ),
+            )
         )
+        ht = ht.select(qual=ht.qual, freq=ht.freq, info=ht.info.select(*metrics),)
 
         logger.info("Getting info annotation histograms")
-        hist_ranges_expr = get_annotations_hists(ht, ANNOTATIONS_HISTS, ["VarDP"])
+        hist_ranges_expr = get_annotations_hists(
+            ht, ANNOTATIONS_HISTS, LOG10_ANNOTATIONS
+        )
 
         # NOTE: this is code was run on gnomAD v2 and has not been run since
         if args.first_pass:
