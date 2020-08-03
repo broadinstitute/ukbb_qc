@@ -330,11 +330,11 @@ def unfurl_nested_annotations(
             # NOTE: need to compute UKBB separately because UKB no longer has faf meta bundled into faf
             combo_dict = {
                 f"faf95_{combo}": hl.or_missing(
-                    hl.set(hl.eval(t.faf_meta[i].values())) == set(entry),
+                    hl.set(hl.eval(t.faf_meta[i].values())) == set(combo_fields),
                     t[faf][i].faf95,
                 ),
                 f"faf99_{combo}": hl.or_missing(
-                    hl.set(hl.eval(t.faf_meta[i].values())) == set(entry),
+                    hl.set(hl.eval(t.faf_meta[i].values())) == set(combo_fields),
                     t[faf][i].faf99,
                 ),
             }
@@ -601,7 +601,9 @@ def main(args):
                     mt = hl.read_matrix_table(release_mt_path(*tranche_data))
                     mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
                     intervals = mt._calculate_new_partitions(10000)
-                    mt = hl.read_matrix_table(release_mt_path(*tranche_data), _intervals=intervals)
+                    mt = hl.read_matrix_table(
+                        release_mt_path(*tranche_data), _intervals=intervals
+                    )
                     mt = mt.annotate_rows(**ht[mt.row_key])
 
                     logger.info("Densifying and exporting VCF...")
