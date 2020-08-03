@@ -1,6 +1,7 @@
 import argparse
 import json
 import logging
+import re
 import sys
 from typing import Dict, List, Optional, Union
 import uuid
@@ -183,6 +184,14 @@ def create_rf_ht(
     if impute_features_by_variant_type:
         ht = median_impute_features(ht, {"variant_type": ht.variant_type})
 
+    ht = ht.annotate_globals(
+        interval_qc_cutoffs=hl.struct(
+            autosome_cov=re.search(r"\d+", hl.eval(info_ht.cov_filter_field)).group(),
+            xy_cov=re.search(r"\d+", hl.eval(info_ht.xy_cov_filter_field)).group(),
+            pct_samples=hl.eval(info_ht.pct_samples),
+        )
+    )
+
     summary = ht.group_by(
         "omni",
         "mills",
@@ -357,7 +366,7 @@ def generate_final_rf_ht(
         "transmitted_singleton": hl.or_missing(
             ts_ac_filter_expr, ht.transmitted_singleton
         ),
-        "rf_probability": ht.rf_probability["TP"],
+        "rf_tp_probability": ht.rf_probability["TP"],
     }
     if "feature_imputed" in ht.row:
         annotations_expr.update(
@@ -370,7 +379,9 @@ def generate_final_rf_ht(
     ht = ht.transmute(filters=add_filters_expr(filters=filters), **annotations_expr)
 
     ht = ht.annotate_globals(
-        rf_snv_cutoff=snp_cutoff_global, rf_indel_cutoff=indel_cutoff_global
+        rf_snv_cutoff=snp_cutoff_global,
+        rf_indel_cutoff=indel_cutoff_global,
+        inbreeding_cutoff=inbreeding_coeff_cutoff,
     )
 
     return ht
