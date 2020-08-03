@@ -1,6 +1,7 @@
 import argparse
 import json
 import logging
+import re
 import sys
 from typing import Dict, List, Optional, Union
 import uuid
