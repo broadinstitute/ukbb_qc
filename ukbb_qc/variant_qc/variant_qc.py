@@ -183,6 +183,16 @@ def create_rf_ht(
     if impute_features_by_variant_type:
         ht = median_impute_features(ht, {"variant_type": ht.variant_type})
 
+    ht = ht.annotate_globals(
+        cov_filter_field=info_ht.index_globals()
+        .cov_filter_field.split("pct_samples_")[1]
+        .replace("x", ""),
+        xy_cov_filter_field=info_ht.index_globals()
+        .xy_cov_filter_field.split("pct_samples_")[1]
+        .replace("x", ""),
+        pct_samples=info_ht.index_globals().pct_samples,
+    )
+
     summary = ht.group_by(
         "omni",
         "mills",
