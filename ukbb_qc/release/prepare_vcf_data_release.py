@@ -56,7 +56,7 @@ logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
     datefmt="%m/%d/%Y %I:%M:%S %p",
 )
-logger = logging.getLogger("data_release")
+logger = logging.getLogger("vcf_release")
 logger.setLevel(logging.INFO)
 
 
@@ -65,14 +65,12 @@ VCF_INFO_DICT = INFO_DICT
 VCF_INFO_DICT["in_capture_region"] = {
     "Description": "Variant falls within an exome capture region"
 }
-VCF_INFO_DICT["fail_interval_qc"] = {
-    "Description": f"Variant falls within a region where less than {INTERVAL_QC_PARAMETERS[0]}% of samples had a mean coverage of {INTERVAL_QC_PARAMETERS[1]}X"
-}
 VCF_INFO_DICT["sibling_singleton"] = {
     "Description": "Variant was a callset-wide doubleton that was present only within a sibling pair"
 }
 
 # Add interval QC, capture region to REGION_FLAG_FIELDS and remove decoy, segdup
+# NOTE: MISSING_REGION_FIELDS could change for 500K if we get hg38 files
 INTERVAL_FIELDS = ["fail_interval_qc", "in_capture_region"]
 MISSING_REGION_FIELDS = ("decoy", "segdup")
 REGION_FLAG_FIELDS = [
@@ -80,8 +78,8 @@ REGION_FLAG_FIELDS = [
 ]
 REGION_FLAG_FIELDS.extend(INTERVAL_FIELDS)
 
-# Add sibling singletons to SITE_FIELDS
-SITE_FIELDS.append("sibling_singleton")
+# Add sibling singletons to AS_FIELDS
+AS_FIELDS.append("sibling_singleton")
 
 # Make subset list (used in properly filling out VCF header descriptions and naming VCF info fields)
 SUBSET_LIST = ["", "gnomad_exomes", "gnomad_genomes"]  # empty for ukbb
@@ -132,8 +130,8 @@ def populate_info_dict(
     vcf_info_dict = info_dict
 
     # Remove decoy and segdup from info dict
-    vcf_info_dict.pop("decoy", None)
-    vcf_info_dict.pop("segdup", None)
+    for field in MISSING_REGION_FIELDS:
+        vcf_info_dict.pop(field, None)
     vcf_info_dict.update(add_as_vcf_info_dict(vcf_info_dict))
 
     all_label_groups = [
@@ -148,12 +146,12 @@ def populate_info_dict(
         dict(group=["adj"], pop=faf_pops, sex=sexes),
     ]
     for subset in subset_list:
-        make_info_dict(subset, dict(group=groups))
+        vcf_info_dict.update(make_info_dict(subset, dict(group=groups)))
 
         for label_group in all_label_groups:
-            make_info_dict(subset, label_group)
+            vcf_info_dict.update(make_info_dict(subset, label_group))
         for label_group in faf_label_groups:
-            make_info_dict(subset, label_group, faf=True)
+            vcf_info_dict.update(make_info_dict(subset, label_group, faf=True))
 
         if "gnomad" in subset:
             description_text = " in gnomAD"
@@ -257,7 +255,7 @@ def unfurl_nested_annotations(
     """
     expr_dict = dict()
 
-    # Set variables to locate necessary fields, compute freq index dicts, and compute faf index dict for UKB
+    # Set variables to locate necessary fields, compute freq index dicts, and compute faf index dict for UKBB
     if gnomad:
         data_type = "genomes" if genome else "exomes"
         gnomad_prefix = f"gnomad_{data_type}"
@@ -329,7 +327,7 @@ def unfurl_nested_annotations(
             }
 
         else:
-            # NOTE: need to compute UKB separately because UKB no longer has faf meta bundled into faf
+            # NOTE: need to compute UKBB separately because UKB no longer has faf meta bundled into faf
             combo_dict = {
                 f"faf95_{combo}": hl.or_missing(
                     hl.set(hl.eval(t.faf_meta[i].values())) == set(entry),
@@ -390,7 +388,7 @@ def unfurl_nested_annotations(
 
 def main(args):
 
-    hl.init(log="/release.log", default_reference="GRCh38")
+    hl.init(log="/vcf_release.log", default_reference="GRCh38")
     data_source = "broad"
     freeze = args.freeze
     tranche_data = (data_source, freeze)
@@ -417,16 +415,6 @@ def main(args):
             mt = hl.experimental.sparse_split_multi(mt)
             mt = mt.select_entries(*ENTRIES)
 
-            logger.info("Removing low QUAL variants...")
-            info_ht = hl.read_table(info_ht_path(data_source, freeze))
-            mt = mt.filter_rows(
-                (
-                    (hl.len(mt.alleles) == 1)
-                    | ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
-                )
-                & (~info_ht[mt.row_key].AS_lowqual)
-            )
-
             logger.info("Reading in release HT and annotating onto raw MT...")
             ht = hl.read_matrix_table(release_ht_path(*tranche_data))
             mt = mt.annotate_rows(**ht[mt.row_key])
@@ -448,6 +436,12 @@ def main(args):
             vcf_info_dict = populate_info_dict(
                 subpops=hybrid_pops, bin_edges=bin_edges, age_hist_data=age_hist_data,
             )
+
+            # Add interval QC parameters to INFO dict
+            # TODO: make this pull from globals for 500K
+            vcf_info_dict["fail_interval_qc"] = {
+                "Description": f"Variant falls within a region where less than {INTERVAL_QC_PARAMETERS[0]}% of samples had a mean coverage of {INTERVAL_QC_PARAMETERS[1]}X"
+            }
 
             # Update INFO dict with quality histograms on raw data
             vcf_info_dict.update(make_hist_dict(bin_edges, adj=False))
@@ -546,16 +540,13 @@ def main(args):
             # Reformat names to remove "adj" pre-export
             # All unlabled frequency information is assumed to be adj
             # All raw frequency information is labeled "_raw"
+            # TODO: change quality histograms to follow this format?
+            # Qual hists on raw data are currently not annotated, but adj ones are (contain "adj" in their names)
             row_annots = list(mt.row.info)
             new_row_annots = []
             for x in row_annots:
                 if "hist" not in x:
-                    x = (
-                        x.replace("adj_", "",)
-                        .replace("_adj", "")
-                        .replace("_adj_", "")
-                        .replace("raw_", "")
-                    )
+                    x = x.replace("_adj", "")
                 new_row_annots.append(x)
 
             info_annot_mapping = dict(
@@ -570,6 +561,7 @@ def main(args):
             mt = mt.transmute_rows(info=hl.struct(**info_annot_mapping))
 
             # Rearrange INFO field in desired ordering
+            # TODO: figure out which hists we want to export and only create those for 500K
             drop_hists = (
                 [x + "_n_smaller" for x in HISTS]
                 + [x + "_bin_edges" for x in HISTS]
@@ -594,10 +586,11 @@ def main(args):
 
             # Export VCFs by chromosome
             if args.per_chromosome:
-                mt_path = get_checkpoint_path(*tranche_data, name="final_vcf", mt=True)
-                mt = mt.write(mt_path)
+                ht = mt.rows().checkpoint(
+                    get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False),
+                    overwrite=args.overwrite,
+                )
 
-                logger.info(f"VCF MT count: {mt.count()}")
                 rg = get_reference_genome(mt.locus)
                 contigs = rg.contigs[:24]  # autosomes + X/Y
                 logger.info(f"Contigs: {contigs}")
@@ -605,13 +598,18 @@ def main(args):
                 for contig in contigs:
                     # Faster way to filter to a contig
                     # TODO: Confirm with hail team if this is the fastest method for this
-                    mt = hl.read_matrix_table(mt_path)
+                    mt = hl.read_matrix_table(release_mt_path(*tranche_data))
                     mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
                     intervals = mt._calculate_new_partitions(10000)
-                    mt = hl.read_matrix_table(mt_path, _intervals=intervals)
+                    mt = hl.read_matrix_table(release_mt_path(*tranche_data), _intervals=intervals)
+                    mt = mt.annotate_rows(**ht[mt.row_key])
 
                     logger.info("Densifying and exporting VCF...")
                     mt = hl.experimental.densify(mt)
+
+                    logger.info("Removing low QUAL variants...")
+                    info_ht = hl.read_table(info_ht_path(data_source, freeze))
+                    mt = mt.filter_rows(~info_ht[mt.row_key].AS_lowqual)
 
                     hl.export_vcf(
                         mt,
@@ -624,6 +622,11 @@ def main(args):
 
                 logger.info("Densifying...")
                 mt = hl.experimental.densify(mt)
+
+                logger.info("Removing low QUAL variants...")
+                info_ht = hl.read_table(info_ht_path(data_source, freeze))
+                mt = mt.filter_rows(~info_ht[mt.row_key].AS_lowqual)
+
                 mt = mt.naive_coalesce(args.n_shards)
 
                 hl.export_vcf(
