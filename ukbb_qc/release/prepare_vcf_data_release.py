@@ -48,7 +48,6 @@ from ukbb_qc.resources.basics import (
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import info_ht_path
 from ukbb_qc.slack_creds import slack_token
-from ukbb_qc.utils.constants import INTERVAL_QC_PARAMETERS
 from ukbb_qc.utils.utils import make_index_dict
 
 
@@ -438,9 +437,13 @@ def main(args):
             )
 
             # Add interval QC parameters to INFO dict
-            # TODO: make this pull from globals for 500K
+            pct_samples = hl.eval(mt.rf_globals.pct_samples)
+            autosome_cov = hl.eval(mt.rf_globals.cov_filter_field)
+            allosome_cov = hl.eval(mt.rf_globals.xy_cov_filter_field)
             vcf_info_dict["fail_interval_qc"] = {
-                "Description": f"Variant falls within a region where less than {INTERVAL_QC_PARAMETERS[0]}% of samples had a mean coverage of {INTERVAL_QC_PARAMETERS[1]}X"
+                "Description": f"Variant falls within a region where less than {pct_samples}%\
+                                 of samples had a mean coverage of {autosome_cov}X on autosomes and \
+                                 {allosome_cov}X on sex chromosomes"
             }
 
             # Update INFO dict with quality histograms on raw data
