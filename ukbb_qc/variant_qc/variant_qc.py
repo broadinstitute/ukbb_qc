@@ -357,7 +357,7 @@ def generate_final_rf_ht(
         "transmitted_singleton": hl.or_missing(
             ts_ac_filter_expr, ht.transmitted_singleton
         ),
-        "rf_probability": ht.rf_probability["TP"],
+        "rf_tp_probability": ht.rf_probability["TP"],
     }
     if "feature_imputed" in ht.row:
         annotations_expr.update(
@@ -370,7 +370,9 @@ def generate_final_rf_ht(
     ht = ht.transmute(filters=add_filters_expr(filters=filters), **annotations_expr)
 
     ht = ht.annotate_globals(
-        rf_snv_cutoff=snp_cutoff_global, rf_indel_cutoff=indel_cutoff_global
+        rf_snv_cutoff=snp_cutoff_global,
+        rf_indel_cutoff=indel_cutoff_global,
+        inbreeding_cutoff=inbreeding_coeff_cutoff,
     )
 
     return ht
