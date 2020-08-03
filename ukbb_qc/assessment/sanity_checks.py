@@ -3,13 +3,15 @@ from typing import Dict, List, Tuple
 
 import hail as hl
 
+from gnomad.assessment.sanity_checks import (
+    generic_field_check,
+    make_filters_sanity_check_expr,
+    sample_sum_check,
+)
 from gnomad.resources.grch37.gnomad import SUBPOPS
 from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.utils.vcf import (
-    generic_field_check,
     HISTS,
-    make_filters_sanity_check_expr,
-    sample_sum_check,
     SEXES,
 )
 
@@ -116,13 +118,14 @@ def filters_sanity_check(ht: hl.Table) -> None:
 
     Summarizes counts for:
         - Total number of variants
-        - Fraction of variants removed by any filter
-        - Fraction of variants removed because of InbreedingCoefficient filter in combination with any other filter
-        - Fraction of varinats removed because of AC0 filter in combination with any other filter
-        - Fraction of variants removed because of random forest filtering in combination with any other filter
-        - Fraction of variants removed only because of InbreedingCoefficient filter
-        - Fraction of variants removed only because of AC0 filter
-        - Fraction of variants removed only because of random forest filtering
+        - Fraction of variants removed due to:
+            - Any filter
+            - Inbreeding coefficient filter in combination with any other filter
+            - AC0 filter in combination with any other filter
+            - Random forest filtering in combination with any other filter
+            - Only inbreeding coefficient filter
+            - Only AC0 filter
+            - Only random forest filtering
 
     :param hl.Table ht: Input Table.
     :return: None
@@ -186,7 +189,7 @@ def histograms_sanity_check(
     ht: hl.Table, verbose: bool, hists: List[str] = HISTS
 ) -> None:
     """
-    Checks the number of variants that have nonzero values in their _n_smaller and n_larger bins of quality histograms.
+    Checks the number of variants that have nonzero values in their n_smaller and n_larger bins of quality histograms (both raw and adj).
 
     :param hl.Table ht: Input Table.
     :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
@@ -206,10 +209,10 @@ def histograms_sanity_check(
             # Check subfield == 0
             generic_field_check(
                 ht,
-                (ht.info[f"{hist}_n_smaller"] != 0),
-                f"{hist}_n_smaller == 0",
-                [f"info.{hist}_n_smaller"],
-                verbose,
+                cond_expr=(ht.info[f"{hist}_n_smaller"] != 0),
+                check_description=f"{hist}_n_smaller == 0",
+                display_fields=[f"info.{hist}_n_smaller"],
+                verbose=verbose,
             )
             if hist not in [
                 "dp_hist_alt",
@@ -217,10 +220,10 @@ def histograms_sanity_check(
             ]:  # NOTE: DP hists can have nonzero values in n_larger bin
                 generic_field_check(
                     ht,
-                    (ht.info[f"{hist}_n_larger"] != 0),
-                    f"{hist}_n_larger == 0",
-                    [f"info.{hist}_n_larger"],
-                    verbose,
+                    cond_expr=(ht.info[f"{hist}_n_larger"] != 0),
+                    check_description=f"{hist}_n_larger == 0",
+                    display_fields=[f"info.{hist}_n_larger"],
+                    verbose=verbose,
                 )
 
 
@@ -244,43 +247,35 @@ def raw_and_adj_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool):
         # Check AC, AN, AF > 0
         generic_field_check(
             ht,
-            (ht.info[f"raw_{subfield}_raw"] <= 0),
-            f"raw_{subfield}_raw > 0",
-            [f"info.raw_{subfield}_raw"],
-            verbose,
+            cond_expr=(ht.info[f"{subfield}_raw"] <= 0),
+            check_description=f"{subfield}_raw > 0",
+            display_fields=[f"info.{subfield}_raw"],
+            verbose=verbose,
         )
         generic_field_check(
             ht,
-            (ht.info[f"adj_{subfield}_adj"] < 0),
-            f"adj_{subfield}_adj >= 0",
-            [f"info.adj_{subfield}_adj", "filters"],
-            verbose,
+            cond_expr=(ht.info[f"{subfield}_adj"] < 0),
+            check_description=f"{subfield}_adj >= 0",
+            display_fields=[f"info.{subfield}_adj", "filters"],
+            verbose=verbose,
         )
 
     for subset in subsets:
-        if subset == "":
-            for subfield in ["AC", "AN", "nhomalt"]:
-                # Check AC_raw >= AC adj
-                generic_field_check(
-                    ht,
-                    (ht.info[f"raw_{subfield}_raw"] < ht.info[f"adj_{subfield}_adj"]),
-                    f"raw_{subfield}_raw >= adj_{subfield}_adj",
-                    [f"info.raw_{subfield}_raw", f"info.adj_{subfield}_adj"],
-                    verbose,
-                )
-        else:
-            for subfield in ["AC", "AN", "nhomalt"]:
-                # Check AC_raw >= AC adj
-                generic_field_check(
-                    ht,
-                    (
-                        ht.info[f"{subset}{subfield}_raw"]
-                        < ht.info[f"{subset}{subfield}_adj"]
-                    ),
-                    f"{subset}{subfield}_raw >= {subset}{subfield}_adj",
-                    [f"info.{subset}{subfield}_raw", f"info.{subset}{subfield}_adj"],
-                    verbose,
-                )
+        for subfield in ["AC", "AN", "nhomalt"]:
+            # Check AC_raw >= AC adj
+            generic_field_check(
+                ht,
+                cond_expr=(
+                    ht.info[f"{subset}{subfield}_raw"]
+                    < ht.info[f"{subset}{subfield}_adj"]
+                ),
+                check_description=f"{subset}{subfield}_raw >= {subset}{subfield}_adj",
+                display_fields=[
+                    f"info.{subset}{subfield}_raw",
+                    f"info.{subset}{subfield}_adj",
+                ],
+                verbose=verbose,
+            )
 
 
 def frequency_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool) -> None:
@@ -309,44 +304,48 @@ def frequency_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool) -> 
             for subfield in ["AC", "AN", "nhomalt"]:
 
                 for group_type in ["adj", "raw"]:
-                    logger.info(f"{group_type} checks -- gnomad")
+                    logger.info(f"{group_type} checks -- gnomAD")
 
                     generic_field_check(
                         ht,
-                        (
+                        cond_expr=(
                             ht.info[f"gnomad_exomes_{subfield}_{group_type}"]
                             == ht.info[f"gnomad_genomes_{subfield}_{group_type}"]
                         ),
-                        f"gnomad_exomes_{subfield}_{group_type} == gnomad_genomes_{subfield}_{group_type}",
-                        [
+                        check_description=f"gnomad_exomes_{subfield}_{group_type} != gnomad_genomes_{subfield}_{group_type}",
+                        display_fields=[
                             f"info.gnomad_exomes_{subfield}_{group_type}",
                             f"info.gnomad_genomes_{subfield}_{group_type}",
                         ],
-                        verbose,
+                        verbose=verbose,
                     )
         else:
             for subfield in ["AC", "AN", "nhomalt"]:
-                logger.info("raw checks -- gnomad/ukb")
+                logger.info("raw checks -- gnomAD/UKBB")
                 generic_field_check(
                     ht,
-                    (
-                        ht.info[f"raw_{subfield}_raw"]
-                        == ht.info[f"{subset}{subfield}_raw"]
+                    cond_expr=(
+                        ht.info[f"{subfield}_raw"] == ht.info[f"{subset}{subfield}_raw"]
                     ),
-                    f"raw_{subfield}_raw == {subset}{subfield}_raw",
-                    [f"info.raw_{subfield}_raw", f"info.{subset}{subfield}_raw"],
-                    verbose,
+                    check_description=f"{subfield}_raw != {subset}{subfield}_raw",
+                    display_fields=[
+                        f"info.{subfield}_raw",
+                        f"info.{subset}{subfield}_raw",
+                    ],
+                    verbose=verbose,
                 )
-                logger.info("adj checks -- gnomad/ukb")
+                logger.info("adj checks -- gnomAD/UKBB")
                 generic_field_check(
                     ht,
-                    (
-                        ht.info[f"adj_{subfield}_adj"]
-                        == ht.info[f"{subset}{subfield}_adj"]
+                    cond_expr=(
+                        ht.info[f"{subfield}_adj"] == ht.info[f"{subset}{subfield}_adj"]
                     ),
-                    f"adj_{subfield}_adj == {subset}{subfield}_adj",
-                    [f"info.adj_{subfield}_adj", f"info.{subset}{subfield}_adj"],
-                    verbose,
+                    check_description=f"{subfield}_adj != {subset}{subfield}_adj",
+                    display_fields=[
+                        f"info.{subfield}_adj",
+                        f"info.{subset}{subfield}_adj",
+                    ],
+                    verbose=verbose,
                 )
 
     freq_counts = ht.aggregate(
@@ -407,37 +406,33 @@ def sample_sum_sanity_checks(
                     [
                         x
                         for x in info_metrics
-                        if (
-                            ("adj" in x or "raw" in x)
-                            and ("gnomad" not in x)
-                            and ("raw" not in x)
-                        )
+                        if (("adj" in x) and ("gnomad" not in x) and ("raw" not in x))
                     ]
                 )
             )
 
-        pop_adjusted = [
-            i.replace("adj_", "").replace("_adj", "").replace("_adj_", "")
-            for i in pop_adjusted
-        ]
+        pop_adjusted = [i.replace("_adj", "") for i in pop_adjusted]
         found = []
         for i in pop_adjusted:
             for z in POP_NAMES:
                 if z in i:
                     found.append(z)
+
+        # Print any missing pops to terminal
         missing_pops = set(POP_NAMES) - set(found)
         if len(missing_pops) != 0:
             logger.warning(f"Missing {missing_pops} pops in {subset} subset!")
-        for pop in found:
+        for pop in set(found):
             logger.info(f"{pop} was found {found.count(pop)} times")
 
-        if subset == "gnomad":
-            sample_sum_check(ht, subset, dict(group=["adj"], pop=POP_NAMES), verbose)
-            sample_sum_check(ht, subset, dict(group=["adj"], sex=SEXES), verbose)
-            sample_sum_check(
-                ht, subset, dict(group=["adj"], pop=POP_NAMES, sex=SEXES), verbose
-            )
+        # Perform sample sum checks
+        sample_sum_check(ht, subset, dict(group=["adj"], pop=POP_NAMES), verbose)
+        sample_sum_check(ht, subset, dict(group=["adj"], sex=SEXES), verbose)
+        sample_sum_check(
+            ht, subset, dict(group=["adj"], pop=POP_NAMES, sex=SEXES), verbose
+        )
 
+        if subset == "gnomad":
             # Adjust subpops to those found in subset
             nfe_subpop_adjusted = list(
                 set([x for x in pop_adjusted if "nfe_" in x and "male" not in x])
@@ -467,13 +462,6 @@ def sample_sum_sanity_checks(
                     verbose,
                     subpop="eas",
                 )
-        else:
-            subset = "adj_"  # hacky add; UKB fields are weirdly named adj_AC_adj
-            sample_sum_check(ht, subset, dict(group=["adj"], pop=POP_NAMES), verbose)
-            sample_sum_check(ht, subset, dict(group=["adj"], sex=SEXES), verbose)
-            sample_sum_check(
-                ht, subset, dict(group=["adj"], pop=POP_NAMES, sex=SEXES), verbose
-            )
 
 
 def sex_chr_sanity_checks(
@@ -619,11 +607,6 @@ def sanity_check_release_mt(
     logger.info("VARIANT FILTER SUMMARIES:")
     filters_sanity_check(ht)
 
-    # NOTE: generic_field_check filters HT based on a certain condition and checks for the number of rows in HT that failed that condition
-    # if the number of fails is 0, then the ht passes that check; otherwise it fails
-    # its inputs are:
-    #   HT, condition expression (the condition to be filtered to), check description (name of check),
-    #   display fields (fields of HT to show), verbose (show values of checks that pass; default is to only show when they fail)
     logger.info("HISTOGRAM CHECKS:")
     histograms_sanity_check(ht, verbose=verbose)
 
@@ -672,10 +655,14 @@ def vcf_field_check(
     hist_fields = []
     for hist in hists:
         hist_fields.extend(
-            [f"{hist}_bin_freq", f"{hist}_n_smaller", f"{hist}_n_larger"]
-        )
-        hist_fields.extend(
-            [f"{hist}_adj_bin_freq", f"{hist}_adj_n_smaller", f"{hist}_adj_n_larger"]
+            [
+                f"{hist}_bin_freq",
+                f"{hist}_n_smaller",
+                f"{hist}_n_larger",
+                f"{hist}_adj_bin_freq",
+                f"{hist}_adj_n_smaller",
+                f"{hist}_adj_n_larger",
+            ]
         )
 
     missing_fields = []
@@ -716,8 +703,8 @@ def vcf_field_check(
         logger.error(
             "Some fields are either missing or missing descriptions in the VCF header! Please reconcile."
         )
-        logger.error(f"Fields: {missing_fields}")
-        logger.error(f"Descriptions: {missing_descriptions}")
+        logger.error(f"Missing fields: {missing_fields}")
+        logger.error(f"Missing descriptions: {missing_descriptions}")
         return False
 
     return True
