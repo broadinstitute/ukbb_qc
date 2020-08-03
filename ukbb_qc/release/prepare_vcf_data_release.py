@@ -437,9 +437,9 @@ def main(args):
             )
 
             # Add interval QC parameters to INFO dict
-            pct_samples = hl.eval(mt.rf_globals.pct_samples)
-            autosome_cov = hl.eval(mt.rf_globals.cov_filter_field)
-            allosome_cov = hl.eval(mt.rf_globals.xy_cov_filter_field)
+            pct_samples = hl.eval(mt.rf_globals.interval_qc_cutoffs.pct_samples)
+            autosome_cov = hl.eval(mt.rf_globals.interval_qc_cutoffs.autosome_cov)
+            allosome_cov = hl.eval(mt.rf_globals.interval_qc_cutoffs.xy_cov)
             vcf_info_dict["fail_interval_qc"] = {
                 "Description": f"Variant falls within a region where less than {pct_samples}%\
                                  of samples had a mean coverage of {autosome_cov}X on autosomes and \
