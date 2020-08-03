@@ -184,13 +184,11 @@ def create_rf_ht(
         ht = median_impute_features(ht, {"variant_type": ht.variant_type})
 
     ht = ht.annotate_globals(
-        cov_filter_field=info_ht.index_globals()
-        .cov_filter_field.split("pct_samples_")[1]
-        .replace("x", ""),
-        xy_cov_filter_field=info_ht.index_globals()
-        .xy_cov_filter_field.split("pct_samples_")[1]
-        .replace("x", ""),
-        pct_samples=info_ht.index_globals().pct_samples,
+        interval_qc_filter=hl.struct(
+            autosome_cov=re.search(r"\d+", hl.eval(info_ht.cov_filter_field)).group(),
+            xy_cov=re.search(r"\d+", hl.eval(info_ht.xy_cov_filter_field)).group(),
+            pct_samples=hl.eval(info_ht.pct_samples),
+        )
     )
 
     summary = ht.group_by(
