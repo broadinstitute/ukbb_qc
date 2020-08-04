@@ -221,6 +221,7 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
     for field in AS_FIELDS:
         vcf_info_dict[field] = t["info"][f"{field}"]
 
+    # TODO: will need to fix this for 500K (raw qual hists are labeled raw_qual_hists and adj are unlabeled)
     for hist in HISTS:
         for prefix in ["adj_qual_hists", "qual_hists"]:
             hist_name = hist
@@ -546,10 +547,10 @@ def main(args):
                 header_dict = pickle.load(p)
 
             # Reformat names to remove "adj" pre-export
-            # All unlabled frequency information is assumed to be adj
+            # All unlabeled frequency information is assumed to be adj
             # All raw frequency information is labeled "_raw"
-            # TODO: change quality histograms to follow this format?
             # Qual hists on raw data are currently not annotated, but adj ones are (contain "adj" in their names)
+            # TODO: update make_hist_dict to label raw qual hists and not adj
             row_annots = list(mt.row.info)
             new_row_annots = []
             for x in row_annots:
