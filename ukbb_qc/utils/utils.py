@@ -402,7 +402,7 @@ def get_hists(mt: hl.MatrixTable, freeze: int) -> hl.MatrixTable:
     mt = mt.annotate_rows(**age_hists_expr(mt.adj, mt.GT, mt.age))
 
     logger.info("Annotating with qual hists (on raw data)...")
-    mt = mt.annotate_rows(**qual_hist_expr(mt.GT, mt.GQ, mt.DP, mt.AD))
+    mt = mt.annotate_rows(raw_qual_hists=qual_hist_expr(mt.GT, mt.GQ, mt.DP, mt.AD))
 
     logger.info("Annotating with qual hists (adj)...")
     mt_filt = filter_to_adj(mt)
@@ -411,5 +411,5 @@ def get_hists(mt: hl.MatrixTable, freeze: int) -> hl.MatrixTable:
         **qual_hist_expr(mt_filt.GT, mt_filt.GQ, mt_filt.DP, mt_filt.AD)
     )
     ht = mt_filt.rows()
-    mt = mt.annotate_rows(adj_qual_hists=ht[mt.row_key])
+    mt = mt.annotate_rows(qual_hists=ht[mt.row_key])
     return mt
