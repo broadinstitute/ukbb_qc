@@ -128,7 +128,7 @@ def populate_info_dict(
     """
     vcf_info_dict = info_dict
 
-    # Remove decoy and segdup from info dict
+    # Remove MISSING_REGION_FIELDS from info dict
     for field in MISSING_REGION_FIELDS:
         vcf_info_dict.pop(field, None)
     vcf_info_dict.update(add_as_vcf_info_dict(vcf_info_dict))
@@ -326,7 +326,7 @@ def unfurl_nested_annotations(
             }
 
         else:
-            # NOTE: need to compute UKBB separately because UKB no longer has faf meta bundled into faf
+            # NOTE: need to compute UKBB separately because UKBB no longer has faf meta bundled into faf
             combo_dict = {
                 f"faf95_{combo}": hl.or_missing(
                     hl.set(hl.eval(t.faf_meta[i].values())) == set(combo_fields),
@@ -612,9 +612,12 @@ def main(args):
                     logger.info("Densifying and exporting VCF...")
                     mt = hl.experimental.densify(mt)
 
-                    logger.info("Removing low QUAL variants...")
+                    logger.info("Removing low QUAL variants and * alleles...")
                     info_ht = hl.read_table(info_ht_path(data_source, freeze))
-                    mt = mt.filter_rows(~info_ht[mt.row_key].AS_lowqual)
+                    mt = mt.filter_rows(
+                        (~info_ht[mt.row_key].AS_lowqual)
+                        & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
+                    )
 
                     hl.export_vcf(
                         mt,
@@ -628,9 +631,12 @@ def main(args):
                 logger.info("Densifying...")
                 mt = hl.experimental.densify(mt)
 
-                logger.info("Removing low QUAL variants...")
+                logger.info("Removing low QUAL variants and * alleles...")
                 info_ht = hl.read_table(info_ht_path(data_source, freeze))
-                mt = mt.filter_rows(~info_ht[mt.row_key].AS_lowqual)
+                mt = mt.filter_rows(
+                    (~info_ht[mt.row_key].AS_lowqual)
+                    & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
+                )
 
                 mt = mt.naive_coalesce(args.n_shards)
 
