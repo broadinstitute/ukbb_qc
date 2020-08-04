@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import hail as hl
 
@@ -123,9 +123,11 @@ def filters_sanity_check(ht: hl.Table) -> None:
             - Inbreeding coefficient filter in combination with any other filter
             - AC0 filter in combination with any other filter
             - Random forest filtering in combination with any other filter
+            - Monoallelic filter in combination with any other filter
             - Only inbreeding coefficient filter
             - Only AC0 filter
             - Only random forest filtering
+            - Only monoallelic filter
 
     :param hl.Table ht: Input Table.
     :return: None
@@ -143,7 +145,12 @@ def filters_sanity_check(ht: hl.Table) -> None:
         ),
     )
 
-    def _filter_agg_order(grouped_ht, n_rows=None, n_cols=None) -> None:
+    def _filter_agg_order(
+        grouped_ht: hl.Table,
+        n_rows: int = None,
+        n_cols: int = None,
+        extra_filter_checks: Optional[Dict[str, hl.expr.Expression]] = None,
+    ) -> None:
         """
         Performs sanity checks to measure percentages of variants filtered under different conditions.
 
@@ -153,14 +160,21 @@ def filters_sanity_check(ht: hl.Table) -> None:
         :return: None
         """
         # NOTE: make_filters_sanity_check_expr returns a dict with %ages of variants filtered
-        grouped_ht.aggregate(**make_filters_sanity_check_expr(ht)).order_by(
-            hl.desc("n")
-        ).show(n_rows, n_cols)
+        grouped_ht.aggregate(
+            **make_filters_sanity_check_expr(ht, extra_filter_checks)
+        ).order_by(hl.desc("n")).show(n_rows, n_cols)
 
     logger.info(
         "Checking distributions of filtered variants amongst variant filters..."
     )
-    _filter_agg_order(ht.group_by(ht.is_filtered))
+    # Add extra check for monoallelic variants to make_filters_sanity_check_expr (currently UKBB-specific filter)
+    monoallelic_dict = {
+        "frac_monoallelic": hl.agg.fraction(ht.filters.contains("Monoallelic")),
+        "frac_inbreed_coeff_only": hl.agg.fraction(
+            ht.filters.contains("Monoallelic") & (ht.filters.length() == 1)
+        ),
+    }
+    _filter_agg_order(ht.group_by(ht.is_filtered), extra_filter_checks=monoallelic_dict)
 
     logger.info("Checking distributions of variant type amongst variant filters...")
     _filter_agg_order(ht.group_by(ht.info.allele_type))
