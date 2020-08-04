@@ -1,4 +1,5 @@
 import argparse
+import json
 import logging
 import pickle
 import sys
@@ -113,7 +114,8 @@ def populate_info_dict(
         - INFO fields for filtering allele frequency (faf) annotations 
         - INFO fields for variant histograms (hist_bin_freq, hist_n_smaller, hist_n_larger for each histogram)
 
-    :param List[str] subpops: List of all UKBB subpops (possible hybrid population cluster names).
+    :param Dict[str, List[str]] subpops: Dictionary of global population names (keys)
+        and all hybrid population cluster names associated with that global pop (values). 
     :param Dict[str, str] bin_edges: Dictionary of variant annotation histograms and their associated bin edges.
     :param str age_hist_data: Pipe-delimited string of age histograms, from `get_age_distributions`.
     :param Dict[str, Dict[str, str]] info_dict: INFO dict to be populated.
@@ -180,11 +182,12 @@ def populate_info_dict(
                     age_hist_data="|".join(str(x) for x in age_hist_data),
                 )
             )
+
             for pop in subpops:
                 vcf_info_dict.update(
                     make_info_dict(
                         subset,
-                        dict(group=["adj"], pop=pop, subpop=subpops),
+                        dict(group=["adj"], pop=[pop], subpop=subpops[pop]),
                         description_text=description_text,
                     )
                 )
@@ -309,7 +312,7 @@ def unfurl_nested_annotations(
         entry = k.split("_")
 
         # Create combo_fields in same way as above ([pop, adj])
-        combo_fields = entry[1:] + ["adj"]
+        combo_fields = entry[1:] + entry[0]
         combo = "_".join(combo_fields)
 
         if gnomad:
@@ -391,7 +394,8 @@ def main(args):
     data_source = "broad"
     freeze = args.freeze
     tranche_data = (data_source, freeze)
-    hybrid_pops = args.hybrid_pops.split(",")
+    hybrid_pop_map = args.hybrid_pop_map
+    hybrid_pops = [pop for sublist in list(hybrid_pop_map.values()) for pop in sublist]
 
     try:
 
@@ -433,7 +437,9 @@ def main(args):
 
             logger.info("Making INFO dict for VCF...")
             vcf_info_dict = populate_info_dict(
-                subpops=hybrid_pops, bin_edges=bin_edges, age_hist_data=age_hist_data,
+                subpops=hybrid_pop_map,
+                bin_edges=bin_edges,
+                age_hist_data=age_hist_data,
             )
 
             # Add interval QC parameters to INFO dict
@@ -441,7 +447,7 @@ def main(args):
             autosome_cov = hl.eval(mt.rf_globals.interval_qc_cutoffs.autosome_cov)
             allosome_cov = hl.eval(mt.rf_globals.interval_qc_cutoffs.xy_cov)
             vcf_info_dict["fail_interval_qc"] = {
-                "Description": f"Variant falls within a region where less than {pct_samples}%\
+                "Description": f"Variant falls within a region where less than {pct_samples}% \
                                  of samples had a mean coverage of {autosome_cov}X on autosomes and \
                                  {allosome_cov}X on sex chromosomes"
             }
@@ -451,8 +457,7 @@ def main(args):
 
             # Adjust keys to remove adj tags before exporting to VCF
             new_vcf_info_dict = {
-                i.replace("adj_", "").replace("_adj", "").replace("_adj_", ""): j
-                for i, j in vcf_info_dict.items()
+                i.replace("_adj", ""): j for i, j in vcf_info_dict.items()
             }
 
             # Add descriptions for quality histograms on adj data here
@@ -662,8 +667,11 @@ if __name__ == "__main__":
         "--prepare_vcf_mt", help="Use release mt to create vcf mt", action="store_true"
     )
     parser.add_argument(
-        "--hybrid_pops",
-        help="Comma-separated list of all possible hybrid populations (used as subpopulations in frequency annotations)",
+        "--hybrid_pop_map",
+        help='Dictionary mapping global populations (keys) to \
+        list of all hybrid populations associated with that global population name (values).\n\
+        e.g., \'{"nfe": [1,2,3], "afr": [4]}\'',
+        type=json.loads,
     )
     parser.add_argument(
         "--sanity_check", help="Run sanity checks function", action="store_true"

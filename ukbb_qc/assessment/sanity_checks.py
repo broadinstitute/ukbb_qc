@@ -161,7 +161,7 @@ def filters_sanity_check(ht: hl.Table) -> None:
         """
         # NOTE: make_filters_sanity_check_expr returns a dict with %ages of variants filtered
         grouped_ht.aggregate(
-            **make_filters_sanity_check_expr(ht, extra_filter_checks)
+            **make_filters_sanity_check_expr(grouped_ht, extra_filter_checks)
         ).order_by(hl.desc("n")).show(n_rows, n_cols)
 
     logger.info(
@@ -170,7 +170,7 @@ def filters_sanity_check(ht: hl.Table) -> None:
     # Add extra check for monoallelic variants to make_filters_sanity_check_expr (currently UKBB-specific filter)
     monoallelic_dict = {
         "frac_monoallelic": hl.agg.fraction(ht.filters.contains("Monoallelic")),
-        "frac_inbreed_coeff_only": hl.agg.fraction(
+        "frac_monoallelic_only": hl.agg.fraction(
             ht.filters.contains("Monoallelic") & (ht.filters.length() == 1)
         ),
     }
@@ -248,7 +248,7 @@ def raw_and_adj_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool):
 
     Checks that:
         - Raw AC, AN, AF are not 0
-        - Adj AC, AN, AF are not 0
+        - Adj AN is not 0 and AC and AF are not negative
         - Raw values for AC, AN, nhomalt in each sample subset are greater than or equal to their corresponding adj values
 
     :param hl.Table ht: Input Table.
@@ -258,8 +258,8 @@ def raw_and_adj_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool):
     :return: None
     :rtype: None
     """
-    for subfield in ["AC", "AN", "AF"]:
-        # Check AC, AN, AF > 0
+    for subfield in ["AC", "AF"]:
+        # Check raw AC, AF > 0
         generic_field_check(
             ht,
             cond_expr=(ht.info[f"{subfield}_raw"] <= 0),
@@ -267,11 +267,22 @@ def raw_and_adj_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool):
             display_fields=[f"info.{subfield}_raw"],
             verbose=verbose,
         )
+        # Check adj AC, AF >=0
         generic_field_check(
             ht,
             cond_expr=(ht.info[f"{subfield}_adj"] < 0),
             check_description=f"{subfield}_adj >= 0",
             display_fields=[f"info.{subfield}_adj", "filters"],
+            verbose=verbose,
+        )
+
+    # Check AN > 0
+    for data_type in ["adj", "raw"]:
+        generic_field_check(
+            ht,
+            cond_expr=(ht.info[f"AN_{data_type}"] <= 0),
+            check_description=f"AN_{data_type} > 0",
+            display_fields=[f"AN_{data_type}"],
             verbose=verbose,
         )
 
@@ -321,7 +332,7 @@ def frequency_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool) -> 
             for subfield in ["AC", "AN", "nhomalt"]:
 
                 for group_type in ["adj", "raw"]:
-                    logger.info(f"{group_type} checks -- gnomAD")
+                    logger.info(f"{group_type} checks -- gnomAD/gnomAD")
 
                     generic_field_check(
                         ht,
