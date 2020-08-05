@@ -32,8 +32,12 @@ logger.setLevel(logging.INFO)
 
 
 # Add interval QC pass to RF fields (to pull field from RF HT)
-ADDITIONAL_RF_FIELDS = ["filters", "in_capture_interval", "interval_qc_pass"]
+ADDITIONAL_RF_FIELDS = ["in_capture_interval", "interval_qc_pass"]
 RF_FIELDS.extend(ADDITIONAL_RF_FIELDS)
+
+# Rename RF probability in RF fields
+RF_FIELDS.remove("rf_probability")
+RF_FIELDS.append("rf_tp_probability")
 
 # Remove InbreedingCoeff from allele-specific fields (processed separately from other fields)
 AS_FIELDS.remove("InbreedingCoeff")
@@ -93,11 +97,13 @@ def prepare_annotations(
     info_ht = info_ht.transmute(info=info_ht.info.select(*info_fields)).select(
         "info", "qual"
     )
+    inbreeding_ht = hl.read_table('gs://broad-ukbb/broad.freeze_6/variant_qc/variant_annotations/inbreeding_coefficient.ht')
     info_ht = info_ht.transmute(
         info=info_ht.info.annotate(
             sibling_singleton=rf_ht[info_ht.key].sibling_singleton,
             transmitted_singleton=rf_ht[info_ht.key].transmitted_singleton,
-            InbreedingCoeff=freq_ht[info_ht.key].InbreedingCoeff,
+            #InbreedingCoeff=freq_ht[info_ht.key].InbreedingCoeff,
+            InbreedingCoeff=inbreeding_ht[info_ht.key].InbreedingCoeff,
         )
     )
     rf_ht = rf_ht.select(*RF_FIELDS)
@@ -165,7 +171,7 @@ def main(args):
         age_hist_data = get_age_distributions(get_age_ht(freeze))
         ht = ht.annotate_globals(age_distribution=age_hist_data)
         ht = ht.naive_coalesce(args.n_partitions)
-        ht.write(release_ht_path(*tranche_data), args.overwrite)
+        ht = ht.checkpoint(release_ht_path(*tranche_data), args.overwrite)
         logger.info(f"Final HT count: {ht.count()}")
 
     finally:
