@@ -35,8 +35,8 @@ logger.setLevel(logging.INFO)
 ADDITIONAL_RF_FIELDS = ["filters", "in_capture_interval", "interval_qc_pass"]
 RF_FIELDS.extend(ADDITIONAL_RF_FIELDS)
 
-# Remove InbreedingCoeff from site fields (processed separately from other site fields)
-SITE_FIELDS.remove("InbreedingCoeff")
+# Remove InbreedingCoeff from allele-specific fields (processed separately from other fields)
+AS_FIELDS.remove("InbreedingCoeff")
 
 
 def flag_problematic_regions(
