@@ -599,8 +599,10 @@ def main(args):
                 logger.info(f"Contigs: {contigs}")
 
                 for contig in contigs:
-                    # Faster way to filter to a contig
-                    # TODO: Confirm with hail team if this is the fastest method for this
+                    # Checked with Hail team about the fastest way to filter to a contig
+                    # This method shouldn't be any faster than `filter_intervals`: the same amount of data is read in both cases
+                    # `_calculate_new_partitions` might give us more parallelism downstream
+                    # Decided to stick with `_calculate_new_partitions` method because it felt much faster on the 300K tranche
                     mt = hl.read_matrix_table(release_mt_path(*tranche_data))
                     mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
                     intervals = mt._calculate_new_partitions(10000)
