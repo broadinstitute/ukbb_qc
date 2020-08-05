@@ -38,6 +38,9 @@ RF_FIELDS.extend(ADDITIONAL_RF_FIELDS)
 # Remove InbreedingCoeff from allele-specific fields (processed separately from other fields)
 AS_FIELDS.remove("InbreedingCoeff")
 
+# Remove BaseQRankSum from site fields (not present in info HT)
+SITE_FIELDS.remove("BaseQRankSum")
+
 
 def flag_problematic_regions(
     t: Union[hl.Table, hl.MatrixTable]
