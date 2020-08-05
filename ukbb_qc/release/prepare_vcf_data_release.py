@@ -9,6 +9,7 @@ import hail as hl
 
 from gnomad.resources.grch37.gnomad import SUBPOPS
 from gnomad.sample_qc.ancestry import POP_NAMES
+from gnomad.sample_qc.sex import adjust_sex_ploidy
 from gnomad.utils.generic import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 from gnomad.utils.vcf import (
@@ -416,7 +417,9 @@ def main(args):
                 raw=True,
                 repartition=args.repartition,
                 n_partitions=args.raw_partitions,
+                meta_root="meta",
             ).select_entries(*SPARSE_ENTRIES)
+            mt = mt.transmute_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype)
 
             logger.info("Splitting raw MT...")
             mt = hl.experimental.sparse_split_multi(mt)
@@ -615,9 +618,12 @@ def main(args):
                         (~info_ht[mt.row_key].AS_lowqual)
                         & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
                     )
+                    mt = adjust_sex_ploidy(
+                        mt, mt.sex_karyotype, male_str="XY", female_str="XX"
+                    )
 
                     hl.export_vcf(
-                        mt,
+                        mt.select_cols(),
                         release_vcf_path(*tranche_data, contig=contig),
                         metadata=header_dict,
                     )
@@ -634,7 +640,10 @@ def main(args):
                     (~info_ht[mt.row_key].AS_lowqual)
                     & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
                 )
-
+                mt = adjust_sex_ploidy(
+                    mt, mt.sex_karyotype, male_str="XY", female_str="XX"
+                )
+                mt = mt.select_cols()
                 mt = mt.naive_coalesce(args.n_shards)
 
                 hl.export_vcf(

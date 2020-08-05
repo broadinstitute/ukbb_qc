@@ -500,7 +500,6 @@ def sex_chr_sanity_checks(
 
     Checks:
         - That metrics for chrY variants in female samples are NA and not 0
-        - That metrics for non-PAR chrX variants in male samples are 0
         - That nhomalt counts are equal to female nhomalt counts for all non-PAR chrX variants
 
     :param hl.Table ht: Input Table.
@@ -512,7 +511,6 @@ def sex_chr_sanity_checks(
     :rtype: None
     """
     female_metrics = [x for x in info_metrics if "_female" in x]
-    male_metrics = [x for x in info_metrics if "_male" in x]
 
     if "chrY" in contigs:
         logger.info("Check values of female metrics for Y variants are NA:")
@@ -527,24 +525,10 @@ def sex_chr_sanity_checks(
             else:
                 logger.info(f"FAILED Y check: Found {values} in {metric}")
 
-    logger.info("Check values of male nhomalt metrics for X nonpar variants are 0:")
     ht_x = hl.filter_intervals(ht, [hl.parse_locus_interval("chrX")])
     ht_xnonpar = ht_x.filter(ht_x.locus.in_x_nonpar())
     n = ht_xnonpar.count()
-    logger.info(
-        f"Found {n} X nonpar sites"
-    )  # Lots of values found in male X nonpar sites
-
-    male_metrics = [x for x in male_metrics if "nhomalt" in x]
-    metrics_values = {}
-    for metric in male_metrics:
-        metrics_values[metric] = hl.agg.collect_as_set(ht_xnonpar.info[metric])
-    output = ht_xnonpar.aggregate(hl.struct(**metrics_values))
-    for metric, values in dict(output).items():
-        if values == {0}:
-            logger.info(f"PASSED {metric} = 0 check for X nonpar variants")
-        else:
-            logger.info(f"FAILED X nonpar check: Found {values} in {metric}")
+    logger.info(f"Found {n} X nonpar sites")
 
     logger.info("Check (nhomalt == nhomalt_female) for X nonpar variants:")
     female_metrics = [x for x in female_metrics if "nhomalt" in x]
