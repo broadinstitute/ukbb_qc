@@ -191,6 +191,10 @@ def populate_info_dict(
                         description_text=description_text,
                     )
                 )
+
+    # Add variant quality histograms to info dict
+    vcf_info_dict.update(make_hist_dict(bin_edges, adj=True))
+    vcf_info_dict.update(make_hist_dict(bin_edges, adj=False))
     return vcf_info_dict
 
 
@@ -452,18 +456,10 @@ def main(args):
                                  {allosome_cov}X on sex chromosomes"
             }
 
-            # Update INFO dict with quality histograms on raw data
-            vcf_info_dict.update(make_hist_dict(bin_edges, adj=False))
-
             # Adjust keys to remove adj tags before exporting to VCF
             new_vcf_info_dict = {
                 i.replace("_adj", ""): j for i, j in vcf_info_dict.items()
             }
-
-            # Add descriptions for quality histograms on adj data here
-            # Needs to be done after replacing all the "adj" strings
-            # This to avoid duplicating descriptions for raw/adj qual hists
-            new_vcf_info_dict.update(make_hist_dict(bin_edges, adj=True))
 
             # Add non-PAR annotation
             mt = mt.annotate_rows(
@@ -476,7 +472,7 @@ def main(args):
             #   RF struct, VQSR struct, allele_info struct,
             #   info struct (site and allele-specific annotations),
             #   region_flag struct, and
-            #   qual_hists/adj_qual_hists structs.
+            #   raw_qual_hists/qual_hists structs.
             mt = mt.annotate_rows(info=hl.struct(**make_info_expr(mt)))
             # Unfurl nested UKBB frequency annotations and add to INFO field
             mt = mt.annotate_rows(
@@ -547,14 +543,10 @@ def main(args):
 
             # Reformat names to remove "adj" pre-export
             # All unlabeled frequency information is assumed to be adj
-            # All raw frequency information is labeled "_raw"
-            # Qual hists on raw data are currently not annotated, but adj ones are (contain "adj" in their names)
-            # TODO: update make_hist_dict to label raw qual hists and not adj
             row_annots = list(mt.row.info)
             new_row_annots = []
             for x in row_annots:
-                if "hist" not in x:
-                    x = x.replace("_adj", "")
+                x = x.replace("_adj", "")
                 new_row_annots.append(x)
 
             info_annot_mapping = dict(
