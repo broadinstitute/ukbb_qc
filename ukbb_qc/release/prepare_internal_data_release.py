@@ -97,12 +97,14 @@ def prepare_annotations(
     info_ht = info_ht.transmute(info=info_ht.info.select(*info_fields)).select(
         "info", "qual"
     )
-    inbreeding_ht = hl.read_table('gs://broad-ukbb/broad.freeze_6/variant_qc/variant_annotations/inbreeding_coefficient.ht')
+    inbreeding_ht = hl.read_table(
+        "gs://broad-ukbb/broad.freeze_6/variant_qc/variant_annotations/inbreeding_coefficient.ht"
+    )
     info_ht = info_ht.transmute(
         info=info_ht.info.annotate(
             sibling_singleton=rf_ht[info_ht.key].sibling_singleton,
             transmitted_singleton=rf_ht[info_ht.key].transmitted_singleton,
-            #InbreedingCoeff=freq_ht[info_ht.key].InbreedingCoeff,
+            # InbreedingCoeff=freq_ht[info_ht.key].InbreedingCoeff,
             InbreedingCoeff=inbreeding_ht[info_ht.key].InbreedingCoeff,
         )
     )
@@ -132,6 +134,7 @@ def prepare_annotations(
         rsid=dbsnp_ht[ht.key].rsid,
         qual=info_ht[ht.key].qual,
     )
+    ht = ht.annotate_globals(**vep_ht.index_globals())
     return ht
 
 
