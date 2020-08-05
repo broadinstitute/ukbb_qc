@@ -221,12 +221,11 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
     for field in AS_FIELDS:
         vcf_info_dict[field] = t["info"][f"{field}"]
 
-    # TODO: will need to fix this for 500K (raw qual hists are labeled raw_qual_hists and adj are unlabeled)
     for hist in HISTS:
-        for prefix in ["adj_qual_hists", "qual_hists"]:
+        for prefix in ["qual_hists", "raw_qual_hists"]:
             hist_name = hist
-            if "adj" in prefix:
-                hist_name = f"{hist}_adj"
+            if "raw" in prefix:
+                hist_name = f"{hist}_raw"
 
             hist_dict = {
                 f"{hist_name}_bin_freq": hl.delimit(
