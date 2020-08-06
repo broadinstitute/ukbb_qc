@@ -691,6 +691,17 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
+        "--repartition",
+        help="Repartition raw MT on read. Needs to be true for tranche 3/freeze 6/300K.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--raw_partitions",
+        help="Number of desired partitions for the raw MT. Necessary only for 300K. Used only if --repartition is also specified",
+        default=30000,
+        type=int,
+    )
+    parser.add_argument(
         "--prepare_vcf_mt", help="Use release mt to create vcf mt", action="store_true"
     )
     parser.add_argument(
