@@ -317,7 +317,7 @@ def unfurl_nested_annotations(
         entry = k.split("_")
 
         # Create combo_fields in same way as above ([pop, adj])
-        combo_fields = entry[1:] + entry[0]
+        combo_fields = entry[1:] + [entry[0]]
         combo = "_".join(combo_fields)
 
         if gnomad:
@@ -545,6 +545,7 @@ def main(args):
                 header_dict = pickle.load(p)
 
             # Reformat names to remove "adj" pre-export
+            # e.g, renaming "AC_adj" to "AC"
             # All unlabeled frequency information is assumed to be adj
             row_annots = list(mt.row.info)
             new_row_annots = []
@@ -571,9 +572,9 @@ def main(args):
                 + [x + "_n_larger" for x in HISTS if "dp_" not in x]
             )
             drop_hists.extend(
-                [x + "_adj_n_smaller" for x in HISTS]
-                + [x + "_adj_bin_edges" for x in HISTS]
-                + [x + "_adj_n_larger" for x in HISTS if "dp_" not in x]
+                [x + "_raw_n_smaller" for x in HISTS]
+                + [x + "_raw_bin_edges" for x in HISTS]
+                + [x + "_raw_n_larger" for x in HISTS if "dp_" not in x]
                 + ["age_hist_hom_bin_edges", "age_hist_het_bin_edges"]
             )
 
@@ -620,6 +621,8 @@ def main(args):
                         (~info_ht[mt.row_key].AS_lowqual)
                         & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
                     )
+
+                    logger.info("Adjusting sex ploidy...")
                     mt = adjust_sex_ploidy(
                         mt, mt.sex_karyotype, male_str="XY", female_str="XX"
                     )
@@ -642,6 +645,8 @@ def main(args):
                     (~info_ht[mt.row_key].AS_lowqual)
                     & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
                 )
+
+                logger.info("Adjusting sex ploidy...")
                 mt = adjust_sex_ploidy(
                     mt, mt.sex_karyotype, male_str="XY", female_str="XX"
                 )
