@@ -421,6 +421,12 @@ def main(args):
             ).select_entries(*SPARSE_ENTRIES)
             mt = mt.transmute_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype)
 
+            logger.info("Filtering to chr20 (for tests only)...")
+            # Using filter intervals to keep all the work done by get_ukbb_data
+            # (removing sample with withdrawn consent/their ref blocks/variants,
+            # also keeping meta col annotations)
+            mt = hl.filter_intervals(mt, [hl.parse_locus_interval("chr20")])
+
             logger.info("Splitting raw MT...")
             mt = hl.experimental.sparse_split_multi(mt)
             mt = mt.select_entries(*ENTRIES)
@@ -429,6 +435,14 @@ def main(args):
             ht = hl.read_matrix_table(release_ht_path(*tranche_data))
             mt = mt.annotate_rows(**ht[mt.row_key])
             mt = mt.annotate_globals(**ht.index_globals())
+
+            logger.info(
+                "Checkpointing release MT (chr20 only + sparse) for testing/pharmas..."
+            )
+            mt = mt.checkpoint(
+                f"{get_release_path(*tranche_data)}/mt/{data_source}.freeze_{freeze}.release.sparse.mt"
+            )
+            logger.info(f"Release MT (sparse; chr20 only) count: {mt.count()}")
 
             logger.info(
                 "Dropping cohort frequencies (necessary only for internal use; at last index of freq struct)..."
