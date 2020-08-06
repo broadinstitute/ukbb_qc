@@ -686,6 +686,11 @@ if __name__ == "__main__":
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
     )
     parser.add_argument(
+        "--key_by_locus_and_alleles",
+        help="Whether to key raw MT by locus and alleles. REQUIRED only for the 300K tranche",
+        action="store_true",
+    )
+    parser.add_argument(
         "--prepare_vcf_mt", help="Use release mt to create vcf mt", action="store_true"
     )
     parser.add_argument(
