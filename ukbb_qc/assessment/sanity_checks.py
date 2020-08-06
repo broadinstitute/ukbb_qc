@@ -671,9 +671,9 @@ def vcf_field_check(
                 f"{hist}_bin_freq",
                 f"{hist}_n_smaller",
                 f"{hist}_n_larger",
-                f"{hist}_adj_bin_freq",
-                f"{hist}_adj_n_smaller",
-                f"{hist}_adj_n_larger",
+                f"{hist}_raw_bin_freq",
+                f"{hist}_raw_n_smaller",
+                f"{hist}_raw_n_larger",
             ]
         )
 
