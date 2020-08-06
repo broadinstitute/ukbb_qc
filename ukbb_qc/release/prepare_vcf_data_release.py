@@ -432,13 +432,15 @@ def main(args):
             mt = mt.select_entries(*ENTRIES)
 
             logger.info("Reading in release HT and annotating onto raw MT...")
-            ht = hl.read_matrix_table(release_ht_path(*tranche_data))
+            ht = hl.read_table(release_ht_path(*tranche_data))
             mt = mt.annotate_rows(**ht[mt.row_key])
             mt = mt.annotate_globals(**ht.index_globals())
 
             logger.info(
                 "Checkpointing release MT (chr20 only + sparse) for testing/pharmas..."
             )
+            from ukbb_qc.resources.basics import get_release_path
+
             mt = mt.checkpoint(
                 f"{get_release_path(*tranche_data)}/mt/{data_source}.freeze_{freeze}.release.sparse.mt"
             )
