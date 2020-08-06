@@ -10,10 +10,10 @@ import hail as hl
 from gnomad.resources.grch37.gnomad import SUBPOPS
 from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.sample_qc.sex import adjust_sex_ploidy
-from gnomad.utils.generic import get_reference_genome
+from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 from gnomad.utils.vcf import (
-    add_as_vcf_info_dict,
+    add_as_info_dict,
     ALLELE_TYPE_FIELDS,
     AS_FIELDS,
     ENTRIES,
@@ -706,7 +706,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--prepare_release_vcf", help="Prepare release VCF", action="store_true"
     )
-    export_opts = parser.add_mutually_exclusive_group("Options for how to export VCF")
+    export_opts = parser.add_mutually_exclusive_group()
     export_opts.add_argument(
         "--per_chromosome",
         help="Prepare release VCFs per chromosome",
