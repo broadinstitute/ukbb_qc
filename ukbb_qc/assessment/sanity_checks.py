@@ -147,7 +147,7 @@ def filters_sanity_check(ht: hl.Table) -> None:
 
     def _filter_agg_order(
         ht: hl.Table,
-        group_expr: hl.expr.Expression,
+        group_expr: Tuple(hl.expr.Expression),
         n_rows: int = None,
         n_cols: int = None,
         extra_filter_checks: Optional[Dict[str, hl.expr.Expression]] = None,
@@ -162,7 +162,7 @@ def filters_sanity_check(ht: hl.Table) -> None:
         :return: None
         """
         # NOTE: make_filters_sanity_check_expr returns a dict with %ages of variants filtered
-        ht.group_by(group_expr).aggregate(
+        ht.group_by(*group_expr).aggregate(
             **make_filters_sanity_check_expr(ht, extra_filter_checks)
         ).order_by(hl.desc("n")).show(n_rows, n_cols)
 
