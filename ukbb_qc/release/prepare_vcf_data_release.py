@@ -80,7 +80,7 @@ REGION_FLAG_FIELDS = [
 REGION_FLAG_FIELDS.extend(INTERVAL_FIELDS)
 
 # Add sibling singletons to AS_FIELDS
-AS_FIELDS.append("sibling_singleton")
+AS_FIELDS.append("AS_sibling_singleton")
 
 # Make subset list (used in properly filling out VCF header descriptions and naming VCF info fields)
 SUBSET_LIST = ["", "gnomad_exomes", "gnomad_genomes"]  # empty for ukbb
@@ -88,6 +88,13 @@ SUBSET_LIST = ["", "gnomad_exomes", "gnomad_genomes"]  # empty for ukbb
 # Get gnomAD subpop names
 GNOMAD_NFE_SUBPOPS = map(lambda x: x.lower(), SUBPOPS["NFE"])
 GNOMAD_EAS_SUBPOPS = map(lambda x: x.lower(), SUBPOPS["EAS"])
+
+# Select populations to keep from the list of population names in POP_NAMES
+# This removes pop names we don't want to use in the UKBB release
+# (e.g., "uniform", "consanguineous") to reduce clutter
+KEEP_GNOMAD_POPS = ["afr", "amr", "asj", "eas", "fin", "nfe", "oth", "sas"]
+# KEEP_GNOMAD_POPS.extend(GNOMAD_NFE_SUBPOPS)
+# KEEP_GNOMAD_POPS.extend(GNOMAD_EAS_SUBPOPS)
 
 
 def populate_info_dict(
@@ -131,15 +138,34 @@ def populate_info_dict(
     """
     vcf_info_dict = info_dict
 
+    # Remove unnecessary pop names from pops dict
+    for pop in pops.copy():
+        if pop not in KEEP_GNOMAD_POPS:
+            pops.pop(pop)
+
+    logger.info("Adding gnomAD subpops to population description dict...")
+    gnomad_pops = pops.extend(gnomad_nfe_subpops)
+    gnomad_pops = gnomad_pops.extend(gnomad_eas_subpops)
+
+    logger.info("Adding UKBB subpops to population description dict...")
+    hybrid_pops = [pop for sublist in list(subpops.values()) for pop in sublist]
+    for pop in set(hybrid_pops):
+        pops[f"{pop}"] = f"hybrid population cluster {pop}"
+
     # Remove MISSING_REGION_FIELDS from info dict
     for field in MISSING_REGION_FIELDS:
         vcf_info_dict.pop(field, None)
-    vcf_info_dict.update(add_as_vcf_info_dict(vcf_info_dict))
+    vcf_info_dict.update(add_as_info_dict(vcf_info_dict))
 
-    all_label_groups = [
+    all_ukbb_label_groups = [
         dict(group=["adj"], sex=sexes),
         dict(group=["adj"], pop=pops),
         dict(group=["adj"], pop=pops, sex=sexes),
+    ]
+    all_gnomad_label_groups = [
+        dict(group=["adj"], sex=sexes),
+        dict(group=["adj"], pop=gnomad_pops),
+        dict(group=["adj"], pop=gnomad_pops, sex=sexes),
     ]
     faf_label_groups = [
         dict(group=["adj"]),
@@ -147,37 +173,72 @@ def populate_info_dict(
         dict(group=["adj"], pop=faf_pops),
         dict(group=["adj"], pop=faf_pops, sex=sexes),
     ]
-    for subset in subset_list:
-        vcf_info_dict.update(make_info_dict(subset, dict(group=groups)))
 
-        for label_group in all_label_groups:
-            vcf_info_dict.update(make_info_dict(subset, label_group))
-        for label_group in faf_label_groups:
-            vcf_info_dict.update(make_info_dict(subset, label_group, faf=True))
+    for subset in subset_list:
 
         if "gnomad" in subset:
             description_text = " in gnomAD"
-            vcf_info_dict.update(
-                make_info_dict(subset, popmax=True, description_text=description_text)
-            )
+
             vcf_info_dict.update(
                 make_info_dict(
-                    subset,
-                    dict(group=["adj"], pop=["nfe"], subpop=gnomad_nfe_subpops),
+                    prefix=subset,
+                    label_groups=dict(group=groups),
                     description_text=description_text,
                 )
             )
             vcf_info_dict.update(
                 make_info_dict(
-                    subset,
-                    dict(group=["adj"], pop=["eas"], subpop=gnomad_eas_subpops),
+                    prefix=subset, popmax=True, description_text=description_text
+                )
+            )
+
+            for label_group in all_gnomad_label_groups:
+                vcf_info_dict.update(
+                    make_info_dict(prefix=subset, label_groups=label_group)
+                )
+
+            for label_group in faf_label_groups:
+                vcf_info_dict.update(
+                    make_info_dict(prefix=subset, label_groups=label_group, faf=True)
+                )
+
+            vcf_info_dict.update(
+                make_info_dict(
+                    prefix=subset,
+                    label_groups=dict(
+                        group=["adj"], pop=["nfe"], subpop=gnomad_nfe_subpops
+                    ),
+                    description_text=description_text,
+                )
+            )
+            vcf_info_dict.update(
+                make_info_dict(
+                    prefix=subset,
+                    label_groups=dict(
+                        group=["adj"], pop=["eas"], subpop=gnomad_eas_subpops
+                    ),
                     description_text=description_text,
                 )
             )
         else:
             vcf_info_dict.update(
+                make_info_dict(prefix=subset, label_groups=dict(group=groups))
+            )
+            vcf_info_dict.update(make_info_dict(prefix=subset, popmax=True))
+
+            for label_group in all_ukbb_label_groups:
+                vcf_info_dict.update(
+                    make_info_dict(prefix=subset, label_groups=label_group)
+                )
+
+            for label_group in faf_label_groups:
+                vcf_info_dict.update(
+                    make_info_dict(prefix=subset, label_groups=label_group, faf=True)
+                )
+
+            vcf_info_dict.update(
                 make_info_dict(
-                    subset,
+                    prefix=subset,
                     bin_edges=bin_edges,
                     popmax=True,
                     age_hist_data="|".join(str(x) for x in age_hist_data),
@@ -187,13 +248,16 @@ def populate_info_dict(
             for pop in subpops:
                 vcf_info_dict.update(
                     make_info_dict(
-                        subset,
-                        dict(group=["adj"], pop=[pop], subpop=subpops[pop]),
-                        description_text=description_text,
+                        prefix=subset,
+                        label_groups=dict(
+                            group=["adj"], pop=[pop], subpop=subpops[pop]
+                        ),
                     )
                 )
 
     # Add variant quality histograms to info dict
+    for key in vcf_info_dict:
+        print(key, vcf_info_dict[key])
     vcf_info_dict.update(make_hist_dict(bin_edges, adj=True))
     vcf_info_dict.update(make_hist_dict(bin_edges, adj=False))
     return vcf_info_dict
@@ -406,7 +470,7 @@ def main(args):
 
         if args.prepare_vcf_mt:
             logger.info("Starting VCF process...")
-            logger.info("Getting raw MT and dropping all unnecessary entries...")
+            """logger.info("Getting raw MT and dropping all unnecessary entries...")
 
             # NOTE: reading in raw MatrixTable to be able to return all samples/variants
             mt = get_ukbb_data(
@@ -444,7 +508,11 @@ def main(args):
             mt = mt.checkpoint(
                 f"{get_release_path(*tranche_data)}/mt/{data_source}.freeze_{freeze}.release.sparse.mt"
             )
-            logger.info(f"Release MT (sparse; chr20 only) count: {mt.count()}")
+            logger.info(f"Release MT (sparse; chr20 only) count: {mt.count()}")"""
+            mt = hl.read_matrix_table(
+                "gs://broad-ukbb/broad.freeze_6/release/mt/broad.freeze_6.release.sparse.mt"
+            )
+            ht = hl.read_table(release_ht_path(*tranche_data))
 
             logger.info(
                 "Dropping cohort frequencies (necessary only for internal use; at last index of freq struct)..."
@@ -453,7 +521,9 @@ def main(args):
             mt = mt.annotate_globals(freq_meta=mt.freq_meta[-1])
 
             logger.info("Making histogram bin edges...")
-            bin_edges = make_hist_bin_edges_expr(mt.rows(), prefix="")
+            # NOTE: using release HT here because age histograms aren't necessarily defined
+            # in the first row of the raw MT (we may have filtered that row because it was low qual)
+            bin_edges = make_hist_bin_edges_expr(ht, prefix="")
 
             logger.info("Getting age hist data...")
             age_hist_data = hl.eval(mt.age_distribution)
@@ -463,6 +533,7 @@ def main(args):
                 subpops=hybrid_pop_map,
                 bin_edges=bin_edges,
                 age_hist_data=age_hist_data,
+                # pops=UKBB_POP_NAMES,
             )
 
             # Add interval QC parameters to INFO dict
