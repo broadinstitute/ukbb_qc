@@ -38,6 +38,7 @@ from ukbb_qc.resources.sample_qc import (
     qc_mt_path,
     qc_sites_path,
 )
+from ukbb_qc.utils.constants import SEXES_UKBB
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -458,11 +459,16 @@ def make_freq_meta_index_dict(
         of each grouping entry in the frequency array
     :rtype: Dict[str, int]
     """
+    if gnomad:
+        sexes = SEXES
+    else:
+        sexes = SEXES_UKBB
+
     index_dict = index_globals(freq_meta, dict(group=GROUPS))
 
     index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=POPS)))
-    index_dict.update(index_globals(freq_meta, dict(group=GROUPS, sex=SEXES)))
-    index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=POPS, sex=SEXES)))
+    index_dict.update(index_globals(freq_meta, dict(group=GROUPS, sex=sexes)))
+    index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=POPS, sex=sexes)))
     index_dict.update(
         index_globals(freq_meta, dict(group=GROUPS, pop=POPS, subpop=subpops))
     )

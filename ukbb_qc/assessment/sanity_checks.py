@@ -452,7 +452,6 @@ def sample_sum_sanity_checks(
                     ]
                 )
             )
-
         pop_adjusted = [i.replace("_adj", "") for i in pop_adjusted]
         pop_found = []
         for i in pop_adjusted:

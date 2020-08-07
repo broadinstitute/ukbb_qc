@@ -134,7 +134,7 @@ def populate_info_dict(
     :param Dict[str, Dict[str, str]] info_dict: INFO dict to be populated.
     :param List[str] subset_list: List of sample subsets in dataset. Default is SUBSET_LIST.
     :param List[str] groups: List of sample groups [adj, raw]. Default is GROUPS.
-    :param List[str] sexes: List of sample sexes. Default is SEXES.
+    :param List[str] sexes: List of sample sexes. Default is SEXES_UKBB.
     :param List[str] pop_names: List of sample global population names. Default is POP_NAMES.
     :param List[str] faf_pops: List of faf population names. Default is FAF_POPS.
     :param List[str] gnomad_nfe_subpops: List of nfe subpopulations in gnomAD. Default is GNOMAD_NFE_SUBPOPS.
@@ -607,8 +607,8 @@ def main(args):
             mt = mt.annotate_rows(**set_female_y_metrics_to_na(mt))
 
             # Reformat vep annotation
-            mt = mt.annotate_rows(vep=vep_struct_to_csq(mt.vep))
-            mt = mt.annotate_rows(info=mt.info.annotate(vep=mt.vep))
+            mt = mt.annotate_rows(vep_csq=vep_struct_to_csq(mt.vep))
+            mt = mt.annotate_rows(info=mt.info.annotate(vep=mt.vep_csq))
 
             # Select relevant fields for VCF export
             mt = mt.select_rows("info", "filters", "rsid", "qual")
