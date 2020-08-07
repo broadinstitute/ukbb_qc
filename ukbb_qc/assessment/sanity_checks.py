@@ -436,7 +436,7 @@ def sample_sum_sanity_checks(
 
     for subset in subsets:
         # Check if pops are present
-        if subset == "gnomad":
+        if "gnomad" in subset:
             sexes = SEXES
             pop_adjusted = list(
                 set([x for x in info_metrics if subset in x and "raw" not in x])
@@ -473,7 +473,7 @@ def sample_sum_sanity_checks(
             ht, subset, dict(group=["adj"], pop=list(set(pop_found)), sex=sexes), verbose
         )
 
-        if subset == "gnomad":
+        if "gnomad" in subset:
             # Adjust subpops to those found in subset
             nfe_subpop_adjusted = list(
                 set([x for x in pop_adjusted if "nfe_" in x and "male" not in x])
