@@ -225,12 +225,12 @@ def histograms_sanity_check(
     :rtype: None
     """
     for hist in hists:
-        for suffix in ["", "adj"]:
-            if suffix == "adj":
-                logger.info("Checking adj qual hists...")
+        for suffix in ["", "raw"]:
+            if suffix == "raw":
+                logger.info("Checking raw qual hists...")
                 hist = f"{hist}_{suffix}"
             else:
-                logger.info("Checking raw qual hists...")
+                logger.info("Checking adj qual hists...")
 
             # Check subfield == 0
             generic_field_check(
