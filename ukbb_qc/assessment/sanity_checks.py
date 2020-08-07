@@ -147,7 +147,7 @@ def filters_sanity_check(ht: hl.Table) -> None:
 
     def _filter_agg_order(
         ht: hl.Table,
-        group_expr: Tuple(hl.expr.Expression),
+        group_expr: Tuple[hl.expr.Expression],
         n_rows: int = None,
         n_cols: int = None,
         extra_filter_checks: Optional[Dict[str, hl.expr.Expression]] = None,
