@@ -454,24 +454,24 @@ def sample_sum_sanity_checks(
             )
 
         pop_adjusted = [i.replace("_adj", "") for i in pop_adjusted]
-        found = []
+        pop_found = []
         for i in pop_adjusted:
             for z in POP_NAMES:
                 if z in i:
-                    found.append(z)
+                    pop_found.append(z)
 
         # Print any missing pops to terminal
-        missing_pops = set(POP_NAMES) - set(found)
+        missing_pops = set(POP_NAMES) - set(pop_found)
         if len(missing_pops) != 0:
             logger.warning(f"Missing {missing_pops} pops in {subset} subset!")
-        for pop in set(found):
-            logger.info(f"{pop} was found {found.count(pop)} times")
+        for pop in set(pop_found):
+            logger.info(f"{pop} was found {pop_found.count(pop)} times")
 
         # Perform sample sum checks
-        sample_sum_check(ht, subset, dict(group=["adj"], pop=POP_NAMES), verbose)
-        sample_sum_check(ht, subset, dict(group=["adj"], sex=SEXES), verbose)
+        sample_sum_check(ht, subset, dict(group=["adj"], pop=list(set(pop_found))), verbose)
+        sample_sum_check(ht, subset, dict(group=["adj"], sex=sexes), verbose)
         sample_sum_check(
-            ht, subset, dict(group=["adj"], pop=POP_NAMES, sex=SEXES), verbose
+            ht, subset, dict(group=["adj"], pop=list(set(pop_found)), sex=sexes), verbose
         )
 
         if subset == "gnomad":
