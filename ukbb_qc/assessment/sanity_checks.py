@@ -14,6 +14,7 @@ from gnomad.utils.vcf import (
     HISTS,
     SEXES,
 )
+from ukbb_qc.ukbb_qc.release.prepare_vcf_data_release import SEXES_UKBB
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -436,10 +437,12 @@ def sample_sum_sanity_checks(
     for subset in subsets:
         # Check if pops are present
         if subset == "gnomad":
+            sexes = SEXES
             pop_adjusted = list(
                 set([x for x in info_metrics if subset in x and "raw" not in x])
             )
         else:
+            sexes = SEXES_UKBB
             pop_adjusted = list(
                 set(
                     [
