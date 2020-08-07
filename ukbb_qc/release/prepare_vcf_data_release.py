@@ -51,6 +51,7 @@ from ukbb_qc.resources.basics import (
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import info_ht_path
 from ukbb_qc.slack_creds import slack_token
+from ukbb_qc.utils.constants import SEXES_UKBB
 from ukbb_qc.utils.utils import make_index_dict
 
 
@@ -99,12 +100,6 @@ GNOMAD_EAS_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["EAS"]))
 KEEP_GNOMAD_POPS = ["afr", "amr", "asj", "eas", "fin", "nfe", "oth", "sas"]
 KEEP_GNOMAD_POPS.extend(GNOMAD_NFE_SUBPOPS)
 KEEP_GNOMAD_POPS.extend(GNOMAD_EAS_SUBPOPS)
-
-SEXES_UKBB = ["XX", "XY"]
-"""
-Sample sexes used in VCF export.
-Used to stratify frequency annotations (AC, AN, AF) for each sex in UKBB.
-"""
 
 
 def populate_info_dict(
