@@ -364,12 +364,12 @@ def frequency_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool) -> 
                 generic_field_check(
                     ht,
                     cond_expr=(
-                        ht.info[f"{subfield}_raw"] == ht.info[f"{subset}{subfield}_raw"]
+                        ht.info[f"{subfield}_raw"] == ht.info[f"{subset}_{subfield}_raw"]
                     ),
-                    check_description=f"{subfield}_raw != {subset}{subfield}_raw",
+                    check_description=f"{subfield}_raw != {subset}_{subfield}_raw",
                     display_fields=[
                         f"info.{subfield}_raw",
-                        f"info.{subset}{subfield}_raw",
+                        f"info.{subset}_{subfield}_raw",
                     ],
                     verbose=verbose,
                 )
@@ -377,12 +377,12 @@ def frequency_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool) -> 
                 generic_field_check(
                     ht,
                     cond_expr=(
-                        ht.info[f"{subfield}_adj"] == ht.info[f"{subset}{subfield}_adj"]
+                        ht.info[f"{subfield}_adj"] == ht.info[f"{subset}_{subfield}_adj"]
                     ),
-                    check_description=f"{subfield}_adj != {subset}{subfield}_adj",
+                    check_description=f"{subfield}_adj != {subset}_{subfield}_adj",
                     display_fields=[
                         f"info.{subfield}_adj",
-                        f"info.{subset}{subfield}_adj",
+                        f"info.{subset}_{subfield}_adj",
                     ],
                     verbose=verbose,
                 )
