@@ -86,15 +86,15 @@ AS_FIELDS.append("AS_sibling_singleton")
 SUBSET_LIST = ["", "gnomad_exomes", "gnomad_genomes"]  # empty for ukbb
 
 # Get gnomAD subpop names
-GNOMAD_NFE_SUBPOPS = map(lambda x: x.lower(), SUBPOPS["NFE"])
-GNOMAD_EAS_SUBPOPS = map(lambda x: x.lower(), SUBPOPS["EAS"])
+GNOMAD_NFE_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["NFE"]))
+GNOMAD_EAS_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["EAS"]))
 
 # Select populations to keep from the list of population names in POP_NAMES
 # This removes pop names we don't want to use in the UKBB release
 # (e.g., "uniform", "consanguineous") to reduce clutter
 KEEP_GNOMAD_POPS = ["afr", "amr", "asj", "eas", "fin", "nfe", "oth", "sas"]
-# KEEP_GNOMAD_POPS.extend(GNOMAD_NFE_SUBPOPS)
-# KEEP_GNOMAD_POPS.extend(GNOMAD_EAS_SUBPOPS)
+KEEP_GNOMAD_POPS.extend(GNOMAD_NFE_SUBPOPS)
+KEEP_GNOMAD_POPS.extend(GNOMAD_EAS_SUBPOPS)
 
 
 def populate_info_dict(
@@ -143,14 +143,16 @@ def populate_info_dict(
         if pop not in KEEP_GNOMAD_POPS:
             pops.pop(pop)
 
-    logger.info("Adding gnomAD subpops to population description dict...")
-    gnomad_pops = pops.extend(gnomad_nfe_subpops)
-    gnomad_pops = gnomad_pops.extend(gnomad_eas_subpops)
-
-    logger.info("Adding UKBB subpops to population description dict...")
+    logger.info(
+        "Removing gnomAD subpops and adding UKBB subpops to population description dict..."
+    )
+    ukbb_pops = pops.copy()
+    for pop in pops:
+        if (pop in gnomad_nfe_subpops) or (pop in gnomad_eas_subpops):
+            ukbb_pops.pop(pop)
     hybrid_pops = [pop for sublist in list(subpops.values()) for pop in sublist]
     for pop in set(hybrid_pops):
-        pops[f"{pop}"] = f"hybrid population cluster {pop}"
+        ukbb_pops[f"{pop}"] = f"hybrid population cluster {pop}"
 
     # Remove MISSING_REGION_FIELDS from info dict
     for field in MISSING_REGION_FIELDS:
@@ -159,13 +161,13 @@ def populate_info_dict(
 
     all_ukbb_label_groups = [
         dict(group=["adj"], sex=sexes),
-        dict(group=["adj"], pop=pops),
-        dict(group=["adj"], pop=pops, sex=sexes),
+        dict(group=["adj"], pop=ukbb_pops),
+        dict(group=["adj"], pop=ukbb_pops, sex=sexes),
     ]
     all_gnomad_label_groups = [
         dict(group=["adj"], sex=sexes),
-        dict(group=["adj"], pop=gnomad_pops),
-        dict(group=["adj"], pop=gnomad_pops, sex=sexes),
+        dict(group=["adj"], pop=pops),
+        dict(group=["adj"], pop=pops, sex=sexes),
     ]
     faf_label_groups = [
         dict(group=["adj"]),
@@ -224,11 +226,12 @@ def populate_info_dict(
             vcf_info_dict.update(
                 make_info_dict(prefix=subset, label_groups=dict(group=groups))
             )
-            vcf_info_dict.update(make_info_dict(prefix=subset, popmax=True))
 
             for label_group in all_ukbb_label_groups:
                 vcf_info_dict.update(
-                    make_info_dict(prefix=subset, label_groups=label_group)
+                    make_info_dict(
+                        prefix=subset, pop_names=ukbb_pops, label_groups=label_group
+                    )
                 )
 
             for label_group in faf_label_groups:
@@ -249,6 +252,7 @@ def populate_info_dict(
                 vcf_info_dict.update(
                     make_info_dict(
                         prefix=subset,
+                        pop_names=ukbb_pops,
                         label_groups=dict(
                             group=["adj"], pop=[pop], subpop=subpops[pop]
                         ),
