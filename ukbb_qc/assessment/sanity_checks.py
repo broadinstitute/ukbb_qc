@@ -293,7 +293,7 @@ def raw_and_adj_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool):
             ht,
             cond_expr=(ht.info[f"AN_{data_type}"] <= 0),
             check_description=f"AN_{data_type} > 0",
-            display_fields=[f"AN_{data_type}"],
+            display_fields=[f"info.AN_{data_type}"],
             verbose=verbose,
         )
 
