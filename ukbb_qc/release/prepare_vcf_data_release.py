@@ -143,16 +143,11 @@ def populate_info_dict(
         if pop not in KEEP_GNOMAD_POPS:
             pops.pop(pop)
 
-    logger.info(
-        "Removing gnomAD subpops and adding UKBB subpops to population description dict..."
-    )
+    logger.info("Removing gnomAD subpops from UKBB population description dict...")
     ukbb_pops = pops.copy()
     for pop in pops:
         if (pop in gnomad_nfe_subpops) or (pop in gnomad_eas_subpops):
             ukbb_pops.pop(pop)
-    hybrid_pops = [pop for sublist in list(subpops.values()) for pop in sublist]
-    for pop in set(hybrid_pops):
-        ukbb_pops[f"{pop}"] = f"hybrid population cluster {pop}"
 
     # Remove MISSING_REGION_FIELDS from info dict
     for field in MISSING_REGION_FIELDS:
@@ -248,20 +243,26 @@ def populate_info_dict(
                 )
             )
 
-            for pop in subpops:
-                vcf_info_dict.update(
-                    make_info_dict(
-                        prefix=subset,
-                        pop_names=ukbb_pops,
-                        label_groups=dict(
-                            group=["adj"], pop=[pop], subpop=subpops[pop]
-                        ),
-                    )
-                )
+    logger.info(
+        "Adding UKBB subpops (hybrid pops) to UKBB population description dict..."
+    )
+    for pop in subpops:
+        for cluster in subpops[pop]:
+            ukbb_pops[
+                f"{cluster}"
+            ] = f"{pops[pop]} and hybrid population cluster {cluster}"
+    for pop in subpops:
+        vcf_info_dict.update(
+            make_info_dict(
+                prefix="",
+                pop_names=ukbb_pops,
+                label_groups=dict(group=["adj"], pop=[pop], subpop=subpops[pop]),
+            )
+        )
 
     # Add variant quality histograms to info dict
-    for key in vcf_info_dict:
-        print(key, vcf_info_dict[key])
+    # for key in vcf_info_dict:
+    #    print(key, vcf_info_dict[key])
     vcf_info_dict.update(make_hist_dict(bin_edges, adj=True))
     vcf_info_dict.update(make_hist_dict(bin_edges, adj=False))
     return vcf_info_dict
