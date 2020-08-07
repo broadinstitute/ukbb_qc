@@ -12,6 +12,7 @@ from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.sample_qc.sex import adjust_sex_ploidy
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
+from gnomad.utils.vep import vep_struct_to_csq
 from gnomad.utils.vcf import (
     add_as_info_dict,
     ALLELE_TYPE_FIELDS,
@@ -79,8 +80,11 @@ REGION_FLAG_FIELDS = [
 ]
 REGION_FLAG_FIELDS.extend(INTERVAL_FIELDS)
 
+# Remove BaseQRankSum from site fields (doesn't exist in UKBB 300K)
+SITE_FIELDS.remove("BaseQRankSum")
+
 # Add sibling singletons to AS_FIELDS
-AS_FIELDS.append("AS_sibling_singleton")
+AS_FIELDS.append("sibling_singleton")
 
 # Make subset list (used in properly filling out VCF header descriptions and naming VCF info fields)
 SUBSET_LIST = ["", "gnomad_exomes", "gnomad_genomes"]  # empty for ukbb
@@ -263,6 +267,7 @@ def populate_info_dict(
     # Add variant quality histograms to info dict
     # for key in vcf_info_dict:
     #    print(key, vcf_info_dict[key])
+    # print(bin_edges)
     vcf_info_dict.update(make_hist_dict(bin_edges, adj=True))
     vcf_info_dict.update(make_hist_dict(bin_edges, adj=False))
     return vcf_info_dict
@@ -520,10 +525,12 @@ def main(args):
             ht = hl.read_table(release_ht_path(*tranche_data))
 
             logger.info(
-                "Dropping cohort frequencies (necessary only for internal use; at last index of freq struct)..."
+                "Dropping cohort frequencies (necessary only for internal use; at last four indices of freq struct)..."
             )
-            mt = mt.annotate_rows(freq=mt.freq[-1])
-            mt = mt.annotate_globals(freq_meta=mt.freq_meta[-1])
+            # print(hl.eval(mt.freq_meta))
+            mt = mt.annotate_rows(freq=mt.freq[:-4])
+            mt = mt.annotate_globals(freq_meta=mt.freq_meta[:-4])
+            # print(hl.eval(mt.freq_meta))
 
             logger.info("Making histogram bin edges...")
             # NOTE: using release HT here because age histograms aren't necessarily defined
@@ -538,7 +545,6 @@ def main(args):
                 subpops=hybrid_pop_map,
                 bin_edges=bin_edges,
                 age_hist_data=age_hist_data,
-                # pops=UKBB_POP_NAMES,
             )
 
             # Add interval QC parameters to INFO dict
@@ -558,7 +564,9 @@ def main(args):
 
             # Add non-PAR annotation
             mt = mt.annotate_rows(
-                nonpar=(mt.locus.in_x_nonpar() | mt.locus.in_y_nonpar())
+                region_flag=mt.region_flag.annotate(
+                    nonpar=(mt.locus.in_x_nonpar() | mt.locus.in_y_nonpar())
+                )
             )
 
             logger.info("Constructing INFO field")
@@ -569,6 +577,7 @@ def main(args):
             #   region_flag struct, and
             #   raw_qual_hists/qual_hists structs.
             mt = mt.annotate_rows(info=hl.struct(**make_info_expr(mt)))
+
             # Unfurl nested UKBB frequency annotations and add to INFO field
             mt = mt.annotate_rows(
                 info=mt.info.annotate(
@@ -595,6 +604,10 @@ def main(args):
             )
             mt = mt.annotate_rows(**set_female_y_metrics_to_na(mt))
 
+            # Reformat vep annotation
+            mt = mt.annotate_rows(vep=vep_struct_to_csq(mt.vep))
+            mt = mt.annotate_rows(info=mt.info.annotate(vep=mt.vep))
+
             # Select relevant fields for VCF export
             mt = mt.select_rows("info", "filters", "rsid", "qual")
             new_vcf_info_dict.update(
@@ -603,8 +616,8 @@ def main(args):
             header_dict = {
                 "info": new_vcf_info_dict,
                 "filter": make_vcf_filter_dict(
-                    mt.rf_globals.snp_cutoff.min_score,
-                    mt.rf_globals.indel_cutoff.min_score,
+                    mt.rf_globals.rf_snv_cutoff.min_score,
+                    mt.rf_globals.rf_indel_cutoff.min_score,
                     mt.rf_globals.inbreeding_cutoff,
                 ),
                 "format": FORMAT_DICT,
@@ -613,7 +626,6 @@ def main(args):
             logger.info("Saving header dict to pickle...")
             with hl.hadoop_open(release_header_path(*tranche_data), "wb") as p:
                 pickle.dump(header_dict, p, protocol=pickle.HIGHEST_PROTOCOL)
-            mt = mt.annotate_rows(info=mt.info.annotate(vep=mt.vep_csq))
             mt.write(release_mt_path(*tranche_data), args.overwrite)
 
         if args.sanity_check:
