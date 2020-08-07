@@ -14,7 +14,7 @@ from gnomad.utils.vcf import (
     HISTS,
     SEXES,
 )
-from ukbb_qc.ukbb_qc.release.prepare_vcf_data_release import SEXES_UKBB
+from ukbb_qc.release.prepare_vcf_data_release import SEXES_UKBB
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
