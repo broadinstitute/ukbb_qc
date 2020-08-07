@@ -402,9 +402,9 @@ def frequency_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool) -> 
             total_defined_gnomad_wgs_AC_raw=hl.agg.count_where(
                 hl.is_defined(ht.info.gnomad_genomes_AC_raw)
             ),
-            total_defined_ukb_AC=hl.agg.count_where(hl.is_defined(ht.info.adj_AC_adj)),
+            total_defined_ukb_AC=hl.agg.count_where(hl.is_defined(ht.info.AC_adj)),
             total_defined_ukb_AC_raw=hl.agg.count_where(
-                hl.is_defined(ht.info.raw_AC_raw)
+                hl.is_defined(ht.info.AC_raw)
             ),
         )
     )
