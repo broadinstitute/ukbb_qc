@@ -146,7 +146,8 @@ def filters_sanity_check(ht: hl.Table) -> None:
     )
 
     def _filter_agg_order(
-        grouped_ht: hl.Table,
+        ht: hl.Table,
+        group_expr: hl.expr.Expression,
         n_rows: int = None,
         n_cols: int = None,
         extra_filter_checks: Optional[Dict[str, hl.expr.Expression]] = None,
@@ -154,14 +155,15 @@ def filters_sanity_check(ht: hl.Table) -> None:
         """
         Performs sanity checks to measure percentages of variants filtered under different conditions.
 
-        param hl.GroupedTable grouped_ht: Table grouped by condition of interest.
+        :param hl.Table ht: Input Table.
+        :param hl.expr.Expression group_expr: Expression to group table by.
         :param int n_rows: Number of rows to show.
         :param int n_cols: Number of columns to show.
         :return: None
         """
         # NOTE: make_filters_sanity_check_expr returns a dict with %ages of variants filtered
-        grouped_ht.aggregate(
-            **make_filters_sanity_check_expr(grouped_ht, extra_filter_checks)
+        ht.group_by(group_expr).aggregate(
+            **make_filters_sanity_check_expr(ht, extra_filter_checks)
         ).order_by(hl.desc("n")).show(n_rows, n_cols)
 
     logger.info(
@@ -174,29 +176,24 @@ def filters_sanity_check(ht: hl.Table) -> None:
             ht.filters.contains("Monoallelic") & (ht.filters.length() == 1)
         ),
     }
-    _filter_agg_order(ht.group_by(ht.is_filtered), extra_filter_checks=monoallelic_dict)
+    _filter_agg_order(ht, ht.is_filtered, extra_filter_checks=monoallelic_dict)
 
     logger.info("Checking distributions of variant type amongst variant filters...")
-    _filter_agg_order(ht.group_by(ht.info.allele_type))
+    _filter_agg_order(ht, ht.info.allele_type)
 
     logger.info(
         "Checking distributions of variant type and region type amongst variant filters..."
     )
-    _filter_agg_order(
-        ht.group_by(ht.info.allele_type, ht.in_problematic_region), 50, 140
-    )
+    _filter_agg_order(ht, (ht.info.allele_type, ht.in_problematic_region), 50, 140)
 
     logger.info(
         "Checking distributions of variant type, region type, and number of alt alleles amongst variant filters..."
     )
     _filter_agg_order(
-        ht.group_by(
-            ht.info.allele_type,
-            ht.in_problematic_region,
-            ht.info.n_alt_alleles,
-            50,
-            140,
-        )
+        ht,
+        (ht.info.allele_type, ht.in_problematic_region, ht.info.n_alt_alleles),
+        50,
+        140,
     )
 
 
