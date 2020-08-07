@@ -100,6 +100,12 @@ KEEP_GNOMAD_POPS = ["afr", "amr", "asj", "eas", "fin", "nfe", "oth", "sas"]
 KEEP_GNOMAD_POPS.extend(GNOMAD_NFE_SUBPOPS)
 KEEP_GNOMAD_POPS.extend(GNOMAD_EAS_SUBPOPS)
 
+SEXES_UKBB = ["XX", "XY"]
+"""
+Sample sexes used in VCF export.
+Used to stratify frequency annotations (AC, AN, AF) for each sex in UKBB.
+"""
+
 
 def populate_info_dict(
     subpops: Dict[str, List[str]],
@@ -108,7 +114,7 @@ def populate_info_dict(
     info_dict: Dict[str, Dict[str, str]] = VCF_INFO_DICT,
     subset_list: List[str] = SUBSET_LIST,
     groups: List[str] = GROUPS,
-    sexes: List[str] = SEXES,
+    sexes: List[str] = SEXES_UKBB,
     pops: List[str] = POP_NAMES,
     faf_pops: List[str] = FAF_POPS,
     gnomad_nfe_subpops: List[str] = GNOMAD_NFE_SUBPOPS,
@@ -164,7 +170,7 @@ def populate_info_dict(
         dict(group=["adj"], pop=ukbb_pops, sex=sexes),
     ]
     all_gnomad_label_groups = [
-        dict(group=["adj"], sex=sexes),
+        dict(group=["adj"], sex=SEXES),
         dict(group=["adj"], pop=pops),
         dict(group=["adj"], pop=pops, sex=sexes),
     ]
