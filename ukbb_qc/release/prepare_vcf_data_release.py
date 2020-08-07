@@ -473,12 +473,13 @@ def main(args):
     data_source = "broad"
     freeze = args.freeze
     tranche_data = (data_source, freeze)
-    hybrid_pop_map = args.hybrid_pop_map
-    hybrid_pops = [pop for sublist in list(hybrid_pop_map.values()) for pop in sublist]
 
     try:
 
         if args.prepare_vcf_mt:
+            hybrid_pop_map = args.hybrid_pop_map
+            hybrid_pops = [pop for sublist in list(hybrid_pop_map.values()) for pop in sublist]
+
             logger.info("Starting VCF process...")
             """logger.info("Getting raw MT and dropping all unnecessary entries...")
 
