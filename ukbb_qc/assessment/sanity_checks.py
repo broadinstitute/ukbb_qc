@@ -433,13 +433,12 @@ def sample_sum_sanity_checks(
     # Get gnomAD subpop names
     GNOMAD_NFE_SUBPOPS = map(lambda x: x.lower(), SUBPOPS["NFE"])
     GNOMAD_EAS_SUBPOPS = map(lambda x: x.lower(), SUBPOPS["EAS"])
-
     for subset in subsets:
         # Check if pops are present
         if "gnomad" in subset:
             sexes = SEXES
             pop_adjusted = list(
-                set([x for x in info_metrics if subset in x and "raw" not in x])
+                set([x for x in info_metrics if (subset in x) and ("raw" not in x)])
             )
         else:
             sexes = SEXES_UKBB
@@ -453,18 +452,22 @@ def sample_sum_sanity_checks(
                 )
             )
         pop_adjusted = [i.replace("_adj", "") for i in pop_adjusted]
-        pop_found = []
-        for i in pop_adjusted:
-            for z in POP_NAMES:
-                if z in i:
-                    pop_found.append(z)
+
+        pop_found = ht[f"{subset + '_' if subset != '' else subset}freq_meta"].filter(lambda x: x.contains('pop'))
+        pop_found = list(hl.eval(pop_found.group_by(lambda x: x['pop'])).keys())
+        for pop in pop_found:
+            no_pop = True
+            for i in pop_adjusted:
+                if pop in i:
+                    no_pop = False
+            if no_pop:
+                pop_found.remove(pop)
+                logger.warning(f"{pop} found in {subset} subset freq_meta but not in info_metrics!")
 
         # Print any missing pops to terminal
         missing_pops = set(POP_NAMES) - set(pop_found)
         if len(missing_pops) != 0:
             logger.warning(f"Missing {missing_pops} pops in {subset} subset!")
-        for pop in set(pop_found):
-            logger.info(f"{pop} was found {pop_found.count(pop)} times")
 
         # Perform sample sum checks
         sample_sum_check(ht, subset, dict(group=["adj"], pop=list(set(pop_found))), verbose)
