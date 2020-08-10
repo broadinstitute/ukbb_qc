@@ -63,6 +63,9 @@ logger = logging.getLogger("vcf_release")
 logger.setLevel(logging.INFO)
 
 
+# Add END to entries
+ENTRIES.append("END")
+
 # Add capture region and sibling singletons to vcf_info_dict
 VCF_INFO_DICT = INFO_DICT
 VCF_INFO_DICT["in_capture_region"] = {
@@ -507,7 +510,7 @@ def main(args):
             ]
 
             logger.info("Starting VCF process...")
-            """logger.info("Getting raw MT and dropping all unnecessary entries...")
+            logger.info("Getting raw MT and dropping all unnecessary entries...")
 
             # NOTE: reading in raw MatrixTable to be able to return all samples/variants
             mt = get_ukbb_data(
@@ -543,12 +546,13 @@ def main(args):
             from ukbb_qc.resources.basics import get_release_path
 
             mt = mt.checkpoint(
-                f"{get_release_path(*tranche_data)}/mt/{data_source}.freeze_{freeze}.release.sparse.mt"
+                f"{get_release_path(*tranche_data)}/mt/{data_source}.freeze_{freeze}.release.sparse.mt",
+                overwrite=args.overwrite,
             )
-            logger.info(f"Release MT (sparse; chr20 only) count: {mt.count()}")"""
-            mt = hl.read_matrix_table(
-                "gs://broad-ukbb/broad.freeze_6/release/mt/broad.freeze_6.release.sparse.mt"
-            )
+            logger.info(f"Release MT (sparse; chr20 only) count: {mt.count()}")
+            # mt = hl.read_matrix_table(
+            #    "gs://broad-ukbb/broad.freeze_6/release/mt/broad.freeze_6.release.sparse.mt"
+            # )
             ht = hl.read_table(release_ht_path(*tranche_data))
 
             logger.info(
@@ -789,6 +793,7 @@ def main(args):
             # Export sharded VCF
             if args.parallelize:
 
+                mt.describe()
                 logger.info("Densifying...")
                 mt = hl.experimental.densify(mt)
 
@@ -808,7 +813,8 @@ def main(args):
 
                 hl.export_vcf(
                     mt,
-                    release_vcf_path(*tranche_data),
+                    # release_vcf_path(*tranche_data),
+                    "gs://broad-ukbb/broad.freeze_6/temp/chr20_release_vcf.bgz",
                     parallel="header_per_shard",
                     metadata=header_dict,
                 )
