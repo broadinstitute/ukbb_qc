@@ -63,7 +63,7 @@ logger = logging.getLogger("vcf_release")
 logger.setLevel(logging.INFO)
 
 
-# Add capture region, interval QC, and sibling singletons to vcf_info_dict
+# Add capture region and sibling singletons to vcf_info_dict
 VCF_INFO_DICT = INFO_DICT
 VCF_INFO_DICT["in_capture_region"] = {
     "Description": "Variant falls within an exome capture region"
@@ -155,7 +155,14 @@ def populate_info_dict(
     # Remove MISSING_REGION_FIELDS from info dict
     for field in MISSING_REGION_FIELDS:
         vcf_info_dict.pop(field, None)
-    vcf_info_dict.update(add_as_info_dict(vcf_info_dict))
+
+    # Add allele-specific fields to info dict, including AS_VQSLOD and AS_culprit
+    vcf_info_dict.update(
+        add_as_info_dict(
+            info_dict=vcf_info_dict,
+            as_fields=AS_FIELDS.extend(["AS_culprit", "AS_VQSLOD"]),
+        )
+    )
 
     all_ukbb_label_groups = [
         dict(group=["adj"], sex=SEXES_UKBB),
@@ -629,13 +636,19 @@ def main(args):
             new_vcf_info_dict.update(
                 {"vep": {"Description": hl.eval(mt.vep_csq_header)}}
             )
+
+            # Make filter dict and add field for MonoAllelic filter
+            filter_dict = make_vcf_filter_dict(
+                mt.rf_globals.rf_snv_cutoff.min_score,
+                mt.rf_globals.rf_indel_cutoff.min_score,
+                mt.rf_globals.inbreeding_cutoff,
+            )
+            filter_dict["MonoAllelic"] = {
+                "Description": "All samples at site are homozygous reference or homozygous alternate"
+            }
             header_dict = {
                 "info": new_vcf_info_dict,
-                "filter": make_vcf_filter_dict(
-                    mt.rf_globals.rf_snv_cutoff.min_score,
-                    mt.rf_globals.rf_indel_cutoff.min_score,
-                    mt.rf_globals.inbreeding_cutoff,
-                ),
+                "filter": filter_dict,
                 "format": FORMAT_DICT,
             }
 
