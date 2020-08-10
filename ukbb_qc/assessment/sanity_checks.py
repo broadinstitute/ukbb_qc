@@ -424,7 +424,7 @@ def sample_sum_sanity_checks(
     subsets: List[str],
     info_metrics: List[str],
     verbose: bool,
-    pop_names: Dist[str, str] = POP_NAMES,
+    pop_names: Dict[str, str] = POP_NAMES,
 ) -> None:
     """
     Performs sanity checks on sample sums in input Table.
