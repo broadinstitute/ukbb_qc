@@ -483,7 +483,9 @@ def main(args):
 
         if args.prepare_vcf_mt:
             hybrid_pop_map = args.hybrid_pop_map
-            hybrid_pops = [pop for sublist in list(hybrid_pop_map.values()) for pop in sublist]
+            hybrid_pops = [
+                pop for sublist in list(hybrid_pop_map.values()) for pop in sublist
+            ]
 
             logger.info("Starting VCF process...")
             """logger.info("Getting raw MT and dropping all unnecessary entries...")
@@ -582,6 +584,14 @@ def main(args):
             #   info struct (site and allele-specific annotations),
             #   region_flag struct, and
             #   raw_qual_hists/qual_hists structs.
+
+            # TODO: Remove this in the 500K, I modified the variant QC code to create the correct names
+            mt = mt.transmute_rows(
+                rf=mt.rf.annotate(
+                    rf_positive_label=mt.rf.tp,
+                    rf_negative_label=mt.rf.fail_hard_filters,
+                )
+            )
             mt = mt.annotate_rows(info=hl.struct(**make_info_expr(mt)))
 
             # Unfurl nested UKBB frequency annotations and add to INFO field
@@ -611,8 +621,8 @@ def main(args):
             mt = mt.annotate_rows(**set_female_y_metrics_to_na(mt))
 
             # Reformat vep annotation
-            mt = mt.annotate_rows(vep_csq=vep_struct_to_csq(mt.vep))
-            mt = mt.annotate_rows(info=mt.info.annotate(vep=mt.vep_csq))
+            mt = mt.annotate_rows(vep=vep_struct_to_csq(mt.vep))
+            mt = mt.annotate_rows(info=mt.info.annotate(vep=mt.vep))
 
             # Select relevant fields for VCF export
             mt = mt.select_rows("info", "filters", "rsid", "qual")
