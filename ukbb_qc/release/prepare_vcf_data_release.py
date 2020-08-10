@@ -109,7 +109,6 @@ def populate_info_dict(
     info_dict: Dict[str, Dict[str, str]] = VCF_INFO_DICT,
     subset_list: List[str] = SUBSET_LIST,
     groups: List[str] = GROUPS,
-    sexes: List[str] = SEXES_UKBB,
     pops: List[str] = POP_NAMES,
     faf_pops: List[str] = FAF_POPS,
     gnomad_nfe_subpops: List[str] = GNOMAD_NFE_SUBPOPS,
@@ -134,7 +133,6 @@ def populate_info_dict(
     :param Dict[str, Dict[str, str]] info_dict: INFO dict to be populated.
     :param List[str] subset_list: List of sample subsets in dataset. Default is SUBSET_LIST.
     :param List[str] groups: List of sample groups [adj, raw]. Default is GROUPS.
-    :param List[str] sexes: List of sample sexes. Default is SEXES_UKBB.
     :param List[str] pop_names: List of sample global population names. Default is POP_NAMES.
     :param List[str] faf_pops: List of faf population names. Default is FAF_POPS.
     :param List[str] gnomad_nfe_subpops: List of nfe subpopulations in gnomAD. Default is GNOMAD_NFE_SUBPOPS.
@@ -160,20 +158,26 @@ def populate_info_dict(
     vcf_info_dict.update(add_as_info_dict(vcf_info_dict))
 
     all_ukbb_label_groups = [
-        dict(group=["adj"], sex=sexes),
+        dict(group=["adj"], sex=SEXES_UKBB),
         dict(group=["adj"], pop=ukbb_pops),
-        dict(group=["adj"], pop=ukbb_pops, sex=sexes),
+        dict(group=["adj"], pop=ukbb_pops, sex=SEXES_UKBB),
     ]
     all_gnomad_label_groups = [
         dict(group=["adj"], sex=SEXES),
         dict(group=["adj"], pop=pops),
-        dict(group=["adj"], pop=pops, sex=sexes),
+        dict(group=["adj"], pop=pops, sex=SEXES),
     ]
     faf_label_groups = [
         dict(group=["adj"]),
-        dict(group=["adj"], sex=sexes),
+        dict(group=["adj"], sex=SEXES_UKBB),
         dict(group=["adj"], pop=faf_pops),
-        dict(group=["adj"], pop=faf_pops, sex=sexes),
+        dict(group=["adj"], pop=faf_pops, sex=SEXES_UKBB),
+    ]
+    faf_gnomad_label_groups = [
+        dict(group=["adj"]),
+        dict(group=["adj"], sex=SEXES),
+        dict(group=["adj"], pop=faf_pops),
+        dict(group=["adj"], pop=faf_pops, sex=SEXES),
     ]
 
     for subset in subset_list:
@@ -199,7 +203,7 @@ def populate_info_dict(
                     make_info_dict(prefix=subset, label_groups=label_group)
                 )
 
-            for label_group in faf_label_groups:
+            for label_group in faf_gnomad_label_groups:
                 vcf_info_dict.update(
                     make_info_dict(prefix=subset, label_groups=label_group, faf=True)
                 )
