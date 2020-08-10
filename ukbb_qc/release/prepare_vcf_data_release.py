@@ -407,6 +407,19 @@ def unfurl_nested_annotations(
         combo = "_".join(combo_fields)
 
         if gnomad:
+
+            # Skip all gnomAD subsets
+            # Note: this is relevant to the exomes only
+            if not genome:
+                subset_labels = ("controls", "non")
+                if entry[0] in subset_labels:
+                    continue
+
+                # Re-create combo to make sure formatting is consistent with other pop lables
+                # Manually create combo with "_adj"
+                # NOTE: entry[0] in the gnomAD exomes faf meta is "gnomad"
+                combo = "_".join(entry[1:] + ["adj"])
+
             prefix = f"{gnomad_prefix}_"
             combo_dict = {
                 f"{prefix}faf95_{combo}": hl.or_missing(
