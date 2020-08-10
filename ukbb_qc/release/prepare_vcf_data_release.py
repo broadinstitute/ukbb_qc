@@ -696,6 +696,21 @@ def main(args):
             with hl.hadoop_open(release_header_path(*tranche_data), "rb") as p:
                 header_dict = pickle.load(p)
 
+            # Drop unnecessary histograms
+            # TODO: figure out which hists we want to export and only create those for 500K
+            drop_hists = (
+                [x + "_n_smaller" for x in HISTS]
+                + [x + "_bin_edges" for x in HISTS]
+                + [x + "_n_larger" for x in HISTS if "dp_" not in x]
+            )
+            drop_hists.extend(
+                [x + "_raw_n_smaller" for x in HISTS]
+                + [x + "_raw_bin_edges" for x in HISTS]
+                + [x + "_raw_n_larger" for x in HISTS if "dp_" not in x]
+                + ["age_hist_hom_bin_edges", "age_hist_het_bin_edges"]
+            )
+            mt = mt.annotate_rows(info=mt.info.drop(*drop_hists))
+
             # Reformat names to remove "adj" pre-export
             # e.g, renaming "AC_adj" to "AC"
             # All unlabeled frequency information is assumed to be adj
@@ -717,26 +732,13 @@ def main(args):
             mt = mt.transmute_rows(info=hl.struct(**info_annot_mapping))
 
             # Rearrange INFO field in desired ordering
-            # TODO: figure out which hists we want to export and only create those for 500K
-            drop_hists = (
-                [x + "_n_smaller" for x in HISTS]
-                + [x + "_bin_edges" for x in HISTS]
-                + [x + "_n_larger" for x in HISTS if "dp_" not in x]
-            )
-            drop_hists.extend(
-                [x + "_raw_n_smaller" for x in HISTS]
-                + [x + "_raw_bin_edges" for x in HISTS]
-                + [x + "_raw_n_larger" for x in HISTS if "dp_" not in x]
-                + ["age_hist_hom_bin_edges", "age_hist_het_bin_edges"]
-            )
-
             mt = mt.annotate_rows(
                 info=mt.info.select(
                     "AC",
                     "AN",
                     "AF",
                     "rf_tp_probability",
-                    *mt.info.drop("AC", "AN", "AF", "rf_tp_probability", *drop_hists),
+                    *mt.info.drop("AC", "AN", "AF", "rf_tp_probability"),
                 )
             )
 
