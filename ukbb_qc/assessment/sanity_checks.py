@@ -420,7 +420,11 @@ def frequency_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool) -> 
 
 
 def sample_sum_sanity_checks(
-    ht: hl.Table, subsets: List[str], info_metrics: List[str], verbose: bool
+    ht: hl.Table,
+    subsets: List[str],
+    info_metrics: List[str],
+    verbose: bool,
+    pop_names: Dist[str, str] = POP_NAMES,
 ) -> None:
     """
     Performs sanity checks on sample sums in input Table.
@@ -435,12 +439,22 @@ def sample_sum_sanity_checks(
     :param List[str] info_metrics: List of metrics in info struct of input Table.
     :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
         show only top values of annotations that fail checks.
+    :param pop_names: Dict with global population names (keys) and population descriptions (values).
     :return: None
     :rtype: None
     """
-    # Get gnomAD subpop names
-    GNOMAD_NFE_SUBPOPS = map(lambda x: x.lower(), SUBPOPS["NFE"])
-    GNOMAD_EAS_SUBPOPS = map(lambda x: x.lower(), SUBPOPS["EAS"])
+    # Get gnomAD subpops
+    GNOMAD_NFE_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["NFE"]))
+    GNOMAD_EAS_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["EAS"]))
+
+    # Remove unnecessary population names from pop_names dict
+    # This is to avoid checking for populations we don't need to check
+    KEEP_GNOMAD_POPS = ["afr", "amr", "asj", "eas", "fin", "nfe", "oth", "sas"]
+
+    for pop in pop_names.copy():
+        if pop not in KEEP_GNOMAD_POPS:
+            pop_names.pop(pop)
+
     for subset in subsets:
         # Check if pops are present
         if "gnomad" in subset:
@@ -477,7 +491,7 @@ def sample_sum_sanity_checks(
                 )
 
         # Print any missing pops to terminal
-        missing_pops = set(POP_NAMES) - set(pop_found)
+        missing_pops = set(pop_names.keys()) - set(pop_found)
         if len(missing_pops) != 0:
             logger.warning(f"Missing {missing_pops} pops in {subset} subset!")
 
