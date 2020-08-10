@@ -291,18 +291,18 @@ def raw_and_adj_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool):
     # Check raw AN > 0
     generic_field_check(
         ht,
-        cond_expr=(ht.info[f"AN_{data_type}"] <= 0),
-        check_description=f"AN_{data_type} > 0",
-        display_fields=[f"info.AN_{data_type}"],
+        cond_expr=(ht.info.AN_raw <= 0),
+        check_description="AN_raw > 0",
+        display_fields=["info.AN_raw"],
         verbose=verbose,
     )
 
     # Check adj AN >= 0
     generic_field_check(
         ht,
-        cond_expr=(ht.info[f"AN_{data_type}"] < 0),
-        check_description=f"AN_{data_type} >= 0",
-        display_fields=[f"info.AN_{data_type}"],
+        cond_expr=(ht.info.AN_adj < 0),
+        check_description="AN_adj >= 0",
+        display_fields=["info.AN_adj"],
         verbose=verbose,
     )
 
