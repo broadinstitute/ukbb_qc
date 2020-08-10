@@ -644,7 +644,7 @@ def main(args):
                 mt.rf_globals.inbreeding_cutoff,
             )
             filter_dict["MonoAllelic"] = {
-                "Description": "All samples at site are homozygous reference or homozygous alternate"
+                "Description": "Samples are all homozygous reference or all homozygous alternate for the variant"
             }
             header_dict = {
                 "info": new_vcf_info_dict,
