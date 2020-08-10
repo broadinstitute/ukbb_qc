@@ -172,9 +172,9 @@ def filters_sanity_check(ht: hl.Table) -> None:
     )
     # Add extra check for monoallelic variants to make_filters_sanity_check_expr (currently UKBB-specific filter)
     monoallelic_dict = {
-        "frac_monoallelic": hl.agg.fraction(ht.filters.contains("Monoallelic")),
+        "frac_monoallelic": hl.agg.fraction(ht.filters.contains("MonoAllelic")),
         "frac_monoallelic_only": hl.agg.fraction(
-            ht.filters.contains("Monoallelic") & (ht.filters.length() == 1)
+            ht.filters.contains("MonoAllelic") & (ht.filters.length() == 1)
         ),
     }
     _filter_agg_order(
