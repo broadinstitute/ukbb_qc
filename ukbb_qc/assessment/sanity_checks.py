@@ -288,15 +288,23 @@ def raw_and_adj_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool):
             verbose=verbose,
         )
 
-    # Check AN > 0
-    for data_type in ["adj", "raw"]:
-        generic_field_check(
-            ht,
-            cond_expr=(ht.info[f"AN_{data_type}"] <= 0),
-            check_description=f"AN_{data_type} > 0",
-            display_fields=[f"info.AN_{data_type}"],
-            verbose=verbose,
-        )
+    # Check raw AN > 0
+    generic_field_check(
+        ht,
+        cond_expr=(ht.info[f"AN_{data_type}"] <= 0),
+        check_description=f"AN_{data_type} > 0",
+        display_fields=[f"info.AN_{data_type}"],
+        verbose=verbose,
+    )
+
+    # Check adj AN >= 0
+    generic_field_check(
+        ht,
+        cond_expr=(ht.info[f"AN_{data_type}"] < 0),
+        check_description=f"AN_{data_type} >= 0",
+        display_fields=[f"info.AN_{data_type}"],
+        verbose=verbose,
+    )
 
     for subset in subsets:
         if subset != "":
