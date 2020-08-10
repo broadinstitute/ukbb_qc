@@ -203,9 +203,9 @@ def filters_sanity_check(ht: hl.Table) -> None:
     _filter_agg_order(
         ht,
         {
-            'allele_type': ht.info.allele_type,
-            'in_problematic_region': ht.in_problematic_region,
-            'n_alt_alleles': ht.info.n_alt_alleles,
+            "allele_type": ht.info.allele_type,
+            "in_problematic_region": ht.in_problematic_region,
+            "n_alt_alleles": ht.info.n_alt_alleles,
         },
         50,
         140,
@@ -365,7 +365,8 @@ def frequency_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool) -> 
                 generic_field_check(
                     ht,
                     cond_expr=(
-                        ht.info[f"{subfield}_raw"] == ht.info[f"{subset}_{subfield}_raw"]
+                        ht.info[f"{subfield}_raw"]
+                        == ht.info[f"{subset}_{subfield}_raw"]
                     ),
                     check_description=f"{subfield}_raw != {subset}_{subfield}_raw",
                     display_fields=[
@@ -378,7 +379,8 @@ def frequency_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool) -> 
                 generic_field_check(
                     ht,
                     cond_expr=(
-                        ht.info[f"{subfield}_adj"] == ht.info[f"{subset}_{subfield}_adj"]
+                        ht.info[f"{subfield}_adj"]
+                        == ht.info[f"{subset}_{subfield}_adj"]
                     ),
                     check_description=f"{subfield}_adj != {subset}_{subfield}_adj",
                     display_fields=[
@@ -403,9 +405,7 @@ def frequency_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool) -> 
                 hl.is_defined(ht.info.gnomad_genomes_AC_raw)
             ),
             total_defined_ukb_AC=hl.agg.count_where(hl.is_defined(ht.info.AC_adj)),
-            total_defined_ukb_AC_raw=hl.agg.count_where(
-                hl.is_defined(ht.info.AC_raw)
-            ),
+            total_defined_ukb_AC_raw=hl.agg.count_where(hl.is_defined(ht.info.AC_raw)),
         )
     )
     logger.info(f"Frequency spot check counts: {freq_counts}")
@@ -453,8 +453,10 @@ def sample_sum_sanity_checks(
             )
         pop_adjusted = [i.replace("_adj", "") for i in pop_adjusted]
 
-        pop_found = ht[f"{subset + '_' if subset != '' else subset}freq_meta"].filter(lambda x: x.contains('pop'))
-        pop_found = list(hl.eval(pop_found.group_by(lambda x: x['pop'])).keys())
+        pop_found = ht[f"{subset + '_' if subset != '' else subset}freq_meta"].filter(
+            lambda x: x.contains("pop")
+        )
+        pop_found = list(hl.eval(pop_found.group_by(lambda x: x["pop"])).keys())
         for pop in pop_found:
             no_pop = True
             for i in pop_adjusted:
@@ -462,7 +464,9 @@ def sample_sum_sanity_checks(
                     no_pop = False
             if no_pop:
                 pop_found.remove(pop)
-                logger.warning(f"{pop} found in {subset} subset freq_meta but not in info_metrics!")
+                logger.warning(
+                    f"{pop} found in {subset} subset freq_meta but not in info_metrics!"
+                )
 
         # Print any missing pops to terminal
         missing_pops = set(POP_NAMES) - set(pop_found)
@@ -470,10 +474,15 @@ def sample_sum_sanity_checks(
             logger.warning(f"Missing {missing_pops} pops in {subset} subset!")
 
         # Perform sample sum checks
-        sample_sum_check(ht, subset, dict(group=["adj"], pop=list(set(pop_found))), verbose)
+        sample_sum_check(
+            ht, subset, dict(group=["adj"], pop=list(set(pop_found))), verbose
+        )
         sample_sum_check(ht, subset, dict(group=["adj"], sex=sexes), verbose)
         sample_sum_check(
-            ht, subset, dict(group=["adj"], pop=list(set(pop_found)), sex=sexes), verbose
+            ht,
+            subset,
+            dict(group=["adj"], pop=list(set(pop_found)), sex=sexes),
+            verbose,
         )
 
         if "gnomad" in subset:

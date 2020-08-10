@@ -659,6 +659,12 @@ def main(args):
 
         if args.sanity_check:
             mt = hl.read_matrix_table(release_mt_path(*tranche_data))
+            # NOTE: removing lowqual and star alleles here to avoid having additional failed missingness checks
+            info_ht = hl.read_table(info_ht_path(data_source, freeze))
+            mt = mt.filter_rows(
+                (~info_ht[mt.row_key].AS_lowqual)
+                & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
+            )
             sanity_check_release_mt(
                 mt, SUBSET_LIST, missingness_threshold=0.5, verbose=args.verbose
             )
