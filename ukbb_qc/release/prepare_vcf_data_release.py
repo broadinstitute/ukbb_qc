@@ -157,9 +157,10 @@ def populate_info_dict(
         vcf_info_dict.pop(field, None)
 
     # Add allele-specific fields to info dict, including AS_VQSLOD and AS_culprit
-    AS_FIELDS.extend(["AS_culprit", "AS_VQSLOD"])
+    temp_AS_fields = AS_FIELDS.copy()
+    temp_AS_fields.extend(["AS_culprit", "AS_VQSLOD"])
     vcf_info_dict.update(
-        add_as_info_dict(info_dict=vcf_info_dict, as_fields=AS_FIELDS,)
+        add_as_info_dict(info_dict=vcf_info_dict, as_fields=temp_AS_fields)
     )
 
     all_ukbb_label_groups = [
