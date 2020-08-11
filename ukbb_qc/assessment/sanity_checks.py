@@ -272,6 +272,7 @@ def raw_and_adj_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool):
     """
     for subfield in ["AC", "AF"]:
         # Check raw AC, AF > 0
+        # NOTE: some sites should fail the raw AC > 0 for UKBB (but only in the low ten thousands range)
         generic_field_check(
             ht,
             cond_expr=(ht.info[f"{subfield}_raw"] <= 0),
@@ -751,8 +752,9 @@ def vcf_field_check(
                 logger.warning(
                     f"{field} in MT info field does not exist in VCF header!"
                 )
-                # NOTE: some hists are not exported
-                if field not in hist_fields:
+                # NOTE: some hists are not exported, so ignoring here
+                # END entry is also not exported (removed during densify)
+                if (field not in hist_fields) and (field != "END"):
                     temp_missing_fields.append(field)
 
         missing_fields.extend(temp_missing_fields)
@@ -766,4 +768,5 @@ def vcf_field_check(
         logger.error(f"Missing descriptions: {missing_descriptions}")
         return False
 
+    logger.info("Passed VCF fields check!")
     return True
