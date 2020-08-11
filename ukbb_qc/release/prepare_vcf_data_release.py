@@ -513,7 +513,7 @@ def main(args):
             logger.info("Getting raw MT and dropping all unnecessary entries...")
 
             # NOTE: reading in raw MatrixTable to be able to return all samples/variants
-            """mt = get_ukbb_data(
+            mt = get_ukbb_data(
                 data_source,
                 freeze,
                 key_by_locus_and_alleles=args.key_by_locus_and_alleles,
@@ -541,27 +541,10 @@ def main(args):
             mt = mt.annotate_globals(**ht.index_globals())
 
             logger.info(
-                "Checkpointing release MT (chr20 only + sparse) for testing/pharmas..."
-            )
-            from ukbb_qc.resources.basics import get_release_path
-
-            mt = mt.checkpoint(
-                f"{get_release_path(*tranche_data)}/mt/{data_source}.freeze_{freeze}.release.sparse.mt",
-                overwrite=args.overwrite,
-            )
-            logger.info(f"Release MT (sparse; chr20 only) count: {mt.count()}")"""
-            mt = hl.read_matrix_table(
-                "gs://broad-ukbb/broad.freeze_6/release/mt/broad.freeze_6.release.sparse.mt"
-            )
-            ht = hl.read_table(release_ht_path(*tranche_data))
-
-            logger.info(
                 "Dropping cohort frequencies (necessary only for internal use; at last four indices of freq struct)..."
             )
-            # print(hl.eval(mt.freq_meta))
             mt = mt.annotate_rows(freq=mt.freq[:-4])
             mt = mt.annotate_globals(freq_meta=mt.freq_meta[:-4])
-            # print(hl.eval(mt.freq_meta))
 
             logger.info("Making histogram bin edges...")
             # NOTE: using release HT here because age histograms aren't necessarily defined
@@ -669,7 +652,7 @@ def main(args):
             logger.info("Saving header dict to pickle...")
             with hl.hadoop_open(release_header_path(*tranche_data), "wb") as p:
                 pickle.dump(header_dict, p, protocol=pickle.HIGHEST_PROTOCOL)
-            # mt.write(release_mt_path(*tranche_data), args.overwrite)
+            mt.write(release_mt_path(*tranche_data), args.overwrite)
 
         if args.sanity_check:
             mt = hl.read_matrix_table(release_mt_path(*tranche_data))
@@ -810,8 +793,7 @@ def main(args):
 
                 hl.export_vcf(
                     mt,
-                    # release_vcf_path(*tranche_data),
-                    "gs://broad-ukbb/broad.freeze_6/temp/chr20_release_vcf.bgz",
+                    release_vcf_path(*tranche_data),
                     parallel="header_per_shard",
                     metadata=header_dict,
                 )
