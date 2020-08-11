@@ -513,7 +513,7 @@ def main(args):
             logger.info("Getting raw MT and dropping all unnecessary entries...")
 
             # NOTE: reading in raw MatrixTable to be able to return all samples/variants
-            mt = get_ukbb_data(
+            """mt = get_ukbb_data(
                 data_source,
                 freeze,
                 key_by_locus_and_alleles=args.key_by_locus_and_alleles,
@@ -549,10 +549,10 @@ def main(args):
                 f"{get_release_path(*tranche_data)}/mt/{data_source}.freeze_{freeze}.release.sparse.mt",
                 overwrite=args.overwrite,
             )
-            logger.info(f"Release MT (sparse; chr20 only) count: {mt.count()}")
-            # mt = hl.read_matrix_table(
-            #    "gs://broad-ukbb/broad.freeze_6/release/mt/broad.freeze_6.release.sparse.mt"
-            # )
+            logger.info(f"Release MT (sparse; chr20 only) count: {mt.count()}")"""
+            mt = hl.read_matrix_table(
+                "gs://broad-ukbb/broad.freeze_6/release/mt/broad.freeze_6.release.sparse.mt"
+            )
             ht = hl.read_table(release_ht_path(*tranche_data))
 
             logger.info(
@@ -579,13 +579,11 @@ def main(args):
             )
 
             # Add interval QC parameters to INFO dict
-            pct_samples = hl.eval(mt.rf_globals.interval_qc_cutoffs.pct_samples)
+            pct_samples = hl.eval(mt.rf_globals.interval_qc_cutoffs.pct_samples) * 100
             autosome_cov = hl.eval(mt.rf_globals.interval_qc_cutoffs.autosome_cov)
             allosome_cov = hl.eval(mt.rf_globals.interval_qc_cutoffs.xy_cov)
             vcf_info_dict["fail_interval_qc"] = {
-                "Description": f"Variant falls within a region where less than {pct_samples}% \
-                                 of samples had a mean coverage of {autosome_cov}X on autosomes and \
-                                 {allosome_cov}X on sex chromosomes"
+                "Description": f"Variant falls within a region where less than {pct_samples}% of samples had a mean coverage of {autosome_cov}X on autosomes and {allosome_cov}X on sex chromosomes"
             }
 
             # Adjust keys to remove adj tags before exporting to VCF
@@ -655,9 +653,9 @@ def main(args):
 
             # Make filter dict and add field for MonoAllelic filter
             filter_dict = make_vcf_filter_dict(
-                mt.rf_globals.rf_snv_cutoff.min_score,
-                mt.rf_globals.rf_indel_cutoff.min_score,
-                mt.rf_globals.inbreeding_cutoff,
+                hl.eval(mt.rf_globals.rf_snv_cutoff.min_score),
+                hl.eval(mt.rf_globals.rf_indel_cutoff.min_score),
+                hl.eval(mt.rf_globals.inbreeding_cutoff),
             )
             filter_dict["MonoAllelic"] = {
                 "Description": "Samples are all homozygous reference or all homozygous alternate for the variant"
@@ -671,7 +669,7 @@ def main(args):
             logger.info("Saving header dict to pickle...")
             with hl.hadoop_open(release_header_path(*tranche_data), "wb") as p:
                 pickle.dump(header_dict, p, protocol=pickle.HIGHEST_PROTOCOL)
-            mt.write(release_mt_path(*tranche_data), args.overwrite)
+            # mt.write(release_mt_path(*tranche_data), args.overwrite)
 
         if args.sanity_check:
             mt = hl.read_matrix_table(release_mt_path(*tranche_data))
@@ -793,7 +791,6 @@ def main(args):
             # Export sharded VCF
             if args.parallelize:
 
-                mt.describe()
                 logger.info("Densifying...")
                 mt = hl.experimental.densify(mt)
 
