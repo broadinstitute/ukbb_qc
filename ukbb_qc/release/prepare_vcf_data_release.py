@@ -104,6 +104,23 @@ KEEP_GNOMAD_POPS = ["afr", "amr", "asj", "eas", "fin", "nfe", "oth", "sas"]
 KEEP_GNOMAD_POPS.extend(GNOMAD_NFE_SUBPOPS)
 KEEP_GNOMAD_POPS.extend(GNOMAD_EAS_SUBPOPS)
 
+# Remove unnecessary pop names from pops dict
+POPS = POP_NAMES
+for pop in pops.copy():
+    if pop not in KEEP_GNOMAD_POPS:
+        pops.pop(pop)
+
+# Separating gnomad exome/genome pops and adding 'ami' to gnomAD genomes pops
+GNOMAD_EXOMES_POPS = POPS.copy()
+GNOMAD_GENOMES_POPS = POPS.copy()
+GNOMAD_GENOMES_POPS["ami"] = "Amish"
+
+# Remove gnomAD subpops from UKBB pops list
+UKBB_POPS = POPS.copy()
+for pop in pops:
+    if (pop in GNOMAD_NFE_SUBPOPS) or (pop in GNOMAD_EAS_SUBPOPS):
+        UKBB_POPS.pop(pop)
+
 
 def populate_info_dict(
     subpops: Dict[str, List[str]],
@@ -112,8 +129,12 @@ def populate_info_dict(
     info_dict: Dict[str, Dict[str, str]] = VCF_INFO_DICT,
     subset_list: List[str] = SUBSET_LIST,
     groups: List[str] = GROUPS,
-    pops: List[str] = POP_NAMES,
+    ukbb_pops: List[str] = UKBB_POPS,
+    gnomad_exomes_pops: List[str] = GNOMAD_EXOMES_POPS,
+    gnomad_genomes_pops: List[str] = GNOMAD_GENOMES_POPS,
     faf_pops: List[str] = FAF_POPS,
+    gnomad_sexes: List[str] = SEXES,
+    ukbb_sexes: List[str] = SEXES_UKBB,
     gnomad_nfe_subpops: List[str] = GNOMAD_NFE_SUBPOPS,
     gnomad_eas_subpops: List[str] = GNOMAD_EAS_SUBPOPS,
 ) -> Dict[str, Dict[str, str]]:
@@ -136,31 +157,17 @@ def populate_info_dict(
     :param Dict[str, Dict[str, str]] info_dict: INFO dict to be populated.
     :param List[str] subset_list: List of sample subsets in dataset. Default is SUBSET_LIST.
     :param List[str] groups: List of sample groups [adj, raw]. Default is GROUPS.
-    :param List[str] pop_names: List of sample global population names. Default is POP_NAMES.
+    :param List[str] ukbb_pops: List of sample global population names for UKBB. Default is UKBB_POPS.
+    :param List[str] gnomad_exomes_pops: List of sample global population names for gnomAD exomes. Default is GNOMAD_EXOMES_POPS.
+    :param List[str] gnomad_genomes_pops: List of sample global population names for gnomAD genomes. Default is GNOMAD_GENOMES_POPS.
     :param List[str] faf_pops: List of faf population names. Default is FAF_POPS.
+    :param List[str] gnomad_sexes: gnomAD sample sexes used in VCF export. Default is SEXES. 
+    :param List[str] ukbb_sexes: UKBB sample sexes used in VCF export. Default is SEXES_UKBB.
     :param List[str] gnomad_nfe_subpops: List of nfe subpopulations in gnomAD. Default is GNOMAD_NFE_SUBPOPS.
     :param List[str] gnomad_eas_subpops: List of eas subpopulations in gnomAD. Default is GNOMAD_EAS_SUBPOPS.
     :rtype: Dict[str, Dict[str, str]]
     """
     vcf_info_dict = info_dict
-
-    # Remove unnecessary pop names from pops dict
-    for pop in pops.copy():
-        if pop not in KEEP_GNOMAD_POPS:
-            pops.pop(pop)
-
-    logger.info(
-        "Separating gnomad exome/genome pops and adding 'ami' to gnomAD genomes pos..."
-    )
-    gnomad_exomes_pops = pops.copy()
-    gnomad_genomes_pops = pops.copy()
-    gnomad_genomes_pops["ami"] = "Amish"
-
-    logger.info("Removing gnomAD subpops from UKBB population description dict...")
-    ukbb_pops = pops.copy()
-    for pop in pops:
-        if (pop in gnomad_nfe_subpops) or (pop in gnomad_eas_subpops):
-            ukbb_pops.pop(pop)
 
     # Remove MISSING_REGION_FIELDS from info dict
     for field in MISSING_REGION_FIELDS:
@@ -174,26 +181,26 @@ def populate_info_dict(
     )
 
     all_ukbb_label_groups = [
-        dict(group=["adj"], sex=SEXES_UKBB),
+        dict(group=["adj"], sex=ukbb_sexes),
         dict(group=["adj"], pop=ukbb_pops),
-        dict(group=["adj"], pop=ukbb_pops, sex=SEXES_UKBB),
+        dict(group=["adj"], pop=ukbb_pops, sex=ukbb_sexes),
     ]
     all_gnomad_label_groups = [
-        dict(group=["adj"], sex=SEXES),
+        dict(group=["adj"], sex=gnomad_sexes),
         dict(group=["adj"], pop=pops),
-        dict(group=["adj"], pop=pops, sex=SEXES),
+        dict(group=["adj"], pop=pops, sex=gnomad_sexes),
     ]
     faf_label_groups = [
         dict(group=["adj"]),
-        dict(group=["adj"], sex=SEXES_UKBB),
+        dict(group=["adj"], sex=ukbb_sexes),
         dict(group=["adj"], pop=faf_pops),
-        dict(group=["adj"], pop=faf_pops, sex=SEXES_UKBB),
+        dict(group=["adj"], pop=faf_pops, sex=ukbb_sexes),
     ]
     faf_gnomad_label_groups = [
         dict(group=["adj"]),
-        dict(group=["adj"], sex=SEXES),
+        dict(group=["adj"], sex=gnomad_sexes),
         dict(group=["adj"], pop=faf_pops),
-        dict(group=["adj"], pop=faf_pops, sex=SEXES),
+        dict(group=["adj"], pop=faf_pops, sex=gnomad_sexes),
     ]
 
     for subset in subset_list:
@@ -396,7 +403,11 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
 
 
 def unfurl_nested_annotations(
-    t: Union[hl.MatrixTable, hl.Table], gnomad: bool, genome: bool, subpops: List[str]
+    t: Union[hl.MatrixTable, hl.Table],
+    gnomad: bool,
+    genome: bool,
+    pops: List[str],
+    subpops: List[str],
 ) -> Dict[str, hl.expr.Expression]:
     """
     Create dictionary keyed by the variant annotation labels to be extracted from variant annotation arrays, where the values
@@ -405,6 +416,7 @@ def unfurl_nested_annotations(
     :param Table/MatrixTable t: Table/MatrixTable containing the nested variant annotation arrays to be unfurled.
     :param bool gnomad: Whether the annotations are from gnomAD.
     :param bool genome: Whether the annotations are from genome data (relevant only to gnomAD data).
+    :param List[str] pops: List of global populations in frequency arry. Used for both gnomAD and UKBB.
     :param List[str] subpops: List of all UKBB subpops (possible hybrid population cluster names). 
     :return: Dictionary containing variant annotations and their corresponding values.
     :rtype: Dict[str, hl.expr.Expression]
@@ -420,15 +432,22 @@ def unfurl_nested_annotations(
         freq = f"{gnomad_prefix}_freq"
         faf_idx = hl.eval(t.globals[f"{gnomad_prefix}_faf_index_dict"])
         freq_idx = make_index_dict(
-            t, f"{gnomad_prefix}_freq_meta", [GNOMAD_NFE_SUBPOPS + GNOMAD_EAS_SUBPOPS]
+            t=t,
+            freq_meta_str=f"{gnomad_prefix}_freq_meta",
+            pops=pops,
+            subpops=[GNOMAD_NFE_SUBPOPS + GNOMAD_EAS_SUBPOPS],
         )
 
     else:
         faf = "faf"
         freq = "freq"
-        faf_idx = make_index_dict(t, "faf_meta", subpops)
+        faf_idx = make_index_dict(
+            t=t, freq_meta_str="faf_meta", pops=pops, subpops=subpops
+        )
         popmax = "popmax"
-        freq_idx = make_index_dict(t, "freq_meta", subpops)
+        freq_idx = make_index_dict(
+            t=t, freq_meta_str="freq_meta", pop=pops, subpops=subpops
+        )
 
     # Unfurl freq index dict
     # Cycles through each key and index (e.g., k=adj_afr, i=31)
@@ -665,7 +684,11 @@ def main(args):
             mt = mt.annotate_rows(
                 info=mt.info.annotate(
                     **unfurl_nested_annotations(
-                        mt, gnomad=False, genome=False, subpops=hybrid_pops
+                        mt,
+                        gnomad=False,
+                        genome=False,
+                        pops=UKBB_POPS,
+                        subpops=hybrid_pops,
                     )
                 )
             )
@@ -673,7 +696,11 @@ def main(args):
             mt = mt.annotate_rows(
                 info=mt.info.annotate(
                     **unfurl_nested_annotations(
-                        mt, gnomad=True, genome=True, subpops=hybrid_pops
+                        mt,
+                        gnomad=True,
+                        genome=True,
+                        pops=GNOMAD_GENOMES_POPS,
+                        subpops=hybrid_pops,
                     )
                 )
             )
@@ -681,7 +708,11 @@ def main(args):
             mt = mt.annotate_rows(
                 info=mt.info.annotate(
                     **unfurl_nested_annotations(
-                        mt, gnomad=True, genome=False, subpops=hybrid_pops
+                        mt,
+                        gnomad=True,
+                        genome=False,
+                        pops=GNOMAD_EXOMES_POPS,
+                        subpops=hybrid_pops,
                     )
                 )
             )
