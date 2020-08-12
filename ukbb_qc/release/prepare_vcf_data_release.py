@@ -477,6 +477,8 @@ def unfurl_nested_annotations(
         if gnomad:
 
             # Create combo_fields in same way as above ([pop, adj])
+            # NOTE: gnomad needs to be handled separately because gnomad faf index dict has different format
+            # gnomad faf index dict has keys like 'adj_afr', but UKBB will index with keys like 'afr_adj'
             combo_fields = entry[1:] + [entry[0]]
             combo = "_".join(combo_fields)
 
