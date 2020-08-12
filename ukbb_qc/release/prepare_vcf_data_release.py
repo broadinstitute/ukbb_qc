@@ -456,19 +456,9 @@ def unfurl_nested_annotations(
         if gnomad:
             prefix = f"{gnomad_prefix}_"
 
-        # Split key to split group (adj, raw) and pop entry
-        # e.g., split 'adj_afr' into ['adj', 'afr']
-        entry = k.split("_")
-
-        # Add 'adj' and 'raw' tags to combo_fields
-        if entry == ["raw"]:
-            combo_fields = entry
-        else:
-            # Add 'adj' tag AFTER all other entries
-            # e.g., if entry is ['adj', 'afr'], set combo fields to ['afr', 'adj']
-            combo_fields = entry[1:] + [entry[0]]
-
-        combo = "_".join(combo_fields)
+        # Set combination to key
+        # e.g., set entry of 'afr_adj' to combo
+        combo = k
         combo_dict = {
             f"{prefix}AC_{combo}": t[freq][i].AC,
             f"{prefix}AN_{combo}": t[freq][i].AN,
@@ -484,11 +474,11 @@ def unfurl_nested_annotations(
     ) in faf_idx.items():  # NOTE: faf annotations are all done on adj-only groupings
         entry = k.split("_")
 
-        # Create combo_fields in same way as above ([pop, adj])
-        combo_fields = entry[1:] + [entry[0]]
-        combo = "_".join(combo_fields)
-
         if gnomad:
+
+            # Create combo_fields in same way as above ([pop, adj])
+            combo_fields = entry[1:] + [entry[0]]
+            combo = "_".join(combo_fields)
 
             # Skip all gnomAD subsets
             # Note: this is relevant to the exomes only
@@ -517,6 +507,9 @@ def unfurl_nested_annotations(
             }
 
         else:
+            # Set combo to equal entry as above
+            combo = entry
+
             # NOTE: need to compute UKBB separately because UKBB no longer has faf meta bundled into faf
             combo_dict = {
                 f"faf95_{combo}": hl.or_missing(
