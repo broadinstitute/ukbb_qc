@@ -149,6 +149,13 @@ def populate_info_dict(
         if pop not in KEEP_GNOMAD_POPS:
             pops.pop(pop)
 
+    logger.info(
+        "Separating gnomad exome/genome pops and adding 'ami' to gnomAD genomes pos..."
+    )
+    gnomad_exomes_pops = pops.copy()
+    gnomad_genomes_pops = pops.copy()
+    gnomad_genomes_pops["ami"] = "Amish"
+
     logger.info("Removing gnomAD subpops from UKBB population description dict...")
     ukbb_pops = pops.copy()
     for pop in pops:
@@ -194,47 +201,101 @@ def populate_info_dict(
         if "gnomad" in subset:
             description_text = " in gnomAD"
 
-            vcf_info_dict.update(
-                make_info_dict(
-                    prefix=subset,
-                    label_groups=dict(group=groups),
-                    description_text=description_text,
-                )
-            )
-            vcf_info_dict.update(
-                make_info_dict(
-                    prefix=subset, popmax=True, description_text=description_text
-                )
-            )
-
-            for label_group in all_gnomad_label_groups:
+            if "exomes" in subset:
                 vcf_info_dict.update(
-                    make_info_dict(prefix=subset, label_groups=label_group)
+                    make_info_dict(
+                        prefix=subset,
+                        pop_names=gnomad_exomes_pops,
+                        label_groups=dict(group=groups),
+                        description_text=description_text,
+                    )
                 )
-
-            for label_group in faf_gnomad_label_groups:
                 vcf_info_dict.update(
-                    make_info_dict(prefix=subset, label_groups=label_group, faf=True)
+                    make_info_dict(
+                        prefix=subset,
+                        pop_names=gnomad_exomes_pops,
+                        popmax=True,
+                        description_text=description_text,
+                    )
                 )
 
-            vcf_info_dict.update(
-                make_info_dict(
-                    prefix=subset,
-                    label_groups=dict(
-                        group=["adj"], pop=["nfe"], subpop=gnomad_nfe_subpops
-                    ),
-                    description_text=description_text,
+                for label_group in all_gnomad_label_groups:
+                    vcf_info_dict.update(
+                        make_info_dict(
+                            prefix=subset,
+                            pop_names=gnomad_exomes_pops,
+                            label_groups=label_group,
+                        )
+                    )
+
+                for label_group in faf_gnomad_label_groups:
+                    vcf_info_dict.update(
+                        make_info_dict(
+                            prefix=subset,
+                            pop_names=gnomad_exomes_pops,
+                            label_groups=label_group,
+                            faf=True,
+                        )
+                    )
+
+                vcf_info_dict.update(
+                    make_info_dict(
+                        prefix=subset,
+                        pop_names=gnomad_exomes_pops,
+                        label_groups=dict(
+                            group=["adj"], pop=["nfe"], subpop=gnomad_nfe_subpops
+                        ),
+                        description_text=description_text,
+                    )
                 )
-            )
-            vcf_info_dict.update(
-                make_info_dict(
-                    prefix=subset,
-                    label_groups=dict(
-                        group=["adj"], pop=["eas"], subpop=gnomad_eas_subpops
-                    ),
-                    description_text=description_text,
+                vcf_info_dict.update(
+                    make_info_dict(
+                        prefix=subset,
+                        pop_names=gnomad_exomes_pops,
+                        label_groups=dict(
+                            group=["adj"], pop=["eas"], subpop=gnomad_eas_subpops
+                        ),
+                        description_text=description_text,
+                    )
                 )
-            )
+
+            else:
+                vcf_info_dict.update(
+                    make_info_dict(
+                        prefix=subset,
+                        pop_names=gnomad_genomes_pops,
+                        label_groups=dict(group=groups),
+                        description_text=description_text,
+                    )
+                )
+                vcf_info_dict.update(
+                    make_info_dict(
+                        prefix=subset,
+                        pop_names=gnomad_genomes_pops,
+                        popmax=True,
+                        description_text=description_text,
+                    )
+                )
+
+                for label_group in all_gnomad_label_groups:
+                    vcf_info_dict.update(
+                        make_info_dict(
+                            prefix=subset,
+                            pop_names=gnomad_genomes_pops,
+                            label_groups=label_group,
+                        )
+                    )
+
+                for label_group in faf_gnomad_label_groups:
+                    vcf_info_dict.update(
+                        make_info_dict(
+                            prefix=subset,
+                            pop_names=gnomad_genomes_pops,
+                            label_groups=label_group,
+                            faf=True,
+                        )
+                    )
+
         else:
             vcf_info_dict.update(
                 make_info_dict(prefix=subset, label_groups=dict(group=groups))
