@@ -16,7 +16,6 @@ from gnomad.utils.vcf import (
     GROUPS,
     SEXES,
 )
-from gnomad_qc.v2.variant_qc.prepare_data_release import index_globals
 from gnomad_qc.v2.variant_qc.prepare_data_release import (
     EAS_SUBPOPS as GNOMAD_EAS_SUBPOPS,
 )
@@ -441,6 +440,40 @@ def get_age_distributions(ht: hl.Table, bins: List[int] = [30, 80, 10]) -> str:
     age_hist_data.bin_freq.insert(0, age_hist_data.n_smaller)
     age_hist_data.bin_freq.append(age_hist_data.n_larger)
     return age_hist_data.bin_freq
+
+
+def index_globals(
+    freq_meta: List[Dict[str, str]], label_groups: Dict
+) -> Dict[str, int]:
+    """
+    Create a dictionary keyed by the specified label groupings with values describing the corresponding index of each grouping entry in the freq_meta array annotation.
+
+    e.g., if freq_meta is [{'group': 'adj'}, {'group': 'raw'}, {'group': 'adj', 'pop': 'nfe'}], then this function will return 
+    {'adj': 0, 'raw': 1, 'nfe_adj': 2}.
+
+    :param List[Dict[str, str]] freq_meta: Ordered list containing dictionaries describing all the grouping combinations contained in the
+        frequency row annotation.
+    param Dict[str, List[str]] label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
+        e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
+    :return: Dictionary keyed by specified label grouping combinations, with values describing the corresponding index
+        of each grouping entry in the frequency array.
+    :rtype: Dict[str, int]
+    """
+    combos = make_label_combos(label_groups)
+    index_dict = {}
+
+    for combo in combos:
+        combo_fields = combo.split("_")
+        for i, v in enumerate(freq_meta):
+            if set(v.values()) == set(combo_fields):
+                # NOTE: this is UKBB specific
+                # This is to avoid updating the dictionary when the subpop is the same as the pop
+                # E.g., this is to avoid updating the index for {'group': 'adj', 'pop': 'nfe'} with the
+                # index for {'group': 'adj', 'pop': 'nfe', 'subpop': 'nfe'},
+                if "subpop" in v and v["subpop"] == v["pop"]:
+                    continue
+                index_dict.update({f"{combo}": i})
+    return index_dict
 
 
 def make_freq_meta_index_dict(
