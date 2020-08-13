@@ -106,9 +106,9 @@ KEEP_GNOMAD_POPS.extend(GNOMAD_EAS_SUBPOPS)
 
 # Remove unnecessary pop names from pops dict
 POPS = POP_NAMES
-for pop in pops.copy():
+for pop in POPS.copy():
     if pop not in KEEP_GNOMAD_POPS:
-        pops.pop(pop)
+        POPS.pop(pop)
 
 # Separating gnomad exome/genome pops and adding 'ami' to gnomAD genomes pops
 GNOMAD_EXOMES_POPS = POPS.copy()
@@ -117,7 +117,7 @@ GNOMAD_GENOMES_POPS["ami"] = "Amish"
 
 # Remove gnomAD subpops from UKBB pops list
 UKBB_POPS = POPS.copy()
-for pop in pops:
+for pop in POPS:
     if (pop in GNOMAD_NFE_SUBPOPS) or (pop in GNOMAD_EAS_SUBPOPS):
         UKBB_POPS.pop(pop)
 
@@ -129,9 +129,9 @@ def populate_info_dict(
     info_dict: Dict[str, Dict[str, str]] = VCF_INFO_DICT,
     subset_list: List[str] = SUBSET_LIST,
     groups: List[str] = GROUPS,
-    ukbb_pops: List[str] = UKBB_POPS,
-    gnomad_exomes_pops: List[str] = GNOMAD_EXOMES_POPS,
-    gnomad_genomes_pops: List[str] = GNOMAD_GENOMES_POPS,
+    ukbb_pops: Dict[str, str] = UKBB_POPS,
+    gnomad_exomes_pops: Dict[str, str] = GNOMAD_EXOMES_POPS,
+    gnomad_genomes_pops: Dict[str, str] = GNOMAD_GENOMES_POPS,
     faf_pops: List[str] = FAF_POPS,
     gnomad_sexes: List[str] = SEXES,
     ukbb_sexes: List[str] = SEXES_UKBB,
@@ -157,9 +157,9 @@ def populate_info_dict(
     :param Dict[str, Dict[str, str]] info_dict: INFO dict to be populated.
     :param List[str] subset_list: List of sample subsets in dataset. Default is SUBSET_LIST.
     :param List[str] groups: List of sample groups [adj, raw]. Default is GROUPS.
-    :param List[str] ukbb_pops: List of sample global population names for UKBB. Default is UKBB_POPS.
-    :param List[str] gnomad_exomes_pops: List of sample global population names for gnomAD exomes. Default is GNOMAD_EXOMES_POPS.
-    :param List[str] gnomad_genomes_pops: List of sample global population names for gnomAD genomes. Default is GNOMAD_GENOMES_POPS.
+    :param Dict[str, str] ukbb_pops: List of sample global population names for UKBB. Default is UKBB_POPS.
+    :param Dict[str, str] gnomad_exomes_pops: List of sample global population names for gnomAD exomes. Default is GNOMAD_EXOMES_POPS.
+    :param Dict[str, str] gnomad_genomes_pops: List of sample global population names for gnomAD genomes. Default is GNOMAD_GENOMES_POPS.
     :param List[str] faf_pops: List of faf population names. Default is FAF_POPS.
     :param List[str] gnomad_sexes: gnomAD sample sexes used in VCF export. Default is SEXES. 
     :param List[str] ukbb_sexes: UKBB sample sexes used in VCF export. Default is SEXES_UKBB.
@@ -180,43 +180,56 @@ def populate_info_dict(
         add_as_info_dict(info_dict=vcf_info_dict, as_fields=temp_AS_fields)
     )
 
-    all_ukbb_label_groups = [
-        dict(group=["adj"], sex=ukbb_sexes),
-        dict(group=["adj"], pop=ukbb_pops),
-        dict(group=["adj"], pop=ukbb_pops, sex=ukbb_sexes),
-    ]
-    all_gnomad_label_groups = [
-        dict(group=["adj"], sex=gnomad_sexes),
-        dict(group=["adj"], pop=pops),
-        dict(group=["adj"], pop=pops, sex=gnomad_sexes),
-    ]
-    faf_label_groups = [
-        dict(group=["adj"]),
-        dict(group=["adj"], sex=ukbb_sexes),
-        dict(group=["adj"], pop=faf_pops),
-        dict(group=["adj"], pop=faf_pops, sex=ukbb_sexes),
-    ]
-    faf_gnomad_label_groups = [
-        dict(group=["adj"]),
-        dict(group=["adj"], sex=gnomad_sexes),
-        dict(group=["adj"], pop=faf_pops),
-        dict(group=["adj"], pop=faf_pops, sex=gnomad_sexes),
-    ]
+    def _create_label_groups(
+        pops: Dict[str, str], sexes: List[str], group: List[str] = ["adj"],
+    ) -> List[Dict[str, List[str]]]:
+        """
+        Generates list of label group dictionaries needed to populate info dictionary.
+
+        Label dictionaries are passed as input to `make_info_dict`.
+
+        :param Dict[str, str] pops: List of population names.
+        :param List[str] sexes: List of sample sexes.
+        :return: List of label group dictionaries.
+        :rtype: List[Dict[str, List[str]]]
+        """
+        return [
+            dict(group=groups),  # this is to capture raw fields
+            dict(group=group, sex=pops),
+            dict(group=group, pop=pops),
+            dict(group=group, pop=pops, sex=sexes),
+        ]
 
     for subset in subset_list:
 
         if "gnomad" in subset:
             description_text = " in gnomAD"
 
-            if "exomes" in subset:
+            # faf labels are the same for exomes/genomes
+            faf_label_groups = _create_label_groups(pops=faf_pops, sexes=gnomad_sexes)
+            for label_group in faf_label_groups:
                 vcf_info_dict.update(
                     make_info_dict(
                         prefix=subset,
                         pop_names=gnomad_exomes_pops,
-                        label_groups=dict(group=groups),
-                        description_text=description_text,
+                        label_groups=label_group,
+                        faf=True,
                     )
                 )
+
+            if "exomes" in subset:
+                gnomad_exomes_label_groups = _create_label_groups(
+                    pops=gnomad_exomes_pops, sexes=gnomad_sexes
+                )
+                for label_group in gnomad_exomes_label_groups:
+                    vcf_info_dict.update(
+                        make_info_dict(
+                            prefix=subset,
+                            pop_names=gnomad_exomes_pops,
+                            label_groups=label_group,
+                            description_text=description_text,
+                        )
+                    )
                 vcf_info_dict.update(
                     make_info_dict(
                         prefix=subset,
@@ -225,25 +238,6 @@ def populate_info_dict(
                         description_text=description_text,
                     )
                 )
-
-                for label_group in all_gnomad_label_groups:
-                    vcf_info_dict.update(
-                        make_info_dict(
-                            prefix=subset,
-                            pop_names=gnomad_exomes_pops,
-                            label_groups=label_group,
-                        )
-                    )
-
-                for label_group in faf_gnomad_label_groups:
-                    vcf_info_dict.update(
-                        make_info_dict(
-                            prefix=subset,
-                            pop_names=gnomad_exomes_pops,
-                            label_groups=label_group,
-                            faf=True,
-                        )
-                    )
 
                 vcf_info_dict.update(
                     make_info_dict(
@@ -267,14 +261,18 @@ def populate_info_dict(
                 )
 
             else:
-                vcf_info_dict.update(
-                    make_info_dict(
-                        prefix=subset,
-                        pop_names=gnomad_genomes_pops,
-                        label_groups=dict(group=groups),
-                        description_text=description_text,
-                    )
+                gnomad_genomes_label_groups = _create_label_groups(
+                    pops=gnomad_exomes_pops, sexes=gnomad_sexes
                 )
+                for label_group in gnomad_genomes_label_groups:
+                    vcf_info_dict.update(
+                        make_info_dict(
+                            prefix=subset,
+                            pop_names=gnomad_genomes_pops,
+                            label_groups=label_group,
+                            description_text=description_text,
+                        )
+                    )
                 vcf_info_dict.update(
                     make_info_dict(
                         prefix=subset,
@@ -284,40 +282,27 @@ def populate_info_dict(
                     )
                 )
 
-                for label_group in all_gnomad_label_groups:
-                    vcf_info_dict.update(
-                        make_info_dict(
-                            prefix=subset,
-                            pop_names=gnomad_genomes_pops,
-                            label_groups=label_group,
-                        )
-                    )
-
-                for label_group in faf_gnomad_label_groups:
-                    vcf_info_dict.update(
-                        make_info_dict(
-                            prefix=subset,
-                            pop_names=gnomad_genomes_pops,
-                            label_groups=label_group,
-                            faf=True,
-                        )
-                    )
-
         else:
-            vcf_info_dict.update(
-                make_info_dict(prefix=subset, label_groups=dict(group=groups))
-            )
-
-            for label_group in all_ukbb_label_groups:
+            ukbb_label_groups = _create_label_groups(pops=ukbb_pops, sexes=ukbb_sexes)
+            for label_group in ukbb_label_groups:
                 vcf_info_dict.update(
                     make_info_dict(
-                        prefix=subset, pop_names=ukbb_pops, label_groups=label_group
+                        prefix=subset,
+                        pop_names=ukbb_pops,
+                        label_groups=label_group,
+                        description_text=description_text,
                     )
                 )
 
+            faf_label_groups = _create_label_groups(pops=faf_pops, sexes=ukbb_sexes)
             for label_group in faf_label_groups:
                 vcf_info_dict.update(
-                    make_info_dict(prefix=subset, label_groups=label_group, faf=True)
+                    make_info_dict(
+                        prefix=subset,
+                        pop_names=ukbb_pops,
+                        label_groups=label_group,
+                        faf=True,
+                    )
                 )
 
             vcf_info_dict.update(
@@ -587,7 +572,7 @@ def main(args):
             ]
 
             logger.info("Starting VCF process...")
-            logger.info("Getting raw MT and dropping all unnecessary entries...")
+            """logger.info("Getting raw MT and dropping all unnecessary entries...")
 
             # NOTE: reading in raw MatrixTable to be able to return all samples/variants
             mt = get_ukbb_data(
@@ -602,11 +587,16 @@ def main(args):
             ).select_entries(*SPARSE_ENTRIES)
             mt = mt.transmute_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype)
 
-            logger.info("Filtering to chr20 (for tests only)...")
+            logger.info("Filtering to chr20 and chrX (for tests only)...")
             # Using filter intervals to keep all the work done by get_ukbb_data
             # (removing sample with withdrawn consent/their ref blocks/variants,
             # also keeping meta col annotations)
-            mt = hl.filter_intervals(mt, [hl.parse_locus_interval("chr20")])
+            mt = hl.filter_intervals(
+                mt, [
+                    hl.parse_locus_interval("chr20"),
+                    hl.parse_locus_interval("chrX")
+                ],
+            )
 
             logger.info("Splitting raw MT...")
             mt = hl.experimental.sparse_split_multi(mt)
@@ -616,6 +606,20 @@ def main(args):
             ht = hl.read_table(release_ht_path(*tranche_data))
             mt = mt.annotate_rows(**ht[mt.row_key])
             mt = mt.annotate_globals(**ht.index_globals())
+
+            logger.info(
+                "Checkpointing release MT (chr20/X only + sparse) for testing/pharmas..."
+            )
+            from ukbb_qc.resources.basics import get_release_path
+
+            mt = mt.checkpoint(
+                f"{get_release_path(*tranche_data)}/mt/{data_source}.freeze_{freeze}.release.sparse.mt",
+                overwrite=args.overwrite,
+            )
+            logger.info(f"Release MT (sparse; chr20/X only) count: {mt.count()}")"""
+            mt = hl.read_matrix_table(
+                "gs://broad-ukbb/broad.freeze_6/release/mt/broad.freeze_6.release.sparse.mt"
+            )
 
             logger.info(
                 "Dropping cohort frequencies (necessary only for internal use; at last four indices of freq struct)..."
@@ -739,8 +743,8 @@ def main(args):
             }
 
             logger.info("Saving header dict to pickle...")
-            with hl.hadoop_open(release_header_path(*tranche_data), "wb") as p:
-                pickle.dump(header_dict, p, protocol=pickle.HIGHEST_PROTOCOL)
+            # with hl.hadoop_open(release_header_path(*tranche_data), "wb") as p:
+            #    pickle.dump(header_dict, p, protocol=pickle.HIGHEST_PROTOCOL)
             mt.write(release_mt_path(*tranche_data), args.overwrite)
 
         if args.sanity_check:
