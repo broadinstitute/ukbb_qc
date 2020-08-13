@@ -195,7 +195,7 @@ def populate_info_dict(
         """
         return [
             dict(group=groups),  # this is to capture raw fields
-            dict(group=group, sex=pops),
+            dict(group=group, sex=sexes),
             dict(group=group, pop=pops),
             dict(group=group, pop=pops, sex=sexes),
         ]
@@ -287,10 +287,7 @@ def populate_info_dict(
             for label_group in ukbb_label_groups:
                 vcf_info_dict.update(
                     make_info_dict(
-                        prefix=subset,
-                        pop_names=ukbb_pops,
-                        label_groups=label_group,
-                        description_text=description_text,
+                        prefix=subset, pop_names=ukbb_pops, label_groups=label_group,
                     )
                 )
 
@@ -321,7 +318,7 @@ def populate_info_dict(
         for cluster in subpops[pop]:
             ukbb_pops[
                 f"{cluster}"
-            ] = f"{pops[pop]} and hybrid population cluster {cluster}"
+            ] = f"{ukbb_pops[pop]} and hybrid population cluster {cluster}"
     for pop in subpops:
         vcf_info_dict.update(
             make_info_dict(
@@ -431,7 +428,7 @@ def unfurl_nested_annotations(
         )
         popmax = "popmax"
         freq_idx = make_index_dict(
-            t=t, freq_meta_str="freq_meta", pop=pops, subpops=subpops
+            t=t, freq_meta_str="freq_meta", pops=pops, subpops=subpops
         )
 
     # Unfurl freq index dict
@@ -495,7 +492,8 @@ def unfurl_nested_annotations(
 
         else:
             # Set combo to equal entry as above
-            combo = entry
+            combo_fields = entry
+            combo = "_".join(combo_fields)
 
             # NOTE: need to compute UKBB separately because UKBB no longer has faf meta bundled into faf
             combo_dict = {
@@ -620,6 +618,7 @@ def main(args):
             mt = hl.read_matrix_table(
                 "gs://broad-ukbb/broad.freeze_6/release/mt/broad.freeze_6.release.sparse.mt"
             )
+            ht = hl.read_table(release_ht_path(*tranche_data))
 
             logger.info(
                 "Dropping cohort frequencies (necessary only for internal use; at last four indices of freq struct)..."
@@ -743,8 +742,8 @@ def main(args):
             }
 
             logger.info("Saving header dict to pickle...")
-            # with hl.hadoop_open(release_header_path(*tranche_data), "wb") as p:
-            #    pickle.dump(header_dict, p, protocol=pickle.HIGHEST_PROTOCOL)
+            with hl.hadoop_open(release_header_path(*tranche_data), "wb") as p:
+                pickle.dump(header_dict, p, protocol=pickle.HIGHEST_PROTOCOL)
             mt.write(release_mt_path(*tranche_data), args.overwrite)
 
         if args.sanity_check:
@@ -886,7 +885,8 @@ def main(args):
 
                 hl.export_vcf(
                     mt,
-                    release_vcf_path(*tranche_data),
+                    # release_vcf_path(*tranche_data),
+                    "gs://broad-ukbb/broad.freeze_6/temp/chr20_X.vcf.bgz",
                     parallel="header_per_shard",
                     metadata=header_dict,
                 )
