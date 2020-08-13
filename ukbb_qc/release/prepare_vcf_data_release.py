@@ -570,7 +570,7 @@ def main(args):
             ]
 
             logger.info("Starting VCF process...")
-            """logger.info("Getting raw MT and dropping all unnecessary entries...")
+            logger.info("Getting raw MT and dropping all unnecessary entries...")
 
             # NOTE: reading in raw MatrixTable to be able to return all samples/variants
             mt = get_ukbb_data(
@@ -590,10 +590,7 @@ def main(args):
             # (removing sample with withdrawn consent/their ref blocks/variants,
             # also keeping meta col annotations)
             mt = hl.filter_intervals(
-                mt, [
-                    hl.parse_locus_interval("chr20"),
-                    hl.parse_locus_interval("chrX")
-                ],
+                mt, [hl.parse_locus_interval("chr20"), hl.parse_locus_interval("chrX")],
             )
 
             logger.info("Splitting raw MT...")
@@ -604,21 +601,6 @@ def main(args):
             ht = hl.read_table(release_ht_path(*tranche_data))
             mt = mt.annotate_rows(**ht[mt.row_key])
             mt = mt.annotate_globals(**ht.index_globals())
-
-            logger.info(
-                "Checkpointing release MT (chr20/X only + sparse) for testing/pharmas..."
-            )
-            from ukbb_qc.resources.basics import get_release_path
-
-            mt = mt.checkpoint(
-                f"{get_release_path(*tranche_data)}/mt/{data_source}.freeze_{freeze}.release.sparse.mt",
-                overwrite=args.overwrite,
-            )
-            logger.info(f"Release MT (sparse; chr20/X only) count: {mt.count()}")"""
-            mt = hl.read_matrix_table(
-                "gs://broad-ukbb/broad.freeze_6/release/mt/broad.freeze_6.release.sparse.mt"
-            )
-            ht = hl.read_table(release_ht_path(*tranche_data))
 
             logger.info(
                 "Dropping cohort frequencies (necessary only for internal use; at last four indices of freq struct)..."
@@ -885,8 +867,7 @@ def main(args):
 
                 hl.export_vcf(
                     mt,
-                    # release_vcf_path(*tranche_data),
-                    "gs://broad-ukbb/broad.freeze_6/temp/chr20_X.vcf.bgz",
+                    release_vcf_path(*tranche_data),
                     parallel="header_per_shard",
                     metadata=header_dict,
                 )
