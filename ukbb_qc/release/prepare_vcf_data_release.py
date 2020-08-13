@@ -262,7 +262,7 @@ def populate_info_dict(
 
             else:
                 gnomad_genomes_label_groups = _create_label_groups(
-                    pops=gnomad_exomes_pops, sexes=gnomad_sexes
+                    pops=gnomad_genomes_pops, sexes=gnomad_sexes
                 )
                 for label_group in gnomad_genomes_label_groups:
                     vcf_info_dict.update(
