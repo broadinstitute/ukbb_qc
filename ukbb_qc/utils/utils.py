@@ -14,6 +14,7 @@ from gnomad.utils.filtering import filter_to_adj, filter_to_autosomes
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.vcf import (
     GROUPS,
+    make_label_combos,
     SEXES,
 )
 from gnomad_qc.v2.variant_qc.prepare_data_release import (
@@ -508,7 +509,7 @@ def make_freq_meta_index_dict(
     if gnomad:
         sexes = gnomad_sexes
     else:
-        sexes = sexes_ukbb
+        sexes = ukbb_sexes
 
     index_dict = index_globals(freq_meta, dict(group=groups))
 
