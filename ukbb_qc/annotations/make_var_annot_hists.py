@@ -60,18 +60,18 @@ def main(args):
         # Move necessary annotations into info struct
         ht = ht.annotate(
             info=ht.info.annotate(
-                rf_tp_probability=ht.rf.rf_probability,
+                rf_tp_probability=ht.rf.rf_tp_probability,
                 AS_VQSLOD=hl.float(ht.vqsr.AS_VQSLOD),
             )
         )
-        ht = ht.select(qual=ht.qual, freq=ht.freq, info=ht.info.select(*metrics),)
+        ht = ht.select(qual=ht.qual, freq=ht.freq, info=ht.info.select(*metrics))
 
         logger.info("Getting info annotation histograms")
         hist_ranges_expr = get_annotations_hists(
             ht, ANNOTATIONS_HISTS, LOG10_ANNOTATIONS
         )
 
-        # NOTE: this is code was run on gnomAD v2 and has not been run since
+        # NOTE: Run this first, then update values ANNOTATIONS_HISTS as necessary
         if args.first_pass:
             logger.info(
                 "Evaluating minimum and maximum values for each metric of interest, and \
@@ -89,7 +89,9 @@ def main(args):
             logger.info(f"Metrics bounds: {minmax}")
 
         else:
-            logger.info("Aggregating hists over hand-tooled ranges")
+            logger.info(
+                "Aggregating hists over ranges determined using first pass run..."
+            )
             hists = ht.aggregate(
                 hl.array(
                     [
