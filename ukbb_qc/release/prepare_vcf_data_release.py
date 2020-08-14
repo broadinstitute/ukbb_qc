@@ -488,9 +488,9 @@ def unfurl_nested_annotations(
             }
 
         else:
-            # Set combo to equal entry as above
+            # Set combo to equal entry
             combo_fields = entry
-            combo = "_".join(combo_fields)
+            combo = k
 
             # NOTE: need to compute UKBB separately because UKBB no longer has faf meta bundled into faf
             combo_dict = {
