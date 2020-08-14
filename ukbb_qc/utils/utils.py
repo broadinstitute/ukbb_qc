@@ -12,11 +12,10 @@ from gnomad.utils.annotations import (
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.filtering import filter_to_adj, filter_to_autosomes
 from gnomad.utils.reference_genome import get_reference_genome
-from gnomad_qc.v2.variant_qc.prepare_data_release import (
+from gnomad.utils.vcf import (
     GROUPS,
-    POPS,
+    make_label_combos,
     SEXES,
-    index_globals,
 )
 from gnomad_qc.v2.variant_qc.prepare_data_release import (
     EAS_SUBPOPS as GNOMAD_EAS_SUBPOPS,
@@ -38,6 +37,7 @@ from ukbb_qc.resources.sample_qc import (
     qc_mt_path,
     qc_sites_path,
 )
+from ukbb_qc.utils.constants import SEXES_UKBB
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -443,8 +443,50 @@ def get_age_distributions(ht: hl.Table, bins: List[int] = [30, 80, 10]) -> str:
     return age_hist_data.bin_freq
 
 
+def index_globals(
+    freq_meta: List[Dict[str, str]], label_groups: Dict
+) -> Dict[str, int]:
+    """
+    Create a dictionary keyed by the specified label groupings with values describing the corresponding index of each grouping entry in the freq_meta array annotation.
+
+    e.g., if freq_meta is [{'group': 'adj'}, {'group': 'raw'}, {'group': 'adj', 'pop': 'nfe'}], then this function will return 
+    {'adj': 0, 'raw': 1, 'nfe_adj': 2}.
+
+    :param List[Dict[str, str]] freq_meta: Ordered list containing dictionaries describing all the grouping combinations contained in the
+        frequency row annotation.
+    param Dict[str, List[str]] label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
+        e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
+    :return: Dictionary keyed by specified label grouping combinations, with values describing the corresponding index
+        of each grouping entry in the frequency array.
+    :rtype: Dict[str, int]
+    """
+    combos = make_label_combos(label_groups)
+    index_dict = {}
+
+    for combo in combos:
+        combo_fields = combo.split("_")
+        for i, v in enumerate(freq_meta):
+            if set(v.values()) == set(combo_fields):
+                # NOTE: this is UKBB specific
+                # This is to avoid updating the dictionary when the subpop is the same as the pop
+                # E.g., this is to avoid updating the index for {'group': 'adj', 'pop': 'nfe'} with the
+                # index for {'group': 'adj', 'pop': 'nfe', 'subpop': 'nfe'},
+                if "subpop" in v and v["subpop"] == v["pop"]:
+                    continue
+                index_dict.update({f"{combo}": i})
+    return index_dict
+
+
 def make_freq_meta_index_dict(
-    freq_meta: List[str], gnomad: bool, subpops: List[str]
+    freq_meta: List[str],
+    gnomad: bool,
+    pops: List[str],
+    subpops: List[str],
+    gnomad_nfe_subpops: List[str] = GNOMAD_NFE_SUBPOPS,
+    gnomad_eas_subpops: List[str] = GNOMAD_EAS_SUBPOPS,
+    groups: List[str] = GROUPS,
+    gnomad_sexes: List[str] = SEXES,
+    ukbb_sexes: List[str] = SEXES_UKBB,
 ) -> Dict[str, int]:
     """
     Makes a dictionary of the entries in the frequency array annotation, where keys are the grouping combinations and the values
@@ -453,29 +495,41 @@ def make_freq_meta_index_dict(
     :param List[str] freq_meta: Ordered list containing string entries describing all the grouping combinations contained in the
         frequency array annotation.
     :param bool gnomad: Whether to index a gnomAD sample freq_meta list.
-    :param List[str] subpops: List of subpops in frequency array.
+    :param List[str] pops: List of global populations in frequency array. Used for both gnomAD and UKBB. 
+        Can handle populations to unique to gnomAD/UKBB or a union of all population names.
+    :param List[str] subpops: List of UKBB subpopulations in frequency array.
+    :param List[str] gnomad_nfe_subpops: List of nfe subpopulations in gnomAD. Default is GNOMAD_NFE_SUBPOPS.
+    :param List[str] gnomad_eas_subpops: List of eas subpopulations in gnomAD. Default is GNOMAD_EAS_SUBPOPS.
+    :param List[str] groups: Group names used to generate labels for high quality genotypes and all raw genotypes. Default is GROUPS.
+    :param List[str] sexes: gnomAD sample sexes used in VCF export. Default is SEXES. 
+    :param List[str] ukbb_sexes: UKBB sample sexes used in VCF export. Default is SEXES_UKBB.
     :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
         of each grouping entry in the frequency array
     :rtype: Dict[str, int]
     """
-    index_dict = index_globals(freq_meta, dict(group=GROUPS))
+    if gnomad:
+        sexes = gnomad_sexes
+    else:
+        sexes = ukbb_sexes
 
-    index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=POPS)))
-    index_dict.update(index_globals(freq_meta, dict(group=GROUPS, sex=SEXES)))
-    index_dict.update(index_globals(freq_meta, dict(group=GROUPS, pop=POPS, sex=SEXES)))
+    index_dict = index_globals(freq_meta, dict(group=groups))
+
+    index_dict.update(index_globals(freq_meta, dict(group=groups, pop=pops)))
+    index_dict.update(index_globals(freq_meta, dict(group=groups, sex=sexes)))
+    index_dict.update(index_globals(freq_meta, dict(group=groups, pop=pops, sex=sexes)))
     index_dict.update(
-        index_globals(freq_meta, dict(group=GROUPS, pop=POPS, subpop=subpops))
+        index_globals(freq_meta, dict(group=groups, pop=pops, subpop=subpops))
     )
 
     if gnomad:
         index_dict.update(
             index_globals(
-                freq_meta, dict(group=GROUPS, pop=["nfe"], subpop=GNOMAD_NFE_SUBPOPS),
+                freq_meta, dict(group=groups, pop=["nfe"], subpop=gnomad_nfe_subpops),
             )
         )
         index_dict.update(
             index_globals(
-                freq_meta, dict(group=GROUPS, pop=["eas"], subpop=GNOMAD_EAS_SUBPOPS),
+                freq_meta, dict(group=groups, pop=["eas"], subpop=gnomad_eas_subpops),
             )
         )
 
@@ -483,13 +537,18 @@ def make_freq_meta_index_dict(
 
 
 def make_index_dict(
-    t: Union[hl.MatrixTable, hl.Table], freq_meta_str: str, subpops: List[str]
+    t: Union[hl.MatrixTable, hl.Table],
+    freq_meta_str: str,
+    pops: List[str],
+    subpops: List[str],
 ) -> Dict[str, int]:
     """
     Create a look-up Dictionary for entries contained in the frequency annotation array.
 
     :param Table ht: Table or MatrixTable containing freq_meta global annotation to be indexed
     :param str freq_meta: freq_meta global annotation to be indexed (freq_meta, gnomad_exomes_freq_meta, or gnomad_genomes_freq_meta)
+    :param List[str] pops: List of global populations in frequency array. Used for both gnomAD and UKBB. 
+        Can handle populations to unique to gnomAD/UKBB or a union of all population names.
     :param List[str] subpops: List of subpops in frequency array.
     :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
         of each grouping entry in the frequency array
@@ -498,7 +557,11 @@ def make_index_dict(
     freq_meta = hl.eval(t.globals[freq_meta_str])
     # check if indexing gnomAD data
     if "gnomad" in freq_meta_str:
-        index_dict = make_freq_meta_index_dict(freq_meta, gnomad=True, subpops=subpops)
+        index_dict = make_freq_meta_index_dict(
+            freq_meta, gnomad=True, pops=pops, subpops=subpops
+        )
     else:
-        index_dict = make_freq_meta_index_dict(freq_meta, gnomad=False, subpops=subpops)
+        index_dict = make_freq_meta_index_dict(
+            freq_meta, gnomad=False, pops=pops, subpops=subpops
+        )
     return index_dict
