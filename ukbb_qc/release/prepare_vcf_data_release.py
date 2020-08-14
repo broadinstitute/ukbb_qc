@@ -613,7 +613,7 @@ def main(args):
 
             # TODO: remove from code for 500K
             # TODO: check with DSP why annotations are missing
-            from ukbb_qc.resources.basics import vqsr_sites_ht_path
+            from ukbb_qc.resources.basics import vqsr_sites_path
             from gnomad.utils.sparse_mt import split_info_annotation
             logger.info("Pulling AS_VarDP from VQSR sites HT (300K fix)...")
             vqsr_sites_ht = hl.read_table(vqsr_sites_path(*tranche_data))
