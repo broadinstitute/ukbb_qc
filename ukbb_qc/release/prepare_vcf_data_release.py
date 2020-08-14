@@ -568,8 +568,6 @@ def main(args):
 
             logger.info("Starting VCF process...")
             logger.info("Getting raw MT and dropping all unnecessary entries...")
-            # TODO: reminder to self to get AS_VarDP from sites HT (given to DSP team)
-            # Also check with DSP why annotations are missing
 
             # NOTE: reading in raw MatrixTable to be able to return all samples/variants
             mt = get_ukbb_data(
@@ -613,9 +611,12 @@ def main(args):
             mt = mt.annotate_rows(freq=mt.freq[:-4])
             mt = mt.annotate_globals(freq_meta=mt.freq_meta[:-4])
 
+            # TODO: remove from code for 500K
+            # TODO: check with DSP why annotations are missing
+            from ukbb_qc.resources.basics import vqsr_sites_ht_path
+            from gnomad.utils.sparse_mt import split_info_annotation
             logger.info("Pulling AS_VarDP from VQSR sites HT (300K fix)...")
             vqsr_sites_ht = hl.read_table(vqsr_sites_path(*tranche_data))
-            from gnomad.utils.sparse_mt import split_info_annotation
 
             vqsr_sites_ht = hl.split_multi(vqsr_sites_ht)
             vqsr_sites_ht = vqsr_sites_ht.annotate(
