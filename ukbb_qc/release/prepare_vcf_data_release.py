@@ -100,26 +100,19 @@ GNOMAD_EAS_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["EAS"]))
 # Select populations to keep from the list of population names in POP_NAMES
 # This removes pop names we don't want to use in the UKBB release
 # (e.g., "uniform", "consanguineous") to reduce clutter
-KEEP_GNOMAD_POPS = ["afr", "amr", "asj", "eas", "fin", "nfe", "oth", "sas"]
-KEEP_GNOMAD_POPS.extend(GNOMAD_NFE_SUBPOPS)
-KEEP_GNOMAD_POPS.extend(GNOMAD_EAS_SUBPOPS)
+KEEP_POPS = ["afr", "amr", "asj", "eas", "fin", "nfe", "oth", "sas"]
+UKBB_POPS = {pop: POP_NAMES[pop] for pop in KEEP_POPS}
+
+KEEP_POPS.extend(GNOMAD_NFE_SUBPOPS)
+KEEP_POPS.extend(GNOMAD_EAS_SUBPOPS)
 
 # Remove unnecessary pop names from pops dict
-POPS = POP_NAMES
-for pop in POPS.copy():
-    if pop not in KEEP_GNOMAD_POPS:
-        POPS.pop(pop)
+POPS = {pop: POP_NAMES[pop] for pop in KEEP_POPS}
 
 # Separating gnomad exome/genome pops and adding 'ami' to gnomAD genomes pops
 GNOMAD_EXOMES_POPS = POPS.copy()
 GNOMAD_GENOMES_POPS = POPS.copy()
 GNOMAD_GENOMES_POPS["ami"] = "Amish"
-
-# Remove gnomAD subpops from UKBB pops list
-UKBB_POPS = POPS.copy()
-for pop in POPS:
-    if (pop in GNOMAD_NFE_SUBPOPS) or (pop in GNOMAD_EAS_SUBPOPS):
-        UKBB_POPS.pop(pop)
 
 
 def populate_info_dict(
@@ -190,6 +183,7 @@ def populate_info_dict(
 
         :param Dict[str, str] pops: List of population names.
         :param List[str] sexes: List of sample sexes.
+        :param List[str] group: List of data types (adj, raw). Default is ["adj"].
         :return: List of label group dictionaries.
         :rtype: List[Dict[str, List[str]]]
         """
@@ -230,6 +224,8 @@ def populate_info_dict(
                             description_text=description_text,
                         )
                     )
+
+                # Add popmax to info dict
                 vcf_info_dict.update(
                     make_info_dict(
                         prefix=subset,
@@ -239,6 +235,7 @@ def populate_info_dict(
                     )
                 )
 
+                # Add gnomAD exome subpops to info dict
                 vcf_info_dict.update(
                     make_info_dict(
                         prefix=subset,
@@ -273,6 +270,8 @@ def populate_info_dict(
                             description_text=description_text,
                         )
                     )
+
+                # Add popmax to info dict
                 vcf_info_dict.update(
                     make_info_dict(
                         prefix=subset,
@@ -329,9 +328,6 @@ def populate_info_dict(
         )
 
     # Add variant quality histograms to info dict
-    # for key in vcf_info_dict:
-    #    print(key, vcf_info_dict[key])
-    # print(bin_edges)
     vcf_info_dict.update(make_hist_dict(bin_edges, adj=True))
     vcf_info_dict.update(make_hist_dict(bin_edges, adj=False))
     return vcf_info_dict
@@ -398,7 +394,7 @@ def unfurl_nested_annotations(
     :param Table/MatrixTable t: Table/MatrixTable containing the nested variant annotation arrays to be unfurled.
     :param bool gnomad: Whether the annotations are from gnomAD.
     :param bool genome: Whether the annotations are from genome data (relevant only to gnomAD data).
-    :param List[str] pops: List of global populations in frequency arry. Used for both gnomAD and UKBB.
+    :param List[str] pops: List of global populations in frequency array. Used for both gnomAD and UKBB.
     :param List[str] subpops: List of all UKBB subpops (possible hybrid population cluster names). 
     :return: Dictionary containing variant annotations and their corresponding values.
     :rtype: Dict[str, hl.expr.Expression]
@@ -458,7 +454,7 @@ def unfurl_nested_annotations(
 
         if gnomad:
 
-            # Create combo_fields in same way as above ([pop, adj])
+            # Create combo_fields
             # NOTE: gnomad needs to be handled separately because gnomad faf index dict has different format
             # gnomad faf index dict has keys like 'adj_afr', but UKBB will index with keys like 'afr_adj'
             combo_fields = entry[1:] + [entry[0]]
@@ -471,7 +467,7 @@ def unfurl_nested_annotations(
                 if entry[0] in subset_labels:
                     continue
 
-                # Re-create combo to make sure formatting is consistent with other pop lables
+                # Re-create combo to make sure formatting is consistent with other pop labels
                 # Manually create combo with "_adj"
                 # NOTE: entry[0] in the gnomAD exomes faf meta is "gnomad",
                 # but the value in the faf meta is still "adj"
@@ -572,6 +568,7 @@ def main(args):
             logger.info("Starting VCF process...")
             logger.info("Getting raw MT and dropping all unnecessary entries...")
             # TODO: reminder to self to get AS_VarDP from sites HT (given to DSP team)
+            # Also check with DSP why these sites were removed
 
             # NOTE: reading in raw MatrixTable to be able to return all samples/variants
             mt = get_ukbb_data(
@@ -586,13 +583,15 @@ def main(args):
             ).select_entries(*SPARSE_ENTRIES)
             mt = mt.transmute_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype)
 
-            logger.info("Filtering to chr20 and chrX (for tests only)...")
-            # Using filter intervals to keep all the work done by get_ukbb_data
-            # (removing sample with withdrawn consent/their ref blocks/variants,
-            # also keeping meta col annotations)
-            mt = hl.filter_intervals(
-                mt, [hl.parse_locus_interval("chr20"), hl.parse_locus_interval("chrX")],
-            )
+            if args.test:
+                logger.info("Filtering to chr20 and chrX (for tests only)...")
+                # Using filter intervals to keep all the work done by get_ukbb_data
+                # (removing sample with withdrawn consent/their ref blocks/variants,
+                # also keeping meta col annotations)
+                mt = hl.filter_intervals(
+                    mt,
+                    [hl.parse_locus_interval("chr20"), hl.parse_locus_interval("chrX")],
+                )
 
             logger.info("Splitting raw MT...")
             mt = hl.experimental.sparse_split_multi(mt)
@@ -606,6 +605,8 @@ def main(args):
             logger.info(
                 "Dropping cohort frequencies (necessary only for internal use; at last four indices of freq struct)..."
             )
+            # Cohort freq has 4 entries in freq and freq meta:
+            # cohort (adj), cohort (raw), cohort (XX), and cohort (XY)
             mt = mt.annotate_rows(freq=mt.freq[:-4])
             mt = mt.annotate_globals(freq_meta=mt.freq_meta[:-4])
 
@@ -886,7 +887,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--key_by_locus_and_alleles",
-        help="Whether to key raw MT by locus and alleles. REQUIRED only for the 300K tranche",
+        help="Whether to key raw MT by locus and alleles. REQUIRED only for tranche 3/freeze 6/300K",
         action="store_true",
     )
     parser.add_argument(
@@ -896,9 +897,14 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--raw_partitions",
-        help="Number of desired partitions for the raw MT. Necessary only for 300K. Used only if --repartition is also specified",
+        help="Number of desired partitions for the raw MT. Necessary only for tranche 3/freeze 6/300K. Used only if --repartition is also specified",
         default=30000,
         type=int,
+    )
+    parser.add_argument(
+        "--test",
+        help="Create release files using only chr20 and chrX for testing purposes",
+        action="store_true",
     )
     parser.add_argument(
         "--prepare_vcf_mt", help="Use release mt to create vcf mt", action="store_true"

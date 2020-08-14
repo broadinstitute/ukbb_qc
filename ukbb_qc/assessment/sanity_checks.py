@@ -157,7 +157,7 @@ def filters_sanity_check(ht: hl.Table) -> None:
         Performs sanity checks to measure percentages of variants filtered under different conditions.
 
         :param hl.Table ht: Input Table.
-        :param hl.expr.Expression group_expr: Expression to group table by.
+        :param hl.expr.Expression group_exprs: Dictionary of expressions to group the table by.
         :param int n_rows: Number of rows to show.
         :param int n_cols: Number of columns to show.
         :return: None
@@ -273,6 +273,7 @@ def raw_and_adj_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool):
     for subfield in ["AC", "AF"]:
         # Check raw AC, AF > 0
         # NOTE: some sites should fail the raw AC > 0 for UKBB (but only in the low ten thousands range)
+        # We generate the release MT based on the raw MT, but the frequency HT calculates frequency only on samples that pass QC
         generic_field_check(
             ht,
             cond_expr=(ht.info[f"{subfield}_raw"] <= 0),
