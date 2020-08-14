@@ -613,6 +613,23 @@ def main(args):
             mt = mt.annotate_rows(freq=mt.freq[:-4])
             mt = mt.annotate_globals(freq_meta=mt.freq_meta[:-4])
 
+            logger.info("Pulling AS_VarDP from VQSR sites HT (300K fix)...")
+            vqsr_sites_ht = hl.read_table(vqsr_sites_path(*tranche_data))
+            from gnomad.utils.sparse_mt import split_info_annotation
+
+            vqsr_sites_ht = hl.split_multi(vqsr_sites_ht)
+            vqsr_sites_ht = vqsr_sites_ht.annotate(
+                info=vqsr_sites_ht.info.annotate(
+                    **split_info_annotation(vqsr_sites_ht.info, vqsr_sites_ht.a_index),
+                ),
+            )
+            vqsr_sites_ht = vqsr_sites_ht.transmute(
+                AS_VarDP=vqsr_sites_ht.info.AS_VarDP
+            )
+            mt = mt.annotate_rows(
+                info=mt.info.annotate(AS_VarDP=vqsr_sites_ht[mt.row_key].AS_VarDP)
+            )
+
             logger.info("Making histogram bin edges...")
             # NOTE: using release HT here because age histograms aren't necessarily defined
             # in the first row of the raw MT (we may have filtered that row because it was low qual)
