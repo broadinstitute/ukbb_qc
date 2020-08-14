@@ -495,7 +495,8 @@ def make_freq_meta_index_dict(
     :param List[str] freq_meta: Ordered list containing string entries describing all the grouping combinations contained in the
         frequency array annotation.
     :param bool gnomad: Whether to index a gnomAD sample freq_meta list.
-    :param List[str] pops: List of global populations in frequency arry. Used for both gnomAD and UKBB.
+    :param List[str] pops: List of global populations in frequency array. Used for both gnomAD and UKBB. 
+        Can handle populations to unique to gnomAD/UKBB or a union of all population names.
     :param List[str] subpops: List of UKBB subpopulations in frequency array.
     :param List[str] gnomad_nfe_subpops: List of nfe subpopulations in gnomAD. Default is GNOMAD_NFE_SUBPOPS.
     :param List[str] gnomad_eas_subpops: List of eas subpopulations in gnomAD. Default is GNOMAD_EAS_SUBPOPS.
@@ -523,12 +524,12 @@ def make_freq_meta_index_dict(
     if gnomad:
         index_dict.update(
             index_globals(
-                freq_meta, dict(group=groups, pop=["nfe"], subpop=GNOMAD_NFE_SUBPOPS),
+                freq_meta, dict(group=groups, pop=["nfe"], subpop=gnomad_nfe_subpops),
             )
         )
         index_dict.update(
             index_globals(
-                freq_meta, dict(group=groups, pop=["eas"], subpop=GNOMAD_EAS_SUBPOPS),
+                freq_meta, dict(group=groups, pop=["eas"], subpop=gnomad_eas_subpops),
             )
         )
 
@@ -546,7 +547,8 @@ def make_index_dict(
 
     :param Table ht: Table or MatrixTable containing freq_meta global annotation to be indexed
     :param str freq_meta: freq_meta global annotation to be indexed (freq_meta, gnomad_exomes_freq_meta, or gnomad_genomes_freq_meta)
-    :param List[str] pops: List of global populations in frequency arry. Used for both gnomAD and UKBB.
+    :param List[str] pops: List of global populations in frequency array. Used for both gnomAD and UKBB. 
+        Can handle populations to unique to gnomAD/UKBB or a union of all population names.
     :param List[str] subpops: List of subpops in frequency array.
     :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
         of each grouping entry in the frequency array
