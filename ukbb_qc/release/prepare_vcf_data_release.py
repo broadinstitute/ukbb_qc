@@ -395,7 +395,7 @@ def unfurl_nested_annotations(
     :param Table/MatrixTable t: Table/MatrixTable containing the nested variant annotation arrays to be unfurled.
     :param bool gnomad: Whether the annotations are from gnomAD.
     :param bool genome: Whether the annotations are from genome data (relevant only to gnomAD data).
-    :param List[str] pops: List of global populations in frequency array. Used for both gnomAD and UKBB.
+    :param List[str] pops: List of global populations in frequency array. 
     :param List[str] subpops: List of all UKBB subpops (possible hybrid population cluster names). 
     :return: Dictionary containing variant annotations and their corresponding values.
     :rtype: Dict[str, hl.expr.Expression]
