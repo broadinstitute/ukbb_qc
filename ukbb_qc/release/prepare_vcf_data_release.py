@@ -569,7 +569,7 @@ def main(args):
             logger.info("Starting VCF process...")
             logger.info("Getting raw MT and dropping all unnecessary entries...")
             # TODO: reminder to self to get AS_VarDP from sites HT (given to DSP team)
-            # Also check with DSP why these sites were removed
+            # Also check with DSP why annotations are missing
 
             # NOTE: reading in raw MatrixTable to be able to return all samples/variants
             mt = get_ukbb_data(
