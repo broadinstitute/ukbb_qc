@@ -589,6 +589,8 @@ def main(args):
                 # Using filter intervals to keep all the work done by get_ukbb_data
                 # (removing sample with withdrawn consent/their ref blocks/variants,
                 # also keeping meta col annotations)
+                # Using chr20 to test a small autosome and chrX to test a sex chromosome
+                # Some annotations (like FAF) are 100% missing on autosomes
                 mt = hl.filter_intervals(
                     mt,
                     [hl.parse_locus_interval("chr20"), hl.parse_locus_interval("chrX")],
