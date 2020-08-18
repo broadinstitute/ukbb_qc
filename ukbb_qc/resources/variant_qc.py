@@ -17,15 +17,22 @@ NA12878 = "Coriell_NA12878_NA12878"
 String representation for NA12878 truth sample
 """
 
-TRUTH_SAMPLES = [SYNDIP, NA12878]
+TRUTH_SAMPLES = {
+    "syndip": {
+        "s": SYNDIP,
+        "truth_mt": grch38.syndip.mt(),
+        "hc_intervals": grch38.syndip_hc_intervals.ht(),
+    },
+    "NA12878": {
+        "s": NA12878,
+        "truth_mt": grch38.na12878_giab.mt(),
+        "hc_intervals": grch38.na12878_giab_hc_intervals.ht(),
+    },
+}
 """
-List containing string representation for truth samples (syndip, NA12878)
+Dictionary containing necessary information for truth samples (syndip, NA12878)
 """
 
-TRUTH_SAMPLE_NAMES = ["syndip", "na12878"]
-"""
-List containing names for truth samples (syndip, NA12878)
-"""
 
 def clinvar_pathogenic_ht_path(version: str) -> str:
     """
@@ -43,6 +50,7 @@ def clinvar_pathogenic_ht_path(version: str) -> str:
 def get_truth_sample_data(
     data_source: str,
     freeze: int = CURRENT_FREEZE,
+    truth_sample_dict = TRUTH_SAMPLES,
     truth_sample: str = None,
     data_type: str = None,
 ) -> Union[str, hl.Table, hl.MatrixTable]:
@@ -51,31 +59,23 @@ def get_truth_sample_data(
 
     Current truth samples available are syndip and na12878.
 
-    The following information is available for each truth sample:
+    `data_type` should be one of the following:
     - s: sample name in the callset
     - truth_mt: truth sample MatrixTable
     - hc_intervals: high confidence interval Table in truth sample
     - callset_truth_mt: truth sample MatrixTable (subset from callset)
+    
+    's', 'truth_mt' and 'hc_intervals' are assumed be present in the `truth_sample_dict` and `callset_truth_mt` will
+    be retrieved using `truth_sample_mt_path(truth_sample, data_source, freeze)` 
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param str freeze: One of the data freezes
-    :param str truth_sample: Name of the truth sample. One of 'syndip' or 'na12878'
+    :param str truth_sample: Name of the truth sample. One of the truth samples with information in `truth_sample_dict`
+    :param str truth_sample_dict: Dictionary containing 's', 'truth_mt' and 'hc_intervals' information for `truth_sample`
     :param str data_type: Truth sample data type. One of 's', 'truth_mt', 'hc_intervals', or 'callset_truth_mt'. 
     :return: Sample name, Table, or MatrixTable of requested truth sample data
     :rtype: Union[str, hl.Table, hl.MatrixTable]
     """
-    truth_samples = {
-        "syndip": {
-            "s": SYNDIP,
-            "truth_mt": grch38.syndip.mt(),
-            "hc_intervals": grch38.syndip_hc_intervals.ht(),
-        },
-        "na12878": {
-            "s": NA12878,
-            "truth_mt": grch38.na12878_giab.mt(),
-            "hc_intervals": grch38.na12878_giab_hc_intervals.ht(),
-        },
-    }
 
     if not truth_sample or not data_type:
         raise DataException("Must specify both truth_sample and desired data_type")

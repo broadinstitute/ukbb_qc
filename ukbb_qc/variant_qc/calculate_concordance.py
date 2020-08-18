@@ -22,7 +22,6 @@ from ukbb_qc.resources.variant_qc import (
     info_ht_path,
     score_quantile_bin_path,
     TRUTH_SAMPLES,
-    TRUTH_SAMPLE_NAMES,
     truth_sample_mt_path,
     var_annotations_ht_path,
 )
@@ -47,7 +46,7 @@ def main(args):
             logger.info(f"Extracting truth samples from adj filtered hardcall MT...")
             mt = get_ukbb_data(*tranche_data, adj=True)
 
-            mt = mt.filter_cols(hl.literal(TRUTH_SAMPLES).contains(mt.s))
+            mt = mt.filter_cols(hl.literal([s['s'] for s in TRUTH_SAMPLES]).contains(mt.s))
 
             # Checkpoint to prevent needing to go through the large table a second time
             mt = mt.checkpoint(
