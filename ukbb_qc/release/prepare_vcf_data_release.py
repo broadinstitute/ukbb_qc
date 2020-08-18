@@ -886,7 +886,9 @@ def main(args):
                     mt, mt.sex_karyotype, male_str="XY", female_str="XX"
                 )
                 mt = mt.select_cols()
-                mt = mt.naive_coalesce(args.n_shards)
+                
+                if args.n_shards:
+                    mt = mt.naive_coalesce(args.n_shards)
 
                 hl.export_vcf(
                     mt,
