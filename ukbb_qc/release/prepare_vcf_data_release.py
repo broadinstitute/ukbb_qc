@@ -582,6 +582,9 @@ def main(args):
             ).select_entries(*SPARSE_ENTRIES)
             mt = mt.transmute_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype)
 
+            logger.info("Removing chrM...")
+            mt = hl.filter_intervals(mt, [hl.parse_locus_interval("chrM")], keep=False)
+
             if args.test:
                 logger.info("Filtering to chr20 and chrX (for tests only)...")
                 # Using filter intervals to keep all the work done by get_ukbb_data
@@ -613,8 +616,9 @@ def main(args):
 
             # TODO: remove from code for 500K
             # TODO: check with DSP why annotations are missing
-            from ukbb_qc.resources.basics import vqsr_sites_ht_path
+            from ukbb_qc.resources.basics import vqsr_sites_path
             from gnomad.utils.sparse_mt import split_info_annotation
+
             logger.info("Pulling AS_VarDP from VQSR sites HT (300K fix)...")
             vqsr_sites_ht = hl.read_table(vqsr_sites_path(*tranche_data))
 
@@ -886,7 +890,9 @@ def main(args):
                     mt, mt.sex_karyotype, male_str="XY", female_str="XX"
                 )
                 mt = mt.select_cols()
-                mt = mt.naive_coalesce(args.n_shards)
+
+                if args.n_shards:
+                    mt = mt.naive_coalesce(args.n_shards)
 
                 hl.export_vcf(
                     mt,
