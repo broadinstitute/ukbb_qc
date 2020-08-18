@@ -559,7 +559,7 @@ def sex_chr_sanity_checks(
     :return: None
     :rtype: None
     """
-    female_metrics = [x for x in info_metrics if "_female" in x]
+    female_metrics = [x for x in info_metrics if "_female" in x or "_XX" in x]
 
     if "chrY" in contigs:
         logger.info("Check values of female metrics for Y variants are NA:")
@@ -582,7 +582,7 @@ def sex_chr_sanity_checks(
     logger.info("Check (nhomalt == nhomalt_female) for X nonpar variants:")
     female_metrics = [x for x in female_metrics if "nhomalt" in x]
     for metric in female_metrics:
-        standard_field = metric.replace("_female", "")
+        standard_field = metric.replace("_female", "").replace("_XX", "")
         generic_field_check(
             ht_xnonpar,
             (ht_xnonpar.info[f"{metric}"] != ht_xnonpar.info[f"{standard_field}"]),
