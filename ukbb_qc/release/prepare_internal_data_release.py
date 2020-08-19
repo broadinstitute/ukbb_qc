@@ -31,6 +31,20 @@ logger = logging.getLogger("data_release")
 logger.setLevel(logging.INFO)
 
 
+# Add interval QC pass to RF fields (to pull field from RF HT)
+ADDITIONAL_RF_FIELDS = ["in_capture_interval", "interval_qc_pass"]
+RF_FIELDS.extend(ADDITIONAL_RF_FIELDS)
+
+# Rename RF probability in RF fields
+RF_FIELDS.append("rf_tp_probability")
+
+# Remove InbreedingCoeff from allele-specific fields (processed separately from other fields)
+AS_FIELDS.remove("InbreedingCoeff")
+
+# Remove BaseQRankSum from site fields (not present in info HT)
+SITE_FIELDS.remove("BaseQRankSum")
+
+
 def flag_problematic_regions(
     t: Union[hl.Table, hl.MatrixTable]
 ) -> hl.expr.StructExpression:
@@ -52,7 +66,7 @@ def flag_problematic_regions(
     return hl.struct(
         lcr=hl.is_defined(lcr_ht[t.locus]),
         fail_interval_qc=~(t.rf.interval_qc_pass),
-        in_capture_region=t.rf.in_capture_interval,
+        outside_capture_region=~t.rf.in_capture_interval,
     )
 
 
@@ -86,29 +100,25 @@ def prepare_annotations(
         info=info_ht.info.annotate(
             sibling_singleton=rf_ht[info_ht.key].sibling_singleton,
             transmitted_singleton=rf_ht[info_ht.key].transmitted_singleton,
+            InbreedingCoeff=freq_ht[info_ht.key].InbreedingCoeff,
         )
     )
     rf_ht = rf_ht.select(*RF_FIELDS)
     vep_ht = vep_ht.transmute(vep=vep_ht.vep.drop("colocated_variants"))
     vqsr_ht = vqsr_ht.transmute(info=vqsr_ht.info.select(*VQSR_FIELDS)).select("info")
-    # NOTE: will need to nest qual hist fields under qual_hists struct for 300K
-    # gq_hist_alt, gq_hist_all, dp_hist_alt, dp_hist_all, ab_hist_alt
-    freq_ht = freq_ht.drop(
-        "InbreedingCoeff"
-    )  # NOTE: Will need to drop InbreedingCoeff annotation here in 500K, but this isn't present in 300K
     dbsnp_ht = dbsnp.ht().select("rsid")
 
     logger.info(
         "Annotating HT with random forest HT and flagging problematic regions..."
     )
-    ht = ht.annotate(rf=rf_ht[ht.key])
+    ht = ht.annotate(rf=rf_ht[ht.key], filters=rf_ht[ht.key].filters)
     ht = ht.annotate_globals(rf_globals=rf_ht.index_globals())
     ht = ht.annotate(region_flag=flag_problematic_regions(ht))
-    ht = ht.transmute(rf=ht.rf.drop("interval_qc_pass"))
+    ht = ht.transmute(rf=ht.rf.drop("interval_qc_pass", "in_capture_interval"))
 
     logger.info("Annotating HT with frequency information...")
-    ht = ht.annotate(**freq_ht[ht.row])
-    ht = ht.annotate(**freq_ht.index_globals())
+    ht = ht.annotate(**freq_ht[ht.key])
+    ht = ht.annotate_globals(**freq_ht.index_globals())
 
     logger.info("Annotating HT info, vep, allele_info, vqsr, rsid, and qual...")
     ht = ht.annotate(
@@ -119,7 +129,7 @@ def prepare_annotations(
         rsid=dbsnp_ht[ht.key].rsid,
         qual=info_ht[ht.key].qual,
     )
-    logger.info(f"Final HT count: {ht.count()}")
+    ht = ht.annotate_globals(**vep_ht.index_globals())
     return ht
 
 
@@ -144,7 +154,7 @@ def main(args):
         ht = hl.filter_intervals(ht, [hl.parse_locus_interval("chrM")], keep=False)
 
         logger.info("Reading in all variant annotation tables...")
-        freq_ht = hl.read_table("join_freq", var_annotations_ht_path(*tranche_data))
+        freq_ht = hl.read_table(var_annotations_ht_path("join_freq", *tranche_data))
         rf_ht = hl.read_table(var_annotations_ht_path("rf", *tranche_data))
         vep_ht = hl.read_table(var_annotations_ht_path("vep", *tranche_data))
         allele_ht = hl.read_table(var_annotations_ht_path("allele_data", *tranche_data))
@@ -159,7 +169,8 @@ def main(args):
         age_hist_data = get_age_distributions(get_age_ht(freeze))
         ht = ht.annotate_globals(age_distribution=age_hist_data)
         ht = ht.naive_coalesce(args.n_partitions)
-        ht.write(release_ht_path(*tranche_data), args.overwrite)
+        ht = ht.checkpoint(release_ht_path(*tranche_data), args.overwrite)
+        logger.info(f"Final HT count: {ht.count()}")
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -172,22 +183,6 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
-    )
-    parser.add_argument(
-        "--key_by_locus_and_alleles",
-        help="Re-key raw MatrixTable by locus and alleles. REQUIRED only for tranche 3/300K dataset.",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--repartition",
-        help="Repartition raw MatrixTable on read. REQUIRED only for tranche 3/300K dataset",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--raw_partitions",
-        help="Number of desired partitions for raw MatrixTable. Only used for tranche 3/300K dataset",
-        default=30000,
-        type=int,
     )
     parser.add_argument(
         "--n_partitions",
