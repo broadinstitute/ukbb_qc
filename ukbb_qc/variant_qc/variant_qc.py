@@ -363,7 +363,7 @@ def generate_final_rf_ht(
     # Fix annotations for release
     annotations_expr = {
         "rf_positive_label": hl.or_else(ht.tp, False),
-        "rf_positive_label": ht.fail_hard_filters,
+        "rf_negative_label": ht.fail_hard_filters,
         "transmitted_singleton": hl.or_missing(
             ts_ac_filter_expr, ht.transmitted_singleton
         ),
