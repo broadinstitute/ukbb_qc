@@ -70,8 +70,8 @@ def get_truth_sample_data(
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param str freeze: One of the data freezes
-    :param str truth_sample: Name of the truth sample. One of the truth samples with information in `truth_sample_dict`
     :param str truth_sample_dict: Dictionary containing 's', 'truth_mt' and 'hc_intervals' information for `truth_sample`
+    :param str truth_sample: Name of the truth sample. One of the truth samples with information in `truth_sample_dict`
     :param str data_type: Truth sample data type. One of 's', 'truth_mt', 'hc_intervals', or 'callset_truth_mt'. 
     :return: Sample name, Table, or MatrixTable of requested truth sample data
     :rtype: Union[str, hl.Table, hl.MatrixTable]

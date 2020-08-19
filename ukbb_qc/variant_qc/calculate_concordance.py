@@ -46,7 +46,9 @@ def main(args):
             logger.info(f"Extracting truth samples from adj filtered hardcall MT...")
             mt = get_ukbb_data(*tranche_data, adj=True)
 
-            mt = mt.filter_cols(hl.literal([s['s'] for s in TRUTH_SAMPLES]).contains(mt.s))
+            mt = mt.filter_cols(
+                hl.literal([s["s"] for s in TRUTH_SAMPLES]).contains(mt.s)
+            )
 
             # Checkpoint to prevent needing to go through the large table a second time
             mt = mt.checkpoint(
@@ -54,7 +56,7 @@ def main(args):
                 overwrite=args.overwrite,
             )
 
-            for truth_sample in TRUTH_SAMPLE_NAMES:
+            for truth_sample in TRUTH_SAMPLES:
                 truth_sample_mt = mt.filter_cols(
                     mt.s == get_truth_sample_data(*tranche_data, truth_sample, "s")
                 )
@@ -68,7 +70,7 @@ def main(args):
                 )
 
         if args.merge_with_truth_data:
-            for truth_sample in TRUTH_SAMPLE_NAMES:
+            for truth_sample in TRUTH_SAMPLES:
                 logger.info(
                     f"Creating a merged table with callset truth sample and truth data for {truth_sample}..."
                 )
@@ -108,7 +110,7 @@ def main(args):
             if args.vqsr:
                 metrics.append("vqsr" if args.vqsr_type == "AS" else "AS_TS_vqsr")
 
-            for truth_sample in TRUTH_SAMPLE_NAMES:
+            for truth_sample in TRUTH_SAMPLES:
                 for metric in metrics:
                     logger.info(
                         f"Creating binned concordance table for {truth_sample} for metric {metric}"
