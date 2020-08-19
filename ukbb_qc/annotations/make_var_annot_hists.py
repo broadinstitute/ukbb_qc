@@ -71,7 +71,7 @@ def main(args):
             ht, ANNOTATIONS_HISTS, LOG10_ANNOTATIONS
         )
 
-        # NOTE: Run this first, then update values ANNOTATIONS_HISTS as necessary
+        # NOTE: Run this first, then update values in ANNOTATIONS_HISTS as necessary
         if args.first_pass:
             logger.info(
                 "Evaluating minimum and maximum values for each metric of interest, and \
