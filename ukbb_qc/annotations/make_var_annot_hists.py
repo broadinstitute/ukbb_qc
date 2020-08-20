@@ -75,7 +75,7 @@ def main(args):
         if args.first_pass:
             logger.info(
                 "Evaluating minimum and maximum values for each metric of interest, and \
-                caps maximum value at 1e10"
+                capping maximum value at 1e10"
             )
             minmax_dict = {}
             for metric in metrics:
