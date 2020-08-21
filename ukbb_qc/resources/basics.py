@@ -424,6 +424,21 @@ def release_vcf_path(data_source: str, freeze: int, contig: str = None) -> str:
         return f"{get_release_path(data_source, freeze)}/vcf/sharded_vcf/{data_source}.freeze_{freeze}.bgz"
 
 
+def annotation_hists_path(data_source: str, freeze: int) -> str:
+    """
+    Returns path to file containing ANNOTATIONS_HISTS dictionary.
+
+    Dictionary contains histogram values for each metric. 
+    For example, "InbreedingCoeff": [-0.25, 0.25, 50].
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :return: Path to file with annotations histograms
+    :rtype: str
+    """
+    return f"{get_release_path(data_source, freeze)}/annotation_hists.json"
+
+
 def vqsr_sites_path(
     data_source: str, freeze: int = CURRENT_FREEZE, ht: bool = True
 ) -> str:
