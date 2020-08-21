@@ -47,7 +47,6 @@ def main(args):
 
     # NOTE: histogram aggregations on these metrics are done on the entire callset (not just PASS variants), on raw data
     metrics = list(ANNOTATIONS_HISTS.keys())
-    print(metrics)
 
     try:
         logger.info("Reading in release HT")
