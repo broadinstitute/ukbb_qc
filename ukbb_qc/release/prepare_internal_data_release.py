@@ -92,6 +92,8 @@ def prepare_annotations(
     :rtype: hl.Table
     """
     logger.info("Selecting annotations from annotation Tables...")
+    # Adding QUALapprox here (needed in variant annotation histograms code downstream)
+    SITE_FIELDS.append("QUALapprox")
     info_fields = SITE_FIELDS + AS_FIELDS
     info_ht = info_ht.transmute(info=info_ht.info.select(*info_fields)).select(
         "info", "qual"
