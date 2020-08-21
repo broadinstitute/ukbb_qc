@@ -23,7 +23,7 @@ logger = logging.getLogger("variant_histograms")
 logger.setLevel(logging.INFO)
 
 
-LOG10_ANNOTATIONS = ["AS_VarDP"]
+LOG10_ANNOTATIONS = ["AS_VarDP", "QUALapprox"]
 """
 List of annotations to log scale when creating histograms. 
 """
@@ -47,11 +47,14 @@ def main(args):
 
     # NOTE: histogram aggregations on these metrics are done on the entire callset (not just PASS variants), on raw data
     metrics = list(ANNOTATIONS_HISTS.keys())
+    print(metrics)
 
     try:
         logger.info("Reading in release HT")
         ht = hl.read_table(release_ht_path(*tranche_data)).select_globals()
 
+        # NOTE: Had to add QUALapprox and AS_FS (from info HT) to release HT for 300k
+        # Also had to add AS_VarDP from VQSR sites HT
         # Move necessary annotations into info struct
         ht = ht.annotate(
             info=ht.info.annotate(
@@ -59,9 +62,9 @@ def main(args):
                 AS_VQSLOD=hl.float(ht.vqsr.AS_VQSLOD),
             )
         )
-        ht = ht.select(qual=ht.qual, freq=ht.freq, info=ht.info.select(*metrics))
+        ht = ht.select(freq=ht.freq, info=ht.info.select(*metrics))
 
-        logger.info("Getting info annotation histograms")
+        logger.info("Getting info annotation histograms...")
         hist_ranges_expr = get_annotations_hists(
             ht, ANNOTATIONS_HISTS, LOG10_ANNOTATIONS
         )
@@ -69,15 +72,16 @@ def main(args):
         # NOTE: Run this first, then update values in annotation_hists_path JSON as necessary
         if args.first_pass:
             logger.info(
-                "Evaluating minimum and maximum values for each metric of interest, and \
-                capping maximum value at 1e10"
+                "Evaluating minimum and maximum values for each metric of interest, and capping maximum value at 1e10"
             )
             minmax_dict = {}
             for metric in metrics:
                 minmax_dict[metric] = hl.struct(
-                    min=hl.agg.min(ht[metric]),
+                    min=hl.agg.min(ht.info[metric]),
                     max=hl.if_else(
-                        hl.agg.max(ht[metric]) < 1e10, hl.agg.max(ht[metric]), 1e10
+                        hl.agg.max(ht.info[metric]) < 1e10,
+                        hl.agg.max(ht.info[metric]),
+                        1e10,
                     ),
                 )
             minmax = ht.aggregate(hl.struct(**minmax_dict))
@@ -100,9 +104,9 @@ def main(args):
                                 AC=ht.freq[1].AC, AF=ht.freq[1].AF
                             ),
                             # Decided to use QUALapprox because its formula is easier to interpret than QUAL's
-                            # TODO: Add QUALapprox to 300k release HT
                             hl.agg.hist(
-                                hl.log10(ht.QUALapprox), *ANNOTATIONS_HISTS["QUALapprox"]
+                                hl.log10(ht.info.QUALapprox),
+                                *ANNOTATIONS_HISTS["QUALapprox"],
                             ),
                         )
                     ).map(lambda x: x[1].annotate(metric=x[0]))
