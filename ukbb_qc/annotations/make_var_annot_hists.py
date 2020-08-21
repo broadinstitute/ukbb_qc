@@ -4,7 +4,9 @@ import logging
 
 import hail as hl
 
+from gnomad.resources.resource_utils import DataException
 from gnomad.utils.annotations import create_frequency_bins_expr, get_annotations_hists
+from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 from ukbb_qc.resources.basics import (
     annotation_hists_path,
@@ -35,6 +37,11 @@ def main(args):
     tranche_data = (data_source, freeze)
 
     logger.info("Loading ANNOTATIONS_HISTS dictionary...")
+    if not file_exists(annotation_hists_path(*tranche_data)):
+        raise DataException(
+            "Annotation hists JSON file not found. Need to create this JSON before running script!"
+        )
+
     with hl.hadoop_open(annotation_hists_path(*tranche_data)) as a:
         ANNOTATIONS_HISTS = json.loads(a.read())
 
@@ -59,7 +66,7 @@ def main(args):
             ht, ANNOTATIONS_HISTS, LOG10_ANNOTATIONS
         )
 
-        # NOTE: Run this first, then update values in ANNOTATIONS_HISTS as necessary
+        # NOTE: Run this first, then update values in annotation_hists_path JSON as necessary
         if args.first_pass:
             logger.info(
                 "Evaluating minimum and maximum values for each metric of interest, and \
@@ -94,7 +101,9 @@ def main(args):
                             ),
                             # Decided to use QUALapprox because its formula is easier to interpret than QUAL's
                             # TODO: Add QUALapprox to 300k release HT
-                            hl.agg.hist(hl.log10(ht.QUALapprox), 1, 10, 36),
+                            hl.agg.hist(
+                                hl.log10(ht.QUALapprox), *ANNOTATIONS_HISTS["QUALapprox"]
+                            ),
                         )
                     ).map(lambda x: x[1].annotate(metric=x[0]))
                 ),

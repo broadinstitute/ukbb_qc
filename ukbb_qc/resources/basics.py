@@ -428,7 +428,8 @@ def annotation_hists_path(data_source: str, freeze: int) -> str:
     """
     Returns path to file containing ANNOTATIONS_HISTS dictionary.
 
-    Dictionary contains histogram values for each metric.
+    Dictionary contains histogram values for each metric. 
+    For example, "InbreedingCoeff": [-0.25, 0.25, 50].
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
