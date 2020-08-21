@@ -8,5 +8,4 @@ SEXES_UKBB = ["XX", "XY"]
 Sample sexes used in VCF export.
 
 Used to stratify frequency annotations (AC, AN, AF) for each sex in UKBB.
->>>>>>> Moved ANNOTATIONS_HISTS to constants
 """

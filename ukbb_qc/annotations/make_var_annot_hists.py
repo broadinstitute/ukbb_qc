@@ -1,4 +1,5 @@
 import argparse
+import json
 import logging
 
 import hail as hl
@@ -6,12 +7,12 @@ import hail as hl
 from gnomad.utils.annotations import create_frequency_bins_expr, get_annotations_hists
 from gnomad.utils.slack import slack_notifications
 from ukbb_qc.resources.basics import (
+    annotation_hists_path,
     logging_path,
     release_ht_path,
     release_var_hist_path,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
-from ukbb_qc.utils.constants import ANNOTATIONS_HISTS
 from ukbb_qc.slack_creds import slack_token
 
 
@@ -32,6 +33,10 @@ def main(args):
     data_source = "broad"
     freeze = args.freeze
     tranche_data = (data_source, freeze)
+
+    logger.info("Loading ANNOTATIONS_HISTS dictionary...")
+    with hl.hadoop_open(annotation_hists_path(*tranche_data)) as a:
+        ANNOTATIONS_HISTS = json.loads(a.read())
 
     # NOTE: histogram aggregations on these metrics are done on the entire callset (not just PASS variants), on raw data
     metrics = list(ANNOTATIONS_HISTS.keys())
