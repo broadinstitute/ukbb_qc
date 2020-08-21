@@ -92,8 +92,9 @@ def main(args):
                             create_frequency_bins_expr(
                                 AC=ht.freq[1].AC, AF=ht.freq[1].AF
                             ),
-                            # NOTE: used qual here for tranche 2, should we use QUALapprox for future tranches?
-                            hl.agg.hist(hl.log10(ht.qual), 1, 10, 36),
+                            # Decided to use QUALapprox because its formula is easier to interpret than QUAL's
+                            # TODO: Add QUALapprox to 300k release HT
+                            hl.agg.hist(hl.log10(ht.QUALapprox), 1, 10, 36),
                         )
                     ).map(lambda x: x[1].annotate(metric=x[0]))
                 ),
