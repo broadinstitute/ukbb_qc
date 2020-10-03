@@ -78,7 +78,7 @@ def prepare_annotations(
     vep_ht: hl.Table,
     allele_ht: hl.Table,
     vqsr_ht: hl.Table,
-) -> hl.MatrixTable:
+) -> hl.Table:
     """
     Join all Tables with variant annotations.
 
