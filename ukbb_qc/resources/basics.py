@@ -283,6 +283,7 @@ def array_sample_map_path(freeze: int = CURRENT_FREEZE) -> str:
         4: "Project_26041_bridge.csv",
         5: "linking_file_200K_withbatch.csv",
         6: "linking_file_300K_withbatch.csv",
+        7: "linking.file.455Kexomes.Broad.csv",
     }
     return f"gs://broad-ukbb/resources/array/{array_map_names[freeze]}"
 
