@@ -15,14 +15,19 @@ logger.setLevel(logging.INFO)
 
 
 # UKBB data resources
-def excluded_samples_path() -> str:
+def excluded_samples_path(freeze: int = CURRENT_FREEZE) -> str:
     """
     Returns path to list of samples to exclude from QC due to withdrawn consents
 
     :return: Path to excluded samples list
     :rtype: str
     """
-    return f"gs://broad-ukbb/resources/withdrawn_consents/w26041_20200204.csv"
+    # NOTE: we did not have files with withdrawn sample IDs for freezes 4 and 5
+    excluded_file_names = {
+        6: "w26041_20200204.csv",
+        7: "w26041_20200820.csv",
+    }
+    return f"gs://broad-ukbb/resources/withdrawn_consents/{excluded_file_names[freeze]}"
 
 
 def get_ukbb_data(
@@ -92,12 +97,12 @@ def get_ukbb_data(
     logger.info(f"Number of samples in MT: {mt.count_cols()}")
 
     # Add warning that no samples will be removed if excluded samples file doesn't exist
-    if not file_exists(excluded_samples_path()):
+    if not file_exists(excluded_samples_path(freeze)):
         logger.warning(
             "No excluded samples file found. No samples will be removed from MT"
         )
 
-    if file_exists(excluded_samples_path()) or ukbb_samples_only:
+    if file_exists(excluded_samples_path(freeze)) or ukbb_samples_only:
 
         # Read in array sample map HT
         sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze))
@@ -108,7 +113,7 @@ def get_ukbb_data(
 
         # Remove any samples with withdrawn consents
         # NOTE: Keeping samples with missing consents to avoid filtering any samples present in MT but not in sample map HT
-        if file_exists(excluded_samples_path()):
+        if file_exists(excluded_samples_path(freeze)):
             mt = mt.filter_cols(
                 (~sample_map_ht[mt.col_key].withdrawn_consent)
                 | (hl.is_missing(sample_map_ht[mt.col_key].withdrawn_consent))
@@ -116,7 +121,7 @@ def get_ukbb_data(
 
             # Double check all withdrawn samples were actually excluded
             withdrawn_ht = hl.import_table(
-                excluded_samples_path(), no_header=True,
+                excluded_samples_path(freeze), no_header=True,
             ).key_by("f0")
             mt_samples = mt.annotate_cols(
                 ukbb_app_26041_id=sample_map_ht[mt.col_key].ukbb_app_26041_id
