@@ -117,8 +117,9 @@ def generate_frequency_data(
     mt = mt.annotate_rows(cohort_freq=cohort_ht[mt.row_key].cohort_freq)
     mt = mt.annotate_globals(**cohort_ht.index_globals())
 
-    logger.info("Filtering related samples...")
+    logger.info("Filtering related samples and their variants...")
     mt = mt.filter_cols(~mt.meta.sample_filters.related)
+    mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
 
     logger.info("Calculating InbreedingCoefficient...")
     # NOTE: This is not the ideal location to calculate this, but added here to avoid another densify
@@ -143,7 +144,17 @@ def generate_frequency_data(
     # Add cohort frequency to last index of freq struct
     # Also add cohort frequency meta to freq_meta globals
     mt = mt.select_rows(
-        "InbreedingCoeff", "faf", "popmax", freq=mt.freq.extend(mt.cohort_freq),
+        "InbreedingCoeff",
+        "faf",
+        "popmax",
+        freq=hl.case()
+        .when(
+            hl.is_defined(mt.freq) & hl.is_defined(mt.cohort_freq),
+            mt.freq.extend(mt.cohort_freq),
+        )
+        .when(hl.is_defined(mt.freq) & hl.is_missing(mt.cohort_freq), mt.freq)
+        .when(hl.is_defined(mt.cohort_freq) & hl.is_missing(mt.freq), mt.cohort_freq,)
+        .or_missing(),
     )
     mt = mt.select_globals(
         faf_meta=faf_meta, freq_meta=mt.freq_meta.extend(mt.cohort_freq_meta)
