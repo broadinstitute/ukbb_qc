@@ -117,8 +117,9 @@ def generate_frequency_data(
     mt = mt.annotate_rows(cohort_freq=cohort_ht[mt.row_key].cohort_freq)
     mt = mt.annotate_globals(**cohort_ht.index_globals())
 
-    logger.info("Filtering related samples...")
+    logger.info("Filtering related samples and their variants...")
     mt = mt.filter_cols(~mt.meta.sample_filters.related)
+    mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
 
     logger.info("Calculating InbreedingCoefficient...")
     # NOTE: This is not the ideal location to calculate this, but added here to avoid another densify
@@ -142,8 +143,36 @@ def generate_frequency_data(
 
     # Add cohort frequency to last index of freq struct
     # Also add cohort frequency meta to freq_meta globals
+    # Create expression to hold missing freq expression
+    null_freq_expr = hl.struct(
+        ac=hl.null(hl.tint32),
+        af=hl.null(hl.tfloat64),
+        an=hl.null(hl.tint32),
+        homozygote_count=hl.null(hl.tint32),
+    )
     mt = mt.select_rows(
-        "InbreedingCoeff", "faf", "popmax", freq=mt.freq.extend(mt.cohort_freq),
+        "InbreedingCoeff",
+        "faf",
+        "popmax",
+        freq=hl.case()
+        # When freq and cohort freq are both defined, extend freq with cohort freq
+        .when(
+            hl.is_defined(mt.freq) & hl.is_defined(mt.cohort_freq),
+            mt.freq.extend(mt.cohort_freq),
+        )
+        # When freq is defined and cohort freq is not defined, extend freq with null freq struct
+        .when(
+            hl.is_defined(mt.freq) & hl.is_missing(mt.cohort_freq),
+            mt.freq.extend([null_freq_expr]),
+        )
+        # When cohort freq is defined and freq is not defined, create array with null freq structs
+        # then extend with cohort freq
+        .when(
+            hl.is_defined(mt.cohort_freq) & hl.is_missing(mt.freq),
+            hl.array([null_freq_expr] * hl.eval(hl.len(mt.freq_meta))).extend(
+                mt.cohort_freq
+            ),
+        ).or_missing(),
     )
     mt = mt.select_globals(
         faf_meta=faf_meta, freq_meta=mt.freq_meta.extend(mt.cohort_freq_meta)
