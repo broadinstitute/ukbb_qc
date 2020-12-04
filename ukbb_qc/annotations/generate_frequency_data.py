@@ -153,7 +153,7 @@ def generate_frequency_data(
             mt.freq.extend(mt.cohort_freq),
         )
         .when(hl.is_defined(mt.freq) & hl.is_missing(mt.cohort_freq), mt.freq)
-        .when(hl.is_defined(mt.cohort_freq) & hl.is_missing(mt.freq), mt.cohort_freq,)
+        .when(hl.is_defined(mt.cohort_freq) & hl.is_missing(mt.freq), mt.cohort_freq)
         .or_missing(),
     )
     mt = mt.select_globals(
