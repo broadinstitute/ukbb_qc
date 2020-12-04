@@ -163,7 +163,7 @@ def generate_frequency_data(
         # When freq is defined and cohort freq is not defined, extend freq with null freq struct
         .when(
             hl.is_defined(mt.freq) & hl.is_missing(mt.cohort_freq),
-            mt.freq.extend([null_freq_expr]),
+            mt.freq.extend([null_freq_expr] * hl.eval(hl.len(mt.cohort_freq_meta))),
         )
         # When cohort freq is defined and freq is not defined, create array with null freq structs
         # then extend with cohort freq
