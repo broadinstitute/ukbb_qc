@@ -145,9 +145,9 @@ def generate_frequency_data(
     # Also add cohort frequency meta to freq_meta globals
     # Create expression to hold missing freq expression
     null_freq_expr = hl.struct(
-        ac=hl.null(hl.tint32),
-        af=hl.null(hl.tfloat64),
-        an=hl.null(hl.tint32),
+        AC=hl.null(hl.tint32),
+        AF=hl.null(hl.tfloat64),
+        AN=hl.null(hl.tint32),
         homozygote_count=hl.null(hl.tint32),
     )
     mt = mt.select_rows(
