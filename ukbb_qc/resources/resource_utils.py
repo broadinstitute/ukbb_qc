@@ -1,4 +1,4 @@
-CURRENT_FREEZE = 6
+CURRENT_FREEZE = 7
 DATA_SOURCES = ["regeneron", "broad"]
-FREEZES = [4, 5, 6]
+FREEZES = [4, 5, 6, 7]
 CURRENT_HAIL_VERSION = "0.2"
