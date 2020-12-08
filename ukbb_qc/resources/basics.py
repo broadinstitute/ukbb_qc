@@ -209,6 +209,7 @@ def raw_mt_path(
         raw_mt_names = {
             5: "hail_dataproc_20191108115937",
             6: "hail_dataproc_20200130092005.mt",
+            7: "hail_450k_dataproc_20201207164032.mt",
         }
         if freeze == 4 or (freeze == 5 and densified):
             return f"gs://broad-ukbb/{data_source}.freeze_{freeze}/data/{data_source}.freeze_{freeze}{tempstr}.mt"
