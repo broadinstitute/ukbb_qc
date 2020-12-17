@@ -176,9 +176,10 @@ def get_ukbb_data(
         samples_to_drop = ht.aggregate(
             hl.agg.count_where(remove_ids.contains(ht.new_s))
         )
-        if samples_to_drop != 27:
+        # NOTE: The length of remove_ids should be 27
+        if samples_to_drop != hl.eval(hl.len(remove_ids)):
             raise DataException(
-                f"Expecting to remove 27 duplicate samples but found {samples_to_drop}. Double check samples in MT"
+                f"Expecting to remove {hl.eval(hl.len(remove_ids))} duplicate samples but found {samples_to_drop}. Double check samples in MT"
             )
 
         mt = mt.filter_cols(~remove_ids.contains(mt.new_s)).drop("new_s", "col_idx")
