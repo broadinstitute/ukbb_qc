@@ -162,7 +162,7 @@ def get_ukbb_data(
 
         # Create list of sample IDs to remove
         remove_ids = []
-        with hl.hadoop_open(dup_map_path, "r") as d:
+        with hl.hadoop_open(dup_map_path(freeze), "r") as d:
             for line in d:
                 line = line.strip().split("\t")
                 remove_ids.append(f"{line[0]}_{line[1]}")
@@ -182,6 +182,7 @@ def get_ukbb_data(
                 f"Expecting to remove {hl.eval(hl.len(remove_ids))} duplicate samples but found {samples_to_drop}. Double check samples in MT"
             )
 
+        logger.info(f"Removing {samples_to_drop} samples...")
         mt = mt.filter_cols(~remove_ids.contains(mt.new_s)).drop("new_s", "col_idx")
     logger.info(f"Sample count post-filtration: {mt.count_cols()}")
 
