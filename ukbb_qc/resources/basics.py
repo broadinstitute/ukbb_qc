@@ -170,17 +170,18 @@ def get_ukbb_data(
         # Remove sample IDs that are present in remove_ids list
         remove_ids = hl.literal(remove_ids)
         mt = mt.annotate_cols(new_s=hl.format("%s_%s", mt.s, mt.col_idx))
-        samples_to_drop = mt.aggregate_cols(
-            hl.agg.count_where(remove_ids.contains(mt.new_s))
+
+        # Using an HT here because aggregate_cols has been slow/memory intensive in the past
+        ht = mt.cols()
+        samples_to_drop = ht.aggregate(
+            hl.agg.count_where(remove_ids.contains(ht.new_s))
         )
         if samples_to_drop != 27:
             raise DataException(
                 f"Expecting to remove 27 duplicate samples but found {samples_to_drop}. Double check samples in MT"
             )
 
-        mt = mt.filter_cols(~remove_ids.contains(mt.new_s)).drop(
-            "new_s", "col_idx"
-        )
+        mt = mt.filter_cols(~remove_ids.contains(mt.new_s)).drop("new_s", "col_idx")
     logger.info(f"Sample count post-filtration: {mt.count_cols()}")
 
     gt_expr = mt.GT if split else mt.LGT
