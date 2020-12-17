@@ -30,6 +30,18 @@ def excluded_samples_path(freeze: int = CURRENT_FREEZE) -> str:
     return f"gs://broad-ukbb/resources/withdrawn_consents/{excluded_file_names[freeze]}"
 
 
+def dup_map_path() -> str:
+    """
+    Returns path to TSV file containing duplicate sample IDs and undesired column index in 450k MatrixTable
+
+    TSV has two columns: sample ID of duplicate sample and column index to remove from the 450 MT
+
+    :return: Path to duplicate sample mapping TSV
+    :rtype: str
+    """
+    return "gs://broad-ukbb/broad.freeze_7/dup_remove_idx.tsv"
+
+
 def get_ukbb_data(
     data_source: str,
     freeze: int = CURRENT_FREEZE,
@@ -137,6 +149,34 @@ def get_ukbb_data(
                 )
             else:
                 logger.info("No withdrawn samples found in MT")
+
+    # Code to resolve duplicate sample specifically in freeze 7/the 450k callset
+    if freeze == 7:
+        logger.info("Resolving duplicate sample IDs in the 450k MT...")
+        # Add column index to samples
+        mt = mt.add_col_index()
+
+        # Create list of sample IDs to remove
+        remove_ids = []
+        with hl.hadoop_open(dup_map_path, "r") as d:
+            # Pull one sample ID and column index to test
+            test_sample = d.readline().strip().split("\t")
+            # Also add test sample to list of IDs to remove
+            remove_ids.append(f"{test_sample[0]}_{test_sample[1]}")
+            for line in d:
+                line = line.strip().split("\t")
+                remove_ids.append(f"{line[0]}_{line[1]}")
+
+        # Make sure ID at index of test sample matches test sample ID
+        test_id = mt.filter_cols(mt.col_idx == int(test_sample[1])).cols().s.take(1)
+        if test_id[0] != test_sample[0]:
+            raise DataException(
+                "Column indices don't match expected sample names. Double check samples"
+            )
+
+        # Remove sample IDs that are present in remove_ids list
+        mt = mt.annotate_cols(new_s=hl.format("%s_%s", mt.s, mt.col_idx))
+        mt = mt.filter_cols(~hl.literal(remove_ids).contains(mt.new_s)).drop("new_s")
     logger.info(f"Sample count post-filtration: {mt.count_cols()}")
 
     gt_expr = mt.GT if split else mt.LGT
