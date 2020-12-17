@@ -162,7 +162,7 @@ def get_ukbb_data(
 
         # Create list of sample IDs to remove
         remove_ids = []
-        with hl.hadoop_open(dup_map_path, "r") as d:
+        with hl.hadoop_open(dup_map_path(freeze), "r") as d:
             for line in d:
                 line = line.strip().split("\t")
                 remove_ids.append(f"{line[0]}_{line[1]}")
