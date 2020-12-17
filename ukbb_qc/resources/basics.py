@@ -19,6 +19,7 @@ def excluded_samples_path(freeze: int = CURRENT_FREEZE) -> str:
     """
     Returns path to list of samples to exclude from QC due to withdrawn consents
 
+    :param int freeze: One of data freezes.
     :return: Path to excluded samples list
     :rtype: str
     """
@@ -30,16 +31,19 @@ def excluded_samples_path(freeze: int = CURRENT_FREEZE) -> str:
     return f"gs://broad-ukbb/resources/withdrawn_consents/{excluded_file_names[freeze]}"
 
 
-def dup_map_path() -> str:
+def dup_map_path(freeze: int = CURRENT_FREEZE) -> str:
     """
     Returns path to TSV file containing duplicate sample IDs and undesired column index in 450k MatrixTable
 
     TSV has two columns: sample ID of duplicate sample and column index to remove from the 450 MT
 
+    :param int freeze: One of data freezes.
     :return: Path to duplicate sample mapping TSV
     :rtype: str
     """
-    return "gs://broad-ukbb/broad.freeze_7/dup_remove_idx.tsv"
+    if freeze != 7:
+        raise DataException("Duplicate map file only exists for freeze 7/450K!")
+    return f"gs://broad-ukbb/broad.freeze_{freeze}/dup_remove_idx.tsv"
 
 
 def get_ukbb_data(
@@ -176,7 +180,9 @@ def get_ukbb_data(
 
         # Remove sample IDs that are present in remove_ids list
         mt = mt.annotate_cols(new_s=hl.format("%s_%s", mt.s, mt.col_idx))
-        mt = mt.filter_cols(~hl.literal(remove_ids).contains(mt.new_s)).drop("new_s")
+        mt = mt.filter_cols(~hl.literal(remove_ids).contains(mt.new_s)).drop(
+            "new_s", "col_idx"
+        )
     logger.info(f"Sample count post-filtration: {mt.count_cols()}")
 
     gt_expr = mt.GT if split else mt.LGT
