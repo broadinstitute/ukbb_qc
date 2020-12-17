@@ -31,6 +31,19 @@ def excluded_samples_path(freeze: int = CURRENT_FREEZE) -> str:
     return f"gs://broad-ukbb/resources/withdrawn_consents/{excluded_file_names[freeze]}"
 
 
+def dup_mt_path(freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Returns path to MT created using most recent gVCF version for duplicate samples in the 450k MatrixTable
+
+    MT was created using the hail gVCF combiner on 12/16/2020
+
+    :param int freeze: One of data freezes
+    :return: Path to duplicate sample MT
+    :rtype: str
+    """
+    return f"gs://broad-ukbb/broad.freeze_{freeze}/temp/most_recent_dup.mt"
+
+
 def dup_map_path(freeze: int = CURRENT_FREEZE) -> str:
     """
     Returns path to TSV file containing duplicate sample IDs and undesired column index in 450k MatrixTable
