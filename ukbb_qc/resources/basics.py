@@ -182,6 +182,7 @@ def get_ukbb_data(
                 f"Expecting to remove {hl.eval(hl.len(remove_ids))} duplicate samples but found {samples_to_drop}. Double check samples in MT"
             )
 
+        logger.info(f"Removing {samples_to_drop} samples...")
         mt = mt.filter_cols(~remove_ids.contains(mt.new_s)).drop("new_s", "col_idx")
     logger.info(f"Sample count post-filtration: {mt.count_cols()}")
 
