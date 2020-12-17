@@ -163,23 +163,21 @@ def get_ukbb_data(
         # Create list of sample IDs to remove
         remove_ids = []
         with hl.hadoop_open(dup_map_path, "r") as d:
-            # Pull one sample ID and column index to test
-            test_sample = d.readline().strip().split("\t")
-            # Also add test sample to list of IDs to remove
-            remove_ids.append(f"{test_sample[0]}_{test_sample[1]}")
             for line in d:
                 line = line.strip().split("\t")
                 remove_ids.append(f"{line[0]}_{line[1]}")
 
-        # Make sure ID at index of test sample matches test sample ID
-        test_id = mt.filter_cols(mt.col_idx == int(test_sample[1])).cols().s.take(1)
-        if test_id[0] != test_sample[0]:
+        # Remove sample IDs that are present in remove_ids list
+        remove_ids = hl.literal(remove_ids)
+        mt = mt.annotate_cols(new_s=hl.format("%s_%s", mt.s, mt.col_idx))
+        samples_to_drop = mt.aggregate_cols(
+            hl.agg.count_where(hl.literal(remove_ids).contains(mt.new_s))
+        )
+        if samples_to_drop != 27:
             raise DataException(
-                "Column indices don't match expected sample names. Double check samples"
+                f"Expecting to remove 27 duplicate samples but found {samples_to_drop}. Double check samples in MT"
             )
 
-        # Remove sample IDs that are present in remove_ids list
-        mt = mt.annotate_cols(new_s=hl.format("%s_%s", mt.s, mt.col_idx))
         mt = mt.filter_cols(~hl.literal(remove_ids).contains(mt.new_s)).drop(
             "new_s", "col_idx"
         )
