@@ -150,6 +150,7 @@ def main(args):
         # version of the filtered MT including the version of the sample with the other column index
         # before re-running the filter_rows and anti_join
         # I wrote the final column indices and the corresponding sample IDs to the `dup_map_path` in basics.py
+        # NB: gs://broad-ukbb/broad.freeze_7/notebooks/resolve_dups.ipynb
 
     finally:
         logger.info("Copying hail log to logging bucket...")
