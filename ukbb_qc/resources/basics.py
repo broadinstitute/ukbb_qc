@@ -171,7 +171,7 @@ def get_ukbb_data(
         remove_ids = hl.literal(remove_ids)
         mt = mt.annotate_cols(new_s=hl.format("%s_%s", mt.s, mt.col_idx))
         samples_to_drop = mt.aggregate_cols(
-            hl.agg.count_where(hl.literal(remove_ids).contains(mt.new_s))
+            hl.agg.count_where(remove_ids.contains(mt.new_s))
         )
         if samples_to_drop != 27:
             raise DataException(
