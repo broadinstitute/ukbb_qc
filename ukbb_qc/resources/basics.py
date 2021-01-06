@@ -31,6 +31,22 @@ def excluded_samples_path(freeze: int = CURRENT_FREEZE) -> str:
     return f"gs://broad-ukbb/resources/withdrawn_consents/{excluded_file_names[freeze]}"
 
 
+def dup_resolution_path(freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Returns path to bucket containing files necessary to resolve duplicate samples.
+
+    Currently only exists for freeze 7/450k callset.
+    :param int freeze: One of data freezes
+    :return: Path to bucket with duplicate sample resolution files
+    :rtype: str
+    """
+    if freeze != 7:
+        raise DataException(
+            "Duplicate resolution bucket only exists for freeze 7/450k!"
+        )
+    return "gs://broad-ukbb/broad.freeze_{freeze}/duplicate_resolution"
+
+
 def dup_gvcf_path(freeze: int = CURRENT_FREEZE) -> str:
     """
     Returns path to file containing duplicate samples and their most recent gVCFs.
@@ -43,7 +59,7 @@ def dup_gvcf_path(freeze: int = CURRENT_FREEZE) -> str:
     """
     if freeze != 7:
         raise DataException("Duplicate gVCF path only exists for freeze 7/450k!")
-    return f"gs://broad-ukbb/broad.freeze_{freeze}/duplicate_resolution/duplicate_sample_map_no_UU.tsv"
+    return f"{dup_resolution_path(freeze)}/duplicate_sample_map_no_UU.tsv"
 
 
 def dup_mt_path(freeze: int = CURRENT_FREEZE) -> str:
@@ -60,7 +76,7 @@ def dup_mt_path(freeze: int = CURRENT_FREEZE) -> str:
     """
     if freeze != 7:
         raise DataException("Duplicate MT only exists for freeze 7/450k!")
-    return f"gs://broad-ukbb/broad.freeze_{freeze}/temp/most_recent_dup.mt"
+    return f"{dup_resolution_path(freeze)}/most_recent_dup.mt"
 
 
 def dup_map_path(freeze: int = CURRENT_FREEZE) -> str:
@@ -77,7 +93,7 @@ def dup_map_path(freeze: int = CURRENT_FREEZE) -> str:
     """
     if freeze != 7:
         raise DataException("Duplicate map file only exists for freeze 7/450K!")
-    return f"gs://broad-ukbb/broad.freeze_{freeze}/dup_remove_idx.tsv"
+    return f"{dup_resolution_path(freeze)}/dup_remove_idx.tsv"
 
 
 def get_ukbb_data(
