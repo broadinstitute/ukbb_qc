@@ -43,6 +43,7 @@ def main(args):
             key_by_locus_and_alleles=True,
         )
         mt = mt.filter_rows(hl.len(mt.alleles) > 1)
+        mt = mt.annotate_rows(alt_alleles_range_array=hl.range(1, hl.len(mt.alleles)))
         mt = remove_hard_filter_samples(data_source, freeze, mt, non_refs_only=True)
 
         if args.use_vqsr:
@@ -62,10 +63,10 @@ def main(args):
                     lambda ai: hl.agg.filter(
                         mt.LA.contains(ai) & mt.LGT.is_het(),
                         hl.agg.max(
-                            hl.binom_test(mt.LAD[1], hl.sum(mt.LAD), 0.5, "two-sided")
+                            hl.agg.max(hl.binom_test(mt.LAD[mt.LA.index(ai)], hl.sum(mt.LAD), 0.5, "two-sided")),
                         ),
                     ),
-                    hl.range(1, hl.len(mt.alleles)),
+                    mt.alt_alleles_range_array,
                 )
             ).rows()
 
