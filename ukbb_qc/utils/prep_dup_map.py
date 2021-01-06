@@ -8,6 +8,7 @@ from gnomad.utils.slack import slack_notifications
 
 from ukbb_qc.resources.basics import (
     dup_mt_path,
+    dup_resolution_path,
     logging_path,
     raw_mt_path,
 )
@@ -21,11 +22,19 @@ logger.setLevel(logging.INFO)
 
 
 def main(args):
+    """
+    This script was required for the freeze 7/450k MT to determine which version of each duplicate sample present in the MT 
+    (distinguished by column index) corresponded to the most recent gVCF version for that sample.
+
+    Our initial thought was to keep the sample with highest depth, but quick tests in a notebook showed that the sample with the highest
+    depth on chr20 wasn't necessarily the most recent version of the sample.
+    """
+
     hl.init(log="/prep_dup_map.log", default_reference="GRCh38")
 
     data_source = "broad"
     freeze = args.freeze
-    temp_path = f"gs://broad-ukbb/broad.freeze_{freeze}/temp"
+    output_path = dup_resolution_path
 
     try:
         logger.info("Reading in raw MT and filtering to chr20...")
@@ -58,7 +67,7 @@ def main(args):
         )
         mt = mt.filter_cols(hl.literal(dups).contains(mt.s))
         mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
-        mt = mt.checkpoint(f"{temp_path}/dup_samples.mt", overwrite=True)
+        mt = mt.checkpoint(f"{output_path}/dup_samples.mt", overwrite=True)
 
         logger.info("Running sample QC...")
         mt = hl.sample_qc(mt)
@@ -70,13 +79,13 @@ def main(args):
         ht = mt.cols().drop("sample_qc")
 
         logger.info("Exporting sample QC results to TSV...")
-        ht.export(f"{temp_path}/dup_samples_call_rate.tsv")
+        ht.export(f"{output_path}/dup_samples_call_rate.tsv")
 
         logger.info("Parsing sample QC results...")
         dups_dict = {}
         for s in set(dups):
             dups_dict[s] = {}
-        with hl.hadoop_open(f"{temp_path}/dup_samples_call_rate.tsv", "r") as i:
+        with hl.hadoop_open(f"{output_path}/dup_samples_call_rate.tsv", "r") as i:
             _ = i.readline()
             for line in i:
                 sample, idx, callrate, ncalled, meandp = line.strip().split("\t")
@@ -108,7 +117,7 @@ def main(args):
             col_idx_expr: hl.expr.Int64Expression, indices: List[int]
         ) -> hl.expr.BooleanExpression:
             """
-            Returns criteria to filter MT columsn based on input column index expression and list of column indices
+            Returns criteria to filter MT columns based on input column index expression and list of column indices
 
             :param hl.expr.Int64Expression col_idx_expr: Expression containing column index.
             :param List[str] indices: List of column indices to keep.
@@ -137,13 +146,12 @@ def main(args):
         new_mt = new_mt.filter_rows(hl.agg.any(new_mt.GT.is_non_ref()))
 
         logger.info(
-            "Testing how many rows are in the MT with the most recent version vs filtered MT..."
+            "Testing how many rows are in the MT with the most recent version vs MT with highest depth duplicates..."
         )
         test = new_mt.anti_join_rows(higher_depth_mt.rows())
-        logger.info(f"Found {test.count()} rows unique to the new MT...")
-
         # NOTE: When I ran an anti_join using the new_mt against the checkpointed mt, I found 10 unique rows
         # I'm not sure why there were 10 unique rows, but they were all rows with star alleles
+        logger.info(f"Found {test.count()} rows unique to the new MT...")
 
         # NOTE: I ran the above sample filtering + anti_join until there weren't any rows unique to the new MT
         # If there were unique rows, I checked for which sample's variants were unique. I then created another
