@@ -31,7 +31,7 @@ try:
     output_file = dup_mt_path(freeze)
 
     # temp bucket
-    temp_bucket = "gs://broad-ukbb/broad.freeze_7/temp/combiner_temp/"
+    temp_bucket = f"gs://broad-ukbb/broad.freeze_{freeze}/temp/combiner_temp/"
     hl.experimental.run_combiner(
         inputs,
         out_file=output_file,
