@@ -31,6 +31,21 @@ def excluded_samples_path(freeze: int = CURRENT_FREEZE) -> str:
     return f"gs://broad-ukbb/resources/withdrawn_consents/{excluded_file_names[freeze]}"
 
 
+def dup_gvcf_path(freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Returns path to file containing duplicate samples and their most recent gVCFs.
+
+    Currently only exists for the 450k MatrixTable.
+
+    :param int freeze: One of data freezes
+    :return: Path to duplicates sample gVCF path tsv file
+    :rtype: str
+    """
+    if freeze != 7:
+        raise DataException("Duplicate gVCF path only exists for freeze 7/450k!")
+    return f"gs://broad-ukbb/broad.freeze_{freeze}/duplicate_resolution/duplicate_sample_map_no_UU.tsv"
+
+
 def dup_mt_path(freeze: int = CURRENT_FREEZE) -> str:
     """
     Returns path to MT created using most recent gVCF version for duplicate samples.
