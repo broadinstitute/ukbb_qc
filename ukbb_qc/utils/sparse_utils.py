@@ -82,6 +82,12 @@ def compute_interval_callrate_dp_mt(
         GT=hl.or_missing(hl.is_defined(mt.GT), hl.struct()),
         DP=hl.if_else(hl.is_defined(mt.DP), mt.DP, 0),
     )
+
+    # Lines 87-88 should eliminate the shuffle
+    mt = mt.key_rows_by(mt.interval)
+    mt = mt._filter_partitions(
+        [], keep=False
+    )  # hack to prevent optimization back to the original execution
     mt = mt.group_rows_by(mt.interval).aggregate(
         n_defined=hl.agg.count_where(hl.is_defined(mt.GT)),
         total=hl.agg.count(),
