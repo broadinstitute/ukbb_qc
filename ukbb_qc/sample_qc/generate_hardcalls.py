@@ -8,6 +8,7 @@ from gnomad.sample_qc.sex import adjust_sex_ploidy
 from gnomad.utils.annotations import add_variant_type, annotate_adj
 from gnomad.utils.slack import slack_notifications
 from ukbb_qc.resources.basics import (
+    capture_ht_path,
     get_checkpoint_path,
     get_ukbb_data,
     get_ukbb_data_path,
@@ -34,12 +35,9 @@ def main(args):
     try:
         if args.impute_sex:
             logger.info("Imputing sex...")
-            # NOTE: Remove key_by_locus_and_alleles when MTs are keyed by locus and alleles by default
-            # currently only keyed by locus
             mt = get_ukbb_data(
                 data_source,
                 freeze,
-                key_by_locus_and_alleles=True,
                 split=False,
                 raw=True,
                 repartition=args.repartition,
@@ -48,6 +46,7 @@ def main(args):
 
             sex_ht = annotate_sex(
                 mt,
+                included_intervals=hl.read_table(capture_ht_path(data_source)),
                 sites_ht=hl.read_table(f_stat_sites_path()),
                 aaf_expr="AF",
                 gt_expr="LGT",
