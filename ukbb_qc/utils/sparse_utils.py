@@ -90,7 +90,6 @@ def compute_interval_callrate_dp_mt(
     )  # hack to prevent optimization back to the original execution
     mt = mt.group_rows_by(mt.interval).aggregate(
         n_defined=hl.agg.count_where(hl.is_defined(mt.GT)),
-        total=hl.agg.count(),
         dp_sum=hl.agg.sum(mt.DP),
         mean_dp=hl.agg.mean(mt.DP),
         **{
@@ -98,6 +97,14 @@ def compute_interval_callrate_dp_mt(
         },
         pct_dp_defined=hl.agg.count_where(mt.DP > 0) / hl.agg.count(),
     )
+    # Get number of variants per interval and annotate callrate MT
+    var_ht = (
+        mt.group_rows_by(mt.interval)
+        .aggregate_rows(n_var=hl.agg.count())
+        .result()
+        .rows()
+    )
+    mt = mt.annotate_rows(n_var=var_ht[mt.interval].n_var)
     mt.write(
         callrate_mt_path(data_source, freeze, interval_filtered=False),
         overwrite=overwrite,
