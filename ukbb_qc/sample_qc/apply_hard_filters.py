@@ -98,7 +98,7 @@ def hard_filter_samples(
         callrate_mt_path(data_source, freeze, interval_filtered=True), overwrite=True
     )
     ht = mt.annotate_cols(
-        call_rate=hl.agg.sum(mt.n_defined) / hl.agg.sum(mt.total),
+        call_rate=hl.agg.sum(mt.n_defined) / mt.n_var,
         sample_mean_dp=hl.agg.sum(mt.dp_sum) / hl.agg.sum(mt.total),
     ).cols()
 
