@@ -46,7 +46,7 @@ def main(args):
 
             logger.info("Annotating callrate MT with callrate...")
             callrate_mt = callrate_mt.annotate_entries(
-                callrate=callrate_mt.n_defined / callrate_mt.total
+                callrate=callrate_mt.n_defined / callrate_mt.n_var
             )
 
             # NOTE: Callrate MT is not filtered to autosomes because it is used in interval QC
