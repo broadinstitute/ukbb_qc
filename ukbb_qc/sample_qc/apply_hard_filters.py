@@ -78,7 +78,7 @@ def hard_filter_samples(
     """
     Applies hard filters to samples and returns Table with samples and their hard filter status.
 
-    This function expects the input MT to be annotated with the fields n_defined, total, and dp_sum.
+    This function expects the input MT to be annotated with the fields n_defined, n_var, and dp_sum.
     These are calculated using compute_interval_callrate_dp_mt.
 
     :param str data_source: One of 'regeneron' or 'broad'
@@ -99,7 +99,7 @@ def hard_filter_samples(
     )
     ht = mt.annotate_cols(
         call_rate=hl.agg.sum(mt.n_defined) / hl.agg.sum(mt.n_var),
-        sample_mean_dp=hl.agg.sum(mt.dp_sum) / hl.agg.sum(mt.total),
+        sample_mean_dp=hl.agg.sum(mt.dp_sum) / hl.agg.sum(mt.n_var),
     ).cols()
 
     logger.info("Adding sex imputation annotations...")
