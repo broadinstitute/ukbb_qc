@@ -7,7 +7,7 @@ import hail as hl
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.liftover import (
     get_liftover_genome,
-    lift_data,
+    default_lift_data,
     annotate_snp_mismatch,
 )
 from gnomad.utils.slack import slack_notifications
@@ -182,13 +182,9 @@ def main(args):
             source, target = get_liftover_genome(array_mt)
 
             logger.info(f"Lifting data to {target.name}")
-            array_mt = lift_data(
-                array_mt,
-                gnomad=False,
-                data_type=None,
-                path=array_mt_path(liftover=True, checkpoint=True),
-                rg=target,
-                overwrite=overwrite,
+            array_mt = default_lift_data(array_mt)
+            array_mt = array_mt.checkpoint(
+                array_mt_path(liftover=True, checkpoint=True), overwrite=overwrite,
             )
 
             logger.info("Checking SNPs for reference mismatches")
