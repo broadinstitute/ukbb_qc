@@ -14,6 +14,38 @@ from ukbb_qc.slack_creds import slack_token
 
 
 def main():
+    """
+    We noticed after running the first round of hard filters on freeze 7/the 450k MT that every sample had a
+    callrate of 100%. Upon closer inspection of the callrate MT, we found that the `total` field for every sample
+    matched their `n_defined` field, meaning that the `total` field had incorrect values.
+
+    Both fields are calculated using:
+    ```
+    mt = mt.group_rows_by(mt.interval).aggregate(
+        n_defined=hl.agg.count_where(hl.is_defined(mt.GT)),
+        total=hl.agg.count(),
+        dp_sum=hl.agg.sum(mt.DP),
+        mean_dp=hl.agg.mean(mt.DP),
+        **{
+            f"pct_gt_{cov}x": hl.agg.fraction(mt.DP >= cov) for cov in target_pct_gt_cov
+        },
+        pct_dp_defined=hl.agg.count_where(mt.DP > 0) / hl.agg.count(),
+    )
+    ```
+    The reason why `total` is not calculated correctly is because the entry aggregation + `count()` 
+    does not count filtered entries. Not every genotype is populated during a densify, which means the 
+    unpopulated entries would appear to be "filtered", so this `count()` is undercounting genotypes.
+    For example, if a sample has a ref block from chr1:1-5 and a variant at chr1:7, and the MT has rows 
+    chr:1 and then chr:7, then after the densify, genotypes for that sample from chr1:2-5 don’t actually get populated 
+    (even though we know they are defined).
+
+    As an important note, the reason the callrate MT code worked on freeze 6/the 300k MT is because of a hail bug.
+    The bug was that previous entry aggregations counted filtered entries. We ran the 300k callrate MT code in April 2020,
+    and the bug was fixed three months later in June.
+
+    The fix for `total` for the 450k MT and moving forwards is to group the callrate MT by interval and 
+    aggregate the *rows* to get the number of variants per interval.
+    """
 
     hl.init(log="/fix_callrate.log", default_reference="GRCh38")
 
