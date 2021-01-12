@@ -8,7 +8,6 @@ from gnomad.utils.file_utils import file_exists
 from gnomad.utils.liftover import (
     get_liftover_genome,
     default_lift_data,
-    annotate_snp_mismatch,
 )
 from gnomad.utils.slack import slack_notifications
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
@@ -184,13 +183,7 @@ def main(args):
             logger.info(f"Lifting data to {target.name}")
             array_mt = default_lift_data(array_mt)
             array_mt = array_mt.checkpoint(
-                array_mt_path(liftover=True, checkpoint=True), overwrite=overwrite,
-            )
-
-            logger.info("Checking SNPs for reference mismatches")
-            array_mt = annotate_snp_mismatch(array_mt, data_type=None, rg=target)
-            array_mt = array_mt.checkpoint(
-                array_mt_path(liftover=True), overwrite=overwrite
+                array_mt_path(liftover=True), overwrite=overwrite,
             )
             array_variants, array_samples = array_mt.count()
             logger.info(
