@@ -88,15 +88,19 @@ def compute_interval_callrate_dp_mt(
     mt = mt._filter_partitions(
         [], keep=False
     )  # hack to prevent optimization back to the original execution
-    mt = mt.group_rows_by(mt.interval).aggregate(
-        n_defined=hl.agg.count_where(hl.is_defined(mt.GT)),
-        total=hl.agg.count(),
-        dp_sum=hl.agg.sum(mt.DP),
-        mean_dp=hl.agg.mean(mt.DP),
-        **{
-            f"pct_gt_{cov}x": hl.agg.fraction(mt.DP >= cov) for cov in target_pct_gt_cov
-        },
-        pct_dp_defined=hl.agg.count_where(mt.DP > 0) / hl.agg.count(),
+    mt = (
+        mt.group_rows_by(mt.interval)
+        .aggregate_rows(n_var=hl.agg.count())
+        .aggregate(
+            n_defined=hl.agg.count_where(hl.is_defined(mt.GT)),
+            dp_sum=hl.agg.sum(mt.DP),
+            mean_dp=hl.agg.mean(mt.DP),
+            **{
+                f"pct_gt_{cov}x": hl.agg.fraction(mt.DP >= cov)
+                for cov in target_pct_gt_cov
+            },
+            pct_dp_defined=hl.agg.count_where(mt.DP > 0) / hl.agg.count(),
+        )
     )
     mt.write(
         callrate_mt_path(data_source, freeze, interval_filtered=False),
