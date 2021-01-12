@@ -155,7 +155,7 @@ def get_ukbb_data(
                 logger.info("No withdrawn samples found in MT")
 
     # Code to resolve duplicate sample specifically in freeze 7/the 450k callset
-    if freeze == 7:
+    if freeze == 7 and raw:
         logger.info("Resolving duplicate sample IDs in the 450k MT...")
         # Add column index to samples
         mt = mt.add_col_index()
