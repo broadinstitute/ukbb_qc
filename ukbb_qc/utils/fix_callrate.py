@@ -1,3 +1,4 @@
+import argparse
 import hail as hl
 
 from gnomad.utils.annotations import bi_allelic_expr
@@ -54,7 +55,7 @@ def main():
 
     try:
         # Read in callrate MT
-        # Rows in callrate MT (from .describe()): 192977
+        # Rows in 450K callrate MT (from .describe()): 192977
         callrate_mt = hl.read_matrix_table(
             callrate_mt_path(data_source, freeze, interval_filtered=False)
         )
@@ -65,6 +66,8 @@ def main():
         )
         capture_ht = hl.read_table(capture_ht_path(data_source))
 
+        # Lines 70-84 are copied from the original callrate MT code
+        # We are running them in this fix to make sure we are producing the same grouped MT
         # Remove ref block rows
         mt = mt.filter_rows(hl.len(mt.alleles) > 1)
 
@@ -84,15 +87,14 @@ def main():
 
         # Group MT by interval and get count of variants per interval -- necessary for callrate
         mt = mt.group_rows_by(mt.interval).aggregate_rows(n_var=hl.agg.count()).result()
-        mt.describe()
 
         # Create HT with intervals and number of variants per interval
+        # This number is specifically for the 450K MT
         ht = mt.rows()
         print(f"Check if HT count matches 192977: {ht.count == 192977}")
 
         # Annotate current callrate MT with n_var annotation
         callrate_mt = callrate_mt.annotate_rows(n_var=ht[callrate_mt.interval].n_var)
-        callrate_mt.describe()
 
         # Write current callrate MT to temp and overwrite MT at callrate mt path
         callrate_mt = callrate_mt.checkpoint(
@@ -107,5 +109,19 @@ def main():
         hl.copy_log(logging_path(data_source, freeze))
 
 
-with slack_notifications(slack_token, "@kc"):
-    main()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int,
+    )
+    parser.add_argument(
+        "--slack_channel", help="Slack channel to post results and notifications to.",
+    )
+
+    args = parser.parse_args()
+
+    if args.slack_channel:
+        with slack_notifications(slack_token, args.slack_channel):
+            main(args)
+    else:
+        main(args)
