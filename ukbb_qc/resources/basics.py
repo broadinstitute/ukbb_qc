@@ -185,14 +185,14 @@ def get_ukbb_data(
         :rtype: int
         """
         # Using an HT here because aggregate_cols has been slow/memory intensive in the past
-        samples_to_drop = samples.aggregate(
+        n_samples_to_drop = samples.aggregate(
             hl.agg.count_where(remove_ids.contains(samples[column_name]))
         )
-        if samples_to_drop != hl.eval(hl.len(remove_ids)):
+        if n_samples_to_drop != hl.eval(hl.len(remove_ids)):
             raise DataException(
-                f"Expecting to remove {hl.eval(hl.len(remove_ids))} duplicate samples but found {samples_to_drop}. Double check samples in MT!"
+                f"Expecting to remove {hl.eval(hl.len(remove_ids))} duplicate samples but found {n_samples_to_drop}. Double check samples in MT!"
             )
-        return samples_to_drop
+        return n_samples_to_drop
 
     if freeze == 7:
 
