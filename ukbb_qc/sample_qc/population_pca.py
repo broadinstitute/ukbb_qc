@@ -12,9 +12,8 @@ from gnomad.sample_qc.ancestry import (
     run_pca_with_relateds,
 )
 from gnomad.utils.liftover import (
-    annotate_snp_mismatch,
     get_liftover_genome,
-    lift_data,
+    default_lift_data,
 )
 from gnomad.utils.slack import slack_notifications
 from gnomad.utils.sparse_mt import densify_sites
@@ -173,19 +172,7 @@ def main(args):
             source, target = get_liftover_genome(gnomad_loadings_ht)
 
             logger.info(f"Lifting data to {target.name}")
-            gnomad_loadings_ht = lift_data(
-                gnomad_loadings_ht,
-                gnomad=False,
-                data_type=None,
-                path=gnomad_ancestry_loadings_liftover_path(checkpoint=True),
-                rg=target,
-                overwrite=args.overwrite,
-            )
-
-            logger.info("Checking SNPs for reference mismatches")
-            gnomad_loadings_ht = annotate_snp_mismatch(
-                gnomad_loadings_ht, data_type=None, rg=target
-            )
+            gnomad_loadings_ht = default_lift_data(gnomad_loadings_ht)
             gnomad_loadings_ht.write(
                 gnomad_ancestry_loadings_liftover_path(), overwrite=args.overwrite
             )
