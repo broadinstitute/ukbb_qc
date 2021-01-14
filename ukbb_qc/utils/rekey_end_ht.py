@@ -11,17 +11,18 @@ from ukbb_qc.resources.basics import (
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.slack_creds import slack_token
 
-
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("rekey_last_end_ht")
 logger.setLevel(logging.INFO)
 
 
 def main(args):
-
     """
 	This script is necessary because sparse MatrixTables now come keyed by locus and alleles by default.
-	That means that `compute_last_ref_block_end` will write the last END HT keyed by locus and alleles.
+	That means that `compute_last_ref_block_end` wrote our current last END HT keyed by locus and alleles.
+    `compute_last_ref_block_end` (fixed with https://github.com/broadinstitute/gnomad_methods/pull/279) 
+    now explicitly keys the last END HT by locus, so this script will not be necessary for any future 
+    production projects.
 
 	The last END HT is used to optimize densifies that only require densifying to a specific list of sites
 	(as opposed to running a full `hl.experimental.densify` on all sites). 
