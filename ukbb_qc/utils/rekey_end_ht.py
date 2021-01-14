@@ -3,6 +3,8 @@ import logging
 
 import hail as hl
 
+from gnomad.utils.slack import slack_notifications
+
 from ukbb_qc.resources.basics import (
     get_checkpoint_path,
     last_END_positions_ht_path,
