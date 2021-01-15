@@ -138,11 +138,11 @@ def filters_sanity_check(ht: hl.Table) -> None:
     logger.info(
         f"hl.agg.counter filters: {ht_explode.aggregate(hl.agg.counter(ht_explode.filters))}"
     )
-    # NOTE: in_problematic_region check will need to be updated if we get hg38 decoy and segdup file
+    # NOTE: in_problematic_region check will need to be updated if we get hg38 decoy file
     ht = ht.annotate(
         is_filtered=hl.len(ht.filters) > 0,
         in_problematic_region=hl.any(
-            lambda x: x, [ht.info.lcr, ht.info.fail_interval_qc]
+            lambda x: x, [ht.info.lcr, ht.info.fail_interval_qc, ht.info.segdup]
         ),
     )
 

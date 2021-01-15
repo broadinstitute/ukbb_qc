@@ -4,7 +4,11 @@ from typing import Union
 
 import hail as hl
 
-from gnomad.resources.grch38.reference_data import dbsnp, lcr_intervals
+from gnomad.resources.grch38.reference_data import (
+    dbsnp,
+    lcr_intervals,
+    seg_dup_intervals,
+)
 from gnomad.utils.slack import slack_notifications
 from gnomad.utils.vcf import (
     AS_FIELDS,
@@ -55,16 +59,18 @@ def flag_problematic_regions(
     
     .. note:: 
 
-        No hg38 resources for decoy, segdup, or self chain yet.
+        No hg38 resources for decoy or self chain yet.
 
     :param Table/MatrixTable t: Input Table/MatrixTable.
     :return: `region_flag` struct row annotation.
     :rtype: hl.expr.StructExpression
     """
     lcr_ht = lcr_intervals.ht()
+    segdup_ht = seg_dup_intervals.ht()
 
     return hl.struct(
         lcr=hl.is_defined(lcr_ht[t.locus]),
+        segdup=hl.is_defined(segdup_ht[t.locus]),
         fail_interval_qc=~(t.rf.interval_qc_pass),
         outside_capture_region=~t.rf.in_capture_interval,
     )
