@@ -361,6 +361,12 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
     for field in AS_FIELDS:
         vcf_info_dict[field] = t["info"][f"{field}"]
 
+    # Histograms to export are:
+    # gq_hist_alt, gq_hist_all, dp_hist_alt, dp_hist_all, ab_hist_alt
+    # We previously dropped:
+    # _n_smaller for all hists
+    # _bin_edges for all hists
+    # _n_larger for all hists EXCEPT DP hists
     for hist in HISTS:
         for prefix in ["qual_hists", "raw_qual_hists"]:
             hist_name = hist
@@ -371,13 +377,13 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
                 f"{hist_name}_bin_freq": hl.delimit(
                     t[prefix][hist].bin_freq, delimiter="|"
                 ),
-                f"{hist_name}_bin_edges": hl.delimit(
-                    t[prefix][hist].bin_edges, delimiter="|"
-                ),
-                f"{hist_name}_n_smaller": t[prefix][hist].n_smaller,
-                f"{hist_name}_n_larger": t[prefix][hist].n_larger,
             }
             vcf_info_dict.update(hist_dict)
+
+            if "dp" in hist_name:
+                vcf_info_dict.update(
+                    {f"{hist_name}_n_larger": t[prefix][hist].n_larger},
+                )
     return vcf_info_dict
 
 
@@ -531,18 +537,14 @@ def unfurl_nested_annotations(
     expr_dict.update(combo_dict)
 
     # Unfurl UKBB ages
+    # We previously dropped:
+    # age_hist_hom_bin_edges, age_hist_het_bin_edges
     if not gnomad:
         age_hist_dict = {
             "age_hist_het_bin_freq": hl.delimit(t.age_hist_het.bin_freq, delimiter="|"),
-            "age_hist_het_bin_edges": hl.delimit(
-                t.age_hist_het.bin_edges, delimiter="|"
-            ),
             "age_hist_het_n_smaller": t.age_hist_het.n_smaller,
             "age_hist_het_n_larger": t.age_hist_het.n_larger,
             "age_hist_hom_bin_freq": hl.delimit(t.age_hist_hom.bin_freq, delimiter="|"),
-            "age_hist_hom_bin_edges": hl.delimit(
-                t.age_hist_hom.bin_edges, delimiter="|"
-            ),
             "age_hist_hom_n_smaller": t.age_hist_hom.n_smaller,
             "age_hist_hom_n_larger": t.age_hist_hom.n_larger,
         }
@@ -614,27 +616,6 @@ def main(args):
             mt = mt.annotate_rows(freq=mt.freq[:-4])
             mt = mt.annotate_globals(freq_meta=mt.freq_meta[:-4])
 
-            # TODO: remove from code for 500K
-            # TODO: check with DSP why annotations are missing
-            from ukbb_qc.resources.basics import vqsr_sites_path
-            from gnomad.utils.sparse_mt import split_info_annotation
-
-            logger.info("Pulling AS_VarDP from VQSR sites HT (300K fix)...")
-            vqsr_sites_ht = hl.read_table(vqsr_sites_path(*tranche_data))
-
-            vqsr_sites_ht = hl.split_multi(vqsr_sites_ht)
-            vqsr_sites_ht = vqsr_sites_ht.annotate(
-                info=vqsr_sites_ht.info.annotate(
-                    **split_info_annotation(vqsr_sites_ht.info, vqsr_sites_ht.a_index),
-                ),
-            )
-            vqsr_sites_ht = vqsr_sites_ht.transmute(
-                AS_VarDP=vqsr_sites_ht.info.AS_VarDP
-            )
-            mt = mt.annotate_rows(
-                info=mt.info.annotate(AS_VarDP=vqsr_sites_ht[mt.row_key].AS_VarDP)
-            )
-
             logger.info("Making histogram bin edges...")
             # NOTE: using release HT here because age histograms aren't necessarily defined
             # in the first row of the raw MT (we may have filtered that row because it was low qual)
@@ -678,13 +659,6 @@ def main(args):
             #   region_flag struct, and
             #   raw_qual_hists/qual_hists structs.
 
-            # TODO: Remove this in the 500K, I modified the variant QC code to create the correct names
-            mt = mt.transmute_rows(
-                rf=mt.rf.annotate(
-                    rf_positive_label=mt.rf.tp,
-                    rf_negative_label=mt.rf.fail_hard_filters,
-                )
-            )
             mt = mt.annotate_rows(info=hl.struct(**make_info_expr(mt)))
 
             # Unfurl nested UKBB frequency annotations and add to INFO field
@@ -780,21 +754,6 @@ def main(args):
             logger.info("Reading header dict from pickle...")
             with hl.hadoop_open(release_header_path(*tranche_data), "rb") as p:
                 header_dict = pickle.load(p)
-
-            # Drop unnecessary histograms
-            # TODO: figure out which hists we want to export and only create those for 500K
-            drop_hists = (
-                [x + "_n_smaller" for x in HISTS]
-                + [x + "_bin_edges" for x in HISTS]
-                + [x + "_n_larger" for x in HISTS if "dp_" not in x]
-            )
-            drop_hists.extend(
-                [x + "_raw_n_smaller" for x in HISTS]
-                + [x + "_raw_bin_edges" for x in HISTS]
-                + [x + "_raw_n_larger" for x in HISTS if "dp_" not in x]
-                + ["age_hist_hom_bin_edges", "age_hist_het_bin_edges"]
-            )
-            mt = mt.annotate_rows(info=mt.info.drop(*drop_hists))
 
             # Reformat names to remove "adj" pre-export
             # e.g, renaming "AC_adj" to "AC"
