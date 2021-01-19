@@ -7,7 +7,7 @@ from gnomad.resources.grch38.reference_data import get_truth_ht
 from gnomad.sample_qc.relatedness import filter_mt_to_trios
 from gnomad.utils.filtering import filter_to_autosomes
 from gnomad.utils.slack import slack_notifications
-from gnomad.utils.vep import vep_or_lookup_vep, vep_struct_to_csq
+from gnomad.utils.vep import VEP_CSQ_HEADER, vep_or_lookup_vep, vep_struct_to_csq
 from gnomad.variant_qc.pipeline import generate_sib_stats, generate_trio_stats
 from ukbb_qc.resources.basics import get_ukbb_data, logging_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
@@ -37,13 +37,14 @@ def main(args):
         if args.vep:
             # Need to spin up a cluster with  --requester-pays-allow-buckets gs://hail-us-vep
             # (or --requester-pays-allows-all) in addition to --vep (build)
-            logger.info(f"Running VEP on split hard call MT...")
+            logger.info("Running VEP on split hard call MT...")
             mt = get_ukbb_data(data_source, freeze)
             ht = mt.filter_rows(
                 (hl.len(mt.alleles) > 1) & hl.agg.any(mt.GT.is_non_ref())
             ).rows()
             ht = vep_or_lookup_vep(ht)
             ht = ht.annotate(vep_csq=vep_struct_to_csq(ht.vep))
+            ht = ht.annotate_globals(vep_csq_header=VEP_CSQ_HEADER)
             ht.naive_coalesce(n_partitions).write(
                 var_annotations_ht_path("vep", data_source, freeze),
                 overwrite=overwrite,
@@ -178,7 +179,6 @@ if __name__ == "__main__":
     slack_params.add_argument(
         "--slack_channel", help="Slack channel to post results and notifications to."
     )
-    slack_params.add_argument("--slack_token", help="Slack token.")
     parser.add_argument("-o", "--overwrite", help="Overwrite data", action="store_true")
     parser.add_argument(
         "--n_partitions",
