@@ -75,10 +75,10 @@ VCF_INFO_DICT["sibling_singleton"] = {
     "Description": "Variant was a callset-wide doubleton that was present only within a sibling pair"
 }
 
-# Add interval QC, capture region to REGION_FLAG_FIELDS and remove decoy, segdup
+# Add interval QC, capture region to REGION_FLAG_FIELDS and remove decoy
 # NOTE: MISSING_REGION_FIELDS could change for 500K if we get hg38 files
 INTERVAL_FIELDS = ["fail_interval_qc", "in_capture_region"]
-MISSING_REGION_FIELDS = ("decoy", "segdup")
+MISSING_REGION_FIELDS = "decoy"
 REGION_FLAG_FIELDS = [
     field for field in REGION_FLAG_FIELDS if field not in MISSING_REGION_FIELDS
 ]
