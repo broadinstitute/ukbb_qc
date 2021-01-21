@@ -122,9 +122,7 @@ def main(args):
                     logger.info(
                         "Filtering out low confidence regions and sites outside the calling intervals..."
                     )
-                    ht = filter_low_conf_regions(
-                        ht, filter_lcr=True, filter_decoy=False,
-                    )
+                    ht = filter_low_conf_regions(ht, filter_decoy=False)
                     calling_intervals = hl.read_table(capture_ht_path(data_source))
                     ht = ht.filter(hl.is_defined(calling_intervals[ht.locus]))
 

@@ -41,7 +41,7 @@ def run_sample_qc(mt: hl.MatrixTable) -> hl.Table:
     """
     # Filtering to bi-allelic sites outside of low confidence regions
     mt = filter_to_autosomes(mt)
-    mt = filter_low_conf_regions(mt, filter_lcr=True, filter_decoy=False)
+    mt = filter_low_conf_regions(mt, filter_decoy=False)
     mt = mt.filter_rows(bi_allelic_expr(mt))
 
     logger.info("Starting sample QC...")
