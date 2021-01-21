@@ -384,6 +384,7 @@ def frequency_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool) -> 
                         f"info.{subset}_{subfield}_raw",
                     ],
                     verbose=verbose,
+                    show_percent_sites=True,
                 )
                 logger.info("adj checks -- gnomAD/UKBB")
                 generic_field_check(
@@ -398,6 +399,7 @@ def frequency_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool) -> 
                         f"info.{subset}_{subfield}_adj",
                     ],
                     verbose=verbose,
+                    show_percent_sites=True,
                 )
 
     freq_counts = ht.aggregate(
