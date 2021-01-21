@@ -496,7 +496,7 @@ task IndelsVariantRecalibrator {
       -resource:mills,known=false,training=true,truth=true,prior=12 ~{mills_resource_vcf} \
       -resource:axiomPoly,known=false,training=true,truth=false,prior=10 ~{axiomPoly_resource_vcf} \
       -resource:dbsnp,known=true,training=false,truth=false,prior=2 ~{dbsnp_resource_vcf} \
-      ~{"-resource:singletons,known=true,training=true,truth=true,prior=10 " + transmitted_singletons_resource_vcf}
+      ~{'-resource:singletons,known=true,training=true,truth=true,prior=10 ' + transmitted_singletons_resource_vcf}
   }
   runtime {
     memory: "104 GB"
@@ -716,7 +716,7 @@ input {
       -resource:omni,known=false,training=true,truth=true,prior=12 ~{omni_resource_vcf} \
       -resource:1000G,known=false,training=true,truth=false,prior=10 ~{one_thousand_genomes_resource_vcf} \
       -resource:dbsnp,known=true,training=false,truth=false,prior=7 ~{dbsnp_resource_vcf} \
-      ~{"-resource:singletons,known=true,training=true,truth=true,prior=10 " + transmitted_singletons_resource_vcf}
+      ~{'-resource:singletons,known=true,training=true,truth=true,prior=10 ' + transmitted_singletons_resource_vcf}
 
   >>>
 
