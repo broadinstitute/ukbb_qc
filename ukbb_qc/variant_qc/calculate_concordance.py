@@ -43,7 +43,7 @@ def main(args):
         info_ht = hl.read_table(info_ht_path(*tranche_data))
 
         if args.extract_truth_samples:
-            logger.info(f"Extracting truth samples from adj filtered hardcall MT...")
+            logger.info("Extracting truth samples from adj filtered hardcall MT...")
             mt = get_ukbb_data(*tranche_data, adj=True)
 
             mt = mt.filter_cols(
@@ -122,13 +122,7 @@ def main(args):
                     logger.info(
                         "Filtering out low confidence regions and sites outside the calling intervals..."
                     )
-                    ht = filter_low_conf_regions(
-                        ht,
-                        filter_lcr=True,
-                        # TODO: Uncomment when we have segdup path
-                        filter_decoy=False,  # True,
-                        filter_segdup=False,  # True,
-                    )
+                    ht = filter_low_conf_regions(ht, filter_decoy=False)
                     calling_intervals = hl.read_table(capture_ht_path(data_source))
                     ht = ht.filter(hl.is_defined(calling_intervals[ht.locus]))
 
