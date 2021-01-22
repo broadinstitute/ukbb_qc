@@ -268,11 +268,12 @@ def main(args):
             logger.info(
                 "Setting het genotypes at sites with >1% AF (using v3.0 frequencies) and > 0.9 AB to homalt..."
             )
+
             # Load tranche 3/freeze 6/300K allele frequencies to avoid an extra frequency calculation
-            freq_ht = hl.read_table(var_annotations_ht_path("ukb_freq", data_source='broad', freeze=6))
+            freq_ht = hl.read_table(release_ht_path(data_source='broad', freeze=6)).select("freq")
             freq_ht = freq_ht.select(AF=freq_ht.freq[0].AF)
             mt = mt.annotate_entries(
-                GT=hl.cond(
+                GT=hl.if_else(
                     (freq_ht[mt.row_key].AF > 0.01)
                     & mt.GT.is_het()
                     & (mt.AD[1] / mt.DP > 0.9),
