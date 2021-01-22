@@ -270,7 +270,9 @@ def main(args):
             )
 
             # Load tranche 3/freeze 6/300K allele frequencies to avoid an extra frequency calculation
-            freq_ht = hl.read_table(release_ht_path(data_source='broad', freeze=6)).select("freq")
+            freq_ht = hl.read_table(
+                release_ht_path(data_source="broad", freeze=6)
+            ).select("freq")
             freq_ht = freq_ht.select(AF=freq_ht.freq[0].AF)
             mt = mt.annotate_entries(
                 GT=hl.if_else(
