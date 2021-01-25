@@ -47,7 +47,7 @@ logger.setLevel(logging.INFO)
 
 def main(args):
 
-    hl.init(log="create_meta.log", default_reference="GRCh38")
+    hl.init(log="/create_meta.log", default_reference="GRCh38")
 
     data_source = "broad"
     freeze = args.freeze
@@ -81,7 +81,7 @@ def main(args):
         # Create struct for join
         right_ht = right_ht.transmute(
             sex_imputation=hl.struct(**right_ht.row.drop("s", "array_sex"))
-        ).select("s", "array_sex")
+        ).select("sex_imputation", "array_sex")
         right_ht = right_ht.annotate_globals(
             sex_imputation_ploidy_cutoffs=right_ht.globals
         ).select_globals("sex_imputation_ploidy_cutoffs")
@@ -111,7 +111,7 @@ def main(args):
         right_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
         right_ht = right_ht.annotate_globals(
             population_inference_pca_metrics=right_ht.globals
-        ).select("population_inference_pca_metrics")
+        ).select_globals("population_inference_pca_metrics")
         left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
         left_ht = left_ht.transmute(
             ukbb_meta=left_ht.ukbb_meta.annotate(
