@@ -28,7 +28,7 @@ from ukbb_qc.resources.sample_qc import (
     sex_ht_path,
     meta_ht_path,
 )
-from ukbb_qc.resources.variant_qc import TRUTH_SAMPLES
+from ukbb_qc.resources.variant_qc import SYNDIP, NA12878
 from ukbb_qc.slack_creds import slack_token
 from ukbb_qc.utils.utils import (
     get_age_ht,
@@ -246,9 +246,10 @@ def main(args):
         )
 
         logger.info("Annotating control samples")
+        truth_samples = hl.literal([SYNDIP, NA12878])
         left_ht = left_ht.annotate(
             sample_filters=left_ht.sample_filters.annotate(
-                control=(hl.literal(TRUTH_SAMPLES).contains(left_ht.s))
+                control=(truth_samples.contains(left_ht.s))
             )
         )
         logger.info(
