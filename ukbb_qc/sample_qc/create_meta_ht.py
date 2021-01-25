@@ -77,7 +77,7 @@ def main(args):
             array_concordance_sites_cutoffs=right_ht.globals
         ).select_globals("array_concordance_sites_cutoffs")
         left_ht = join_tables(left_ht, "ukbb_id", right_ht, "s", "left")
-        left_ht = left_ht.drop("ukbb_id")
+        left_ht = left_ht.key_by("s").drop("ukbb_id")
 
         logger.info(logging_statement.format("sex HT"))
         right_ht = hl.read_table(sex_ht_path(data_source, freeze))
