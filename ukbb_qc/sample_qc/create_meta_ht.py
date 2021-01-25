@@ -178,7 +178,7 @@ def main(args):
         )
         left_ht = left_ht.annotate(
             relatedness_inference=hl.struct(
-                relationships=relatedness_ht[left_ht.s].relationship,
+                relationships=relatedness_ht[left_ht.s].relationships,
             )
         )
 
@@ -289,10 +289,10 @@ if __name__ == "__main__":
         choices=["gnomad_pc_project_pop", "HDBSCAN_pop_cluster", "hybrid_pop"],
     )
     parser.add_argument(
-        "--platform_assignment_method",
-        help="Platform assignment method to use for outlier stratification",
-        default="batch",
-        choices=["batch", "qc_platform"],
+        "--pop_assignment_method",
+        help="Population assignment method to use for outlier stratification",
+        default="hybrid_pop_data",
+        choices=["gnomad_pc_project_pop_data", "hybrid_pop_data"],
     )
     parser.add_argument(
         "-o",
