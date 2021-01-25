@@ -11,6 +11,7 @@ from gnomad.sample_qc.ancestry import (
     pc_project,
     run_pca_with_relateds,
 )
+from gnomad.utils.file_utils import file_exists
 from gnomad.utils.liftover import (
     get_liftover_genome,
     default_lift_data,
@@ -21,6 +22,7 @@ from gnomad_qc.v2.resources.basics import get_gnomad_meta
 from gnomad_qc.v2.resources.sample_qc import (
     ancestry_pca_loadings_ht_path as gnomad_ancestry_pca_loadings_ht_path,
 )
+from ukbb_qc.load_data.utils import load_self_reported_ancestry
 from ukbb_qc.resources.basics import (
     array_sample_map_ht_path,
     get_checkpoint_path,
@@ -197,7 +199,6 @@ def main(args):
             pop_pca_loadings_ht.write(
                 ancestry_pca_loadings_ht_path(data_source, freeze), args.overwrite
             )
-            pop_pca_scores_ht = pop_pca_scores_ht.repartition(args.n_partitions)
             pop_pca_scores_ht.write(
                 ancestry_pca_scores_ht_path(data_source, freeze), args.overwrite
             )
@@ -216,7 +217,6 @@ def main(args):
                 hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
                 hdbscan_min_samples=hdbscan_min_samples,
             )
-            pops_ht = pops_ht.repartition(args.n_partitions)
             pops_ht.write(ancestry_cluster_ht_path(data_source, freeze), args.overwrite)
 
         if args.assign_clusters_array_pcs:
@@ -234,7 +234,6 @@ def main(args):
                 hdbscan_min_cluster_size=args.hdbscan_min_cluster_size,
                 hdbscan_min_samples=hdbscan_min_samples,
             )
-            pops_ht = pops_ht.repartition(args.n_partitions)
             pops_ht.write(
                 ancestry_cluster_ht_path(data_source, freeze, "array"), args.overwrite
             )
@@ -263,7 +262,6 @@ def main(args):
                 n_exome_pcs=scores_ht.n_exome_pcs,
                 n_array_pcs=n_array_pcs,
             )
-            pops_ht = pops_ht.repartition(args.n_partitions)
             pops_ht.write(
                 ancestry_cluster_ht_path(data_source, freeze, "joint"), args.overwrite,
             )
@@ -275,7 +273,6 @@ def main(args):
             mt = get_ukbb_data(data_source, freeze, split=True, adj=True)
             last_END_ht = hl.read_table(last_END_positions_ht_path(freeze))
             joint_scores_ht = project_on_gnomad_pop_pcs(mt, last_END_ht, n_project_pcs)
-            joint_scores_ht = joint_scores_ht.repartition(args.n_partitions)
             joint_scores_ht.write(
                 ancestry_pc_project_scores_ht_path(data_source, freeze, "joint"),
                 overwrite=args.overwrite,
@@ -370,7 +367,6 @@ def main(args):
 
             # NOTE: Removing hard filtered samples here to avoid sample filtration pre-densify
             scores_ht = remove_hard_filter_samples(data_source, freeze, scores_ht)
-            scores_ht = scores_ht.repartition(args.n_partitions)
             scores_ht = scores_ht.checkpoint(
                 ancestry_pc_project_scores_ht_path(data_source, freeze),
                 overwrite=args.overwrite,
@@ -418,6 +414,8 @@ def main(args):
             )
 
             logger.info("Getting self reported ancestries...")
+            if not file_exists(get_ukbb_self_reported_ancestry_path(freeze)):
+                load_self_reported_ancestry(freeze)
             ukbb_ancestry_ht = hl.read_table(
                 get_ukbb_self_reported_ancestry_path(freeze)
             )
@@ -427,7 +425,6 @@ def main(args):
                 ].self_reported_ancestry
             )
             pop_ht = pop_ht.annotate_globals(**pc_scores_ht.index_globals())
-            pop_ht = pop_ht.repartition(args.n_partitions)
             pop_ht.write(
                 ancestry_hybrid_ht_path(data_source, freeze), overwrite=args.overwrite,
             )
