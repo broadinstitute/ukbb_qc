@@ -287,14 +287,16 @@ def main(args):
             joint_scores_ht = hl.read_table(
                 ancestry_pc_project_scores_ht_path(data_source, freeze, "joint")
             )
+            logger.info(f"Joint scores HT count: {joint_scores_ht.count()}")
 
             logger.info("Splitting HT into two smaller HTs with ~200K samples each...")
             sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze=7))
             joint_scores_ht = joint_scores_ht.annotate(batch=sample_map_ht[joint_scores_ht.s].batch)
             joint_scores_ht.describe()
+            logger.info(f"Batch sanity check: {joint_scores_ht.aggregate(hl.agg.counter(joint_scores_ht.batch))}")
 
             batch_1_2_ht = joint_scores_ht.filter(
-                hl.is_missing(joint_scores_ht.pop_for_rf)
+                hl.is_missing(joint_scores_ht.batch)
                 | (
                     (joint_scores_ht.batch == "100K")
                     | (joint_scores_ht.batch == "150K")
@@ -302,7 +304,7 @@ def main(args):
                 )
             )
             batch_3_4_ht = joint_scores_ht.filter(
-                hl.is_missing(joint_scores_ht.pop_for_rf)
+                hl.is_missing(joint_scores_ht.batch)
                 | (
                     (joint_scores_ht.batch == "300K")
                     | (joint_scores_ht.batch == "455K")
@@ -321,7 +323,8 @@ def main(args):
 
             fit = None
             with hl.hadoop_open(
-                qc_temp_data_prefix(data_source, freeze) + "gnomad.joint.RF_fit.pkl"
+                qc_temp_data_prefix(data_source, freeze) + "gnomad.joint.RF_fit.pkl",
+                "rb"
             ) as f:
                 fit = pickle.load(f)
             joint_pops_ht_1_2, joint_pops_rf_model = assign_population_pcs(
