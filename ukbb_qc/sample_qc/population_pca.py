@@ -293,7 +293,7 @@ def main(args):
             joint_scores_ht = joint_scores_ht.annotate(batch=sample_map_ht[joint_scores_ht.s].batch)
             joint_scores_ht.describe()
 
-            batch_1_2_ht = joint_scores_ht.filter_cols(
+            batch_1_2_ht = joint_scores_ht.filter(
                 hl.is_missing(joint_scores_ht.pop_for_rf)
                 | (
                     (joint_scores_ht.batch == "100K")
@@ -301,7 +301,7 @@ def main(args):
                     | (joint_scores_ht.batch == "200K")
                 )
             )
-            batch_3_4_ht = joint_scores_ht.filter_cols(
+            batch_3_4_ht = joint_scores_ht.filter(
                 hl.is_missing(joint_scores_ht.pop_for_rf)
                 | (
                     (joint_scores_ht.batch == "300K")
