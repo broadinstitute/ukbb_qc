@@ -12,6 +12,7 @@ from gnomad.utils.slack import slack_notifications
 from ukbb_qc.resources.basics import (
     array_sample_map_ht_path,
     get_checkpoint_path,
+    known_dups_ht_path,
     logging_path,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
@@ -75,8 +76,8 @@ def main(args):
         right_ht = right_ht.annotate_globals(
             array_concordance_sites_cutoffs=right_ht.globals
         ).select_globals("array_concordance_sites_cutoffs")
-        left_ht = join_tables(left_ht, "eid_sample", right_ht, "s", "left")
-        left_ht = left_ht.drop("eid_sample")
+        left_ht = join_tables(left_ht, "ukbb_id", right_ht, "s", "left")
+        left_ht = left_ht.drop("ukbb_id")
 
         logger.info(logging_statement.format("sex HT"))
         right_ht = hl.read_table(sex_ht_path(data_source, freeze))
@@ -257,6 +258,11 @@ def main(args):
 
         logger.info("Removing duplicate samples and writing out meta ht")
         left_ht = left_ht.distinct()
+        known_dups_ht = hl.read_table(known_dups_ht_path(freeze))
+        ids_to_remove = known_dups_ht.aggregate(
+            hl.agg.collect(known_dups_ht["Sample Name - ID1"]), _localize=False
+        )
+        left_ht = left_ht.filter(~ids_to_remove.contains(left_ht.s))
         left_ht = left_ht.repartition(args.n_partitions)
         left_ht = left_ht.checkpoint(
             meta_ht_path(data_source, freeze), overwrite=args.overwrite
