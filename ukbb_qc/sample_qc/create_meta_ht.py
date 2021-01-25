@@ -67,6 +67,7 @@ def main(args):
         )
 
         logger.info(logging_statement.format("array sample concordance HT"))
+        left_ht = left_ht.annotate(ukbb_id=left_ht.ukbb_meta.ukbb_app_26041_id)
         right_ht = hl.read_table(array_concordance_results_path(data_source, freeze))
         right_ht = right_ht.annotate(
             array_concordance=hl.struct(**right_ht.row.drop("s"))
@@ -74,7 +75,8 @@ def main(args):
         right_ht = right_ht.annotate_globals(
             array_concordance_sites_cutoffs=right_ht.globals
         ).select_globals("array_concordance_sites_cutoffs")
-        left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
+        left_ht = join_tables(left_ht, "eid_sample", right_ht, "s", "left")
+        left_ht = left_ht.drop("eid_sample")
 
         logger.info(logging_statement.format("sex HT"))
         right_ht = hl.read_table(sex_ht_path(data_source, freeze))
