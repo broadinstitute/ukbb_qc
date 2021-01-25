@@ -291,9 +291,13 @@ def main(args):
 
             logger.info("Splitting HT into two smaller HTs with ~200K samples each...")
             sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze=7))
-            joint_scores_ht = joint_scores_ht.annotate(batch=sample_map_ht[joint_scores_ht.s].batch)
+            joint_scores_ht = joint_scores_ht.annotate(
+                batch=sample_map_ht[joint_scores_ht.s].batch
+            )
             joint_scores_ht.describe()
-            logger.info(f"Batch sanity check: {joint_scores_ht.aggregate(hl.agg.counter(joint_scores_ht.batch))}")
+            logger.info(
+                f"Batch sanity check: {joint_scores_ht.aggregate(hl.agg.counter(joint_scores_ht.batch))}"
+            )
 
             batch_1_2_ht = joint_scores_ht.filter(
                 hl.is_missing(joint_scores_ht.batch)
@@ -324,7 +328,7 @@ def main(args):
             fit = None
             with hl.hadoop_open(
                 qc_temp_data_prefix(data_source, freeze) + "gnomad.joint.RF_fit.pkl",
-                "rb"
+                "rb",
             ) as f:
                 fit = pickle.load(f)
             joint_pops_ht_1_2, joint_pops_rf_model = assign_population_pcs(
@@ -394,18 +398,23 @@ def main(args):
                 gnomad_pc_project_pop_data=hl.struct(
                     pop=pc_project_ht.pop.pop, scores=pc_project_ht.scores,
                 )
-            ).select("gnomad_PC_project_pop_data")
+            ).select("gnomad_pc_project_pop_data")
 
             pop_ht = pop_ht.annotate(
                 hybrid_pop_data=hl.struct(
                     scores=pc_scores_ht[pop_ht.key].scores,
                     cluster=pc_cluster_ht[pop_ht.key].ancestry_cluster,
+                )
+            )
+            pop_ht = pop_ht.annotate(
+                hybrid_pop_data=pop_ht.hybrid_pop_data.annotate(
                     pop=hl.case()
                     .when(
-                        pop_ht.HDBSCAN_pop_cluster == -1, pop_ht.gnomad_pc_project_pop
+                        pop_ht.hybrid_pop_data.cluster == -1,
+                        pop_ht.gnomad_pc_project_pop_data.pop,
                     )
-                    .default(hl.str(pop_ht.HDBSCAN_pop_cluster)),
-                ),
+                    .default(hl.str(pop_ht.hybrid_pop_data.cluster)),
+                )
             )
 
             logger.info("Getting self reported ancestries...")
