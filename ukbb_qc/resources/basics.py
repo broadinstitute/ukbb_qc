@@ -568,6 +568,28 @@ def vqsr_sites_path(
     return f"{get_release_path(data_source, freeze)}/vqsr/{data_source}.freeze_{freeze}.sites_for_vqsr.{suffix}"
 
 
+def release_summary_path(
+    data_source: str, freeze: int = CURRENT_FREEZE, ht: bool = True
+) -> str:
+    """
+    Get path for summary HT or MT.
+
+    Returns either path to HT with summary per variant OR path to MT with gene LoF matrix.
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param bool ht: Will return path to Table if True, otherwise will return path to MT. Default is True.
+    :return: Path to summary HT or MT
+    :rtype: str
+    """
+    if freeze != 7:
+        raise DataException("Release summary path only exists for freeze 7/450K!")
+
+    if ht:
+        return f"{get_release_path(data_source, freeze)}/summary/summary_per_variant.ht"
+    return f"{get_release_path(data_source, freeze)}/summary/gene_lof_matrix.mt"
+
+
 # logging path
 def logging_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
