@@ -17,12 +17,13 @@ from gnomad.utils.liftover import (
 )
 from gnomad.utils.slack import slack_notifications
 from gnomad.utils.sparse_mt import densify_sites
-#from gnomad_qc.v2.resources.basics import get_gnomad_meta
-#from gnomad_qc.v2.resources.sample_qc import (
-#    ancestry_pca_loadings_ht_path as gnomad_ancestry_pca_loadings_ht_path,
-#)
+from gnomad_qc.v2.resources.basics import get_gnomad_meta
+from gnomad_qc.v2.resources.sample_qc import (
+    ancestry_pca_loadings_ht_path as gnomad_ancestry_pca_loadings_ht_path,
+)
 from ukbb_qc.resources.basics import (
     array_sample_map_ht_path,
+    get_checkpoint_path,
     get_ukbb_data,
     last_END_positions_ht_path,
     logging_path,
@@ -284,28 +285,76 @@ def main(args):
             # NOTE: I needed to switch to n1-standard-16s for 300k
             logger.info("Running random forest after projection on gnomAD PCs...")
             joint_scores_ht = hl.read_table(
-                ancestry_pc_project_scores_ht_path(data_source, freeze)
+                ancestry_pc_project_scores_ht_path(data_source, freeze, "joint")
             )
-            joint_scores_ht = joint_scores_ht.annotate(
-                scores=joint_scores_ht.scores[:6],
-                pop_for_rf=hl.null(hl.tstr),
+
+            logger.info("Splitting HT into two smaller HTs with ~200K samples each...")
+            sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze=7))
+            joint_scores_ht = joint_scores_ht.annotate(batch=sample_map_ht[joint_scores_ht.s].batch)
+            joint_scores_ht.describe()
+
+            batch_1_2_ht = joint_scores_ht.filter_cols(
+                hl.is_missing(joint_scores_ht.pop_for_rf)
+                | (
+                    (joint_scores_ht.batch == "100K")
+                    | (joint_scores_ht.batch == "150K")
+                    | (joint_scores_ht.batch == "200K")
+                )
             )
-            import pickle
+            batch_3_4_ht = joint_scores_ht.filter_cols(
+                hl.is_missing(joint_scores_ht.pop_for_rf)
+                | (
+                    (joint_scores_ht.batch == "300K")
+                    | (joint_scores_ht.batch == "455K")
+                )
+            )
+            logger.info(f"Number of samples in batch_1_2_ht: {batch_1_2_ht.count()}")
+            logger.info(f"Number of samples in batch_3_4_ht: {batch_3_4_ht.count()}")
+
+            # NOTE: should use 6 PCs here
+            batch_1_2_ht = batch_1_2_ht.annotate(
+                scores=batch_1_2_ht.scores[:n_project_pcs],
+            )
+            batch_3_4_ht = batch_3_4_ht.annotate(
+                scores=batch_3_4_ht.scores[:n_project_pcs],
+            )
+
             fit = None
-            with hl.hadoop_open("gs://gnomad/sample_qc/temp/joint/gnomad.joint.RF_fit.pkl", 'rb') as f:
+            with hl.hadoop_open(
+                qc_temp_data_prefix(data_source, freeze) + "gnomad.joint.RF_fit.pkl"
+            ) as f:
                 fit = pickle.load(f)
-            joint_pops_ht, joint_pops_rf_model = assign_population_pcs(
-                joint_scores_ht,
-                pc_cols=joint_scores_ht.scores,
+            joint_pops_ht_1_2, joint_pops_rf_model = assign_population_pcs(
+                batch_1_2_ht,
+                pc_cols=batch_1_2_ht.scores,
                 known_col="pop_for_rf",
                 fit=fit,
                 min_prob=args.min_pop_prob,
             )
 
-            #scores_ht = joint_scores_ht.filter(
-            #    hl.is_missing(joint_scores_ht.pop_for_rf)
-            #)
-            scores_ht = scores_ht.select("scores")
+            joint_pops_ht_3_4, joint_pops_rf_model = assign_population_pcs(
+                batch_3_4_ht,
+                pc_cols=batch_3_4_ht.scores,
+                known_col="pop_for_rf",
+                fit=fit,
+                min_prob=args.min_pop_prob,
+            )
+
+            batch_1_2_ht = batch_1_2_ht.filter(
+                hl.is_missing(batch_1_2_ht.pop_for_rf)
+            ).select("scores")
+            batch_3_4_ht = batch_3_4_ht.filter(
+                hl.is_missing(batch_3_4_ht.pop_for_rf)
+            ).select("scores")
+            batch_1_2_ht = batch_1_2_ht.checkpoint(
+                get_checkpoint_path(data_source, freeze, name="pca_scores_1_2")
+            )
+            batch_3_4_ht = batch_3_4_ht.checkpoint(
+                get_checkpoint_path(data_source, freeze, name="pca_scores_3_4")
+            )
+
+            scores_ht = batch_1_2_ht.union(batch_3_4_ht)
+            joint_pops_ht = joint_pops_ht_1_2.union(joint_pops_ht_3_4)
             joint_pops_ht = joint_pops_ht.drop("pop_for_rf")
             scores_ht = scores_ht.annotate(pop=joint_pops_ht[scores_ht.key])
             scores_ht = scores_ht.annotate_globals(
@@ -317,7 +366,6 @@ def main(args):
             scores_ht = scores_ht.repartition(args.n_partitions)
             scores_ht = scores_ht.checkpoint(
                 ancestry_pc_project_scores_ht_path(data_source, freeze),
-                #"gs://broad-ukbb/broad.freeze_6/sample_qc/population_pca/pc_project_scores_pop_assign_test_gnomad_RF_model_only_ukb.ht",
                 overwrite=args.overwrite,
             )
 
@@ -326,14 +374,6 @@ def main(args):
                     scores_ht.aggregate(hl.agg.counter(scores_ht.pop["pop"]))
                 )
             )
-
-            #logger.info("Writing out random forest model...")
-            #with hl.hadoop_open(
-            #    qc_temp_data_prefix(data_source, freeze)
-            #    + "project_gnomad_pop_rf_model.pkl",
-            #    "wb",
-            #) as out:
-            #    pickle.dump(joint_pops_rf_model, out)
 
         if args.assign_hybrid_ancestry:
             logger.info(
@@ -494,20 +534,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-<<<<<<< HEAD
     if args.slack_channel:
         with slack_notifications(slack_token, args.slack_channel):
             main(args)
     else:
         main(args)
-||||||| 40647ed
-    if args.slack_channel:
-        try_slack(args.slack_channel, main, args)
-    else:
-        main(args)
-=======
-    #if args.slack_channel:
-    #    try_slack(args.slack_channel, main, args)
-    #else:
-    main(args)
->>>>>>> e934e55144d5f529cbe55066485a287d4a7ff69b
