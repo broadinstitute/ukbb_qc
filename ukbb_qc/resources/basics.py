@@ -61,6 +61,32 @@ def known_dups_ht_path(freeze: int = CURRENT_FREEZE) -> str:
     return f"gs://broad-ukbb/broad.freeze_{freeze}/duplicate_resolution/pharma_known_dups.ht"
 
 
+def check_dups_to_remove(
+    remove_ids: hl.expr.ArrayExpression, samples: hl.Table, column_name: str = "s",
+) -> int:
+    """
+    This function checks whether the number of duplicate samples in the input Table matches expected counts.
+
+    Used to check numbers prior to duplicate sample removal. 
+    Function was written specifically to resolve duplicates in freeze 7/the 450k callset.
+
+    :param hl.expr.ArrayExpression remove_list: ArrayExpression containing list of sample IDs to remove.
+    :param hl.Table samples: Table containing all sample IDs.
+    :param str column_name: Name of column containing sample IDs in Table. Default is 's'.
+    :return: Number of samples to remove from Table.
+    :rtype: int
+    """
+    # Using an HT here because aggregate_cols has been slow/memory intensive in the past
+    n_samples_to_drop = samples.aggregate(
+        hl.agg.count_where(remove_ids.contains(samples[column_name]))
+    )
+    if n_samples_to_drop != hl.eval(hl.len(remove_ids)):
+        raise DataException(
+            f"Expecting to remove {hl.eval(hl.len(remove_ids))} duplicate samples but found {n_samples_to_drop}. Double check samples in MT!"
+        )
+    return n_samples_to_drop
+
+
 def get_ukbb_data(
     data_source: str,
     freeze: int = CURRENT_FREEZE,
@@ -170,31 +196,7 @@ def get_ukbb_data(
             else:
                 logger.info("No withdrawn samples found in MT")
 
-    # Code to resolve duplicate sample specifically in freeze 7/the 450k callset
-    def _check_dups_to_remove(
-        remove_ids: hl.expr.ArrayExpression, samples: hl.Table, column_name: str = "s",
-    ) -> int:
-        """
-        This function checks whether the number of duplicate samples in the input Table matches expected counts.
-
-        Used to check numbers prior to duplicate sample removal.
-
-        :param hl.expr.ArrayExpression remove_list: ArrayExpression containing list of sample IDs to remove.
-        :param hl.Table samples: Table containing all sample IDs.
-        :param str column_name: Name of column containing sample IDs in Table. Default is 's'.
-        :return: Number of samples to remove from Table.
-        :rtype: int
-        """
-        # Using an HT here because aggregate_cols has been slow/memory intensive in the past
-        n_samples_to_drop = samples.aggregate(
-            hl.agg.count_where(remove_ids.contains(samples[column_name]))
-        )
-        if n_samples_to_drop != hl.eval(hl.len(remove_ids)):
-            raise DataException(
-                f"Expecting to remove {hl.eval(hl.len(remove_ids))} duplicate samples but found {n_samples_to_drop}. Double check samples in MT!"
-            )
-        return n_samples_to_drop
-
+    # Code to resolve duplicate samples specifically in freeze 7/the 450k callset
     if freeze == 7:
 
         # Remove samples that are known to be on the pharma's sample remove list
@@ -215,7 +217,7 @@ def get_ukbb_data(
         )
 
         # Check number of samples to remove -- should be 44 here
-        num_ids = _check_dups_to_remove(ids_to_remove, mt.cols())
+        num_ids = check_dups_to_remove(ids_to_remove, mt.cols())
         logger.info(f"Removing {num_ids} samples...")
         mt = mt.filter_cols(~ids_to_remove.contains(mt.s))
 
@@ -239,7 +241,7 @@ def get_ukbb_data(
             mt = mt.annotate_cols(new_s=hl.format("%s_%s", mt.s, mt.col_idx))
 
             # Check number of samples to remove -- should be 27 here
-            samples_to_drop = _check_dups_to_remove(remove_ids, mt.cols(), "new_s")
+            samples_to_drop = check_dups_to_remove(remove_ids, mt.cols(), "new_s")
             logger.info(f"Removing {samples_to_drop} samples...")
             mt = mt.filter_cols(~remove_ids.contains(mt.new_s)).drop("new_s", "col_idx")
     logger.info(f"Sample count post-filtration: {mt.count_cols()}")

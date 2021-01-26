@@ -11,6 +11,7 @@ from gnomad.sample_qc.relatedness import (
 from gnomad.utils.slack import slack_notifications
 from ukbb_qc.resources.basics import (
     array_sample_map_ht_path,
+    check_dups_to_remove,
     get_checkpoint_path,
     known_dups_ht_path,
     logging_path,
@@ -263,7 +264,11 @@ def main(args):
         ids_to_remove = known_dups_ht.aggregate(
             hl.agg.collect(known_dups_ht["Sample Name - ID1"]), _localize=False
         )
+        # Check number of samples to remove
+        num_ids = check_dups_to_remove(ids_to_remove, left_ht)
+        logger.info(f"Removing {num_ids} samples...")
         left_ht = left_ht.filter(~ids_to_remove.contains(left_ht.s))
+
         left_ht = left_ht.repartition(args.n_partitions)
         left_ht = left_ht.checkpoint(
             meta_ht_path(data_source, freeze), overwrite=args.overwrite
@@ -292,10 +297,10 @@ if __name__ == "__main__":
         "-f", "--freeze", help="Current freeze", default=CURRENT_FREEZE, type=int
     )
     parser.add_argument(
-        "--pop_assignment_method",
-        help="Population assignment method to use for outlier stratification",
-        default="hybrid_pop",
-        choices=["gnomad_pc_project_pop", "HDBSCAN_pop_cluster", "hybrid_pop"],
+        "--platform_assignment_method",
+        help="Platform assignment method to use for outlier stratification",
+        default="batch",
+        choices=["batch", "qc_platform"],
     )
     parser.add_argument(
         "--pop_assignment_method",
