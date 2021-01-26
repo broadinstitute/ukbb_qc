@@ -10,7 +10,8 @@ from gnomad.utils.sparse_mt import (
     split_info_annotation,
     split_lowqual_annotation,
 )
-from ukbb_qc.resources.basics import get_ukbb_data, logging_path
+from gnomad.utils.vcf import ht_to_vcf_mt
+from ukbb_qc.resources.basics import get_ukbb_data, logging_path, vqsr_sites_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import info_ht_path, var_annotations_ht_path
 from ukbb_qc.slack_creds import slack_token
