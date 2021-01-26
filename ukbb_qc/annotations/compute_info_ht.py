@@ -94,6 +94,23 @@ def main(args):
             ),
         )
 
+        info_ht = annotate_interval_qc_filter(
+            data_source,
+            freeze,
+            info_ht,
+            cov_filter_field=args.interval_cov_filter_field,
+            xy_cov_filter_field=args.xy_cov_filter_field,
+            pct_samples=args.interval_filter_pct_samples,
+        )
+        info_ht = info_ht.annotate_globals(
+            vqsr=args.use_vqsr,
+            cov_filter_field=args.interval_cov_filter_field,
+            xy_cov_filter_field=args.xy_cov_filter_field,
+            pct_samples=args.interval_filter_pct_samples,
+        )
+        if args.use_vqsr:
+            info_ht = info_ht.annotate_globals(vqsr_type=args.vqsr_type)
+
         info_ht = info_ht.checkpoint(
             info_ht_path(data_source, freeze, split=False), overwrite=args.overwrite
         )
@@ -105,22 +122,6 @@ def main(args):
                 **split_info_annotation(info_ht.info, info_ht.a_index),
             ),
             AS_lowqual=split_lowqual_annotation(info_ht.AS_lowqual, info_ht.a_index),
-        )
-
-        info_ht = annotate_interval_qc_filter(
-            data_source,
-            freeze,
-            info_ht,
-            cov_filter_field=args.interval_cov_filter_field,
-            xy_cov_filter_field=args.xy_cov_filter_field,
-            pct_samples=args.interval_filter_pct_samples,
-        )
-        info_ht = info_ht.annotate_globals(
-            vqsr=args.use_vqsr,
-            vqsr_type=args.vqsr_type if args.use_vqsr else None,
-            cov_filter_field=args.interval_cov_filter_field,
-            xy_cov_filter_field=args.xy_cov_filter_field,
-            pct_samples=args.interval_filter_pct_samples,
         )
 
         info_ht.write(
