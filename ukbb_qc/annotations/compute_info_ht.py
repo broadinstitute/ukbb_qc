@@ -64,6 +64,10 @@ def main(args):
             )
         ).rows()
 
+        pab_max_ht = pab_max_ht.checkpoint(
+            get_checkpoint_path(data_source, freeze, "AS_pab_max", mt=False), overwrite=args.overwrite
+        )
+
         if args.use_vqsr:
             logger.info("Reading in VQSR unsplit HT...")
             info_ht = hl.read_table(
