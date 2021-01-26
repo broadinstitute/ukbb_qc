@@ -574,7 +574,7 @@ def release_summary_path(
     """
     Get path for summary HT or MT.
 
-    Returns either path to HT with summary per variant OR path to MT with gene LoF matrix.
+    Returns either path to HT with summary counts per variant category OR path to MT with gene LoF matrix.
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
@@ -582,7 +582,7 @@ def release_summary_path(
     :return: Path to summary HT or MT
     :rtype: str
     """
-    if freeze != 7:
+    if freeze not in (6, 7):
         raise DataException("Release summary path only exists for freeze 7/450K!")
 
     if ht:

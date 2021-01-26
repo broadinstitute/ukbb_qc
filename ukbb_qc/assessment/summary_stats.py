@@ -3,7 +3,7 @@ import logging
 
 import hail as hl
 
-from gnomad.assessment.summary_stats import get_summary_per_variant
+from gnomad.assessment.summary_stats import get_summary_counts
 from gnomad.utils.slack import slack_notifications
 
 from gnomad_lof.constraint.gene_lof_matrix import generate_gene_lof_matrix
@@ -23,7 +23,7 @@ logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
     datefmt="%m/%d/%Y %I:%M:%S %p",
 )
-logger = logging.getLogger("sanity_checks")
+logger = logging.getLogger("summary_stats")
 logger.setLevel(logging.INFO)
 
 
@@ -36,9 +36,9 @@ def main(args):
     tranche_data = (data_source, freeze)
 
     try:
-        if args.get_summary_per_variant:
+        if args.get_summary_counts:
             logger.info("Gettimg summary per variant...")
-            ht = get_summary_per_variant(hl.read_table(release_ht_path(*tranche_data)))
+            ht = get_summary_counts(hl.read_table(release_ht_path(*tranche_data)))
             ht.write(release_summary_path(*tranche_data))
 
         if args.generate_gene_lof_matrix:
@@ -65,7 +65,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-o",
         "--overwrite",
-        help="Overwrite all data from this subset (default: False)",
+        help="Overwrite data (default: False)",
         action="store_true",
     )
     parser.add_argument(
@@ -75,8 +75,8 @@ if __name__ == "__main__":
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
     )
     parser.add_argument(
-        "--get_summary_per_variant",
-        help="Get summary stats per variant",
+        "--get_summary_counts",
+        help="Get summary counts per variant category",
         action="store_true",
     )
     parser.add_argument(
