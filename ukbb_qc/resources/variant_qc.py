@@ -134,10 +134,6 @@ def var_annotations_ht_path(
     return f"{variant_qc_prefix(data_source, freeze)}/variant_annotations/{annotation_type}.ht"
 
 
-def get_truth_vcf_path(type: str, confidence: str, data_source: str, freeze: int = CURRENT_FREEZE) -> str:
-    return f'{variant_qc_prefix(data_source, freeze)}/variant_annotations/{type}{confidence}.vcf.bgz'
-
-
 def info_ht_path(
     data_source: str, freeze: int = CURRENT_FREEZE, split: bool = True
 ) -> str:
