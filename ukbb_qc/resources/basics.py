@@ -5,6 +5,8 @@ import hail as hl
 
 from gnomad.utils.file_utils import file_exists
 from gnomad.resources.resource_utils import DataException
+
+from ukbb_qc.utils.utils import check_dups_to_remove
 from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES
 from .sample_qc import meta_ht_path
 
@@ -170,31 +172,7 @@ def get_ukbb_data(
             else:
                 logger.info("No withdrawn samples found in MT")
 
-    # Code to resolve duplicate sample specifically in freeze 7/the 450k callset
-    def _check_dups_to_remove(
-        remove_ids: hl.expr.ArrayExpression, samples: hl.Table, column_name: str = "s",
-    ) -> int:
-        """
-        This function checks whether the number of duplicate samples in the input Table matches expected counts.
-
-        Used to check numbers prior to duplicate sample removal.
-
-        :param hl.expr.ArrayExpression remove_list: ArrayExpression containing list of sample IDs to remove.
-        :param hl.Table samples: Table containing all sample IDs.
-        :param str column_name: Name of column containing sample IDs in Table. Default is 's'.
-        :return: Number of samples to remove from Table.
-        :rtype: int
-        """
-        # Using an HT here because aggregate_cols has been slow/memory intensive in the past
-        n_samples_to_drop = samples.aggregate(
-            hl.agg.count_where(remove_ids.contains(samples[column_name]))
-        )
-        if n_samples_to_drop != hl.eval(hl.len(remove_ids)):
-            raise DataException(
-                f"Expecting to remove {hl.eval(hl.len(remove_ids))} duplicate samples but found {n_samples_to_drop}. Double check samples in MT!"
-            )
-        return n_samples_to_drop
-
+    # Code to resolve duplicate samples specifically in freeze 7/the 450k callset
     if freeze == 7:
         # Remove fully duplicated IDs when reading in raw MT only
         # These 27 duplicates are discussed in this ticket:
@@ -215,7 +193,7 @@ def get_ukbb_data(
             remove_ids = hl.literal(remove_ids)
             mt = mt.annotate_cols(new_s=hl.format("%s_%s", mt.s, mt.col_idx))
             # Check number of samples to remove -- should be 27 here
-            samples_to_drop = _check_dups_to_remove(remove_ids, mt.cols(), "new_s")
+            samples_to_drop = check_dups_to_remove(remove_ids, mt.cols(), "new_s")
             logger.info(f"Removing {samples_to_drop} samples...")
             mt = mt.filter_cols(~remove_ids.contains(mt.new_s)).drop("new_s", "col_idx")
 
