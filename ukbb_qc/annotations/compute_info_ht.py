@@ -139,6 +139,9 @@ def main(args):
 
         if args.export_info_vcf:
             logger.info("Exporting info HT to VCF...")
+            info_ht = hl.read_table(
+                info_ht_path(data_source, freeze, split=False)
+            )
             vcf_mt = ht_to_vcf_mt(info_ht)
             hl.export_vcf(
                 vcf_mt,
