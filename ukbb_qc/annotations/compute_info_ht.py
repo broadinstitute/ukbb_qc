@@ -44,7 +44,7 @@ def main(args):
         )
         mt = mt.filter_rows(hl.len(mt.alleles) > 1)
         mt = mt.annotate_rows(alt_alleles_range_array=hl.range(1, hl.len(mt.alleles)))
-        mt = remove_hard_filter_samples(data_source, freeze, mt, non_refs_only=True)
+        mt = mt.filter_cols(mt.meta.sample_filters.high_quality)
 
         if args.use_vqsr:
             logger.info("Reading in VQSR unsplit HT...")
