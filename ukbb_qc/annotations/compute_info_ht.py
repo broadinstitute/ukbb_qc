@@ -45,7 +45,9 @@ def main(args):
                 meta_root="meta",
             )
             mt = mt.filter_rows(hl.len(mt.alleles) > 1)
-            mt = mt.annotate_rows(alt_alleles_range_array=hl.range(1, hl.len(mt.alleles)))
+            mt = mt.annotate_rows(
+                alt_alleles_range_array=hl.range(1, hl.len(mt.alleles))
+            )
             mt = mt.filter_cols(mt.meta.sample_filters.high_quality)
 
             logger.info("Annotating raw MT with pab max...")
@@ -67,7 +69,8 @@ def main(args):
             ).rows()
 
             pab_max_ht = pab_max_ht.checkpoint(
-                get_checkpoint_path(data_source, freeze, "AS_pab_max", mt=False), overwrite=args.overwrite
+                get_checkpoint_path(data_source, freeze, "AS_pab_max", mt=False),
+                overwrite=args.overwrite,
             )
 
             if args.use_vqsr:
@@ -85,15 +88,20 @@ def main(args):
                 info_ht = default_compute_info(mt, site_annotations=True)
 
             logger.info(
-                "Annotating with pab max from raw MT and updating lowqual annotations with indel_phred_het_prior=40...")
+                "Annotating with pab max from raw MT and updating lowqual annotations with indel_phred_het_prior=40..."
+            )
             # Note: we use indel_phred_het_prior=40 to be more consistent with the filtering used by DSP/Laura for VQSR
             info_ht = info_ht.annotate(
-                info=info_ht.info.annotate(AS_pab_max=pab_max_ht[info_ht.key].AS_pab_max),
+                info=info_ht.info.annotate(
+                    AS_pab_max=pab_max_ht[info_ht.key].AS_pab_max
+                ),
                 lowqual=get_lowqual_expr(
                     info_ht.alleles, info_ht.info.QUALapprox, indel_phred_het_prior=40
                 ),
                 AS_lowqual=get_lowqual_expr(
-                    info_ht.alleles, info_ht.info.AS_QUALapprox, indel_phred_het_prior=40
+                    info_ht.alleles,
+                    info_ht.info.AS_QUALapprox,
+                    indel_phred_het_prior=40,
                 ),
             )
 
@@ -120,15 +128,15 @@ def main(args):
 
         if args.split_info:
             logger.info("Splitting info HT...")
-            info_ht = hl.read_table(
-                info_ht_path(data_source, freeze, split=False)
-            )
+            info_ht = hl.read_table(info_ht_path(data_source, freeze, split=False))
             info_ht = hl.split_multi(info_ht)
             info_ht = info_ht.annotate(
                 info=info_ht.info.annotate(
                     **split_info_annotation(info_ht.info, info_ht.a_index),
                 ),
-                AS_lowqual=split_lowqual_annotation(info_ht.AS_lowqual, info_ht.a_index),
+                AS_lowqual=split_lowqual_annotation(
+                    info_ht.AS_lowqual, info_ht.a_index
+                ),
             )
 
             info_ht = info_ht.checkpoint(
@@ -139,14 +147,10 @@ def main(args):
 
         if args.export_info_vcf:
             logger.info("Exporting info HT to VCF...")
-            info_ht = hl.read_table(
-                info_ht_path(data_source, freeze, split=False)
-            )
+            info_ht = hl.read_table(info_ht_path(data_source, freeze, split=False))
             vcf_mt = ht_to_vcf_mt(info_ht)
             hl.export_vcf(
-                vcf_mt,
-                vqsr_sites_path(data_source, freeze, ht=False),
-                tabix=True,
+                vcf_mt, vqsr_sites_path(data_source, freeze, ht=False), tabix=True,
             )
 
     finally:
@@ -160,9 +164,7 @@ if __name__ == "__main__":
         "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
     )
     parser.add_argument(
-        "--compute_info",
-        help="Computes info HT",
-        action="store_true",
+        "--compute_info", help="Computes info HT", action="store_true",
     )
     parser.add_argument(
         "--repartition",
@@ -204,14 +206,10 @@ if __name__ == "__main__":
         type=float,
     )
     parser.add_argument(
-        "--split_info",
-        help="Splits info HT",
-        action="store_true",
+        "--split_info", help="Splits info HT", action="store_true",
     )
     parser.add_argument(
-        "--export_info_vcf",
-        help="Export info HT as a VCF",
-        action="store_true",
+        "--export_info_vcf", help="Export info HT as a VCF", action="store_true",
     )
     parser.add_argument(
         "-o",
@@ -229,4 +227,3 @@ if __name__ == "__main__":
             main(args)
     else:
         main(args)
-        
