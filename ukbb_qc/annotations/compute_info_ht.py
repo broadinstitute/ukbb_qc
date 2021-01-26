@@ -46,6 +46,24 @@ def main(args):
         mt = mt.annotate_rows(alt_alleles_range_array=hl.range(1, hl.len(mt.alleles)))
         mt = mt.filter_cols(mt.meta.sample_filters.high_quality)
 
+        logger.info("Annotating raw MT with pab max...")
+        pab_max_ht = mt.annotate_rows(
+            AS_pab_max=hl.agg.array_agg(
+                lambda ai: hl.agg.filter(
+                    mt.LA.contains(ai) & mt.LGT.is_het(),
+                    hl.agg.max(
+                        hl.binom_test(
+                            mt.LAD[mt.LA.index(ai)],
+                            hl.sum(mt.LAD),
+                            0.5,
+                            "two-sided",
+                        )
+                    ),
+                ),
+                mt.alt_alleles_range_array,
+            )
+        ).rows()
+
         if args.use_vqsr:
             logger.info("Reading in VQSR unsplit HT...")
             info_ht = hl.read_table(
@@ -56,36 +74,15 @@ def main(args):
                 )
             )
 
-            logger.info("Annotating raw MT with pab max...")
-            mt = mt.select_rows()
-            ht = mt.annotate_rows(
-                AS_pab_max=hl.agg.array_agg(
-                    lambda ai: hl.agg.filter(
-                        mt.LA.contains(ai) & mt.LGT.is_het(),
-                        hl.agg.max(
-                            hl.binom_test(
-                                mt.LAD[mt.LA.index(ai)],
-                                hl.sum(mt.LAD),
-                                0.5,
-                                "two-sided",
-                            )
-                        ),
-                    ),
-                    mt.alt_alleles_range_array,
-                )
-            ).rows()
-
-            logger.info("Annotating VQSR unsplit HT with pab max from raw MT...")
-            info_ht = info_ht.annotate(
-                info=info_ht.info.annotate(AS_pab_max=ht[info_ht.key].AS_pab_max)
-            )
         else:
             logger.info("Computing info HT...")
             info_ht = default_compute_info(mt, site_annotations=True)
 
-        logger.info("Updating lowqual annotations with indel_phred_het_prior=40...")
+        logger.info(
+            "Annotating with pab max from raw MT and updating lowqual annotations with indel_phred_het_prior=40...")
         # Note: we use indel_phred_het_prior=40 to be more consistent with the filtering used by DSP/Laura for VQSR
         info_ht = info_ht.annotate(
+            info=info_ht.info.annotate(AS_pab_max=pab_max_ht[info_ht.key].AS_pab_max),
             lowqual=get_lowqual_expr(
                 info_ht.alleles, info_ht.info.QUALapprox, indel_phred_het_prior=40
             ),
