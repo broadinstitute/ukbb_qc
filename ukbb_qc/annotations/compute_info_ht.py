@@ -40,7 +40,7 @@ def main(args):
             raw=True,
             repartition=args.repartition,
             n_partitions=args.raw_partitions,
-            key_by_locus_and_alleles=True,
+            meta_root="meta",
         )
         mt = mt.filter_rows(hl.len(mt.alleles) > 1)
         mt = mt.annotate_rows(alt_alleles_range_array=hl.range(1, hl.len(mt.alleles)))
