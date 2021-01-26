@@ -11,6 +11,7 @@ from gnomad.utils.sparse_mt import (
     split_lowqual_annotation,
 )
 from gnomad.utils.vcf import ht_to_vcf_mt
+
 from ukbb_qc.resources.basics import get_ukbb_data, logging_path, vqsr_sites_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import info_ht_path, var_annotations_ht_path
@@ -209,7 +210,7 @@ if __name__ == "__main__":
         "--split_info", help="Splits info HT", action="store_true",
     )
     parser.add_argument(
-        "--export_info_vcf", help="Export info HT as a VCF", action="store_true",
+        "--export_info_vcf", help="Export info HT as a VCF, Note: this is used for input to VQSR", action="store_true",
     )
     parser.add_argument(
         "-o",
