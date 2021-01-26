@@ -174,29 +174,6 @@ def get_ukbb_data(
 
     # Code to resolve duplicate samples specifically in freeze 7/the 450k callset
     if freeze == 7:
-
-        # Remove samples that are known to be on the pharma's sample remove list
-        # These samples were discovered when running array concordance
-        # and were resolved in this notebook:
-        # gs://broad-ukbb/broad.freeze_7/notebooks/array_dups.ipynb
-        # All 44 of these samples have the note to "remove ID1"
-        # Example:
-        # "UKB_1534238_0230755066"  "UKB_1534238_236168062-DUP" "Known duplication; blacklist ID1"
-        # NOTE: UKB_4316697_236168099-DUP is in the 450K MT
-        # but the othersample ID known to be on the remove list, UKB_3489701_236190071,
-        # is not present, so this pair is NOT in the known dups HT
-        # Therefore, the number of samples to remove in this check is 43
-        # "UKB_3489701_236190071"   "UKB_4316697_236168099-DUP" "Known duplication; blacklist ID1"
-        dups_ht = hl.read_table(known_dups_ht_path(freeze))
-        ids_to_remove = dups_ht.aggregate(
-            hl.agg.collect(dups_ht["Sample Name - ID1"]), _localize=False
-        )
-
-        # Check number of samples to remove -- should be 44 here
-        num_ids = check_dups_to_remove(ids_to_remove, mt.cols())
-        logger.info(f"Removing {num_ids} samples...")
-        mt = mt.filter_cols(~ids_to_remove.contains(mt.s))
-
         # Remove fully duplicated IDs when reading in raw MT only
         # These 27 duplicates are discussed in this ticket:
         # https://broadinstitute.atlassian.net/browse/PO-28339
@@ -215,11 +192,33 @@ def get_ukbb_data(
             # Remove sample IDs that are present in remove_ids list
             remove_ids = hl.literal(remove_ids)
             mt = mt.annotate_cols(new_s=hl.format("%s_%s", mt.s, mt.col_idx))
-
             # Check number of samples to remove -- should be 27 here
             samples_to_drop = check_dups_to_remove(remove_ids, mt.cols(), "new_s")
             logger.info(f"Removing {samples_to_drop} samples...")
             mt = mt.filter_cols(~remove_ids.contains(mt.new_s)).drop("new_s", "col_idx")
+
+    # Remove samples that are known to be on the pharma's sample remove list
+    # These samples were discovered when running array concordance
+    # and were resolved in this notebook:
+    # gs://broad-ukbb/broad.freeze_7/notebooks/array_dups.ipynb
+    # All 44 of these samples have the note to "remove ID1"
+    # Example:
+    # "UKB_1534238_0230755066"  "UKB_1534238_236168062-DUP" "Known duplication; blacklist ID1"
+    # NOTE: UKB_4316697_236168099-DUP is in the 450K MT
+    # but the othersample ID known to be on the remove list, UKB_3489701_236190071,
+    # is not present, so this pair is NOT in the known dups HT
+    # Therefore, the number of samples to remove in this check is 43
+    # "UKB_3489701_236190071"   "UKB_4316697_236168099-DUP" "Known duplication; blacklist ID1"
+    dups_ht = hl.read_table(known_dups_ht_path(freeze))
+    ids_to_remove = dups_ht.aggregate(
+        hl.agg.collect(dups_ht["Sample Name - ID1"]), _localize=False
+    )
+
+    # Check number of samples to remove -- should be 44 here
+    num_ids = _check_dups_to_remove(ids_to_remove, mt.cols())
+    logger.info(f"Removing {num_ids} samples...")
+    mt = mt.filter_cols(~ids_to_remove.contains(mt.s))
+
     logger.info(f"Sample count post-filtration: {mt.count_cols()}")
 
     gt_expr = mt.GT if split else mt.LGT
