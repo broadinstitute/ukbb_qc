@@ -301,6 +301,32 @@ def get_qc_mt_sites() -> None:
 
 
 # Sample-related resources
+def check_dups_to_remove(
+    remove_ids: hl.expr.ArrayExpression, samples: hl.Table, column_name: str = "s",
+) -> int:
+    """
+    This function checks whether the number of duplicate samples in the input Table matches expected counts.
+
+    Used to check numbers prior to duplicate sample removal. 
+    Function was written specifically to resolve duplicates in freeze 7/the 450k callset.
+
+    :param hl.expr.ArrayExpression remove_list: ArrayExpression containing list of sample IDs to remove.
+    :param hl.Table samples: Table containing all sample IDs.
+    :param str column_name: Name of column containing sample IDs in Table. Default is 's'.
+    :return: Number of samples to remove from Table.
+    :rtype: int
+    """
+    # Using an HT here because aggregate_cols has been slow/memory intensive in the past
+    n_samples_to_drop = samples.aggregate(
+        hl.agg.count_where(remove_ids.contains(samples[column_name]))
+    )
+    if n_samples_to_drop != hl.eval(hl.len(remove_ids)):
+        raise DataException(
+            f"Expecting to remove {hl.eval(hl.len(remove_ids))} duplicate samples but found {n_samples_to_drop}. Double check samples in MT!"
+        )
+    return n_samples_to_drop
+
+
 def get_phenotype_field(freeze: int, field: str) -> hl.Table:
     """
     Pull phenotype information using input field from UKBB phenotype file
