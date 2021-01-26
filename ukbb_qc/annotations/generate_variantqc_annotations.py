@@ -176,13 +176,26 @@ def main(args):
             # Filter to autosomes to prevent unnecessary densify of the sex chromosomes
             mt = filter_to_autosomes(mt)
             mt = filter_mt_to_trios(mt, fam_ht)
+            mt = mt.select_entries("GT", "GQ", "AD", "END", "adj")
             mt = hl.experimental.densify(mt)
+            mt = mt.filter_rows(hl.len(mt.alleles) == 2)
 
             mt = hl.trio_matrix(mt, pedigree=ped, complete_trios=True)
             trio_stats_ht = generate_trio_stats(mt, bi_allelic_only=False)
             trio_stats_ht.naive_coalesce(n_partitions).write(
                 var_annotations_ht_path("trio_stats", data_source, freeze),
                 overwrite=overwrite,
+            )
+
+        if args.export_true_positive_vcfs:
+            logger.info("Exporting true positive variants to VCFs...")
+            export_tp_vcf(data_source, freeze)
+            export_tp_vcf(
+                data_source,
+                freeze,
+                transmitted_singletons=True,
+                sibling_singletons=False,
+                array_con_common=False,
             )
 
         if args.generate_sibling_stats:
@@ -277,6 +290,11 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--generate_trio_stats", help="Calculates trio stats", action="store_true"
+    )
+    parser.add_argument(
+        "--export_true_positive_vcfs",
+        help="Exports true positive variants to VCF files.",
+        action="store_true",
     )
     parser.add_argument(
         "--generate_sibling_stats",
