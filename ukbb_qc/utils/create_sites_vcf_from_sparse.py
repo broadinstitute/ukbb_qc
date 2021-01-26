@@ -21,6 +21,8 @@ logger.setLevel(logging.INFO)
 def main(args):
 
     # NOTE: This script does NOT need a densify
+    # NOTE: This script was not used for freeze 7/450K. We instead used compute_info_ht.py to allow for exclusion
+    # of samples filtered by Sample QC
     hl.init(log="/create_sites_vcf.log", default_reference="GRCh38")
     data_source = "broad"
     freeze = args.freeze
