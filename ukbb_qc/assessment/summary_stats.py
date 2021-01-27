@@ -42,7 +42,7 @@ def main(args):
             ht.write(release_summary_path(*tranche_data))
 
         if args.generate_gene_lof_matrix:
-            # do we want adj here?
+            # Konrad released metrics on adj GT only (gnomAD v2.1)
             mt = get_ukbb_data(*tranche_data, adj=True, split=True)
             freq_ht = hl.read_table(var_annotations_ht_path("ukb_freq", *tranche_data))
             vep_ht = hl.read_table(var_annotations_ht_path("vep", *tranche_data))
