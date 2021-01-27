@@ -502,6 +502,7 @@ task IndelsVariantRecalibrator {
     memory: "104 GB"
     cpu: "2"
     disks: "local-disk " + disk_size + " HDD"
+    docker: "us.gcr.io/broad-gatk/gatk:4.1.1.0"
   }
   output {
     File recalibration = "${recalibration_filename}"
@@ -572,6 +573,7 @@ task IndelsVariantRecalibratorCreateModel {
     memory: "104 GB"
     cpu: "2"
     disks: "local-disk " + disk_size + " HDD"
+    docker: gatk_docker
   }
   output {
     File model_report = "${model_report_filename}"
