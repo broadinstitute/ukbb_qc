@@ -17,6 +17,16 @@ logger.setLevel(logging.INFO)
 
 
 # UKBB data resources
+def pan_ancestry_ht_path() -> str:
+    """
+    Returns path to Table that contains pan-ancestry label per sample.
+
+    :return: Path to HT that contains pan-ancestry labels.
+    :rtype: str
+    """
+    return "gs://broad-ukbb/resources/pan_ancestry.ht"
+
+
 def excluded_samples_path(freeze: int = CURRENT_FREEZE) -> str:
     """
     Returns path to list of samples to exclude from QC due to withdrawn consents

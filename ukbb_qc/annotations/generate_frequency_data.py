@@ -13,7 +13,7 @@ from gnomad.utils.annotations import (
     pop_max_expr,
 )
 from gnomad.utils.slack import slack_notifications
-from ukbb_qc.resources.basics import get_ukbb_data, logging_path
+from ukbb_qc.resources.basics import get_ukbb_data, logging_path, pan_ancestry_ht_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 from ukbb_qc.slack_creds import slack_token
@@ -264,6 +264,10 @@ def main(args):
             else:
                 platform_expr = None
 
+            if args.use_pan_ancestry:
+                pan_ancestry_ht = hl.read_table(pan_ancestry_ht_path)
+                mt = mt.annotate_cols(pop=pan_ancestry_ht[mt.s].pan_ancestry)
+
             # Temporary hotfix for depletion of homozygous alternate genotypes
             logger.info(
                 "Setting het genotypes at sites with >1% AF (using v3.0 frequencies) and > 0.9 AB to homalt..."
@@ -343,6 +347,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--compute_frequency", help="Compute frequency data data", action="store_true",
+    )
+    parser.add_argument(
+        "--use_pan_ancestry", help="Use pan-ancestry label instead of inferred population", action="store_true",
     )
     platform_args = parser.add_mutually_exclusive_group()
     platform_args.add_argument(
