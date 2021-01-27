@@ -37,8 +37,8 @@ workflow VariantCallingOFTHEFUTURE {
       File axiomPoly_resource_vcf_index
       File dbsnp_resource_vcf = dbsnp_vcf
       File dbsnp_resource_vcf_index = dbsnp_vcf_index
-      File transmitted_singletons_resource_vcf_index
-      File transmitted_singletons_resource_vcf
+      File? transmitted_singletons_resource_vcf_index
+      File? transmitted_singletons_resource_vcf
 
       # ExcessHet is a phred-scaled p-value. We want a cutoff of anything more extreme
       # than a z-score of -4.5 which is a p-value of 3.4e-06, which phred-scaled is 54.69
@@ -249,54 +249,13 @@ workflow VariantCallingOFTHEFUTURE {
         }
    }
 
-#   call GatherMetrics {
-#        input:
-#         input_details_fofn = write_lines(select_all(CollectMetricsSharded.detail_metrics_file)),
-#         input_summaries_fofn = write_lines(select_all(CollectMetricsSharded.summary_metrics_file)),
-#         output_prefix = callset_name,
-#         disk_size = medium_disk
-#    }
-#
-#  call PartitionSampleNameMap {
-#    input:
-#      sample_name_map = sample_name_map,
-#      line_limit = 1000
-#  }
-
-#  scatter (idx in range(length(PartitionSampleNameMap.partitions))) {
-#
-#    Array[File] files_in_partition = read_lines(PartitionSampleNameMap.partitions[idx])
-#
-#    call CrossCheckFingerprint as CrossCheckFingerprintsScattered {
-#      input:
-#        gvcf_paths = files_in_partition,
-#        vcf_path = fingerprinting_vcf,
-#        sample_name_map = sample_name_map,
-#        haplotype_database = haplotype_database,
-#        output_base_name = callset_name + "." + idx,
-#        scattered = true
-#    }
-#  }
-#
-#  call GatherPicardMetrics as GatherFingerprintingMetrics {
-#    input:
-#      metrics_files = CrossCheckFingerprintsScattered.crosscheck_metrics,
-#      output_file_name = callset_name + ".fingerprintcheck",
-#      disk_size = small_disk
-#  }
-
     output {
            # Hail output IS the annotation DB so we don't need that
-
-           # Metrics from either the small or large callset
-           #File detail_metrics_file = GatherMetrics.detail_metrics_file
-           #File summary_metrics_file = GatherMetrics.summary_metrics_file
 
            # Outputs from the small callset path through the wdl.
            Array[File] output_vcfs = ApplyRecalibration.recalibrated_vcf
            Array[File] output_vcf_indices = ApplyRecalibration.recalibrated_vcf_index
 
-#           File crosscheck_metrics = GatherFingerprintingMetrics.gathered_metrics
     }
 }
 
@@ -502,6 +461,7 @@ task IndelsVariantRecalibrator {
     memory: "104 GB"
     cpu: "2"
     disks: "local-disk " + disk_size + " HDD"
+    docker: "us.gcr.io/broad-gatk/gatk:4.1.1.0"
   }
   output {
     File recalibration = "${recalibration_filename}"
@@ -529,8 +489,8 @@ task IndelsVariantRecalibratorCreateModel {
     File mills_resource_vcf_index
     File axiomPoly_resource_vcf_index
     File dbsnp_resource_vcf_index
-    File transmitted_singletons_resource_vcf
-    File transmitted_singletons_resource_vcf_index
+    File? transmitted_singletons_resource_vcf
+    File? transmitted_singletons_resource_vcf_index
     Boolean use_allele_specific_annotations
     Int max_gaussians = 4
 
@@ -566,12 +526,13 @@ task IndelsVariantRecalibratorCreateModel {
       -resource:mills,known=false,training=true,truth=true,prior=12 ~{mills_resource_vcf} \
       -resource:axiomPoly,known=false,training=true,truth=false,prior=10 ~{axiomPoly_resource_vcf} \
       -resource:dbsnp,known=true,training=false,truth=false,prior=2 ~{dbsnp_resource_vcf} \
-      -resource:singletons,known=true,training=true,truth=true,prior=10 ~{transmitted_singletons_resource_vcf}
+      ~{'-resource:singletons,known=true,training=true,truth=true,prior=10 ' + transmitted_singletons_resource_vcf}
   }
   runtime {
     memory: "104 GB"
     cpu: "2"
     disks: "local-disk " + disk_size + " HDD"
+    docker: gatk_docker
   }
   output {
     File model_report = "${model_report_filename}"
@@ -600,8 +561,8 @@ task SNPsVariantRecalibratorCreateModel {
     File omni_resource_vcf_index
     File one_thousand_genomes_resource_vcf_index
     File dbsnp_resource_vcf_index
-    File transmitted_singletons_resource_vcf
-    File transmitted_singletons_resource_vcf_index
+    File? transmitted_singletons_resource_vcf
+    File? transmitted_singletons_resource_vcf_index
     Int max_gaussians = 6
     Int java_mem = 100
 
@@ -639,7 +600,7 @@ task SNPsVariantRecalibratorCreateModel {
       -resource:omni,known=false,training=true,truth=true,prior=12 ~{omni_resource_vcf} \
       -resource:1000G,known=false,training=true,truth=false,prior=10 ~{one_thousand_genomes_resource_vcf} \
       -resource:dbsnp,known=true,training=false,truth=false,prior=7 ~{dbsnp_resource_vcf} \
-      -resource:singletons,known=true,training=true,truth=true,prior=10 ~{transmitted_singletons_resource_vcf}
+      ~{'-resource:singletons,known=true,training=true,truth=true,prior=10 ' + transmitted_singletons_resource_vcf}
   }
   runtime {
     memory: "104 GB"
@@ -936,310 +897,6 @@ task CollectVariantCallingMetrics {
     disks: "local-disk " + disk_size + " HDD"
     preemptible: 1
     docker: gatk_docker
-  }
-}
-
-task GatherMetrics {
-  input{
-    File input_details_fofn
-    File input_summaries_fofn
-
-    String output_prefix
-
-    Int disk_size
-  }
-
-  command <<<
-    set -e
-    set -o pipefail
-
-    # this is here to deal with the JES bug where commands may be run twice
-    rm -rf metrics
-
-    mkdir metrics
-    RETRY_LIMIT=5
-
-    count=0
-    until cat ${input_details_fofn} | /usr/bin/gsutil -m cp -L cp.log -c -I metrics/; do
-        sleep 1
-        ((count++)) && ((count >= $RETRY_LIMIT)) && break
-    done
-    if [ "$count" -ge "$RETRY_LIMIT" ]; then
-        echo 'Could not copy all the metrics from the cloud' && exit 1
-    fi
-
-    count=0
-    until cat ${input_summaries_fofn} | /usr/bin/gsutil -m cp -L cp.log -c -I metrics/; do
-        sleep 1
-        ((count++)) && ((count >= $RETRY_LIMIT)) && break
-    done
-    if [ "$count" -ge "$RETRY_LIMIT" ]; then
-        echo 'Could not copy all the metrics from the cloud' && exit 1
-    fi
-
-    INPUT=`cat ${input_details_fofn} | rev | cut -d '/' -f 1 | rev | sed s/.variant_calling_detail_metrics//g | awk '{printf("I=metrics/%s ", $1)}'`
-
-    java -Xmx2g -Xms2g -jar /usr/gitc/picard.jar \
-    AccumulateVariantCallingMetrics \
-    $INPUT \
-    O= ${output_prefix}
-  >>>
-  runtime {
-    memory: "3 GB"
-    cpu: "1"
-    disks: "local-disk " + disk_size + " HDD"
-
-  }
-  output {
-    File detail_metrics_file = "${output_prefix}.variant_calling_detail_metrics"
-    File summary_metrics_file = "${output_prefix}.variant_calling_summary_metrics"
-  }
-}
-
-task CrossCheckFingerprint {
-
-  input {
-    Array[File] gvcf_paths
-    File vcf_path
-    File sample_name_map
-    File haplotype_database
-    String output_base_name
-    Boolean scattered = false
-    Array[String] expected_inconclusive_samples = []
-    Int disk = 2000
-    String picard_docker = "us.gcr.io/broad-gotc-prod/gatk4-joint-genotyping:yf_fire_crosscheck_picard_with_nio_fast_fail_fast_sample_map"
-  }
-
-  parameter_meta {
-    gvcf_paths: {
-      localization_optional: true
-    }
-    vcf_path: {
-      localization_optional: true
-    }
-  }
-
-  Int num_gvcfs = length(gvcf_paths)
-  Int cpu = if num_gvcfs < 32 then num_gvcfs else 32
-  # Compute memory to use based on the CPU count, following the pattern of
-  # 3.75GiB / cpu used by GCP's pricing: https://cloud.google.com/compute/pricing
-  Int memMb = round(cpu * 3.75 * 1024)
-
-  String output_name = output_base_name + ".fingerprintcheck"
-
-  command <<<
-    set -eu
-
-    gvcfInputsList=~{write_lines(gvcf_paths)}
-    vcfInputsList=~{vcf_path}
-
-    cp $gvcfInputsList gvcf_inputs.list
-    cp $vcfInputsList vcf_inputs.list
-
-    java -Dpicard.useLegacyParser=false -Xms~{memMb - 512}m \
-      -jar /usr/gitc/PicardPublicWithCrosscheckNIOandSampleMapping.jar \
-      CrosscheckFingerprints \
-      --INPUT gvcf_inputs.list \
-      --SECOND_INPUT vcf_inputs.list \
-      --HAPLOTYPE_MAP ~{haplotype_database} \
-      --INPUT_SAMPLE_FILE_MAP ~{sample_name_map} \
-      --CROSSCHECK_BY SAMPLE \
-      --CROSSCHECK_MODE CHECK_SAME_SAMPLE \
-      --NUM_THREADS ~{cpu} \
-      --SKIP_INPUT_READABLITY_TEST \
-      ~{true='--EXIT_CODE_WHEN_MISMATCH 0' false='' scattered} \
-      --OUTPUT ~{output_name}
-
-    if ~{scattered}; then
-      # UNEXPECTED_MATCH is not possible with CHECK_SAME_SAMPLE
-      matches=$(grep "EXPECTED_MATCH" ~{output_name} | wc -l)
-
-      # check inconclusive samples
-      expectedInconclusiveSamples=("~{sep='" "' expected_inconclusive_samples}")
-      inconclusiveSamplesCount=0
-      inconclusiveSamples=($(grep 'INCONCLUSIVE' ~{output_name} | cut -f 1))
-      for sample in ${inconclusiveSamples[@]}; do
-        if printf '%s\n' ${expectedInconclusiveSamples[@]} | grep -P '^'${sample}'$'; then
-          inconclusiveSamplesCount=$((inconclusiveSamplesCount+1))
-        fi
-      done
-
-      total_matches=$((inconclusiveSamplesCount + matches))
-      if [[ ${total_matches} -eq ~{num_gvcfs} ]]; then
-        >&2 echo "Found the correct number of matches (~{num_gvcfs}) for this shard"
-      else
-        >&2 echo "ERROR: Found $total_matches 'EXPECTED_MATCH' records, but expected ~{num_gvcfs}"
-        exit 1
-      fi
-    fi
-  >>>
-
-  runtime {
-    memory: memMb + " MiB"
-    disks: "local-disk " + disk + " HDD"
-    preemptible: 0
-    docker: picard_docker
-  }
-
-  output {
-    File crosscheck_metrics = output_name
-  }
-}
-
-task PartitionSampleNameMap {
-  input {
-    File sample_name_map
-    Int line_limit
-  }
-
-  command {
-
-    cut -f 2 ~{sample_name_map} > sample_paths
-    split -l ~{line_limit} -d sample_paths partition_
-
-    # Let the OS catch up with creation of files for glob command
-    sleep 1
-  }
-
-  output {
-    Array[File] partitions = glob("partition_*")
-  }
-
-  runtime {
-    memory: "1 GiB"
-    preemptible: 1
-    disks: "local-disk 10 HDD"
-    docker: "us.gcr.io/broad-gotc-prod/python:2.7"
-  }
-}
-
-task CrossCheckFingerprint {
-    input {
-      Array[File] gvcf_paths
-      File vcf_path
-      File sample_name_map
-      File haplotype_database
-      String output_base_name
-      Boolean scattered = false
-      Array[String] expected_inconclusive_samples = []
-      String picard_docker = "us.gcr.io/broad-gotc-prod/gatk4-joint-genotyping:yf_fire_crosscheck_picard_with_nio_fast_fail_fast_sample_map"
-    }
-
-  Int num_gvcfs = length(gvcf_paths)
-  Int cpu = if num_gvcfs < 32 then num_gvcfs else 32
-  # Compute memory to use based on the CPU count, following the pattern of
-  # 3.75GiB / cpu used by GCP's pricing: https://cloud.google.com/compute/pricing
-  Int memMb = round(cpu * 3.75 * 1024)
-  Int disk = 100
-
-  String output_name = output_base_name + ".fingerprintcheck"
-
-  command <<<
-    set -eu
-
-    gvcfInputsList=~{write_lines(gvcf_paths)}
-    vcfInputsList=~{vcf_path}
-
-    cp $gvcfInputsList gvcf_inputs.list
-    cp $vcfInputsList vcf_inputs.list
-
-    java -Dpicard.useLegacyParser=false -Xms~{memMb - 512}m \
-      -jar /usr/gitc/PicardPublicWithCrosscheckNIOandSampleMapping.jar \
-      CrosscheckFingerprints \
-      --INPUT gvcf_inputs.list \
-      --SECOND_INPUT vcf_inputs.list \
-      --HAPLOTYPE_MAP ~{haplotype_database} \
-      --INPUT_SAMPLE_FILE_MAP ~{sample_name_map} \
-      --CROSSCHECK_BY SAMPLE \
-      --CROSSCHECK_MODE CHECK_SAME_SAMPLE \
-      --NUM_THREADS ~{cpu} \
-      --SKIP_INPUT_READABLITY_TEST \
-      ~{true='--EXIT_CODE_WHEN_MISMATCH 0' false='' scattered} \
-      --OUTPUT ~{output_name}
-
-    if ~{scattered}; then
-      # UNEXPECTED_MATCH is not possible with CHECK_SAME_SAMPLE
-      matches=$(grep "EXPECTED_MATCH" ~{output_name} | wc -l)
-
-      # check inconclusive samples
-      expectedInconclusiveSamples=("~{sep='" "' expected_inconclusive_samples}")
-      inconclusiveSamplesCount=0
-      inconclusiveSamples=($(grep 'INCONCLUSIVE' ~{output_name} | cut -f 1))
-      for sample in ${inconclusiveSamples[@]}; do
-        if printf '%s\n' ${expectedInconclusiveSamples[@]} | grep -P '^'${sample}'$'; then
-          inconclusiveSamplesCount=$((inconclusiveSamplesCount+1))
-        fi
-      done
-
-      total_matches=$((inconclusiveSamplesCount + matches))
-      if [[ ${total_matches} -eq ~{num_gvcfs} ]]; then
-        >&2 echo "Found the correct number of matches (~{num_gvcfs}) for this shard"
-      else
-        >&2 echo "ERROR: Found $total_matches 'EXPECTED_MATCH' records, but expected ~{num_gvcfs}"
-        exit 1
-      fi
-    fi
-  >>>
-
-  runtime {
-    memory: memMb + " MiB"
-    disks: "local-disk " + disk + " HDD"
-    preemptible: 0
-    docker: picard_docker
-  }
-
-  output {
-    File crosscheck_metrics = output_name
-  }
-}
-
-task GatherPicardMetrics {
-  input {
-    Array[File] metrics_files
-    String output_file_name
-    Int disk_size
-  }
-
-  command {
-    # Don't use this task to gather tens of thousands of files.
-    # Cromwell can't handle it.
-
-    # This cannot gather metrics with histograms
-
-    head -n 7 ~{metrics_files[0]} > ~{output_file_name}
-
-    for metrics_file in ~{sep=' ' metrics_files}; do
-      sed -n '1,7d;p' $metrics_file | grep -v '^$' >> ~{output_file_name}
-    done
-  }
-
-  output {
-    File gathered_metrics = "~{output_file_name}"
-  }
-
-  runtime {
-    cpu: 1
-    memory: "3.75 GiB"
-    preemptible: 1
-    disks: "local-disk " + disk_size + " HDD"
-    docker: "us.gcr.io/broad-gotc-prod/python:2.7"
-  }
-}
-
-task GetNumberOfSamples {
-  input {
-    File sample_name_map
-  }
-
-  command <<<
-    wc -l ${sample_name_map} | awk '{print $1}'
-  >>>
-  runtime {
-    memory: "1 GB"
-    preemptible: 3
-  }
-  output {
-    Int sample_count = read_int(stdout())
   }
 }
 
