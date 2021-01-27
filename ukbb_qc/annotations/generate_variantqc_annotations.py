@@ -17,95 +17,13 @@ from ukbb_qc.resources.sample_qc import (
     inferred_ped_path,
     relatedness_ht_path,
 )
-from ukbb_qc.resources.variant_qc import (
-    get_true_positive_vcf_path,
-    var_annotations_ht_path,
-)
+from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 from ukbb_qc.slack_creds import slack_token
+
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("variantqc_annotations")
 logger.setLevel(logging.INFO)
-
-
-def export_tp_vcf(
-    data_source: str,
-    freeze: int,
-    transmitted_singletons: bool = True,
-    sibling_singletons: bool = True,
-    array_con_common: bool = True,
-):
-    """
-    Export true positive variants to VCF for use in VQSR
-    
-    :param str data_source: 'regeneron' or 'broad'
-    :param int freeze: One of the data freezes
-    :param transmitted_singletons: Should transmitted singletons be included
-    :param sibling_singletons: Should sibling singletons be included
-    :param array_con_common: Should common variants that are concordant with array data be included
-    :return: None
-    """
-    if not (transmitted_singletons | sibling_singletons | array_con_common):
-        raise ValueError(
-            "At least one of transmitted_singletons, sibling_singletons, or array_con_common must be set to True"
-        )
-
-    qc_ac_ht = hl.read_table(
-        var_annotations_ht_path("allele_counts", data_source, freeze)
-    )
-    trio_stats_ht = hl.read_table(
-        var_annotations_ht_path("trio_stats", data_source, freeze)
-    )
-    sib_stats_ht = hl.read_table(
-        var_annotations_ht_path("sib_stats", data_source, freeze)
-    )
-    array_con_ht = hl.read_table(
-        var_annotations_ht_path("array_exome_concordant_variants", data_source, freeze)
-    )
-    qc_ac_ht = qc_ac_ht.annotate(
-        ukbb_array_con_common=hl.is_defined(array_con_ht[qc_ac_ht.key])
-    )
-
-    for transmission_confidence in ["raw", "adj"]:
-        filter_expr = False
-        true_positive_type = ""
-        if transmitted_singletons:
-            filter_expr = filter_expr | (
-                trio_stats_ht[qc_ac_ht.key][f"n_transmitted_{transmission_confidence}"]
-                == 1
-            ) & (qc_ac_ht.ac_qc_samples_raw == 2)
-            true_positive_type = true_positive_type + "ts_"
-
-        if sibling_singletons:
-            filter_expr = filter_expr | (
-                sib_stats_ht[qc_ac_ht.key][
-                    f"n_sib_shared_variants_{transmission_confidence}"
-                ]
-                == 1
-            ) & (qc_ac_ht.ac_qc_samples_raw == 2)
-            true_positive_type = true_positive_type + "ss_"
-
-        if array_con_common:
-            filter_expr = filter_expr | qc_ac_ht.ukbb_array_con_common
-            true_positive_type = true_positive_type + "ac_"
-
-        ht = qc_ac_ht.filter(filter_expr)
-        ht = ht.annotate(s=hl.null(hl.tstr))
-        ht = ht.to_matrix_table_row_major(columns=["s"], entry_field_name="s")
-        ht = ht.filter_cols(False)
-        logger.info(
-            f"Exporting {transmission_confidence} transmitted singleton VCF with {ht.count()} variants..."
-        )
-        hl.export_vcf(
-            ht,
-            get_true_positive_vcf_path(
-                true_positive_type=true_positive_type,
-                adj=(transmission_confidence == "adj"),
-                data_source=data_source,
-                freeze=freeze,
-            ),
-            tabix=True,
-        )
 
 
 def main(args):
