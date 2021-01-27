@@ -990,7 +990,7 @@ task GatherMetrics {
     memory: "3 GB"
     cpu: "1"
     disks: "local-disk " + disk_size + " HDD"
-
+    docker: "us.gcr.io/broad-gatk/gatk:4.1.1.0"
   }
   output {
     File detail_metrics_file = "${output_prefix}.variant_calling_detail_metrics"
