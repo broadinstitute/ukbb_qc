@@ -12,7 +12,8 @@ from ukbb_qc.resources.basics import (
     get_ukbb_data,
     logging_path,
     release_ht_path,
-    release_summary_path,
+    release_summary_ht_path,
+    release_lof_mt_path,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import var_annotations_ht_path
@@ -37,9 +38,9 @@ def main(args):
 
     try:
         if args.get_summary_counts:
-            logger.info("Gettimg summary per variant...")
+            logger.info("Getting summary counts per variant category...")
             ht = get_summary_counts(hl.read_table(release_ht_path(*tranche_data)))
-            ht.write(release_summary_path(*tranche_data))
+            ht.write(release_summary_ht_path(*tranche_data))
 
         if args.generate_gene_lof_matrix:
             # Konrad released metrics on adj GT only (gnomAD v2.1)
@@ -52,7 +53,7 @@ def main(args):
             mt = generate_gene_lof_matrix(
                 mt=mt, tx_ht=hl.null(hl.Table), by_transcript=True,
             )
-            mt.write(release_summary_path(*tranche_data, ht=False))
+            mt.write(release_lof_mt_path(*tranche_data))
 
     finally:
         logger.info("Copying hail log to logging bucket...")
