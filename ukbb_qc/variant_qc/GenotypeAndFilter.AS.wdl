@@ -37,8 +37,8 @@ workflow VariantCallingOFTHEFUTURE {
       File axiomPoly_resource_vcf_index
       File dbsnp_resource_vcf = dbsnp_vcf
       File dbsnp_resource_vcf_index = dbsnp_vcf_index
-      File transmitted_singletons_resource_vcf_index
-      File transmitted_singletons_resource_vcf
+      File? transmitted_singletons_resource_vcf_index
+      File? transmitted_singletons_resource_vcf
 
       # ExcessHet is a phred-scaled p-value. We want a cutoff of anything more extreme
       # than a z-score of -4.5 which is a p-value of 3.4e-06, which phred-scaled is 54.69
@@ -529,8 +529,8 @@ task IndelsVariantRecalibratorCreateModel {
     File mills_resource_vcf_index
     File axiomPoly_resource_vcf_index
     File dbsnp_resource_vcf_index
-    File transmitted_singletons_resource_vcf
-    File transmitted_singletons_resource_vcf_index
+    File? transmitted_singletons_resource_vcf
+    File? transmitted_singletons_resource_vcf_index
     Boolean use_allele_specific_annotations
     Int max_gaussians = 4
 
@@ -566,7 +566,7 @@ task IndelsVariantRecalibratorCreateModel {
       -resource:mills,known=false,training=true,truth=true,prior=12 ~{mills_resource_vcf} \
       -resource:axiomPoly,known=false,training=true,truth=false,prior=10 ~{axiomPoly_resource_vcf} \
       -resource:dbsnp,known=true,training=false,truth=false,prior=2 ~{dbsnp_resource_vcf} \
-      -resource:singletons,known=true,training=true,truth=true,prior=10 ~{transmitted_singletons_resource_vcf}
+      ~{'-resource:singletons,known=true,training=true,truth=true,prior=10 ' + transmitted_singletons_resource_vcf}
   }
   runtime {
     memory: "104 GB"
@@ -600,8 +600,8 @@ task SNPsVariantRecalibratorCreateModel {
     File omni_resource_vcf_index
     File one_thousand_genomes_resource_vcf_index
     File dbsnp_resource_vcf_index
-    File transmitted_singletons_resource_vcf
-    File transmitted_singletons_resource_vcf_index
+    File? transmitted_singletons_resource_vcf
+    File? transmitted_singletons_resource_vcf_index
     Int max_gaussians = 6
     Int java_mem = 100
 
@@ -639,7 +639,7 @@ task SNPsVariantRecalibratorCreateModel {
       -resource:omni,known=false,training=true,truth=true,prior=12 ~{omni_resource_vcf} \
       -resource:1000G,known=false,training=true,truth=false,prior=10 ~{one_thousand_genomes_resource_vcf} \
       -resource:dbsnp,known=true,training=false,truth=false,prior=7 ~{dbsnp_resource_vcf} \
-      -resource:singletons,known=true,training=true,truth=true,prior=10 ~{transmitted_singletons_resource_vcf}
+      ~{'-resource:singletons,known=true,training=true,truth=true,prior=10 ' + transmitted_singletons_resource_vcf}
   }
   runtime {
     memory: "104 GB"
