@@ -17,6 +17,16 @@ logger.setLevel(logging.INFO)
 
 
 # UKBB data resources
+def pan_ancestry_txt_path() -> str:
+    """
+    Returns path to text file that contains pan-ancestry label per sample.
+
+    :return: Path to file that contains pan-ancestry labels.
+    :rtype: str
+    """
+    return "gs://broad-ukbb/resources/pan_ancestry.txt"
+
+
 def pan_ancestry_ht_path() -> str:
     """
     Returns path to Table that contains pan-ancestry label per sample.

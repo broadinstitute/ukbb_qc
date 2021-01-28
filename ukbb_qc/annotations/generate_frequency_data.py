@@ -13,7 +13,7 @@ from gnomad.utils.annotations import (
     pop_max_expr,
 )
 from gnomad.utils.slack import slack_notifications
-from ukbb_qc.resources.basics import get_ukbb_data, logging_path, pan_ancestry_ht_path
+from ukbb_qc.resources.basics import get_ukbb_data, logging_path, release_ht_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 from ukbb_qc.slack_creds import slack_token
@@ -57,12 +57,12 @@ def generate_cohort_frequency_data(
     mt = mt.drop("_pop", "_sex")
     mt = mt.select_rows(cohort_freq=mt.freq)
     cohort_freq_meta = hl.eval(mt.freq_meta)
-    for i in range(len(cohort_freq_meta)):
-        if i == 1:
+    for index, _ in enumerate(cohort_freq_meta):
+        if index == 1:
             update_dict = {"group": "cohort_raw"}
         else:
             update_dict = {"group": "cohort"}
-        cohort_freq_meta[i].update(update_dict)
+        cohort_freq_meta[index].update(update_dict)
     mt = mt.annotate_globals(cohort_freq_meta=cohort_freq_meta)
     return mt.select_globals("cohort_freq_meta").rows()
 
@@ -111,7 +111,7 @@ def generate_frequency_data(
     cohort_ht = generate_cohort_frequency_data(
         mt,
         cohort_frequency_pops,
-        mt.meta.gnomad_pc_project_pop_data.pop,
+        mt.meta.pan_ancestry_meta.pop,
         mt.meta.sex_imputation.sex_karyotype,
     )
     mt = mt.annotate_rows(cohort_freq=cohort_ht[mt.row_key].cohort_freq)
@@ -129,7 +129,7 @@ def generate_frequency_data(
     mt = annotate_freq(
         mt,
         sex_expr=mt.meta.sex_imputation.sex_karyotype,
-        pop_expr=mt.meta.gnomad_pc_project_pop_data.pop,
+        pop_expr=mt.meta.pan_ancestry_metagi.pop,
         subpop_expr=mt.meta.hybrid_pop_data.pop,
         additional_strata_expr=additional_strata_expr,
     )
@@ -264,10 +264,6 @@ def main(args):
             else:
                 platform_expr = None
 
-            if args.use_pan_ancestry:
-                pan_ancestry_ht = hl.read_table(pan_ancestry_ht_path)
-                mt = mt.annotate_cols(pop=pan_ancestry_ht[mt.s].pan_ancestry)
-
             # Temporary hotfix for depletion of homozygous alternate genotypes
             logger.info(
                 "Setting het genotypes at sites with >1% AF (using v3.0 frequencies) and > 0.9 AB to homalt..."
@@ -347,9 +343,6 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--compute_frequency", help="Compute frequency data data", action="store_true",
-    )
-    parser.add_argument(
-        "--use_pan_ancestry", help="Use pan-ancestry label instead of inferred population", action="store_true",
     )
     platform_args = parser.add_mutually_exclusive_group()
     platform_args.add_argument(
