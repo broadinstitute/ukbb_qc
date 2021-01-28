@@ -48,7 +48,7 @@ def main(args):
 
         if args.generate_gene_lof_matrix:
             # Konrad released metrics on adj GT only (gnomAD v2.1)
-            mt = get_ukbb_data(*tranche_data, adj=True, split=True)
+            mt = get_ukbb_data(*tranche_data, adj=True, split=True, meta_root="meta")
             freq_ht = hl.read_table(var_annotations_ht_path("ukb_freq", *tranche_data))
             vep_ht = hl.read_table(var_annotations_ht_path("vep", *tranche_data))
             mt = mt.annotate_rows(
@@ -58,12 +58,21 @@ def main(args):
                 # NOTE: using `range_table` to create an empty HT here
                 mt=mt,
                 tx_ht=hl.utils.range_table(0),
+                by_transcript=True,
             )
             mt.write(release_lof_mt_path(*tranche_data), args.overwrite)
 
         if args.summarize_gene_lof_matrix:
             mt = hl.read_matrix_table(release_lof_mt_path(*tranche_data))
-            ht = generate_gene_lof_summary(mt)
+
+            # NOTE: adding pop annotation here so that `generate_gene_lof_summary` will work as expected
+            if args.use_hybrid_pop:
+                mt = mt.annotate_cols(meta=mt.meta.annotate(pop=mt.hybrid_pop_data.pop))
+            else:
+                mt = mt.annotate_cols(
+                    meta=mt.meta.annotate(pop=mt.pan_ancestry_meta.pop)
+                )
+            ht = generate_gene_lof_summary(mt, by_transcript=True)
             ht.write(release_lof_ht_path(*tranche_data), args.overwrite)
 
     finally:
@@ -99,6 +108,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--summarize_gene_lof_matrix",
         help="Creates gene LoF matrix summary Table",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--use_hybrid_pop",
+        help="Use hybrid ancestry assignments when generating LoF matrix summary Table. Will use pan-ancestry assignment if not set",
         action="store_true",
     )
 
