@@ -80,10 +80,10 @@ def get_truth_sample_data(
     if not truth_sample or not data_type:
         raise DataException("Must specify both truth_sample and desired data_type")
 
-    if truth_sample not in truth_samples:
+    if truth_sample not in truth_sample_dict:
         raise DataException("This truth sample is not present")
 
-    truth_samples_info = truth_samples[truth_sample]
+    truth_samples_info = truth_sample_dict[truth_sample]
     if (data_type not in truth_samples_info) and (
         data_type == "callset_truth_mt"
         and not file_exists(
