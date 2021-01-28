@@ -47,7 +47,7 @@ def main(args):
             mt = get_ukbb_data(*tranche_data, adj=True)
 
             mt = mt.filter_cols(
-                hl.literal([s["s"] for s in TRUTH_SAMPLES]).contains(mt.s)
+                hl.literal([TRUTH_SAMPLES[s]["s"] for s in TRUTH_SAMPLES]).contains(mt.s)
             )
 
             # Checkpoint to prevent needing to go through the large table a second time
@@ -55,10 +55,10 @@ def main(args):
                 get_checkpoint_path(*tranche_data, "truth_samples", mt=True),
                 overwrite=args.overwrite,
             )
-
+            mt = hl.read_matrix_table(get_checkpoint_path(*tranche_data, "truth_samples", mt=True))
             for truth_sample in TRUTH_SAMPLES:
                 truth_sample_mt = mt.filter_cols(
-                    mt.s == get_truth_sample_data(*tranche_data, truth_sample, "s")
+                    mt.s == get_truth_sample_data(*tranche_data, truth_sample=truth_sample, data_type="s")
                 )
                 # Filter to variants in truth data
                 truth_sample_mt = truth_sample_mt.filter_rows(
@@ -77,16 +77,16 @@ def main(args):
 
                 # Load truth data
                 mt = get_truth_sample_data(
-                    *tranche_data, truth_sample, "callset_truth_mt"
+                    *tranche_data, truth_sample=truth_sample, data_type="callset_truth_mt"
                 )
                 truth_hc_intervals = get_truth_sample_data(
-                    *tranche_data, truth_sample, "hc_intervals"
+                    *tranche_data, truth_sample=truth_sample, data_type="hc_intervals"
                 )
                 truth_mt = get_truth_sample_data(
-                    *tranche_data, truth_sample, "truth_mt"
+                    *tranche_data, truth_sample=truth_sample, data_type="truth_mt"
                 )
                 truth_mt = truth_mt.key_cols_by(
-                    s=hl.str(get_truth_sample_data(*tranche_data, truth_sample, "s"))
+                    s=hl.str(get_truth_sample_data(*tranche_data, truth_sample=truth_sample, data_type="s"))
                 )
 
                 # remove low quality sites
