@@ -240,7 +240,7 @@ def get_ukbb_data(
         )
 
         # Check number of samples to remove -- should be 44 here
-        num_ids = _check_dups_to_remove(ids_to_remove, mt.cols())
+        num_ids = check_dups_to_remove(ids_to_remove, mt.cols())
         logger.info(f"Removing {num_ids} samples...")
         mt = mt.filter_cols(~ids_to_remove.contains(mt.s))
 
@@ -602,6 +602,23 @@ def release_lof_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
         )
 
     return f"{get_release_path(data_source, freeze)}/summary/gene_lof_matrix.mt"
+
+
+def release_lof_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Returns path to summary HT containing gene LoF matrix summary.
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :return: Path to summary HT with gene LoF matrix
+    :rtype: str
+    """
+    if freeze not in (6, 7):
+        raise DataException(
+            "Release LoF HT path only exists for freezes 6/300K and 7/450K!"
+        )
+
+    return f"{get_release_path(data_source, freeze)}/summary/gene_lof_matrix_summary.ht"
 
 
 # logging path

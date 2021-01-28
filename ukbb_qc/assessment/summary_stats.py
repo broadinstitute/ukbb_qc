@@ -6,13 +6,17 @@ import hail as hl
 from gnomad.assessment.summary_stats import get_summary_counts
 from gnomad.utils.slack import slack_notifications
 
-from gnomad_lof.constraint.gene_lof_matrix import generate_gene_lof_matrix
+from gnomad_lof.constraint.gene_lof_matrix import (
+    generate_gene_lof_matrix,
+    generate_gene_lof_summary,
+)
 
 from ukbb_qc.resources.basics import (
     get_ukbb_data,
     logging_path,
     release_ht_path,
     release_summary_ht_path,
+    release_lof_ht_path,
     release_lof_mt_path,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
@@ -40,7 +44,7 @@ def main(args):
         if args.get_summary_counts:
             logger.info("Getting summary counts per variant category...")
             ht = get_summary_counts(hl.read_table(release_ht_path(*tranche_data)))
-            ht.write(release_summary_ht_path(*tranche_data))
+            ht.write(release_summary_ht_path(*tranche_data), args.overwrite)
 
         if args.generate_gene_lof_matrix:
             # Konrad released metrics on adj GT only (gnomAD v2.1)
@@ -51,9 +55,16 @@ def main(args):
                 freq=freq_ht[mt.row_key].freq, vep=vep_ht[mt.row_key].vep
             )
             mt = generate_gene_lof_matrix(
-                mt=mt, tx_ht=hl.null(hl.Table), by_transcript=True,
+                # NOTE: using `range_table` to create an empty HT here
+                mt=mt,
+                tx_ht=hl.utils.range_table(0),
             )
-            mt.write(release_lof_mt_path(*tranche_data))
+            mt.write(release_lof_mt_path(*tranche_data), args.overwrite)
+
+        if args.export_gene_lof_matrix:
+            mt = hl.read_matrix_table(release_lof_mt_path(*tranche_data))
+            ht = generate_gene_lof_summary(mt)
+            ht.write(release_lof_ht_path(*tranche_data), args.overwrite)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -85,6 +96,12 @@ if __name__ == "__main__":
         help="Generate gene LoF matrix",
         action="store_true",
     )
+    parser.add_argument(
+        "--export_gene_lof_matrix",
+        help="Creates gene LoF matrix summary Table",
+        action="store_true",
+    )
+
     args = parser.parse_args()
 
     if args.slack_channel:
