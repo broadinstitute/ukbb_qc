@@ -46,7 +46,6 @@ TRAIN_COL = "rf_train"
 PREDICTION_COL = "rf_prediction"
 INFO_FEATURES = ["AS_QD", "AS_pab_max", "AS_MQRankSum", "AS_SOR", "AS_ReadPosRankSum"]
 FEATURES = [
-    "InbreedingCoeff",
     "variant_type",
     "allele_type",
     "n_alt_alleles",
@@ -108,14 +107,6 @@ def create_rf_ht(
     logger.info("Loading split hardcall MatrixTable and annotation Tables")
     ht = get_ukbb_data(data_source, freeze).rows()
 
-    inbreeding_ht = hl.read_table(
-        var_annotations_ht_path("inbreeding_coefficient", data_source, freeze)
-    )
-    inbreeding_ht = inbreeding_ht.annotate(
-        InbreedingCoeff=hl.or_missing(
-            ~hl.is_nan(inbreeding_ht.InbreedingCoeff), inbreeding_ht.InbreedingCoeff
-        )
-    )
     trio_stats_ht = hl.read_table(
         var_annotations_ht_path("trio_stats", data_source, freeze)
     )
@@ -147,7 +138,6 @@ def create_rf_ht(
     logger.info("Annotating Table with all columns from multiple annotation Tables")
     ht = ht.annotate(
         **info_ht[ht.key],
-        **inbreeding_ht[ht.key],
         **trio_stats_ht[ht.key],
         **sibling_stats_ht[ht.key],
         **truth_data_ht[ht.key],
@@ -421,9 +411,6 @@ def main(args):
 
         if args.train_rf:
             features = FEATURES
-            if args.no_inbreeding_coeff:
-                features.remove("InbreedingCoeff")
-
             run_hash = str(uuid.uuid4())[:8]
             rf_runs = get_rf_runs(rf_run_hash_path(data_source, freeze))
             while run_hash in rf_runs:
@@ -549,6 +536,14 @@ def main(args):
         if args.finalize:
             ht = hl.read_table(
                 rf_path(data_source, freeze, "rf_result", run_hash=args.run_hash)
+            )
+            inbreeding_ht = hl.read_table(
+                var_annotations_ht_path("inbreeding_coefficient", data_source, freeze)
+            )
+            ht = ht.annotate(
+                InbreedingCoeff=hl.or_missing(
+                    ~hl.is_nan(inbreeding_ht[ht.key].InbreedingCoeff), inbreeding_ht[ht.key].InbreedingCoeff
+                )
             )
             freq_ht = hl.read_table(
                 var_annotations_ht_path("ukb_freq", data_source, freeze)
@@ -696,11 +691,6 @@ if __name__ == "__main__":
     training_params.add_argument(
         "--interval_qc_filter",
         help="Should interval QC be applied before RF training.",
-        action="store_true",
-    )
-    training_params.add_argument(
-        "--no_inbreeding_coeff",
-        help="Train RF without inbreeding coefficient as a feature.",
         action="store_true",
     )
 
