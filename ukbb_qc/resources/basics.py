@@ -6,7 +6,6 @@ import hail as hl
 from gnomad.utils.file_utils import file_exists
 from gnomad.resources.resource_utils import DataException
 
-from ukbb_qc.utils.utils import check_dups_to_remove
 from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES
 from .sample_qc import meta_ht_path
 
@@ -61,6 +60,32 @@ def known_dups_ht_path(freeze: int = CURRENT_FREEZE) -> str:
     if freeze != 7:
         raise DataException("Known duplicates file only exists for freeze 7/450K!")
     return f"gs://broad-ukbb/broad.freeze_{freeze}/duplicate_resolution/pharma_known_dups.ht"
+
+
+def check_dups_to_remove(
+    remove_ids: hl.expr.ArrayExpression, samples: hl.Table, column_name: str = "s",
+) -> int:
+    """
+    This function checks whether the number of duplicate samples in the input Table matches expected counts.
+
+    Used to check numbers prior to duplicate sample removal. 
+    Function was written specifically to resolve duplicates in freeze 7/the 450k callset.
+
+    :param hl.expr.ArrayExpression remove_list: ArrayExpression containing list of sample IDs to remove.
+    :param hl.Table samples: Table containing all sample IDs.
+    :param str column_name: Name of column containing sample IDs in Table. Default is 's'.
+    :return: Number of samples to remove from Table.
+    :rtype: int
+    """
+    # Using an HT here because aggregate_cols has been slow/memory intensive in the past
+    n_samples_to_drop = samples.aggregate(
+        hl.agg.count_where(remove_ids.contains(samples[column_name]))
+    )
+    if n_samples_to_drop != hl.eval(hl.len(remove_ids)):
+        raise DataException(
+            f"Expecting to remove {hl.eval(hl.len(remove_ids))} duplicate samples but found {n_samples_to_drop}. Double check samples in MT!"
+        )
+    return n_samples_to_drop
 
 
 def get_ukbb_data(
@@ -197,29 +222,29 @@ def get_ukbb_data(
             logger.info(f"Removing {samples_to_drop} samples...")
             mt = mt.filter_cols(~remove_ids.contains(mt.new_s)).drop("new_s", "col_idx")
 
-    # Remove samples that are known to be on the pharma's sample remove list
-    # These samples were discovered when running array concordance
-    # and were resolved in this notebook:
-    # gs://broad-ukbb/broad.freeze_7/notebooks/array_dups.ipynb
-    # All 44 of these samples have the note to "remove ID1"
-    # Example:
-    # "UKB_1534238_0230755066"  "UKB_1534238_236168062-DUP" "Known duplication; blacklist ID1"
-    # NOTE: UKB_4316697_236168099-DUP is in the 450K MT
-    # but the othersample ID known to be on the remove list, UKB_3489701_236190071,
-    # is not present, so this pair is NOT in the known dups HT
-    # Therefore, the number of samples to remove in this check is 43
-    # "UKB_3489701_236190071"   "UKB_4316697_236168099-DUP" "Known duplication; blacklist ID1"
-    dups_ht = hl.read_table(known_dups_ht_path(freeze))
-    ids_to_remove = dups_ht.aggregate(
-        hl.agg.collect(dups_ht["Sample Name - ID1"]), _localize=False
-    )
+        # Remove samples that are known to be on the pharma's sample remove list
+        # These samples were discovered when running array concordance
+        # and were resolved in this notebook:
+        # gs://broad-ukbb/broad.freeze_7/notebooks/array_dups.ipynb
+        # All 44 of these samples have the note to "remove ID1"
+        # Example:
+        # "UKB_1534238_0230755066"  "UKB_1534238_236168062-DUP" "Known duplication; blacklist ID1"
+        # NOTE: UKB_4316697_236168099-DUP is in the 450K MT
+        # but the othersample ID known to be on the remove list, UKB_3489701_236190071,
+        # is not present, so this pair is NOT in the known dups HT
+        # Therefore, the number of samples to remove in this check is 43
+        # "UKB_3489701_236190071"   "UKB_4316697_236168099-DUP" "Known duplication; blacklist ID1"
+        dups_ht = hl.read_table(known_dups_ht_path(freeze))
+        ids_to_remove = dups_ht.aggregate(
+            hl.agg.collect(dups_ht["Sample Name - ID1"]), _localize=False
+        )
 
-    # Check number of samples to remove -- should be 44 here
-    num_ids = _check_dups_to_remove(ids_to_remove, mt.cols())
-    logger.info(f"Removing {num_ids} samples...")
-    mt = mt.filter_cols(~ids_to_remove.contains(mt.s))
+        # Check number of samples to remove -- should be 44 here
+        num_ids = _check_dups_to_remove(ids_to_remove, mt.cols())
+        logger.info(f"Removing {num_ids} samples...")
+        mt = mt.filter_cols(~ids_to_remove.contains(mt.s))
 
-    logger.info(f"Sample count post-filtration: {mt.count_cols()}")
+        logger.info(f"Sample count post-filtration: {mt.count_cols()}")
 
     gt_expr = mt.GT if split else mt.LGT
     mt = mt.filter_rows(hl.agg.any(gt_expr.is_non_ref() | hl.is_defined(mt.END)))
