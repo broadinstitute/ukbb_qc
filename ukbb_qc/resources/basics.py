@@ -222,29 +222,29 @@ def get_ukbb_data(
             logger.info(f"Removing {samples_to_drop} samples...")
             mt = mt.filter_cols(~remove_ids.contains(mt.new_s)).drop("new_s", "col_idx")
 
-    # Remove samples that are known to be on the pharma's sample remove list
-    # These samples were discovered when running array concordance
-    # and were resolved in this notebook:
-    # gs://broad-ukbb/broad.freeze_7/notebooks/array_dups.ipynb
-    # All 44 of these samples have the note to "remove ID1"
-    # Example:
-    # "REDACTED_SAMPLE_ID"  "REDACTED_SAMPLE_ID" "Known duplication; blacklist ID1"
-    # NOTE: REDACTED_SAMPLE_ID is in the 450K MT
-    # but the othersample ID known to be on the remove list, REDACTED_SAMPLE_ID,
-    # is not present, so this pair is NOT in the known dups HT
-    # Therefore, the number of samples to remove in this check is 43
-    # "REDACTED_SAMPLE_ID"   "REDACTED_SAMPLE_ID" "Known duplication; blacklist ID1"
-    dups_ht = hl.read_table(known_dups_ht_path(freeze))
-    ids_to_remove = dups_ht.aggregate(
-        hl.agg.collect(dups_ht["Sample Name - ID1"]), _localize=False
-    )
+        # Remove samples that are known to be on the pharma's sample remove list
+        # These samples were discovered when running array concordance
+        # and were resolved in this notebook:
+        # gs://broad-ukbb/broad.freeze_7/notebooks/array_dups.ipynb
+        # All 44 of these samples have the note to "remove ID1"
+        # Example:
+        # "REDACTED_SAMPLE_ID"  "REDACTED_SAMPLE_ID" "Known duplication; blacklist ID1"
+        # NOTE: REDACTED_SAMPLE_ID is in the 450K MT
+        # but the othersample ID known to be on the remove list, REDACTED_SAMPLE_ID,
+        # is not present, so this pair is NOT in the known dups HT
+        # Therefore, the number of samples to remove in this check is 43
+        # "REDACTED_SAMPLE_ID"   "REDACTED_SAMPLE_ID" "Known duplication; blacklist ID1"
+        dups_ht = hl.read_table(known_dups_ht_path(freeze))
+        ids_to_remove = dups_ht.aggregate(
+            hl.agg.collect(dups_ht["Sample Name - ID1"]), _localize=False
+        )
 
-    # Check number of samples to remove -- should be 44 here
-    num_ids = _check_dups_to_remove(ids_to_remove, mt.cols())
-    logger.info(f"Removing {num_ids} samples...")
-    mt = mt.filter_cols(~ids_to_remove.contains(mt.s))
+        # Check number of samples to remove -- should be 44 here
+        num_ids = _check_dups_to_remove(ids_to_remove, mt.cols())
+        logger.info(f"Removing {num_ids} samples...")
+        mt = mt.filter_cols(~ids_to_remove.contains(mt.s))
 
-    logger.info(f"Sample count post-filtration: {mt.count_cols()}")
+        logger.info(f"Sample count post-filtration: {mt.count_cols()}")
 
     gt_expr = mt.GT if split else mt.LGT
     mt = mt.filter_rows(hl.agg.any(gt_expr.is_non_ref() | hl.is_defined(mt.END)))
