@@ -75,7 +75,6 @@ def create_rf_ht(
     Annotations that are added:
 
         Features for RF:
-            - InbreedingCoeff
             - variant_type
             - allele_type
             - n_alt_alleles
