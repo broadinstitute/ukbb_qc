@@ -61,7 +61,7 @@ def main(args):
             )
             mt.write(release_lof_mt_path(*tranche_data), args.overwrite)
 
-        if args.export_gene_lof_matrix:
+        if args.summarize_gene_lof_matrix:
             mt = hl.read_matrix_table(release_lof_mt_path(*tranche_data))
             ht = generate_gene_lof_summary(mt)
             ht.write(release_lof_ht_path(*tranche_data), args.overwrite)
@@ -97,7 +97,7 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--export_gene_lof_matrix",
+        "--summarize_gene_lof_matrix",
         help="Creates gene LoF matrix summary Table",
         action="store_true",
     )
