@@ -51,8 +51,11 @@ def main(args):
             mt = get_ukbb_data(*tranche_data, adj=True, split=True, meta_root="meta")
             freq_ht = hl.read_table(var_annotations_ht_path("ukb_freq", *tranche_data))
             vep_ht = hl.read_table(var_annotations_ht_path("vep", *tranche_data))
+            release_ht = hl.read_table(release_summary_ht_path(*tranche_data))
             mt = mt.annotate_rows(
-                freq=freq_ht[mt.row_key].freq, vep=vep_ht[mt.row_key].vep
+                freq=freq_ht[mt.row_key].freq,
+                vep=vep_ht[mt.row_key].vep,
+                filters=release_ht[mt.row_key].filters,
             )
             mt = generate_gene_lof_matrix(
                 # NOTE: using `range_table` to create an empty HT here
