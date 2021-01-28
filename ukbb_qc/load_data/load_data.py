@@ -12,6 +12,7 @@ from ukbb_qc.load_data.utils import (
     import_phenotype_ht,
     import_vqsr,
     load_clinvar_path,
+    load_pan_ancestry,
     load_self_reported_ancestry,
     load_ukbb_array_pcs,
 )
@@ -66,6 +67,10 @@ def main(args):
         if args.load_self_reported_ancestry:
             logger.info("Loading self reported ancestries...")
             load_self_reported_ancestry(freeze)
+
+        if args.load_pan_ancestry:
+            logger.info("Loading pan-ancestry information...")
+            load_pan_ancestry()
 
         if args.load_capture_intervals:
             logger.info("Importing capture intervals...")
@@ -145,6 +150,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--load_self_reported_ancestry",
         help="Loads self reported ancestry from phenotype file and writes Table",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--load_pan_ancestry",
+        help="Loads pan ancestry information from text file and writes Table",
         action="store_true",
     )
 
