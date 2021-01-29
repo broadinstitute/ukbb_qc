@@ -570,12 +570,15 @@ def vqsr_sites_path(
     return f"{get_release_path(data_source, freeze)}/vqsr/{data_source}.freeze_{freeze}.sites_for_vqsr.{suffix}"
 
 
-def release_summary_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+def release_summary_ht_path(
+    data_source: str, freeze: int = CURRENT_FREEZE, intervals: bool = False
+) -> str:
     """
     Returns path to HT with summary counts per variant category.
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
+    :param bool intervals: Whether HT has been filtered to interval QC pass regions only. Default is False.
     :return: Path to summary counts HT
     :rtype: str
     """
@@ -584,15 +587,18 @@ def release_summary_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> s
             "Release summary HT path only exists for freezes 6/300K and 7/450K!"
         )
 
-    return f"{get_release_path(data_source, freeze)}/summary/summary_per_variant.ht"
+    return f"{get_release_path(data_source, freeze)}/summary/summary_per_variant{'_intervals' if intervals else ''}.ht"
 
 
-def release_lof_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+def release_lof_mt_path(
+    data_source: str, freeze: int = CURRENT_FREEZE, intervals: bool = False
+) -> str:
     """
     Returns path to summary MT containing gene LoF matrix.
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
+    :param bool intervals: Whether MT has been filtered to interval QC pass regions only. Default is False.
     :return: Path to summary MT with gene LoF matrix
     :rtype: str
     """
@@ -601,15 +607,18 @@ def release_lof_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
             "Release LoF MT path only exists for freezes 6/300K and 7/450K!"
         )
 
-    return f"{get_release_path(data_source, freeze)}/summary/gene_lof_matrix.mt"
+    return f"{get_release_path(data_source, freeze)}/summary/gene_lof_matrix{'_intervals' if intervals else ''}.mt"
 
 
-def release_lof_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+def release_lof_ht_path(
+    data_source: str, freeze: int = CURRENT_FREEZE, intervals: bool = False
+) -> str:
     """
     Returns path to summary HT containing gene LoF matrix summary.
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
+    :param bool intervals: Whether MT has been filtered to interval QC pass regions only. Default is False.
     :return: Path to summary HT with gene LoF matrix
     :rtype: str
     """
@@ -618,7 +627,7 @@ def release_lof_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
             "Release LoF HT path only exists for freezes 6/300K and 7/450K!"
         )
 
-    return f"{get_release_path(data_source, freeze)}/summary/gene_lof_matrix_summary.ht"
+    return f"{get_release_path(data_source, freeze)}/summary/gene_lof_matrix_summary{'_intervals' if intervals else ''}.ht"
 
 
 # logging path
