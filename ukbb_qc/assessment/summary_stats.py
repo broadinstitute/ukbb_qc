@@ -52,7 +52,7 @@ def main(args):
                 & ~(meta_ht.sample_filters.related)
             )
             logger.info(f"Number of high quality samples: {meta_ht.count()}")
-            ht = ht.annotate_globals(total_samples=meta_ht.count())
+            ht = ht.annotate_globals(num_high_qual_samples=meta_ht.count())
             ht.write(release_summary_ht_path(*tranche_data), args.overwrite)
 
         if args.generate_gene_lof_matrix:
