@@ -20,6 +20,7 @@ from ukbb_qc.resources.basics import (
     release_lof_mt_path,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
+from ukbb_qc.resources.sample_qc import meta_ht_path
 from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 from ukbb_qc.slack_creds import slack_token
 
@@ -44,6 +45,14 @@ def main(args):
         if args.get_summary_counts:
             logger.info("Getting summary counts per variant category...")
             ht = get_summary_counts(hl.read_table(release_ht_path(*tranche_data)))
+            meta_ht = hl.read_table(meta_ht_path(*tranche_data))
+            meta_ht = meta_ht.filter(
+                meta_ht.sample_filters.high_quality
+                & hl.is_defined(meta_ht.ukbb_meta.batch)
+                & ~(meta_ht.sample_filters.related)
+            )
+            logger.info(f"Number of high quality samples: {meta_ht.count()}")
+            ht = ht.annotate_globals(total_samples=meta_ht.count())
             ht.write(release_summary_ht_path(*tranche_data), args.overwrite)
 
         if args.generate_gene_lof_matrix:
