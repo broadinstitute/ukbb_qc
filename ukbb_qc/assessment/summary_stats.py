@@ -51,7 +51,7 @@ def main(args):
             mt = get_ukbb_data(*tranche_data, adj=True, split=True, meta_root="meta")
             freq_ht = hl.read_table(var_annotations_ht_path("ukb_freq", *tranche_data))
             vep_ht = hl.read_table(var_annotations_ht_path("vep", *tranche_data))
-            release_ht = hl.read_table(release_summary_ht_path(*tranche_data))
+            release_ht = hl.read_table(release_ht_path(*tranche_data))
             mt = mt.annotate_rows(
                 freq=freq_ht[mt.row_key].freq,
                 vep=vep_ht[mt.row_key].vep,
