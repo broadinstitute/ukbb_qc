@@ -43,10 +43,13 @@ def main(args):
 
     try:
         if args.get_summary_counts:
+            ht = hl.read_table(release_ht_path(*tranche_data)).select_globals()
+            if args.interval_qc_pass_only:
+                logger.info("Removing regions that fail interval QC...")
+                ht = ht.filter(~ht.region_flag.fail_interval_qc)
+
             logger.info("Getting summary counts per variant category...")
-            ht = get_summary_counts(
-                hl.read_table(release_ht_path(*tranche_data))
-            ).select_globals()
+            ht = get_summary_counts(ht)
             meta_ht = hl.read_table(meta_ht_path(*tranche_data))
             meta_ht = meta_ht.filter(
                 meta_ht.sample_filters.high_quality
@@ -55,7 +58,12 @@ def main(args):
             )
             logger.info(f"Number of high quality samples: {meta_ht.count()}")
             ht = ht.annotate_globals(num_high_qual_samples=meta_ht.count())
-            ht.write(release_summary_ht_path(*tranche_data), args.overwrite)
+            ht.write(
+                release_summary_ht_path(
+                    *tranche_data, intervals=args.interval_qc_pass_only
+                ),
+                args.overwrite,
+            )
 
         if args.generate_gene_lof_matrix:
             # Konrad released metrics on adj GT only (gnomAD v2.1)
@@ -67,17 +75,29 @@ def main(args):
                 freq=freq_ht[mt.row_key].freq,
                 vep=vep_ht[mt.row_key].vep,
                 filters=release_ht[mt.row_key].filters,
+                fail_interval_qc=release_ht[mt.row_key].region_flag.fail_interval_qc,
             )
+            if args.interval_qc_pass_only:
+                logger.info("Removing regions that fail interval QC...")
+                mt = mt.filter_rows(~mt.fail_interval_qc)
+
             mt = generate_gene_lof_matrix(
                 # NOTE: using `range_table` to create an empty HT here
                 mt=mt,
                 tx_ht=hl.utils.range_table(0),
                 by_transcript=True,
             )
-            mt.write(release_lof_mt_path(*tranche_data), args.overwrite)
+            mt.write(
+                release_lof_mt_path(
+                    *tranche_data, intervals=args.interval_qc_pass_only
+                ),
+                args.overwrite,
+            )
 
         if args.summarize_gene_lof_matrix:
-            mt = hl.read_matrix_table(release_lof_mt_path(*tranche_data))
+            mt = hl.read_matrix_table(
+                release_lof_mt_path(*tranche_data, intervals=args.interval_qc_pass_only)
+            )
 
             # NOTE: adding pop annotation here so that `generate_gene_lof_summary` will work as expected
             if args.use_hybrid_pop:
@@ -87,7 +107,12 @@ def main(args):
                     meta=mt.meta.annotate(pop=mt.pan_ancestry_meta.pop)
                 )
             ht = generate_gene_lof_summary(mt, by_transcript=True)
-            ht.write(release_lof_ht_path(*tranche_data), args.overwrite)
+            ht.write(
+                release_lof_ht_path(
+                    *tranche_data, intervals=args.interval_qc_pass_only
+                ),
+                args.overwrite,
+            )
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -127,6 +152,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--use_hybrid_pop",
         help="Use hybrid ancestry assignments when generating LoF matrix summary Table. Will use pan-ancestry assignment if not set",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--interval_qc_pass_only",
+        help="Generate summary stats on interval QC pass regions only",
         action="store_true",
     )
 
