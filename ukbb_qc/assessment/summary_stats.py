@@ -44,7 +44,9 @@ def main(args):
     try:
         if args.get_summary_counts:
             logger.info("Getting summary counts per variant category...")
-            ht = get_summary_counts(hl.read_table(release_ht_path(*tranche_data)))
+            ht = get_summary_counts(
+                hl.read_table(release_ht_path(*tranche_data))
+            ).select_globals()
             meta_ht = hl.read_table(meta_ht_path(*tranche_data))
             meta_ht = meta_ht.filter(
                 meta_ht.sample_filters.high_quality
