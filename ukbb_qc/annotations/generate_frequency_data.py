@@ -276,8 +276,8 @@ def main(args):
             freq_ht = freq_ht.select(AF=freq_ht.freq[0].AF)
             mt = mt.annotate_entries(
                 GT=hl.if_else(
-                    (freq_ht[mt.row_key].AF > 0.01)
-                    & mt.GT.is_het()
+                    mt.GT.is_het()
+                    & (freq_ht[mt.row_key].AF > 0.01)
                     & (mt.AD[1] / mt.DP > 0.9),
                     hl.call(1, 1),
                     mt.GT,
