@@ -10,7 +10,7 @@ from gnomad.utils.annotations import (
     qual_hist_expr,
 )
 from gnomad.utils.file_utils import file_exists
-from gnomad.utils.filtering import filter_to_adj, filter_to_autosomes
+from gnomad.utils.filtering import filter_to_autosomes
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.vcf import (
     GROUPS,
@@ -414,18 +414,24 @@ def get_hists(mt: hl.MatrixTable, freeze: int) -> hl.MatrixTable:
     mt = mt.annotate_cols(age=age_ht[mt.col_key].age)
     mt = mt.annotate_rows(**age_hists_expr(mt.adj, mt.GT, mt.age))
 
-    logger.info("Annotating with qual hists (on raw data)...")
-    mt = mt.annotate_rows(raw_qual_hists=qual_hist_expr(mt.GT, mt.GQ, mt.DP, mt.AD))
-
-    logger.info("Annotating with qual hists (adj)...")
-    mt_filt = filter_to_adj(mt)
-    mt_filt = mt_filt.select_rows()
-    mt_filt = mt_filt.annotate_rows(
-        **qual_hist_expr(mt_filt.GT, mt_filt.GQ, mt_filt.DP, mt_filt.AD)
+    logger.info("Annotating with qual hists...")
+    mt = mt.annotate_rows(
+        raw_qual_hists=qual_hist_expr(mt.GT, mt.GQ, mt.DP, mt.AD, mt.adj)
     )
-    ht = mt_filt.rows()
-    mt = mt.annotate_rows(qual_hists=ht[mt.row_key])
-    return mt
+
+    logger.info(
+        "Renaming hists (qual_hist_expr adds '_adj' suffix to adj hists) and returning..."
+    )
+    return mt.annotate_rows(
+        qual_hists=hl.struct(
+            **{
+                # Removing "_adj" suffix from hist
+                f"{hist[:-4]}": hist_vals
+                for hist, hist_vals in mt.raw_qual_hists.items()
+                if "_adj" in hist
+            }
+        )
+    )
 
 
 def get_age_distributions(ht: hl.Table, bins: List[int] = [30, 80, 10]) -> str:
