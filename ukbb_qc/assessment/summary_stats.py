@@ -3,13 +3,12 @@ import logging
 
 import hail as hl
 
-from gnomad.assessment.summary_stats import get_summary_counts
-from gnomad.utils.slack import slack_notifications
-
-from gnomad_lof.constraint.gene_lof_matrix import (
-    generate_gene_lof_matrix,
-    generate_gene_lof_summary,
+from gnomad.assessment.summary_stats import (
+    default_generate_gene_lof_summary,
+    default_generate_gene_lof_matrix,
+    get_summary_counts,
 )
+from gnomad.utils.slack import slack_notifications
 
 from ukbb_qc.resources.basics import (
     get_ukbb_data,
@@ -81,12 +80,7 @@ def main(args):
                 logger.info("Removing regions that fail interval QC...")
                 mt = mt.filter_rows(~mt.fail_interval_qc)
 
-            mt = generate_gene_lof_matrix(
-                # NOTE: using `range_table` to create an empty HT here
-                mt=mt,
-                tx_ht=hl.utils.range_table(0),
-                by_transcript=True,
-            )
+            mt = default_generate_gene_lof_matrix(mt=mt)
             mt.write(
                 release_lof_mt_path(
                     *tranche_data, intervals=args.interval_qc_pass_only
@@ -99,14 +93,14 @@ def main(args):
                 release_lof_mt_path(*tranche_data, intervals=args.interval_qc_pass_only)
             )
 
-            # NOTE: adding pop annotation here so that `generate_gene_lof_summary` will work as expected
+            # Reformatting pop annotations here to call `default_generate_gene_lof_summary`
             if args.use_hybrid_pop:
                 mt = mt.annotate_cols(meta=mt.meta.annotate(pop=mt.hybrid_pop_data.pop))
             else:
                 mt = mt.annotate_cols(
                     meta=mt.meta.annotate(pop=mt.pan_ancestry_meta.pop)
                 )
-            ht = generate_gene_lof_summary(mt, by_transcript=True)
+            ht = default_generate_gene_lof_summary(mt)
             ht.write(
                 release_lof_ht_path(
                     *tranche_data, intervals=args.interval_qc_pass_only
