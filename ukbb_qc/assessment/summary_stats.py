@@ -80,7 +80,7 @@ def main(args):
                 logger.info("Removing regions that fail interval QC...")
                 mt = mt.filter_rows(~mt.fail_interval_qc)
 
-            mt = default_generate_gene_lof_matrix(mt=mt)
+            mt = default_generate_gene_lof_matrix(mt=mt, tx_ht=None)
             mt.write(
                 release_lof_mt_path(
                     *tranche_data, intervals=args.interval_qc_pass_only
