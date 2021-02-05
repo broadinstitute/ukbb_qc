@@ -94,12 +94,14 @@ def main(args):
             )
 
             # Reformatting pop annotations here to call `default_generate_gene_lof_summary`
-            if args.use_hybrid_pop:
-                mt = mt.annotate_cols(meta=mt.meta.annotate(pop=mt.hybrid_pop_data.pop))
-            else:
-                mt = mt.annotate_cols(
-                    meta=mt.meta.annotate(pop=mt.pan_ancestry_meta.pop)
+            mt = mt.annotate_cols(
+                meta=mt.meta.annotate(
+                    pop=mt.hybrid_pop_data.pop
+                    if args.use_hybrid_pop
+                    else mt.pan_ancestry_meta.pop
                 )
+            )
+
             ht = default_generate_gene_lof_summary(mt)
             ht.write(
                 release_lof_ht_path(
