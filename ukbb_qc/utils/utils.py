@@ -4,6 +4,7 @@ from typing import Dict, List, Union
 import hail as hl
 
 from gnomad.resources.grch38.reference_data import lcr_intervals
+from gnomad.resources.resource_utils import DataException
 from gnomad.sample_qc.relatedness import UNRELATED
 from gnomad.utils.annotations import (
     age_hists_expr,
@@ -17,6 +18,7 @@ from gnomad.utils.vcf import (
     make_label_combos,
     SEXES,
 )
+from gnomad.variant_qc.random_forest import get_rf_runs
 from gnomad_qc.v2.variant_qc.prepare_data_release import (
     EAS_SUBPOPS as GNOMAD_EAS_SUBPOPS,
 )
@@ -37,6 +39,7 @@ from ukbb_qc.resources.sample_qc import (
     qc_mt_path,
     qc_sites_path,
 )
+from ukbb_qc.resources.variant_qc import vqsr_run_path
 from ukbb_qc.utils.constants import SEXES_UKBB
 
 
@@ -193,6 +196,29 @@ def annotate_interval_qc_filter(
         t = t.annotate(interval_qc_pass=hl.is_defined(good_intervals_ht[t.locus]))
 
     return t
+
+
+def vqsr_run_check(data_source: str, freeze: int, vqsr_type: str):
+    """
+    Checks the run data log `vqsr_run_path` for the presence of `vqsr_type`.
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param int vqsr_type: Name of VQSR model
+    :return: 
+    """
+    vqsr_runs = get_rf_runs(vqsr_run_path(data_source, freeze))
+    if vqsr_type not in vqsr_runs:
+        vqsr_runs_print = ""
+        for run_hash, run_data in vqsr_runs.items():
+            vqsr_runs_print = vqsr_runs_print + f"\n=== {run_hash} ==="
+            vqsr_runs_print = vqsr_runs_print + json.dumps(
+                run_data, sort_keys=True, indent=4, separators=(",", ": ")
+            )
+
+        raise DataException(
+            f"Requested VQSR data doesn't exist: {vqsr_type}. Current loaded models: {vqsr_runs_print}"
+        )
 
 
 # Sites resources
