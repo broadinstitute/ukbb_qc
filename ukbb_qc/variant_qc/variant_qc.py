@@ -196,23 +196,6 @@ def create_rf_ht(
     return ht
 
 
-def get_rf_runs(rf_json_fp: str) -> Dict:
-    """
-    Loads RF run data from JSON file.
-
-    :param rf_json_fp: File path to rf json file.
-    :return: Dictionary containing the content of the JSON file, or an empty dictionary if the file wasn't found.
-    """
-    if file_exists(rf_json_fp):
-        with hl.hadoop_open(rf_json_fp) as f:
-            return json.load(f)
-    else:
-        logger.warning(
-            f"File {rf_json_fp} could not be found. Returning empty RF run hash dict."
-        )
-        return {}
-
-
 def get_run_data(
     data_source: str,
     freeze: int,
