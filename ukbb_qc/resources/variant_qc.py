@@ -177,6 +177,19 @@ def rf_run_hash_path(data_source: str, freeze: int = CURRENT_FREEZE):
     return f"{variant_qc_prefix(data_source, freeze)}/rf/runs.json"
 
 
+def vqsr_run_path(data_source: str, freeze: int = CURRENT_FREEZE):
+    """
+    Returns the path to the json file containing the VQSR runs list.
+
+    :param str data_source: 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :return: Path to json file
+    :rtype: str
+    """
+
+    return f"{variant_qc_prefix(data_source, freeze)}/vqsr/runs.json"
+
+
 def rf_annotated_path(
     data_source: str, freeze: int = CURRENT_FREEZE, adj: bool = False
 ) -> str:
