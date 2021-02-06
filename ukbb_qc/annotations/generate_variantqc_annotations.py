@@ -90,14 +90,12 @@ def export_tp_vcf(
             true_positive_type = true_positive_type + "ac_"
 
         ht = qc_ac_ht.filter(filter_expr)
-        ht = ht.annotate(s=hl.null(hl.tstr))
-        ht = ht.to_matrix_table_row_major(columns=["s"], entry_field_name="s")
-        ht = ht.filter_cols(False)
+        mt = hl.MatrixTable.from_rows_table(ht)
         logger.info(
-            f"Exporting {transmission_confidence} transmitted singleton VCF with {ht.count()} variants..."
+            f"Exporting {transmission_confidence} transmitted singleton VCF with {mt.count()} variants..."
         )
         hl.export_vcf(
-            ht,
+            mt,
             get_true_positive_vcf_path(
                 true_positive_type=true_positive_type,
                 adj=(transmission_confidence == "adj"),
@@ -176,7 +174,6 @@ def main(args):
             # Filter to autosomes to prevent unnecessary densify of the sex chromosomes
             mt = filter_to_autosomes(mt)
             mt = filter_mt_to_trios(mt, fam_ht)
-            mt = mt.select_entries("GT", "GQ", "AD", "END", "adj")
             mt = hl.experimental.densify(mt)
             mt = mt.filter_rows(hl.len(mt.alleles) == 2)
 
@@ -185,17 +182,6 @@ def main(args):
             trio_stats_ht.naive_coalesce(n_partitions).write(
                 var_annotations_ht_path("trio_stats", data_source, freeze),
                 overwrite=overwrite,
-            )
-
-        if args.export_true_positive_vcfs:
-            logger.info("Exporting true positive variants to VCFs...")
-            export_tp_vcf(data_source, freeze)
-            export_tp_vcf(
-                data_source,
-                freeze,
-                transmitted_singletons=True,
-                sibling_singletons=False,
-                array_con_common=False,
             )
 
         if args.generate_sibling_stats:
@@ -260,6 +246,17 @@ def main(args):
                 overwrite=overwrite,
             )
             ht.summarize()
+
+        if args.export_true_positive_vcfs:
+            logger.info("Exporting true positive variants to VCFs...")
+            export_tp_vcf(
+                data_source,
+                freeze,
+                transmitted_singletons=args.transmitted_singletons,
+                sibling_singletons=args.sibling_singletons,
+                array_con_common=args.array_con_common,
+            )
+
     finally:
         logger.info("Copying hail log to logging bucket...")
         hl.copy_log(logging_path(data_source, freeze))
@@ -292,11 +289,6 @@ if __name__ == "__main__":
         "--generate_trio_stats", help="Calculates trio stats", action="store_true"
     )
     parser.add_argument(
-        "--export_true_positive_vcfs",
-        help="Exports true positive variants to VCF files.",
-        action="store_true",
-    )
-    parser.add_argument(
         "--generate_sibling_stats",
         help="Calculated sibling variant sharing stats",
         action="store_true",
@@ -321,6 +313,26 @@ if __name__ == "__main__":
     parser.add_argument(
         "--annotate_truth_data",
         help="Creates a HT of UKBB variants annotated with truth sites",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--export_true_positive_vcfs",
+        help="Exports true positive variants to VCF files.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--transmitted_singletons",
+        help="Include transmitted singletons in the exports of true positive variants to VCF files.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--sibling_singletons",
+        help="Include sibling singletons in the exports of true positive variants to VCF files.",
+        action="store_true",
+    )
+    training_params.add_argument(
+        "--array_con_common",
+        help="Include common concordant array variants in the exports of true positive variants to VCF files.",
         action="store_true",
     )
     args = parser.parse_args()
