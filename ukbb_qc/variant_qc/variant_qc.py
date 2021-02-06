@@ -14,6 +14,7 @@ from gnomad.utils.slack import slack_notifications
 from gnomad.variant_qc.pipeline import train_rf_model
 from gnomad.variant_qc.random_forest import (
     apply_rf_model,
+    get_rf_runs,
     load_model,
     median_impute_features,
     pretty_print_runs,
@@ -31,7 +32,7 @@ from ukbb_qc.resources.variant_qc import (
     rf_run_hash_path,
     rf_path,
     rf_annotated_path,
-    score_quantile_bin_path,
+    score_bin_path,
     var_annotations_ht_path,
 )
 from ukbb_qc.slack_creds import slack_token
@@ -289,7 +290,7 @@ def generate_final_rf_ht(
     Prepares finalized RF model given an RF result table from `rf.apply_rf_model` and cutoffs for filtering.
 
     If `determine_cutoff_from_bin` is True, `aggregated_bin_ht` must be supplied to determine the SNP and indel RF
-    probabilities to use as cutoffs from an aggregated quantile bin Table like one created by
+    probabilities to use as cutoffs from an aggregated bin Table like one created by
     `compute_grouped_binned_ht` in combination with `score_bin_agg`.
 
     :param ht: RF result table from `rf.apply_rf_model` to prepare as the final RF Table
@@ -299,7 +300,7 @@ def generate_final_rf_ht(
     :param snp_cutoff: RF probability or bin (if `determine_cutoff_from_bin` True) to use for SNP variant QC filter
     :param indel_cutoff: RF probability or bin (if `determine_cutoff_from_bin` True) to use for indel variant QC filter
     :param determine_cutoff_from_bin: If True the RF probability will be determined using bin info in `aggregated_bin_ht`
-    :param aggregated_bin_ht: File with aggregate counts of variants based on quantile bins
+    :param aggregated_bin_ht: File with aggregate counts of variants based on bins
     :param bin_id: Name of bin to use in the 'bin_id' column of `aggregated_bin_ht` to use to determine probability cutoff
     :param inbreeding_coeff_cutoff: InbreedingCoeff hard filter to use for variants
     :return: Finalized random forest Table annotated with variant filters
@@ -550,7 +551,7 @@ def main(args):
                 var_annotations_ht_path("ukb_freq", data_source, freeze)
             )
 
-            aggregated_bin_path = score_quantile_bin_path(
+            aggregated_bin_path = score_bin_path(
                 args.run_hash, data_source, freeze, aggregated=True
             )
             if not file_exists(aggregated_bin_path):
