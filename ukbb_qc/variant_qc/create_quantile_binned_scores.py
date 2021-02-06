@@ -21,6 +21,7 @@ from ukbb_qc.resources.variant_qc import (
     var_annotations_ht_path,
 )
 from ukbb_qc.slack_creds import slack_token
+from ukbb_qc.utils.utils import vqsr_run_check
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -42,15 +43,17 @@ def create_rank_bin_ht(
     :return: Nothing
     :rtype: None
     """
-    logger.info(
-        f"Annotating RF file for {data_source}.freeze_{freeze} RF run {metric} with quantile bins"
-    )
+    logger.info(f"Annotating variant QC results for {metric} with bins")
     info_ht = hl.read_table(info_ht_path(data_source, freeze))
     if metric.endswith("vqsr"):
         rf_ht = hl.read_table(rf_annotated_path(data_source, freeze))
         ht = hl.read_table(var_annotations_ht_path(metric, data_source, freeze))
 
-        ht = ht.filter(~info_ht[ht.key].AS_lowqual & ~hl.is_infinite(ht.info.AS_VQSLOD))
+        ht = ht.filter(
+            ~info_ht[ht.key].AS_lowqual
+            & ~hl.is_infinite(ht.info.AS_VQSLOD)
+            & hl.is_defined(rf_ht[ht.key])
+        )
         ht = ht.annotate(
             **rf_ht[ht.key],
             score=ht.info.AS_VQSLOD,
@@ -150,7 +153,8 @@ def main(args):
     data_source = "broad"
     freeze = args.freeze
     if args.vqsr:
-        metric = "vqsr" if args.vqsr_type == "AS" else "AS_TS_vqsr"
+        vqsr_run_check(data_source, freeze, args.vqsr_type)
+        metric = "vqsr" if args.vqsr_type == "AS" else f"{args.vqsr_type}_vqsr"
     else:
         metric = args.run_hash
 
@@ -208,11 +212,7 @@ if __name__ == "__main__":
         "--vqsr", help="When set, creates the VQSR rank file.", action="store_true"
     )
     parser.add_argument(
-        "--vqsr_type",
-        help="What type of VQSR was run: allele-specific, or allele-specific with transmitted singletons",
-        type=str,
-        choices=["AS", "AS_TS"],
-        default="AS",
+        "--vqsr_type", help="What type of VQSR was run", type=str, default="AS",
     )
     parser.add_argument(
         "--create_rank_bin_ht",
