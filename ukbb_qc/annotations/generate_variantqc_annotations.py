@@ -9,7 +9,7 @@ from gnomad.utils.filtering import filter_to_autosomes
 from gnomad.utils.slack import slack_notifications
 from gnomad.utils.vep import VEP_CSQ_HEADER, vep_or_lookup_vep, vep_struct_to_csq
 from gnomad.variant_qc.pipeline import generate_sib_stats, generate_trio_stats
-from ukbb_qc.resources.basics import get_ukbb_data, logging_path
+from ukbb_qc.resources.basics import get_checkpoint_path, get_ukbb_data, logging_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import (
     array_concordance_results_path,
@@ -42,7 +42,8 @@ def main(args):
             ht = mt.filter_rows(
                 (hl.len(mt.alleles) > 1) & hl.agg.any(mt.GT.is_non_ref())
             ).rows()
-            ht = vep_or_lookup_vep(ht)
+            ht = ht.checkpoint(get_checkpoint_path(data_source, freeze, "temp_vep"))
+            ht = vep_or_lookup_vep(ht, vep_version="101")
             ht = ht.annotate(vep_csq=vep_struct_to_csq(ht.vep))
             ht = ht.annotate_globals(vep_csq_header=VEP_CSQ_HEADER)
             ht.naive_coalesce(n_partitions).write(
