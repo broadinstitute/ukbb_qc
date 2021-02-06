@@ -176,9 +176,7 @@ def main(args):
                         has_singleton_rank=hl.agg.counter(
                             hl.is_defined(ht.singleton_bin)
                         ),
-                        was_split_singleton=hl.agg.counter(
-                            ht.singleton & ~ht.was_split
-                        ),
+                        was_split_singleton=hl.agg.counter(ht.singleton & ht.was_split),
                         has_biallelic_singleton_rank=hl.agg.counter(
                             hl.is_defined(ht.biallelic_singleton_bin)
                         ),
