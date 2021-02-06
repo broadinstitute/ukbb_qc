@@ -35,6 +35,7 @@ from ukbb_qc.resources.variant_qc import (
     var_annotations_ht_path,
 )
 from ukbb_qc.slack_creds import slack_token
+from ukbb_qc.utils.utils import vqsr_run_check
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("run_ukbb_variant_qc")
@@ -418,9 +419,10 @@ def main(args):
             ht = hl.read_table(rf_annotated_path(data_source, freeze, args.adj))
 
             if args.vqsr_training:
+                vqsr_run_check(data_source, freeze, args.vqsr_type)
                 vqsr_ht = hl.read_table(
                     var_annotations_ht_path(
-                        "vqsr" if args.vqsr_type == "AS" else "AS_TS_vqsr",
+                        "vqsr" if args.vqsr_type == "AS" else f"{args.vqsr_type}_vqsr",
                         data_source,
                         freeze,
                     )
