@@ -20,7 +20,7 @@ from ukbb_qc.resources.variant_qc import (
     binned_concordance_path,
     get_truth_sample_data,
     info_ht_path,
-    score_quantile_bin_path,
+    score_bin_path,
     TRUTH_SAMPLES,
     truth_sample_mt_path,
     var_annotations_ht_path,
@@ -127,11 +127,9 @@ def main(args):
                     ht = ht.filter(hl.is_defined(calling_intervals[ht.locus]))
 
                     logger.info(
-                        "Loading HT containing RF or VQSR scores annotated with a bin based on metric quantiles..."
+                        "Loading HT containing RF or VQSR scores annotated with a bin based on metric score ranking..."
                     )
-                    metric_ht = hl.read_table(
-                        score_quantile_bin_path(metric, *tranche_data)
-                    )
+                    metric_ht = hl.read_table(score_bin_path(metric, *tranche_data))
                     ht = ht.filter(hl.is_defined(metric_ht[ht.key]))
 
                     ht = ht.annotate(
