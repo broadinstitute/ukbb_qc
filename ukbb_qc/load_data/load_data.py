@@ -79,10 +79,24 @@ def main(args):
 
         if args.load_vqsr:
             logger.info("Loading VQSR VCF...")
+            logger.warning(
+                "Please confirm that the following variants were used in training for the VQSR results being loaded:\n"
+                f"  Transmitted singletons: {args.transmitted_singletons}\n"
+                f"  Sibling singletons: {args.sibling_singletons}\n"
+                f"  Common variants with high concordance to array data: {args.array_con_common}\n"
+                f"  Additional notes for the model: {'None' if args.additional_notes == '' else args.additional_notes}\n"
+            )
+            args.transmitted_singletons,
+            args.sibling_singletons,
+            args.array_con_common,
             import_vqsr(
                 freeze,
                 args.vqsr_vcf_path,
                 args.vqsr_type,
+                args.transmitted_singletons,
+                args.sibling_singletons,
+                args.array_con_common,
+                args.additional_notes,
                 args.n_partitions,
                 args.overwrite,
                 args.header_path,
@@ -172,12 +186,35 @@ if __name__ == "__main__":
     vqsr.add_argument(
         "--load_vqsr", help="Load VQSR file into Table", action="store_true",
     )
-    vqsr.add_argument("--vqsr_vcf_path", help="Path to VQSR VCF")
+    vqsr.add_argument(
+        "--vqsr_vcf_path",
+        help="Path to VQSR VCF. Can be specified as Hadoop glob patterns",
+    )
     vqsr.add_argument(
         "--vqsr_type",
-        help="Path to VQSR VCF. Can be specified as Hadoop glob patterns",
-        choices=["AS", "AS_TS"],
-        default="AS",
+        help="ID to use for VQSR model defined by vqsr_vcf_path. e.g. AS, AS_TS...",
+        type=str,
+    )
+    vqsr.add_argument(
+        "--transmitted_singletons",
+        help="Transmitted singletons were used in VQSR training.",
+        action="store_true",
+    )
+    vqsr.add_argument(
+        "--sibling_singletons",
+        help="Sibling singletons were used in VQSR training.",
+        action="store_true",
+    )
+    vqsr.add_argument(
+        "--array_con_common",
+        help="Common concordant array variants were used in VQSR training.",
+        action="store_true",
+    )
+    vqsr.add_argument(
+        "--additional_notes",
+        help="Any additional notes to add about the VQSR model.",
+        default="",
+        type=str,
     )
     vqsr.add_argument(
         "--n_partitions",
