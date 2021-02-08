@@ -134,22 +134,6 @@ def var_annotations_ht_path(
     return f"{variant_qc_prefix(data_source, freeze)}/variant_annotations/{annotation_type}.ht"
 
 
-def get_true_positive_vcf_path(
-    true_positive_type: str, adj: bool, data_source: str, freeze: int = CURRENT_FREEZE
-) -> str:
-    """
-    Get path to VCF containing variants to be used as true positives
-
-    :param true_positive_type: Type of true positives, e.g., ts for transmitted singletons, ss for sibling singletons,
-        ac for concordant array variants, or a combination like ts_ss_ac
-    :param adj: Whether to restrict to variants that pass 'adj' filtering
-    :param str data_source: One of 'regeneron' or 'broad'
-    :param int freeze: One of the data freezes
-    :return: Path to VCF containing true positive variants for use in VQSR
-    """
-    return f"{variant_qc_prefix(data_source, freeze)}/variant_annotations/{true_positive_type}{'adj' if adj else 'raw'}.vcf.bgz"
-
-
 def info_ht_path(
     data_source: str, freeze: int = CURRENT_FREEZE, split: bool = True
 ) -> str:

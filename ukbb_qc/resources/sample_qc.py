@@ -2,7 +2,6 @@ import logging
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.file_utils import file_exists
 from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES
 
 
@@ -539,7 +538,7 @@ def qc_temp_data_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
 def platform_pop_outlier_ht_path(
     data_source: str,
     freeze: int = CURRENT_FREEZE,
-    pop_assignment_method: str = "hybrid_pop",
+    pop_assignment_method: str = "hybrid_pop_data",
     platform_assignment_method: str = "batch",
 ) -> str:
     """
@@ -547,7 +546,7 @@ def platform_pop_outlier_ht_path(
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of data freezes
-    :param str pop_assignment_method: Method used to infer populations (gnomad_qc_project_pop, HDBSCAN_pop_cluster, hybrid_pop). Default is hybrid_pop
+    :param str pop_assignment_method: Method used to infer populations (gnomad_qc_project_pop_data, hybrid_pop_data). Default is hybrid_pop_data
     :param str platform_assignment_method: Method used to infer platforms (qc_platform or batch). Default is batch
     :return: Path to Table with outlier samples flagged
     :rtype: str

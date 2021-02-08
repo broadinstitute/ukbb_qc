@@ -11,7 +11,9 @@ from gnomad.sample_qc.relatedness import (
 from gnomad.utils.slack import slack_notifications
 from ukbb_qc.resources.basics import (
     array_sample_map_ht_path,
+    check_dups_to_remove,
     get_checkpoint_path,
+    known_dups_ht_path,
     logging_path,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
@@ -27,7 +29,7 @@ from ukbb_qc.resources.sample_qc import (
     sex_ht_path,
     meta_ht_path,
 )
-from ukbb_qc.resources.variant_qc import TRUTH_SAMPLES
+from ukbb_qc.resources.variant_qc import SYNDIP, NA12878
 from ukbb_qc.slack_creds import slack_token
 from ukbb_qc.utils.utils import (
     get_age_ht,
@@ -47,7 +49,7 @@ logger.setLevel(logging.INFO)
 
 def main(args):
 
-    hl.init(log="create_meta.log", default_reference="GRCh38")
+    hl.init(log="/create_meta.log", default_reference="GRCh38")
 
     data_source = "broad"
     freeze = args.freeze
@@ -67,6 +69,7 @@ def main(args):
         )
 
         logger.info(logging_statement.format("array sample concordance HT"))
+        left_ht = left_ht.annotate(ukbb_id=left_ht.ukbb_meta.ukbb_app_26041_id)
         right_ht = hl.read_table(array_concordance_results_path(data_source, freeze))
         right_ht = right_ht.annotate(
             array_concordance=hl.struct(**right_ht.row.drop("s"))
@@ -74,14 +77,15 @@ def main(args):
         right_ht = right_ht.annotate_globals(
             array_concordance_sites_cutoffs=right_ht.globals
         ).select_globals("array_concordance_sites_cutoffs")
-        left_ht = join_tables(left_ht, "s", right_ht, "s", "left")
+        left_ht = join_tables(left_ht, "ukbb_id", right_ht, "s", "left")
+        left_ht = left_ht.key_by("s").drop("ukbb_id")
 
         logger.info(logging_statement.format("sex HT"))
         right_ht = hl.read_table(sex_ht_path(data_source, freeze))
         # Create struct for join
         right_ht = right_ht.transmute(
             sex_imputation=hl.struct(**right_ht.row.drop("s", "array_sex"))
-        ).select("s", "array_sex")
+        ).select("sex_imputation", "array_sex")
         right_ht = right_ht.annotate_globals(
             sex_imputation_ploidy_cutoffs=right_ht.globals
         ).select_globals("sex_imputation_ploidy_cutoffs")
@@ -111,7 +115,7 @@ def main(args):
         right_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
         right_ht = right_ht.annotate_globals(
             population_inference_pca_metrics=right_ht.globals
-        ).select("population_inference_pca_metrics")
+        ).select_globals("population_inference_pca_metrics")
         left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
         left_ht = left_ht.transmute(
             ukbb_meta=left_ht.ukbb_meta.annotate(
@@ -178,7 +182,7 @@ def main(args):
         )
         left_ht = left_ht.annotate(
             relatedness_inference=hl.struct(
-                relationships=relatedness_ht[left_ht.s].relationship,
+                relationships=relatedness_ht[left_ht.s].relationships,
             )
         )
 
@@ -243,9 +247,10 @@ def main(args):
         )
 
         logger.info("Annotating control samples")
+        truth_samples = hl.literal([SYNDIP, NA12878])
         left_ht = left_ht.annotate(
             sample_filters=left_ht.sample_filters.annotate(
-                control=(hl.literal(TRUTH_SAMPLES).contains(left_ht.s))
+                control=(truth_samples.contains(left_ht.s))
             )
         )
         logger.info(
@@ -255,6 +260,15 @@ def main(args):
 
         logger.info("Removing duplicate samples and writing out meta ht")
         left_ht = left_ht.distinct()
+        known_dups_ht = hl.read_table(known_dups_ht_path(freeze))
+        ids_to_remove = known_dups_ht.aggregate(
+            hl.agg.collect(known_dups_ht["Sample Name - ID1"]), _localize=False
+        )
+        # Check number of samples to remove
+        num_ids = check_dups_to_remove(ids_to_remove, left_ht)
+        logger.info(f"Removing {num_ids} samples...")
+        left_ht = left_ht.filter(~ids_to_remove.contains(left_ht.s))
+
         left_ht = left_ht.repartition(args.n_partitions)
         left_ht = left_ht.checkpoint(
             meta_ht_path(data_source, freeze), overwrite=args.overwrite
@@ -283,16 +297,16 @@ if __name__ == "__main__":
         "-f", "--freeze", help="Current freeze", default=CURRENT_FREEZE, type=int
     )
     parser.add_argument(
-        "--pop_assignment_method",
-        help="Population assignment method to use for outlier stratification",
-        default="hybrid_pop",
-        choices=["gnomad_pc_project_pop", "HDBSCAN_pop_cluster", "hybrid_pop"],
-    )
-    parser.add_argument(
         "--platform_assignment_method",
         help="Platform assignment method to use for outlier stratification",
         default="batch",
         choices=["batch", "qc_platform"],
+    )
+    parser.add_argument(
+        "--pop_assignment_method",
+        help="Population assignment method to use for outlier stratification",
+        default="hybrid_pop_data",
+        choices=["gnomad_pc_project_pop_data", "hybrid_pop_data"],
     )
     parser.add_argument(
         "-o",
