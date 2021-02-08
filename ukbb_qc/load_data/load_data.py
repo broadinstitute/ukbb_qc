@@ -154,7 +154,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--load_pan_ancestry",
-        help="Loads pan ancestry information from text file and writes Table",
+        help="Loads pan-ancestry information from text file and writes Table",
         action="store_true",
     )
 
