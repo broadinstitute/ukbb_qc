@@ -17,22 +17,23 @@ from ukbb_qc.resources.variant_qc import (
     info_ht_path,
     rf_annotated_path,
     rf_path,
-    score_quantile_bin_path,
+    score_bin_path,
     var_annotations_ht_path,
 )
 from ukbb_qc.slack_creds import slack_token
+from ukbb_qc.utils.utils import vqsr_run_check
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
-logger = logging.getLogger("quantile_bin_rf")
+logger = logging.getLogger("bin_rf")
 logger.setLevel(logging.INFO)
 
 
-def create_quantile_bin_ht(
+def create_rank_bin_ht(
     data_source: str, freeze: int, metric: str, n_bins: int, overwrite: bool = False
 ) -> None:
     """
-    Creates a table with quantile bin annotations added for a RF run and writes it to its correct location in annotations.
+    Creates a table with bin annotations added for a RF run and writes it to its correct location in annotations.
 
     :param str data_source: 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
@@ -42,15 +43,17 @@ def create_quantile_bin_ht(
     :return: Nothing
     :rtype: None
     """
-    logger.info(
-        f"Annotating RF file for {data_source}.freeze_{freeze} RF run {metric} with quantile bins"
-    )
+    logger.info(f"Annotating variant QC results for {metric} with bins")
     info_ht = hl.read_table(info_ht_path(data_source, freeze))
     if metric.endswith("vqsr"):
         rf_ht = hl.read_table(rf_annotated_path(data_source, freeze))
         ht = hl.read_table(var_annotations_ht_path(metric, data_source, freeze))
 
-        ht = ht.filter(~info_ht[ht.key].AS_lowqual & ~hl.is_infinite(ht.info.AS_VQSLOD))
+        ht = ht.filter(
+            ~info_ht[ht.key].AS_lowqual
+            & ~hl.is_infinite(ht.info.AS_VQSLOD)
+            & hl.is_defined(rf_ht[ht.key])
+        )
         ht = ht.annotate(
             **rf_ht[ht.key],
             score=ht.info.AS_VQSLOD,
@@ -73,7 +76,7 @@ def create_quantile_bin_ht(
     )
 
     bin_ht.write(
-        score_quantile_bin_path(metric, data_source, freeze), overwrite=overwrite,
+        score_bin_path(metric, data_source, freeze), overwrite=overwrite,
     )
 
 
@@ -81,7 +84,7 @@ def create_grouped_bin_ht(
     data_source: str, freeze: int, metric: str, overwrite: bool
 ) -> None:
     """
-    Creates binned data from a quantile bin annotated Table grouped by bin_id (rank, bi-allelic, etc.), contig, snv,
+    Creates binned data from a bin annotated Table grouped by bin_id (rank, bi-allelic, etc.), contig, snv,
     bi_allelic and singleton containing the information needed for evaluation plots.
 
     :param str data_source: 'regeneron' or 'broad'
@@ -92,7 +95,7 @@ def create_grouped_bin_ht(
     :rtype: None
     """
 
-    ht = hl.read_table(score_quantile_bin_path(metric, data_source, freeze))
+    ht = hl.read_table(score_bin_path(metric, data_source, freeze))
 
     # Count variants for ranking
     count_expr = {
@@ -139,29 +142,28 @@ def create_grouped_bin_ht(
     )
 
     agg_ht.write(
-        score_quantile_bin_path(metric, data_source, freeze, aggregated=True),
+        score_bin_path(metric, data_source, freeze, aggregated=True),
         overwrite=overwrite,
     )
 
 
 def main(args):
-    hl.init(log="/create_quantile_rank_bins.log")
+    hl.init(log="/create_rank_bins.log")
 
     data_source = "broad"
     freeze = args.freeze
     if args.vqsr:
-        metric = "vqsr" if args.vqsr_type == "AS" else "AS_TS_vqsr"
+        vqsr_run_check(data_source, freeze, args.vqsr_type)
+        metric = "vqsr" if args.vqsr_type == "AS" else f"{args.vqsr_type}_vqsr"
     else:
         metric = args.run_hash
 
     try:
 
-        if args.create_quantile_bin_ht:
-            create_quantile_bin_ht(
-                data_source, freeze, metric, args.n_bins, args.overwrite
-            )
+        if args.create_rank_bin_ht:
+            create_rank_bin_ht(data_source, freeze, metric, args.n_bins, args.overwrite)
         if args.run_sanity_checks:
-            ht = hl.read_table(score_quantile_bin_path(metric, data_source, freeze))
+            ht = hl.read_table(score_bin_path(metric, data_source, freeze))
             logger.info("Running sanity checks...")
             print(
                 ht.aggregate(
@@ -174,9 +176,7 @@ def main(args):
                         has_singleton_rank=hl.agg.counter(
                             hl.is_defined(ht.singleton_bin)
                         ),
-                        was_split_singleton=hl.agg.counter(
-                            ht.singleton & ~ht.was_split
-                        ),
+                        was_split_singleton=hl.agg.counter(ht.singleton & ht.was_split),
                         has_biallelic_singleton_rank=hl.agg.counter(
                             hl.is_defined(ht.biallelic_singleton_bin)
                         ),
@@ -210,15 +210,11 @@ if __name__ == "__main__":
         "--vqsr", help="When set, creates the VQSR rank file.", action="store_true"
     )
     parser.add_argument(
-        "--vqsr_type",
-        help="What type of VQSR was run: allele-specific, or allele-specific with transmitted singletons",
-        type=str,
-        choices=["AS", "AS_TS"],
-        default="AS",
+        "--vqsr_type", help="What type of VQSR was run", type=str, default="AS",
     )
     parser.add_argument(
-        "--create_quantile_bin_ht",
-        help="When set, creates file annotated with quantile bin based on vqsr/RF run hash score.",
+        "--create_rank_bin_ht",
+        help="When set, creates a variant HT annotated with ranked bins of approximately equal size based on vqsr/RF run hash score.",
         action="store_true",
     )
     parser.add_argument(
@@ -228,7 +224,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--create_aggregated_bin_ht",
-        help="When set, creates a file with aggregate counts of variants based on quantile bins.",
+        help="When set, creates a file with aggregate counts of variants based on ranked bins.",
         action="store_true",
     )
     parser.add_argument(

@@ -141,6 +141,8 @@ def get_ukbb_data(
         mt = hl.read_matrix_table(
             get_ukbb_data_path(data_source, freeze, hardcalls=not raw)
         )
+    # Add column index to samples
+    mt = mt.add_col_index()
 
     if adj:
         mt = filter_to_adj(mt)
@@ -204,8 +206,6 @@ def get_ukbb_data(
         # https://broadinstitute.atlassian.net/browse/PO-28339
         if raw:
             logger.info("Resolving duplicate sample IDs in the 450k MT...")
-            # Add column index to samples
-            mt = mt.add_col_index()
 
             # Create list of sample IDs to remove
             remove_ids = []

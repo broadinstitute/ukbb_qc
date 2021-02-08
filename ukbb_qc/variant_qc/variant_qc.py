@@ -14,6 +14,7 @@ from gnomad.utils.slack import slack_notifications
 from gnomad.variant_qc.pipeline import train_rf_model
 from gnomad.variant_qc.random_forest import (
     apply_rf_model,
+    get_rf_runs,
     load_model,
     median_impute_features,
     pretty_print_runs,
@@ -31,10 +32,11 @@ from ukbb_qc.resources.variant_qc import (
     rf_run_hash_path,
     rf_path,
     rf_annotated_path,
-    score_quantile_bin_path,
+    score_bin_path,
     var_annotations_ht_path,
 )
 from ukbb_qc.slack_creds import slack_token
+from ukbb_qc.utils.utils import vqsr_run_check
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("run_ukbb_variant_qc")
@@ -46,7 +48,6 @@ TRAIN_COL = "rf_train"
 PREDICTION_COL = "rf_prediction"
 INFO_FEATURES = ["AS_QD", "AS_pab_max", "AS_MQRankSum", "AS_SOR", "AS_ReadPosRankSum"]
 FEATURES = [
-    "InbreedingCoeff",
     "variant_type",
     "allele_type",
     "n_alt_alleles",
@@ -76,7 +77,6 @@ def create_rf_ht(
     Annotations that are added:
 
         Features for RF:
-            - InbreedingCoeff
             - variant_type
             - allele_type
             - n_alt_alleles
@@ -108,14 +108,6 @@ def create_rf_ht(
     logger.info("Loading split hardcall MatrixTable and annotation Tables")
     ht = get_ukbb_data(data_source, freeze).rows()
 
-    inbreeding_ht = hl.read_table(
-        var_annotations_ht_path("inbreeding_coefficient", data_source, freeze)
-    )
-    inbreeding_ht = inbreeding_ht.annotate(
-        InbreedingCoeff=hl.or_missing(
-            ~hl.is_nan(inbreeding_ht.InbreedingCoeff), inbreeding_ht.InbreedingCoeff
-        )
-    )
     trio_stats_ht = hl.read_table(
         var_annotations_ht_path("trio_stats", data_source, freeze)
     )
@@ -147,7 +139,6 @@ def create_rf_ht(
     logger.info("Annotating Table with all columns from multiple annotation Tables")
     ht = ht.annotate(
         **info_ht[ht.key],
-        **inbreeding_ht[ht.key],
         **trio_stats_ht[ht.key],
         **sibling_stats_ht[ht.key],
         **truth_data_ht[ht.key],
@@ -203,23 +194,6 @@ def create_rf_ht(
     summary.show(20)
 
     return ht
-
-
-def get_rf_runs(rf_json_fp: str) -> Dict:
-    """
-    Loads RF run data from JSON file.
-
-    :param rf_json_fp: File path to rf json file.
-    :return: Dictionary containing the content of the JSON file, or an empty dictionary if the file wasn't found.
-    """
-    if file_exists(rf_json_fp):
-        with hl.hadoop_open(rf_json_fp) as f:
-            return json.load(f)
-    else:
-        logger.warning(
-            f"File {rf_json_fp} could not be found. Returning empty RF run hash dict."
-        )
-        return {}
 
 
 def get_run_data(
@@ -299,7 +273,7 @@ def generate_final_rf_ht(
     Prepares finalized RF model given an RF result table from `rf.apply_rf_model` and cutoffs for filtering.
 
     If `determine_cutoff_from_bin` is True, `aggregated_bin_ht` must be supplied to determine the SNP and indel RF
-    probabilities to use as cutoffs from an aggregated quantile bin Table like one created by
+    probabilities to use as cutoffs from an aggregated bin Table like one created by
     `compute_grouped_binned_ht` in combination with `score_bin_agg`.
 
     :param ht: RF result table from `rf.apply_rf_model` to prepare as the final RF Table
@@ -309,7 +283,7 @@ def generate_final_rf_ht(
     :param snp_cutoff: RF probability or bin (if `determine_cutoff_from_bin` True) to use for SNP variant QC filter
     :param indel_cutoff: RF probability or bin (if `determine_cutoff_from_bin` True) to use for indel variant QC filter
     :param determine_cutoff_from_bin: If True the RF probability will be determined using bin info in `aggregated_bin_ht`
-    :param aggregated_bin_ht: File with aggregate counts of variants based on quantile bins
+    :param aggregated_bin_ht: File with aggregate counts of variants based on bins
     :param bin_id: Name of bin to use in the 'bin_id' column of `aggregated_bin_ht` to use to determine probability cutoff
     :param inbreeding_coeff_cutoff: InbreedingCoeff hard filter to use for variants
     :return: Finalized random forest Table annotated with variant filters
@@ -421,9 +395,6 @@ def main(args):
 
         if args.train_rf:
             features = FEATURES
-            if args.no_inbreeding_coeff:
-                features.remove("InbreedingCoeff")
-
             run_hash = str(uuid.uuid4())[:8]
             rf_runs = get_rf_runs(rf_run_hash_path(data_source, freeze))
             while run_hash in rf_runs:
@@ -432,9 +403,10 @@ def main(args):
             ht = hl.read_table(rf_annotated_path(data_source, freeze, args.adj))
 
             if args.vqsr_training:
+                vqsr_run_check(data_source, freeze, args.vqsr_type)
                 vqsr_ht = hl.read_table(
                     var_annotations_ht_path(
-                        "vqsr" if args.vqsr_type == "AS" else "AS_TS_vqsr",
+                        "vqsr" if args.vqsr_type == "AS" else f"{args.vqsr_type}_vqsr",
                         data_source,
                         freeze,
                     )
@@ -550,11 +522,19 @@ def main(args):
             ht = hl.read_table(
                 rf_path(data_source, freeze, "rf_result", run_hash=args.run_hash)
             )
+            inbreeding_ht = hl.read_table(
+                var_annotations_ht_path("inbreeding_coefficient", data_source, freeze)
+            )
+            ht = ht.annotate(
+                InbreedingCoeff=hl.or_missing(
+                    ~hl.is_nan(inbreeding_ht[ht.key].InbreedingCoeff), inbreeding_ht[ht.key].InbreedingCoeff
+                )
+            )
             freq_ht = hl.read_table(
                 var_annotations_ht_path("ukb_freq", data_source, freeze)
             )
 
-            aggregated_bin_path = score_quantile_bin_path(
+            aggregated_bin_path = score_bin_path(
                 args.run_hash, data_source, freeze, aggregated=True
             )
             if not file_exists(aggregated_bin_path):
@@ -696,11 +676,6 @@ if __name__ == "__main__":
     training_params.add_argument(
         "--interval_qc_filter",
         help="Should interval QC be applied before RF training.",
-        action="store_true",
-    )
-    training_params.add_argument(
-        "--no_inbreeding_coeff",
-        help="Train RF without inbreeding coefficient as a feature.",
         action="store_true",
     )
 
