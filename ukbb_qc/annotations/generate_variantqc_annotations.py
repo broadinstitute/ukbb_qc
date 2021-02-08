@@ -17,11 +17,9 @@ from ukbb_qc.resources.sample_qc import (
     inferred_ped_path,
     relatedness_ht_path,
 )
-from ukbb_qc.resources.variant_qc import (
-    get_true_positive_vcf_path,
-    var_annotations_ht_path,
-)
+from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 from ukbb_qc.slack_creds import slack_token
+
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("variantqc_annotations")

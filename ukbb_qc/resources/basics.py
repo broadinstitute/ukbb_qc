@@ -5,6 +5,7 @@ import hail as hl
 
 from gnomad.utils.file_utils import file_exists
 from gnomad.resources.resource_utils import DataException
+
 from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES
 from .sample_qc import meta_ht_path
 
@@ -59,6 +60,32 @@ def known_dups_ht_path(freeze: int = CURRENT_FREEZE) -> str:
     if freeze != 7:
         raise DataException("Known duplicates file only exists for freeze 7/450K!")
     return f"gs://broad-ukbb/broad.freeze_{freeze}/duplicate_resolution/pharma_known_dups.ht"
+
+
+def check_dups_to_remove(
+    remove_ids: hl.expr.ArrayExpression, samples: hl.Table, column_name: str = "s",
+) -> int:
+    """
+    This function checks whether the number of duplicate samples in the input Table matches expected counts.
+
+    Used to check numbers prior to duplicate sample removal. 
+    Function was written specifically to resolve duplicates in freeze 7/the 450k callset.
+
+    :param hl.expr.ArrayExpression remove_list: ArrayExpression containing list of sample IDs to remove.
+    :param hl.Table samples: Table containing all sample IDs.
+    :param str column_name: Name of column containing sample IDs in Table. Default is 's'.
+    :return: Number of samples to remove from Table.
+    :rtype: int
+    """
+    # Using an HT here because aggregate_cols has been slow/memory intensive in the past
+    n_samples_to_drop = samples.aggregate(
+        hl.agg.count_where(remove_ids.contains(samples[column_name]))
+    )
+    if n_samples_to_drop != hl.eval(hl.len(remove_ids)):
+        raise DataException(
+            f"Expecting to remove {hl.eval(hl.len(remove_ids))} duplicate samples but found {n_samples_to_drop}. Double check samples in MT!"
+        )
+    return n_samples_to_drop
 
 
 def get_ukbb_data(
@@ -170,32 +197,30 @@ def get_ukbb_data(
             else:
                 logger.info("No withdrawn samples found in MT")
 
-    # Code to resolve duplicate sample specifically in freeze 7/the 450k callset
-    def _check_dups_to_remove(
-        remove_ids: hl.expr.ArrayExpression, samples: hl.Table, column_name: str = "s",
-    ) -> int:
-        """
-        This function checks whether the number of duplicate samples in the input Table matches expected counts.
-
-        Used to check numbers prior to duplicate sample removal.
-
-        :param hl.expr.ArrayExpression remove_list: ArrayExpression containing list of sample IDs to remove.
-        :param hl.Table samples: Table containing all sample IDs.
-        :param str column_name: Name of column containing sample IDs in Table. Default is 's'.
-        :return: Number of samples to remove from Table.
-        :rtype: int
-        """
-        # Using an HT here because aggregate_cols has been slow/memory intensive in the past
-        n_samples_to_drop = samples.aggregate(
-            hl.agg.count_where(remove_ids.contains(samples[column_name]))
-        )
-        if n_samples_to_drop != hl.eval(hl.len(remove_ids)):
-            raise DataException(
-                f"Expecting to remove {hl.eval(hl.len(remove_ids))} duplicate samples but found {n_samples_to_drop}. Double check samples in MT!"
-            )
-        return n_samples_to_drop
-
+    # Code to resolve duplicate samples specifically in freeze 7/the 450k callset
     if freeze == 7:
+        # Remove fully duplicated IDs when reading in raw MT only
+        # These 27 duplicates are discussed in this ticket:
+        # https://broadinstitute.atlassian.net/browse/PO-28339
+        if raw:
+            logger.info("Resolving duplicate sample IDs in the 450k MT...")
+            # Add column index to samples
+            mt = mt.add_col_index()
+
+            # Create list of sample IDs to remove
+            remove_ids = []
+            with hl.hadoop_open(dup_map_path(freeze), "r") as d:
+                for line in d:
+                    line = line.strip().split("\t")
+                    remove_ids.append(f"{line[0]}_{line[1]}")
+
+            # Remove sample IDs that are present in remove_ids list
+            remove_ids = hl.literal(remove_ids)
+            mt = mt.annotate_cols(new_s=hl.format("%s_%s", mt.s, mt.col_idx))
+            # Check number of samples to remove -- should be 27 here
+            samples_to_drop = check_dups_to_remove(remove_ids, mt.cols(), "new_s")
+            logger.info(f"Removing {samples_to_drop} samples...")
+            mt = mt.filter_cols(~remove_ids.contains(mt.new_s)).drop("new_s", "col_idx")
 
         # Remove samples that are known to be on the pharma's sample remove list
         # These samples were discovered when running array concordance
@@ -215,34 +240,11 @@ def get_ukbb_data(
         )
 
         # Check number of samples to remove -- should be 44 here
-        num_ids = _check_dups_to_remove(ids_to_remove, mt.cols())
+        num_ids = check_dups_to_remove(ids_to_remove, mt.cols())
         logger.info(f"Removing {num_ids} samples...")
         mt = mt.filter_cols(~ids_to_remove.contains(mt.s))
 
-        # Remove fully duplicated IDs when reading in raw MT only
-        # These 27 duplicates are discussed in this ticket:
-        # https://broadinstitute.atlassian.net/browse/PO-28339
-        if raw:
-            logger.info("Resolving duplicate sample IDs in the 450k MT...")
-            # Add column index to samples
-            mt = mt.add_col_index()
-
-            # Create list of sample IDs to remove
-            remove_ids = []
-            with hl.hadoop_open(dup_map_path(freeze), "r") as d:
-                for line in d:
-                    line = line.strip().split("\t")
-                    remove_ids.append(f"{line[0]}_{line[1]}")
-
-            # Remove sample IDs that are present in remove_ids list
-            remove_ids = hl.literal(remove_ids)
-            mt = mt.annotate_cols(new_s=hl.format("%s_%s", mt.s, mt.col_idx))
-
-            # Check number of samples to remove -- should be 27 here
-            samples_to_drop = _check_dups_to_remove(remove_ids, mt.cols(), "new_s")
-            logger.info(f"Removing {samples_to_drop} samples...")
-            mt = mt.filter_cols(~remove_ids.contains(mt.new_s)).drop("new_s", "col_idx")
-    logger.info(f"Sample count post-filtration: {mt.count_cols()}")
+        logger.info(f"Sample count post-filtration: {mt.count_cols()}")
 
     gt_expr = mt.GT if split else mt.LGT
     mt = mt.filter_rows(hl.agg.any(gt_expr.is_non_ref() | hl.is_defined(mt.END)))
@@ -566,6 +568,66 @@ def vqsr_sites_path(
     """
     suffix = "ht" if ht else "vcf.bgz"
     return f"{get_release_path(data_source, freeze)}/vqsr/{data_source}.freeze_{freeze}.sites_for_vqsr.{suffix}"
+
+
+def release_summary_ht_path(
+    data_source: str, freeze: int = CURRENT_FREEZE, intervals: bool = False
+) -> str:
+    """
+    Returns path to HT with summary counts per variant category.
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param bool intervals: Whether HT has been filtered to interval QC pass regions only. Default is False.
+    :return: Path to summary counts HT
+    :rtype: str
+    """
+    if freeze not in (6, 7):
+        raise DataException(
+            "Release summary HT path only exists for freezes 6/300K and 7/450K!"
+        )
+
+    return f"{get_release_path(data_source, freeze)}/summary/summary_per_variant{'_intervals' if intervals else ''}.ht"
+
+
+def release_lof_mt_path(
+    data_source: str, freeze: int = CURRENT_FREEZE, intervals: bool = False
+) -> str:
+    """
+    Returns path to summary MT containing gene LoF matrix.
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param bool intervals: Whether MT has been filtered to interval QC pass regions only. Default is False.
+    :return: Path to summary MT with gene LoF matrix
+    :rtype: str
+    """
+    if freeze not in (6, 7):
+        raise DataException(
+            "Release LoF MT path only exists for freezes 6/300K and 7/450K!"
+        )
+
+    return f"{get_release_path(data_source, freeze)}/summary/gene_lof_matrix{'_intervals' if intervals else ''}.mt"
+
+
+def release_lof_ht_path(
+    data_source: str, freeze: int = CURRENT_FREEZE, intervals: bool = False
+) -> str:
+    """
+    Returns path to summary HT containing gene LoF matrix summary.
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param bool intervals: Whether MT has been filtered to interval QC pass regions only. Default is False.
+    :return: Path to summary HT with gene LoF matrix
+    :rtype: str
+    """
+    if freeze not in (6, 7):
+        raise DataException(
+            "Release LoF HT path only exists for freezes 6/300K and 7/450K!"
+        )
+
+    return f"{get_release_path(data_source, freeze)}/summary/gene_lof_matrix_summary{'_intervals' if intervals else ''}.ht"
 
 
 # logging path
