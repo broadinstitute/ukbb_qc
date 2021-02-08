@@ -415,9 +415,7 @@ def get_hists(mt: hl.MatrixTable, freeze: int) -> hl.MatrixTable:
     mt = mt.annotate_rows(**age_hists_expr(mt.adj, mt.GT, mt.age))
 
     logger.info("Annotating with qual hists...")
-    mt = mt.annotate_rows(
-        raw_qual_hists=qual_hist_expr(mt.GT, mt.GQ, mt.DP, mt.AD, mt.adj)
-    )
+    mt = mt.annotate_rows(qual_hists=qual_hist_expr(mt.GT, mt.GQ, mt.DP, mt.AD, mt.adj))
 
     logger.info(
         "Renaming hists (qual_hist_expr adds '_adj' suffix to adj hists) and returning..."
@@ -425,12 +423,14 @@ def get_hists(mt: hl.MatrixTable, freeze: int) -> hl.MatrixTable:
     return mt.annotate_rows(
         qual_hists=hl.struct(
             **{
-                # Removing "_adj" suffix from hist
-                f"{hist[:-4]}": hist_vals
-                for hist, hist_vals in mt.raw_qual_hists.items()
-                if "_adj" in hist
+                i.replace("_adj", ""): mt.qual_hists[i]
+                for i in mt.qual_hists
+                if "_adj" in i
             }
-        )
+        ),
+        raw_qual_hists=hl.struct(
+            **{i: mt.qual_hists[i] for i in mt.qual_hists if "_adj" not in i}
+        ),
     )
 
 
