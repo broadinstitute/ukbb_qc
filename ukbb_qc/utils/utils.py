@@ -199,14 +199,14 @@ def annotate_interval_qc_filter(
     return t
 
 
-def vqsr_run_check(data_source: str, freeze: int, vqsr_type: str):
+def vqsr_run_check(data_source: str, freeze: int, vqsr_type: str) -> None:
     """
     Checks the run data log `vqsr_run_path` for the presence of `vqsr_type`.
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
     :param int vqsr_type: Name of VQSR model
-    :return: 
+    :return: None
     """
     vqsr_runs = get_rf_runs(vqsr_run_path(data_source, freeze))
     if vqsr_type not in vqsr_runs:

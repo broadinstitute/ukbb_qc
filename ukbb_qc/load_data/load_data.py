@@ -86,9 +86,7 @@ def main(args):
                 f"  Common variants with high concordance to array data: {args.array_con_common}\n"
                 f"  Additional notes for the model: {'None' if args.additional_notes == '' else args.additional_notes}\n"
             )
-            args.transmitted_singletons,
-            args.sibling_singletons,
-            args.array_con_common,
+
             import_vqsr(
                 freeze,
                 args.vqsr_vcf_path,

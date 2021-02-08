@@ -177,7 +177,7 @@ def rf_run_hash_path(data_source: str, freeze: int = CURRENT_FREEZE):
     return f"{variant_qc_prefix(data_source, freeze)}/rf/runs.json"
 
 
-def vqsr_run_path(data_source: str, freeze: int = CURRENT_FREEZE):
+def vqsr_run_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
     Returns the path to the json file containing the VQSR runs list.
 

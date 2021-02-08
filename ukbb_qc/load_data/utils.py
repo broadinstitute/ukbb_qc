@@ -189,7 +189,7 @@ def import_capture_intervals(interval_path: str, header: bool, overwrite: bool) 
 
 
 # Variant resources
-def get_vqsr_runs(vqsr_json_fp: str) -> Dict:
+def vqsr_json_path(vqsr_json_fp: str) -> Dict:
     """
     Loads VQSR run data from JSON file.
 
@@ -223,7 +223,8 @@ def import_vqsr(
 
     :param freeze: One of the data freezes. Default is CURRENT_FREEZE.
     :param vqsr_path: Path to input vqsr site vcf. This can be specified as Hadoop glob patterns
-    :param vqsr_type: Type of VQSR being loaded. e.g., `AS` (allele specific), `AS_TS` (allele specific with transmitted singletons)...
+    :param vqsr_type: Type of VQSR being loaded. e.g., `AS` (allele specific), 
+        `AS_TS` (allele specific with transmitted singletons), `AS_SS` (allele specific with sibling singletons), etc.
     :param num_partitions: Number of partitions to use for the VQSR HT
     :param overwrite: Whether to overwrite imported VQSR HT
     :param import_header_path: Optional path to a header file to use for import
@@ -288,7 +289,7 @@ def import_vqsr(
     )
 
     logger.info("Adding VQSR type to run list")
-    vqsr_runs = get_vqsr_runs(vqsr_run_path(data_source, freeze))
+    vqsr_runs = vqsr_json_path(vqsr_run_path(data_source, freeze))
     vqsr_runs[vqsr_type] = {
         "data": data_source,
         "freeze": freeze,
