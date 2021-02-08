@@ -76,7 +76,6 @@ def generate_frequency_data(
     tranche: bool = False,
     platform_expr: Optional[hl.expr.StringExpression] = None,
     data_source: str = "broad",
-    overwrite: bool = True,
 ) -> hl.MatrixTable:
     """
     Generates frequency struct annotation containing AC, AF, AN, and homozygote count for input dataset stratified by population.
@@ -99,7 +98,6 @@ def generate_frequency_data(
     :param bool calculate_by_tranche: Whether to calculate frequencies per tranche.
     :param hl.expr.StringExpression platform_expr: Expression containing platform or tranche information. Required if platform_strata is set.
     :param str data_source: One of 'regeneron' or 'broad'. Default is 'broad'.
-    :param bool overwrite: Whether to overwrite temporary checkpoint HT containing cohort frequency. Default is True.
     :return: MatrixTable with frequency annotations in struct named `freq` and metadata in globals named `freq_meta`.
     :rtype: hl.MatrixTable
     """
@@ -120,8 +118,7 @@ def generate_frequency_data(
         mt.meta.sex_imputation.sex_karyotype,
     )
     cohort_ht = cohort_ht.checkpoint(
-        var_annotations_ht_path("ukb_cohort_freq", data_source, freeze),
-        overwrite=overwrite,
+        var_annotations_ht_path("ukb_cohort_freq", data_source, freeze), overwrite=True,
     )
     mt = mt.annotate_rows(cohort_freq=cohort_ht[mt.row_key].cohort_freq)
     mt = mt.annotate_globals(**cohort_ht.index_globals())
