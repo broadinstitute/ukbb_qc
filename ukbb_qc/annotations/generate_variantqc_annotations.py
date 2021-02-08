@@ -26,6 +26,84 @@ logger = logging.getLogger("variantqc_annotations")
 logger.setLevel(logging.INFO)
 
 
+def export_tp_vcf(
+    data_source: str,
+    freeze: int,
+    transmitted_singletons: bool = True,
+    sibling_singletons: bool = True,
+    array_con_common: bool = True,
+):
+    """
+    Export true positive variants to VCF for use in VQSR
+    
+    :param str data_source: 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param transmitted_singletons: Should transmitted singletons be included
+    :param sibling_singletons: Should sibling singletons be included
+    :param array_con_common: Should common variants that are concordant with array data be included
+    :return: None
+    """
+    if not (transmitted_singletons | sibling_singletons | array_con_common):
+        raise ValueError(
+            "At least one of transmitted_singletons, sibling_singletons, or array_con_common must be set to True"
+        )
+
+    qc_ac_ht = hl.read_table(
+        var_annotations_ht_path("allele_counts", data_source, freeze)
+    )
+    trio_stats_ht = hl.read_table(
+        var_annotations_ht_path("trio_stats", data_source, freeze)
+    )
+    sib_stats_ht = hl.read_table(
+        var_annotations_ht_path("sib_stats", data_source, freeze)
+    )
+    array_con_ht = hl.read_table(
+        var_annotations_ht_path("array_exome_concordant_variants", data_source, freeze)
+    )
+    qc_ac_ht = qc_ac_ht.annotate(
+        ukbb_array_con_common=hl.is_defined(array_con_ht[qc_ac_ht.key])
+    )
+
+    for transmission_confidence in ["raw", "adj"]:
+        filter_expr = False
+        true_positive_type = ""
+        if transmitted_singletons:
+            filter_expr = filter_expr | (
+                trio_stats_ht[qc_ac_ht.key][f"n_transmitted_{transmission_confidence}"]
+                == 1
+            ) & (qc_ac_ht.ac_qc_samples_raw == 2)
+            true_positive_type = true_positive_type + "ts_"
+
+        if sibling_singletons:
+            filter_expr = filter_expr | (
+                sib_stats_ht[qc_ac_ht.key][
+                    f"n_sib_shared_variants_{transmission_confidence}"
+                ]
+                == 1
+            ) & (qc_ac_ht.ac_qc_samples_raw == 2)
+            true_positive_type = true_positive_type + "ss_"
+
+        if array_con_common:
+            filter_expr = filter_expr | qc_ac_ht.ukbb_array_con_common
+            true_positive_type = true_positive_type + "ac_"
+
+        ht = qc_ac_ht.filter(filter_expr)
+        mt = hl.MatrixTable.from_rows_table(ht)
+        logger.info(
+            f"Exporting {transmission_confidence} transmitted singleton VCF with {mt.count()} variants..."
+        )
+        hl.export_vcf(
+            mt,
+            get_true_positive_vcf_path(
+                true_positive_type=true_positive_type,
+                adj=(transmission_confidence == "adj"),
+                data_source=data_source,
+                freeze=freeze,
+            ),
+            tabix=True,
+        )
+
+
 def main(args):
     hl.init(log="/generate_variantqc_annotations.log", default_reference="GRCh38")
     data_source = "broad"
@@ -95,6 +173,7 @@ def main(args):
             mt = filter_to_autosomes(mt)
             mt = filter_mt_to_trios(mt, fam_ht)
             mt = hl.experimental.densify(mt)
+            mt = mt.filter_rows(hl.len(mt.alleles) == 2)
 
             mt = hl.trio_matrix(mt, pedigree=ped, complete_trios=True)
             trio_stats_ht = generate_trio_stats(mt, bi_allelic_only=False)
@@ -165,6 +244,17 @@ def main(args):
                 overwrite=overwrite,
             )
             ht.summarize()
+
+        if args.export_true_positive_vcfs:
+            logger.info("Exporting true positive variants to VCFs...")
+            export_tp_vcf(
+                data_source,
+                freeze,
+                transmitted_singletons=args.transmitted_singletons,
+                sibling_singletons=args.sibling_singletons,
+                array_con_common=args.array_con_common,
+            )
+
     finally:
         logger.info("Copying hail log to logging bucket...")
         hl.copy_log(logging_path(data_source, freeze))
@@ -221,6 +311,26 @@ if __name__ == "__main__":
     parser.add_argument(
         "--annotate_truth_data",
         help="Creates a HT of UKBB variants annotated with truth sites",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--export_true_positive_vcfs",
+        help="Exports true positive variants to VCF files.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--transmitted_singletons",
+        help="Include transmitted singletons in the exports of true positive variants to VCF files.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--sibling_singletons",
+        help="Include sibling singletons in the exports of true positive variants to VCF files.",
+        action="store_true",
+    )
+    training_params.add_argument(
+        "--array_con_common",
+        help="Include common concordant array variants in the exports of true positive variants to VCF files.",
         action="store_true",
     )
     args = parser.parse_args()
