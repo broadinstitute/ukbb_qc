@@ -373,6 +373,21 @@ def main(args):
                 )
                 scores_ht = batch_1_2_ht.union(batch_3_4_ht)
 
+            else:
+                joint_pops_ht, joint_pops_rf_model = assign_population_pcs(
+                    joint_scores_ht,
+                    pc_cols=joint_scores_ht.scores,
+                    known_col="pop_for_rf",
+                    fit=fit,
+                    min_prob=args.min_pop_prob,
+                )
+                joint_scores_ht = joint_scores_ht.filter(
+                    hl.is_missing(joint_scores_ht.pop_for_rf)
+                ).select("scores")
+                scores_ht = joint_scores_ht.annotate(
+                    pop=joint_pops_ht[joint_scores_ht.key]
+                )
+
             scores_ht = scores_ht.annotate_globals(
                 n_project_pcs=n_project_pcs, min_prob=args.min_pop_prob
             )
