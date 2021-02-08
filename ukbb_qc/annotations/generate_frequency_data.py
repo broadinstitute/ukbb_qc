@@ -99,6 +99,7 @@ def generate_frequency_data(
     :param bool calculate_by_tranche: Whether to calculate frequencies per tranche.
     :param hl.expr.StringExpression platform_expr: Expression containing platform or tranche information. Required if platform_strata is set.
     :param str data_source: One of 'regeneron' or 'broad'. Default is 'broad'.
+    :param bool overwrite: Whether to overwrite temporary checkpoint HT containing cohort frequency. Default is True.
     :return: MatrixTable with frequency annotations in struct named `freq` and metadata in globals named `freq_meta`.
     :rtype: hl.MatrixTable
     """
@@ -137,7 +138,7 @@ def generate_frequency_data(
     mt = annotate_freq(
         mt,
         sex_expr=mt.meta.sex_imputation.sex_karyotype,
-        pop_expr=mt.meta.pan_ancestry_metagi.pop,
+        pop_expr=mt.meta.pan_ancestry_meta.pop,
         subpop_expr=mt.meta.hybrid_pop_data.pop,
         additional_strata_expr=additional_strata_expr,
     )
