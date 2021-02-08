@@ -12,6 +12,8 @@ from ukbb_qc.resources.basics import (
     array_sample_map_ht_path,
     capture_ht_path,
     excluded_samples_path,
+    pan_ancestry_txt_path,
+    pan_ancestry_ht_path,
     phenotype_ht_path,
     ukbb_phenotype_path,
 )
@@ -108,15 +110,15 @@ def import_phenotype_ht() -> None:
     phenotype_ht.write(phenotype_ht_path(), overwrite=True)
 
 
-def load_self_reported_ancestry(freeze: int) -> hl.Table:
+def load_self_reported_ancestry(freeze: int) -> None:
     """
     Loads phenotype Table and extracts self reported ancestry information.
 
     Converts ancestry integers to more legible strings (e.g., 1 -> "White")
 
     :param int freeze: One of data freezes
-    :return: Table with self reported ancestry information
-    :rtype: Table
+    :return: None
+    :rtype: None
     """
     ukbb_ancestry_ht = hl.read_table(phenotype_ht_path())
     ukbb_ancestry_ht = ukbb_ancestry_ht.select(
@@ -153,6 +155,19 @@ def load_self_reported_ancestry(freeze: int) -> hl.Table:
         .default("None")
     )
     ukbb_ancestry_ht.write(get_ukbb_self_reported_ancestry_path(freeze), overwrite=True)
+
+
+def load_pan_ancestry() -> None:
+    """
+    Loads pan-ancestry information for all UKBB samples (contains data for all freezes).
+
+    Writes HT to pan_ancestry_ht_path().
+
+    :return: None
+    :rtype: None
+    """
+    ht = hl.import_table(pan_ancestry_txt_path(), impute=True)
+    ht = ht.key_by("s").write(pan_ancestry_ht_path(), overwrite=True)
 
 
 # Interval resources
