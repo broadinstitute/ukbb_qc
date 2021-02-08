@@ -157,14 +157,14 @@ def load_self_reported_ancestry(freeze: int) -> None:
 
 def load_pan_ancestry() -> None:
     """
-    Loads pan-ancestry information for all UKBB samples (all freezes).
+    Loads pan-ancestry information for all UKBB samples (contains data for all freezes).
 
     Writes HT to pan_ancestry_ht_path().
 
     :return: None
     :rtype: None
     """
-    ht = hl.import_table(pan_ancestry_txt_path, impute=True)
+    ht = hl.import_table(pan_ancestry_txt_path(), impute=True)
     ht = ht.key_by("s").write(pan_ancestry_ht_path(), overwrite=True)
 
 
