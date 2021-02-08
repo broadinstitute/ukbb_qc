@@ -50,7 +50,7 @@ def clinvar_pathogenic_ht_path(version: str) -> str:
 def get_truth_sample_data(
     data_source: str,
     freeze: int = CURRENT_FREEZE,
-    truth_sample_dict = TRUTH_SAMPLES,
+    truth_sample_dict: Dict[str, Dict[str, Union[str, hl.Table, hl.MatrixTable]]] = TRUTH_SAMPLES,
     truth_sample: str = None,
     data_type: str = None,
 ) -> Union[str, hl.Table, hl.MatrixTable]:
