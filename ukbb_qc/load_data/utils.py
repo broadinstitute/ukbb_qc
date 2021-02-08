@@ -1,5 +1,6 @@
+import json
 import logging
-from typing import Optional
+from typing import Dict, Optional
 
 import hail as hl
 
@@ -22,6 +23,7 @@ from ukbb_qc.resources.sample_qc import (
 from ukbb_qc.resources.variant_qc import (
     clinvar_pathogenic_ht_path,
     var_annotations_ht_path,
+    vqsr_run_path,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 
@@ -187,10 +189,31 @@ def import_capture_intervals(interval_path: str, header: bool, overwrite: bool) 
 
 
 # Variant resources
+def vqsr_json_path(vqsr_json_fp: str) -> Dict:
+    """
+    Loads VQSR run data from JSON file.
+
+    :param vqsr_json_fp: File path to VQSR json file.
+    :return: Dictionary containing the content of the JSON file, or an empty dictionary if the file wasn't found.
+    """
+    if file_exists(vqsr_json_fp):
+        with hl.hadoop_open(vqsr_json_fp) as f:
+            return json.load(f)
+    else:
+        logger.warning(
+            f"File {vqsr_json_fp} could not be found. Returning empty RF run hash dict."
+        )
+        return {}
+
+
 def import_vqsr(
     freeze: int,
     vqsr_path: str,
-    vqsr_type: str = "AS",
+    vqsr_type: str,
+    transmitted_singletons: bool = False,
+    sibling_singletons: bool = False,
+    array_con_common: bool = False,
+    additional_notes: str = "",
     num_partitions: int = 5000,
     overwrite: bool = False,
     import_header_path: Optional[str] = None,
@@ -200,7 +223,8 @@ def import_vqsr(
 
     :param freeze: One of the data freezes. Default is CURRENT_FREEZE.
     :param vqsr_path: Path to input vqsr site vcf. This can be specified as Hadoop glob patterns
-    :param vqsr_type: One of `AS` (allele specific) or `AS_TS` (allele specific with transmitted singletons)
+    :param vqsr_type: Type of VQSR being loaded. e.g., `AS` (allele specific), 
+        `AS_TS` (allele specific with transmitted singletons), `AS_SS` (allele specific with sibling singletons), etc.
     :param num_partitions: Number of partitions to use for the VQSR HT
     :param overwrite: Whether to overwrite imported VQSR HT
     :param import_header_path: Optional path to a header file to use for import
@@ -217,7 +241,6 @@ def import_vqsr(
     ).repartition(num_partitions)
 
     ht = mt.rows()
-
     ht = ht.annotate(
         info=ht.info.annotate(
             AS_VQSLOD=ht.info.AS_VQSLOD.map(lambda x: hl.float(x)),
@@ -226,14 +249,21 @@ def import_vqsr(
             ),
             AS_VarDP=ht.info.AS_VarDP.split("\|")[1:].map(lambda x: hl.int(x)),
             AS_SB_TABLE=ht.info.AS_SB_TABLE.split("\|").map(
-                lambda x: x.split(",").map(lambda y: hl.int(y))
+                lambda x: hl.or_missing(x != "", x.split(",").map(lambda y: hl.int(y)))
             ),
         )
     )
 
+    ht = ht.annotate_globals(
+        transmitted_singletons=transmitted_singletons,
+        sibling_singletons=sibling_singletons,
+        array_con_common=array_con_common,
+        notes=additional_notes,
+    )
+
     ht = ht.checkpoint(
         var_annotations_ht_path(
-            f'{"vqsr" if vqsr_type == "AS" else "AS_TS_vqsr"}.unsplit',
+            f'{"vqsr" if vqsr_type == "AS" else f"{vqsr_type}_vqsr"}.unsplit',
             data_source,
             freeze,
         ),
@@ -249,7 +279,7 @@ def import_vqsr(
 
     ht = ht.checkpoint(
         var_annotations_ht_path(
-            "vqsr" if vqsr_type == "AS" else "AS_TS_vqsr", data_source, freeze,
+            "vqsr" if vqsr_type == "AS" else f"{vqsr_type}_vqsr", data_source, freeze,
         ),
         overwrite=overwrite,
     )
@@ -257,6 +287,21 @@ def import_vqsr(
     logger.info(
         f"Found {unsplit_count} unsplit and {split_count} split variants with VQSR annotations"
     )
+
+    logger.info("Adding VQSR type to run list")
+    vqsr_runs = vqsr_json_path(vqsr_run_path(data_source, freeze))
+    vqsr_runs[vqsr_type] = {
+        "data": data_source,
+        "freeze": freeze,
+        "vcf_path": vqsr_path,
+        "transmitted_singletons": transmitted_singletons,
+        "sibling_singletons": sibling_singletons,
+        "array_con_common": array_con_common,
+        "notes": additional_notes,
+    }
+
+    with hl.hadoop_open(vqsr_run_path(data_source, freeze), "w") as f:
+        json.dump(vqsr_runs, f)
 
 
 def load_clinvar_path() -> hl.Table:
