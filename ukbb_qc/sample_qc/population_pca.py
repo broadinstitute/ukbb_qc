@@ -1,6 +1,7 @@
 import argparse
 import logging
 import pickle
+from typing import Any, List
 
 import hail as hl
 import numpy as np
@@ -155,6 +156,45 @@ def get_array_pcs_mapped_to_exome_ids(freeze: int, n_pcs: int = 20) -> hl.Table:
     return array_pc_ht
 
 
+def apply_rf_by_batch(
+    ht: hl.Table,
+    batches: List[str],
+    min_pop_prob: float,
+    fit: Any = None,  # Type should be RandomForestClassifier but we do not want to import sklearn.RandomForestClassifier outside
+) -> hl.Table:
+    """
+    Splits input HT (HT with scores from PC project) into desired batches and applies gnomAD's RF.
+
+    Splitting helps prevent out of memory issues during sample aggregations. 
+    Necessary only for freeze 7/455k. 
+
+    :param hl.Table ht: Input Table containing scores from gnomAD PC project step.
+    :param List[str] batches: Desired batches to keep in HT.
+    :param float min_pop_prob: Minimum probability of belonging to a given population for assignment (if below, the sample is labeled as 'oth').
+    :return: Table with PC project scores and gnomAD PC project population assignment.
+    :rtype: hl.Table
+    """
+    logger.info(f"Filtering to samples in batches: {batches}...")
+    ht = ht.filter(
+        # Remove gnomAD samples
+        hl.is_missing(ht.batch)
+        # Filter to samples in desired batches only
+        | (hl.literal(batches).contains(ht.batch))
+    )
+    logger.info(f"Number of samples in HT after filtration: {ht.count()}...")
+
+    logger.info("Assigning population labels based on gnomAD PC project scores...")
+    # gnomAD RF only used 6 PCs
+    ht = ht.annotate(scores=ht.scores[:6])
+    joint_pops_ht, joint_pops_rf_model = assign_population_pcs(
+        ht, pc_cols=ht.scores, known_col="pop_for_rf", fit=fit, min_prob=min_pop_prob,
+    )
+
+    logger.info("Annotating with gnomAD PC project population and returning...")
+    ht = ht.filter(hl.is_missing(ht.pop_for_rf)).select("scores")
+    return ht.annotate(pop=joint_pops_ht[ht.key])
+
+
 def main(args):
     hl.init(log="/population_pca.log", default_reference="GRCh38")
 
@@ -280,47 +320,12 @@ def main(args):
 
         if args.run_rf:
             # NOTE: I needed to switch to n1-standard-16s for 300k
-            logger.info("Running random forest after projection on gnomAD PCs...")
+            # NOTE: Can use a max of 6 PCs here because using gnomAD's random forest model
+            logger.info("Applying gnomAD's random forest model using 6 PCs...")
             joint_scores_ht = hl.read_table(
                 ancestry_pc_project_scores_ht_path(data_source, freeze, "joint")
             )
             logger.info(f"Joint scores HT count: {joint_scores_ht.count()}")
-
-            logger.info("Splitting HT into two smaller HTs with ~200K samples each...")
-            sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze=7))
-            joint_scores_ht = joint_scores_ht.annotate(
-                batch=sample_map_ht[joint_scores_ht.s].batch
-            )
-            joint_scores_ht.describe()
-            logger.info(
-                f"Batch sanity check: {joint_scores_ht.aggregate(hl.agg.counter(joint_scores_ht.batch))}"
-            )
-
-            batch_1_2_ht = joint_scores_ht.filter(
-                hl.is_missing(joint_scores_ht.batch)
-                | (
-                    (joint_scores_ht.batch == "100K")
-                    | (joint_scores_ht.batch == "150K")
-                    | (joint_scores_ht.batch == "200K")
-                )
-            )
-            batch_3_4_ht = joint_scores_ht.filter(
-                hl.is_missing(joint_scores_ht.batch)
-                | (
-                    (joint_scores_ht.batch == "300K")
-                    | (joint_scores_ht.batch == "455K")
-                )
-            )
-            logger.info(f"Number of samples in batch_1_2_ht: {batch_1_2_ht.count()}")
-            logger.info(f"Number of samples in batch_3_4_ht: {batch_3_4_ht.count()}")
-
-            # NOTE: should use 6 PCs here
-            batch_1_2_ht = batch_1_2_ht.annotate(
-                scores=batch_1_2_ht.scores[:n_project_pcs],
-            )
-            batch_3_4_ht = batch_3_4_ht.annotate(
-                scores=batch_3_4_ht.scores[:n_project_pcs],
-            )
 
             fit = None
             with hl.hadoop_open(
@@ -328,39 +333,46 @@ def main(args):
                 "rb",
             ) as f:
                 fit = pickle.load(f)
-            joint_pops_ht_1_2, joint_pops_rf_model = assign_population_pcs(
-                batch_1_2_ht,
-                pc_cols=batch_1_2_ht.scores,
-                known_col="pop_for_rf",
-                fit=fit,
-                min_prob=args.min_pop_prob,
-            )
 
-            joint_pops_ht_3_4, joint_pops_rf_model = assign_population_pcs(
-                batch_3_4_ht,
-                pc_cols=batch_3_4_ht.scores,
-                known_col="pop_for_rf",
-                fit=fit,
-                min_prob=args.min_pop_prob,
-            )
+            # NOTE: Splitting HT by batch is only necessary for freeze 7/455k
+            # The 455k has too many samples, and the code below (containing sample aggregations) crashes
+            # Splitting the HT into two HTs (batches 1, 1.5, 2 in one HT; batches 3 and 4 in the other)
+            # is the fastest way to get this code to run
+            if freeze == 7:
+                logger.info(
+                    "Splitting HT into two smaller HTs with ~200K samples each..."
+                )
+                sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze=7))
+                joint_scores_ht = joint_scores_ht.annotate(
+                    batch=sample_map_ht[joint_scores_ht.s].batch
+                )
+                logger.info(
+                    f"Batch sanity check: {joint_scores_ht.aggregate(hl.agg.counter(joint_scores_ht.batch))}"
+                )
 
-            batch_1_2_ht = batch_1_2_ht.filter(
-                hl.is_missing(batch_1_2_ht.pop_for_rf)
-            ).select("scores")
-            batch_3_4_ht = batch_3_4_ht.filter(
-                hl.is_missing(batch_3_4_ht.pop_for_rf)
-            ).select("scores")
-            batch_1_2_ht = batch_1_2_ht.checkpoint(
-                get_checkpoint_path(data_source, freeze, name="pca_scores_1_2")
-            )
-            batch_3_4_ht = batch_3_4_ht.checkpoint(
-                get_checkpoint_path(data_source, freeze, name="pca_scores_3_4")
-            )
+                logger.info("Creating batches 1-2 (freezes 4-5) HT...")
+                batch_1_2_ht = apply_rf_by_batch(
+                    ht=joint_scores_ht,
+                    batches=["100K", "150K", "200K"],
+                    min_pop_prob=args.min_pop_prob,
+                    fit=fit,
+                )
+                batch_1_2_ht = batch_1_2_ht.checkpoint(
+                    get_checkpoint_path(data_source, freeze, name="pca_scores_1_2")
+                )
 
-            scores_ht = batch_1_2_ht.union(batch_3_4_ht)
-            joint_pops_ht = joint_pops_ht_1_2.union(joint_pops_ht_3_4)
-            joint_pops_ht = joint_pops_ht.drop("pop_for_rf")
-            scores_ht = scores_ht.annotate(pop=joint_pops_ht[scores_ht.key])
+                logger.info("Creating batches 3-4 (freezes 6-7) HT...")
+                batch_3_4_ht = apply_rf_by_batch(
+                    ht=joint_scores_ht,
+                    batches=["300K", "455K"],
+                    min_pop_prob=args.min_pop_prob,
+                    fit=fit,
+                )
+                batch_3_4_ht = batch_3_4_ht.checkpoint(
+                    get_checkpoint_path(data_source, freeze, name="pca_scores_3_4")
+                )
+                scores_ht = batch_1_2_ht.union(batch_3_4_ht)
+
             scores_ht = scores_ht.annotate_globals(
                 n_project_pcs=n_project_pcs, min_prob=args.min_pop_prob
             )
