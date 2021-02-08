@@ -15,6 +15,7 @@ from ukbb_qc.resources.basics import (
     get_checkpoint_path,
     known_dups_ht_path,
     logging_path,
+    pan_ancestry_ht_path,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import (
@@ -121,6 +122,12 @@ def main(args):
             ukbb_meta=left_ht.ukbb_meta.annotate(
                 self_reported_ancestry=left_ht.self_reported_ancestry
             )
+        )
+
+        logger.info(logging_statement.format("pan-ancestry HT"))
+        right_ht = hl.read_table(pan_ancestry_ht_path())
+        left_ht = left_ht.annotate(
+            pan_ancestry_meta=hl.struct(**right_ht[left_ht.ukbb_meta.ukbb_app_26041_id])
         )
 
         logger.info("Creating checkpoint")

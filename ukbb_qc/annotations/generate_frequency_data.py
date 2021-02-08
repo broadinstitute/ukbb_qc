@@ -13,7 +13,7 @@ from gnomad.utils.annotations import (
     pop_max_expr,
 )
 from gnomad.utils.slack import slack_notifications
-from ukbb_qc.resources.basics import get_ukbb_data, logging_path
+from ukbb_qc.resources.basics import get_ukbb_data, logging_path, release_ht_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 from ukbb_qc.slack_creds import slack_token
@@ -57,23 +57,25 @@ def generate_cohort_frequency_data(
     mt = mt.drop("_pop", "_sex")
     mt = mt.select_rows(cohort_freq=mt.freq)
     cohort_freq_meta = hl.eval(mt.freq_meta)
-    for i in range(len(cohort_freq_meta)):
-        if i == 1:
+    for index, _ in enumerate(cohort_freq_meta):
+        if index == 1:
             update_dict = {"group": "cohort_raw"}
         else:
             update_dict = {"group": "cohort"}
-        cohort_freq_meta[i].update(update_dict)
+        cohort_freq_meta[index].update(update_dict)
     mt = mt.annotate_globals(cohort_freq_meta=cohort_freq_meta)
     return mt.select_globals("cohort_freq_meta").rows()
 
 
 def generate_frequency_data(
     mt: hl.MatrixTable,
+    freeze: int,
     pops_to_remove_for_popmax: List[str],
     cohort_frequency_pops: List[str],
     platform_strata: bool = False,
     tranche: bool = False,
     platform_expr: Optional[hl.expr.StringExpression] = None,
+    data_source: str = "broad",
 ) -> hl.MatrixTable:
     """
     Generates frequency struct annotation containing AC, AF, AN, and homozygote count for input dataset stratified by population.
@@ -95,6 +97,7 @@ def generate_frequency_data(
     :param bool tranche: Whether to use tranche (as a proxy for platform) instead of inferred platform.
     :param bool calculate_by_tranche: Whether to calculate frequencies per tranche.
     :param hl.expr.StringExpression platform_expr: Expression containing platform or tranche information. Required if platform_strata is set.
+    :param str data_source: One of 'regeneron' or 'broad'. Default is 'broad'.
     :return: MatrixTable with frequency annotations in struct named `freq` and metadata in globals named `freq_meta`.
     :rtype: hl.MatrixTable
     """
@@ -111,8 +114,11 @@ def generate_frequency_data(
     cohort_ht = generate_cohort_frequency_data(
         mt,
         cohort_frequency_pops,
-        mt.meta.gnomad_pc_project_pop_data.pop,
+        mt.meta.pan_ancestry_meta.pop,
         mt.meta.sex_imputation.sex_karyotype,
+    )
+    cohort_ht = cohort_ht.checkpoint(
+        var_annotations_ht_path("ukb_cohort_freq", data_source, freeze), overwrite=True,
     )
     mt = mt.annotate_rows(cohort_freq=cohort_ht[mt.row_key].cohort_freq)
     mt = mt.annotate_globals(**cohort_ht.index_globals())
@@ -129,7 +135,7 @@ def generate_frequency_data(
     mt = annotate_freq(
         mt,
         sex_expr=mt.meta.sex_imputation.sex_karyotype,
-        pop_expr=mt.meta.gnomad_pc_project_pop_data.pop,
+        pop_expr=mt.meta.pan_ancestry_meta.pop,
         subpop_expr=mt.meta.hybrid_pop_data.pop,
         additional_strata_expr=additional_strata_expr,
     )
@@ -276,8 +282,8 @@ def main(args):
             freq_ht = freq_ht.select(AF=freq_ht.freq[0].AF)
             mt = mt.annotate_entries(
                 GT=hl.if_else(
-                    (freq_ht[mt.row_key].AF > 0.01)
-                    & mt.GT.is_het()
+                    mt.GT.is_het()
+                    & (freq_ht[mt.row_key].AF > 0.01)
                     & (mt.AD[1] / mt.DP > 0.9),
                     hl.call(1, 1),
                     mt.GT,
@@ -287,6 +293,7 @@ def main(args):
             logger.info("Calculating frequencies")
             mt = generate_frequency_data(
                 mt,
+                freeze,
                 pops_to_remove_for_popmax,
                 cohort_frequency_pops,
                 args.by_platform,

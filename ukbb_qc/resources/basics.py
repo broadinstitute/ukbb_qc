@@ -16,6 +16,26 @@ logger.setLevel(logging.INFO)
 
 
 # UKBB data resources
+def pan_ancestry_txt_path() -> str:
+    """
+    Returns path to text file that contains pan-ancestry label per sample.
+
+    :return: Path to file that contains pan-ancestry labels.
+    :rtype: str
+    """
+    return "gs://broad-ukbb/resources/pan_ancestry.txt"
+
+
+def pan_ancestry_ht_path() -> str:
+    """
+    Returns path to Table that contains pan-ancestry label per sample.
+
+    :return: Path to HT that contains pan-ancestry labels.
+    :rtype: str
+    """
+    return "gs://broad-ukbb/resources/pan_ancestry.ht"
+
+
 def excluded_samples_path(freeze: int = CURRENT_FREEZE) -> str:
     """
     Returns path to list of samples to exclude from QC due to withdrawn consents
@@ -113,7 +133,7 @@ def get_ukbb_data(
     :param bool raw: Whether to return the raw data (not recommended: unsplit, and no special consideration on sex chromosomes)
     :param bool repartition: Whether to repartition the MatrixTable. 
         Required if raw is True for tranche 3/freeze 6. Default is False
-    :param int n_partitions: Number of desired partitions for MatrixTable. Applies only to raw MT.
+    :param int n_partitions: Number of desired partitions for MatrixTable. 
         Required if raw is True for tranche 3/freeze 6. Default is 30000
     :param str meta_root: Root annotation name for metadata (e.g., 'meta')
     :return: hardcalls dataset
@@ -132,7 +152,7 @@ def get_ukbb_data(
     if not file_exists(f"{array_sample_map_ht_path(freeze)}"):
         raise DataException(f"Need to import array sample map ht for freeze {freeze}!")
 
-    if raw and repartition:
+    if repartition:
         mt = hl.read_matrix_table(
             path=get_ukbb_data_path(data_source, freeze, hardcalls=not raw),
             _n_partitions=n_partitions,
