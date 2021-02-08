@@ -52,9 +52,59 @@ def excluded_samples_path(freeze: int = CURRENT_FREEZE) -> str:
     return f"gs://broad-ukbb/resources/withdrawn_consents/{excluded_file_names[freeze]}"
 
 
+def dup_resolution_path(freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Returns path to bucket containing files necessary to resolve duplicate samples.
+
+    Currently only exists for freeze 7/450k callset.
+    :param int freeze: One of data freezes
+    :return: Path to bucket with duplicate sample resolution files
+    :rtype: str
+    """
+    if freeze != 7:
+        raise DataException(
+            "Duplicate resolution bucket only exists for freeze 7/450k!"
+        )
+    return "gs://broad-ukbb/broad.freeze_{freeze}/duplicate_resolution"
+
+
+def dup_gvcf_path(freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Returns path to file containing duplicate samples and their most recent gVCFs.
+
+    Currently only exists for the 450k MatrixTable.
+
+    :param int freeze: One of data freezes
+    :return: Path to duplicates sample gVCF path tsv file
+    :rtype: str
+    """
+    if freeze != 7:
+        raise DataException("Duplicate gVCF path only exists for freeze 7/450k!")
+    return f"{dup_resolution_path(freeze)}/duplicate_sample_map_no_UU.tsv"
+
+
+def dup_mt_path(freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Returns path to MT created using most recent gVCF version for duplicate samples.
+
+    Currently only exists for the 450k MatrixTable.
+
+    MT was created using the hail gVCF combiner on 12/16/2020
+
+    :param int freeze: One of data freezes
+    :return: Path to duplicate sample MT
+    :rtype: str
+    """
+    if freeze != 7:
+        raise DataException("Duplicate MT only exists for freeze 7/450k!")
+    return f"{dup_resolution_path(freeze)}/most_recent_dup.mt"
+
+
 def dup_map_path(freeze: int = CURRENT_FREEZE) -> str:
     """
-    Returns path to TSV file containing duplicate sample IDs and undesired column index in 450k MatrixTable
+    Returns path to TSV file containing duplicate sample IDs and undesired column index.
+
+    Currently only exists for the 450k MatrixTable.
 
     TSV has two columns: sample ID of duplicate sample and column index to remove from the 450 MT
 
@@ -64,7 +114,7 @@ def dup_map_path(freeze: int = CURRENT_FREEZE) -> str:
     """
     if freeze != 7:
         raise DataException("Duplicate map file only exists for freeze 7/450K!")
-    return f"gs://broad-ukbb/broad.freeze_{freeze}/dup_remove_idx.tsv"
+    return f"{dup_resolution_path(freeze)}/dup_remove_idx.tsv"
 
 
 def known_dups_ht_path(freeze: int = CURRENT_FREEZE) -> str:
