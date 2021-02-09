@@ -20,7 +20,6 @@ from ukbb_qc.resources.basics import (
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import meta_ht_path
-from ukbb_qc.resources.variant_qc import var_annotations_ht_path
 from ukbb_qc.slack_creds import slack_token
 
 
@@ -67,12 +66,10 @@ def main(args):
         if args.generate_gene_lof_matrix:
             # Konrad released metrics on adj GT only (gnomAD v2.1)
             mt = get_ukbb_data(*tranche_data, adj=True, split=True, meta_root="meta")
-            freq_ht = hl.read_table(var_annotations_ht_path("ukb_freq", *tranche_data))
-            vep_ht = hl.read_table(var_annotations_ht_path("vep", *tranche_data))
             release_ht = hl.read_table(release_ht_path(*tranche_data))
             mt = mt.annotate_rows(
-                freq=freq_ht[mt.row_key].freq,
-                vep=vep_ht[mt.row_key].vep,
+                freq=release_ht[mt.row_key].freq,
+                vep=release_ht[mt.row_key].vep,
                 filters=release_ht[mt.row_key].filters,
                 fail_interval_qc=release_ht[mt.row_key].region_flag.fail_interval_qc,
             )
@@ -80,7 +77,7 @@ def main(args):
                 logger.info("Removing regions that fail interval QC...")
                 mt = mt.filter_rows(~mt.fail_interval_qc)
 
-            mt = default_generate_gene_lof_matrix(mt=mt)
+            mt = default_generate_gene_lof_matrix(mt=mt, tx_ht=None)
             mt.write(
                 release_lof_mt_path(
                     *tranche_data, intervals=args.interval_qc_pass_only
