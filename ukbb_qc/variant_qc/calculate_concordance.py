@@ -138,7 +138,7 @@ def main(args):
                         )
                         ht = ht.annotate(GT=hl.or_missing(ht.adj, ht.GT))
                         ht = ht.filter(
-                            hl.is_defined(ht.GT) & hl.is_defined(ht.truth_GT)
+                            hl.is_defined(ht.GT) | hl.is_defined(ht.truth_GT)
                         )
 
                     logger.info(
