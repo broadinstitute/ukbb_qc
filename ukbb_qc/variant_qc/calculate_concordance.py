@@ -3,6 +3,7 @@ import logging
 
 import hail as hl
 
+from gnomad.utils.annotations import annotate_adj
 from gnomad.utils.filtering import filter_low_conf_regions
 from gnomad.utils.slack import slack_notifications
 from gnomad.variant_qc.evaluation import (
@@ -45,10 +46,12 @@ def main(args):
 
         if args.extract_truth_samples:
             logger.info("Extracting truth samples from adj filtered hardcall MT...")
-            mt = get_ukbb_data(*tranche_data, adj=True)
+            mt = get_ukbb_data(*tranche_data)
 
             mt = mt.filter_cols(
-                hl.literal([TRUTH_SAMPLES[s]["s"] for s in TRUTH_SAMPLES]).contains(mt.s)
+                hl.literal([TRUTH_SAMPLES[s]["s"] for s in TRUTH_SAMPLES]).contains(
+                    mt.s
+                )
             )
 
             # Checkpoint to prevent needing to go through the large table a second time
@@ -56,10 +59,13 @@ def main(args):
                 get_checkpoint_path(*tranche_data, "truth_samples", mt=True),
                 overwrite=args.overwrite,
             )
-            mt = hl.read_matrix_table(get_checkpoint_path(*tranche_data, "truth_samples", mt=True))
+            mt = annotate_adj(mt)
             for truth_sample in TRUTH_SAMPLES:
                 truth_sample_mt = mt.filter_cols(
-                    mt.s == get_truth_sample_data(*tranche_data, truth_sample=truth_sample, data_type="s")
+                    mt.s
+                    == get_truth_sample_data(
+                        *tranche_data, truth_sample=truth_sample, data_type="s"
+                    )
                 )
                 # Filter to variants in truth data
                 truth_sample_mt = truth_sample_mt.filter_rows(
@@ -78,7 +84,9 @@ def main(args):
 
                 # Load truth data
                 mt = get_truth_sample_data(
-                    *tranche_data, truth_sample=truth_sample, data_type="callset_truth_mt"
+                    *tranche_data,
+                    truth_sample=truth_sample,
+                    data_type="callset_truth_mt",
                 )
                 truth_hc_intervals = get_truth_sample_data(
                     *tranche_data, truth_sample=truth_sample, data_type="hc_intervals"
@@ -87,7 +95,11 @@ def main(args):
                     *tranche_data, truth_sample=truth_sample, data_type="truth_mt"
                 )
                 truth_mt = truth_mt.key_cols_by(
-                    s=hl.str(get_truth_sample_data(*tranche_data, truth_sample=truth_sample, data_type="s"))
+                    s=hl.str(
+                        get_truth_sample_data(
+                            *tranche_data, truth_sample=truth_sample, data_type="s"
+                        )
+                    )
                 )
 
                 # remove low quality sites
@@ -122,6 +134,14 @@ def main(args):
                     ht = hl.read_table(
                         var_annotations_ht_path(truth_sample, *tranche_data),
                     )
+                    if args.adj:
+                        logger.info(
+                            "Filtering out genotypes that don't pass adj filtering..."
+                        )
+                        ht = ht.annotate(GT=hl.or_missing(ht.adj, ht.GT))
+                        ht = ht.filter(
+                            hl.is_missing(ht.GT) & hl.is_missing(ht.truth_GT)
+                        )
 
                     logger.info(
                         "Filtering out low confidence regions and sites outside the calling intervals..."
@@ -148,7 +168,9 @@ def main(args):
                         add_bins={"interval_bin": ht.interval_qc_pass},
                     )
                     ht.write(
-                        binned_concordance_path(truth_sample, metric, *tranche_data),
+                        binned_concordance_path(
+                            truth_sample, metric, *tranche_data, adj=args.adj
+                        ),
                         overwrite=args.overwrite,
                     )
     finally:
@@ -198,6 +220,11 @@ if __name__ == "__main__":
         help="Number of bins for the binned file (default: 100)",
         default=100,
         type=int,
+    )
+    parser.add_argument(
+        "--adj",
+        help="Will perform the bin_truth_sample_concordance with adj passing variants only.",
+        action="store_true",
     )
     args = parser.parse_args()
 
