@@ -3,7 +3,6 @@ import logging
 
 import hail as hl
 
-from gnomad.utils.annotations import annotate_adj
 from gnomad.utils.filtering import filter_low_conf_regions
 from gnomad.utils.slack import slack_notifications
 from gnomad.variant_qc.evaluation import (
@@ -59,7 +58,6 @@ def main(args):
                 get_checkpoint_path(*tranche_data, "truth_samples", mt=True),
                 overwrite=args.overwrite,
             )
-            mt = annotate_adj(mt)
             for truth_sample in TRUTH_SAMPLES:
                 truth_sample_mt = mt.filter_cols(
                     mt.s
@@ -140,7 +138,7 @@ def main(args):
                         )
                         ht = ht.annotate(GT=hl.or_missing(ht.adj, ht.GT))
                         ht = ht.filter(
-                            hl.is_missing(ht.GT) & hl.is_missing(ht.truth_GT)
+                            hl.is_defined(ht.GT) & hl.is_defined(ht.truth_GT)
                         )
 
                     logger.info(
