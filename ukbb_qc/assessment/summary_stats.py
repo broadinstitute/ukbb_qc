@@ -73,7 +73,7 @@ def main(args):
                 filters=release_ht[mt.row_key].filters,
                 fail_interval_qc=release_ht[mt.row_key].region_flag.fail_interval_qc,
             )
-            mt.describe()
+
             if args.interval_qc_pass_only:
                 logger.info("Removing regions that fail interval QC...")
                 mt = mt.filter_rows(~mt.fail_interval_qc)
