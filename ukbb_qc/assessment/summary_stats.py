@@ -73,6 +73,7 @@ def main(args):
                 filters=release_ht[mt.row_key].filters,
                 fail_interval_qc=release_ht[mt.row_key].region_flag.fail_interval_qc,
             )
+            mt.describe()
             if args.interval_qc_pass_only:
                 logger.info("Removing regions that fail interval QC...")
                 mt = mt.filter_rows(~mt.fail_interval_qc)
@@ -93,9 +94,9 @@ def main(args):
             # Reformatting pop annotations here to call `default_generate_gene_lof_summary`
             mt = mt.annotate_cols(
                 meta=mt.meta.annotate(
-                    pop=mt.hybrid_pop_data.pop
+                    pop=mt.meta.hybrid_pop_data.pop
                     if args.use_hybrid_pop
-                    else mt.pan_ancestry_meta.pop
+                    else mt.meta.pan_ancestry_meta.pop
                 )
             )
 
