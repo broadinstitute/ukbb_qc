@@ -700,6 +700,47 @@ def release_lof_ht_path(
     return f"{get_release_path(data_source, freeze)}/summary/gene_lof_matrix_summary{'_intervals' if intervals else ''}.ht"
 
 
+def get_doubleton_ht_path(
+    data_source: str, freeze: int = CURRENT_FREEZE, unrelated_only: bool = False
+) -> str:
+    """
+    Returns path to HT containing doubletons and relevant sample IDs.
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param bool unrelated_only: Whether the HT contains only unrelated samples. Default is False.
+    :return: Path to doubletons HT
+    :rtype: str
+    """
+    if freeze not in (6, 7):
+        raise DataException(
+            "Doubleton HT path only exists for freezes 6/300K and 7/450K!"
+        )
+
+    return f"{get_release_path(data_source, freeze)}/summary/doubleton/doubletons{'_unrelated' if unrelated_only else ''}.ht"
+
+
+def get_pair_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Returns path to HT containing randomly selected sample pairs.
+
+    Used to compare to pairs in doubleton HT.
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :return: Path to comparison pairs HT
+    :rtype: hl.Table
+    """
+    if freeze not in (6, 7):
+        raise DataException(
+            "Comparison pairs HT path only exists for freezes 6/300K and 7/450K!"
+        )
+
+    return (
+        f"{get_release_path(data_source, freeze)}/summary/doubleton/comparison_pairs.ht"
+    )
+
+
 # logging path
 def logging_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
