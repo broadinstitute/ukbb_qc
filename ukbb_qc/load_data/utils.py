@@ -189,7 +189,8 @@ def import_location_ht(
     """
     Opens UKBB phenotype text file, extracts location fields, and imports into a Table.
 
-    Opens text file because the previously written phenotype HT throws class too large errors.
+    Opens text file because the previously written phenotype HT threw class too large errors.
+    Phenotype HT was then overwritten with only phenotype fields relevant to sample QC.
 
     :param List[str] fields: List of fields to extract. Default is LOCATION_FIELDS.
     """
