@@ -521,7 +521,7 @@ def phenotype_ht_path() -> str:
     return "gs://broad-ukbb/resources/ukb24295.phenotypes.ht"
 
 
-def location_ht_path() -> str:
+def geographical_ht_path() -> str:
     """
     Returns path to location Table.
 

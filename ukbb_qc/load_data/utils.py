@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 import hail as hl
 
@@ -12,7 +12,7 @@ from ukbb_qc.resources.basics import (
     array_sample_map_ht_path,
     capture_ht_path,
     excluded_samples_path,
-    location_ht_path,
+    geographical_ht_path,
     pan_ancestry_txt_path,
     pan_ancestry_ht_path,
     phenotype_ht_path,
@@ -36,9 +36,9 @@ logger = logging.getLogger("load_data")
 logger.setLevel(logging.INFO)
 
 
-LOCATION_FIELDS = ["f.129.0.0", "f.130.0.0", "f.1647.0.0"]
+GEOGRAPHICAL_MAPPING = {"f.129.0.0": "north", "f.130.0.0": "east", "f.1647.0.0": "country"}
 """
-Names of fields in UKBB phenotype text file that contain location information.
+Names of fields in UKBB phenotype text file that contain geographical information.
 Currently pulls place of birth (north coordinate: 129, east coordinate: 130), 
 and country of birth (1647).
 
@@ -183,8 +183,8 @@ def load_pan_ancestry() -> None:
     ht = ht.key_by("s").write(pan_ancestry_ht_path(), overwrite=True)
 
 
-def import_location_ht(
-    key: str = "f.eid", data_fields: List[str] = LOCATION_FIELDS
+def import_geographical_ht(
+    key: str = "f.eid", data_mapping: Dict[str, str] = GEOGRAPHICAL_MAPPING,
 ) -> None:
     """
     Opens UKBB phenotype text file, extracts location fields, and imports into a Table.
@@ -192,11 +192,15 @@ def import_location_ht(
     Opens text file because the previously written phenotype HT threw class too large errors.
     Phenotype HT was then overwritten with only phenotype fields relevant to sample QC.
 
-    :param List[str] fields: List of fields to extract. Default is LOCATION_FIELDS.
+    :param Dist[str,str] data_mapping: Dictionary containing fields to extract (keys) 
+        and their contents (values).
+    :return: None
     """
-    location_ht = hl.import_table(ukbb_phenotype_path())
-    location_ht = location_ht.key_by(key).select(*data_fields)
-    location_ht.write(location_ht_path(), overwrite=True)
+    geo_ht = hl.import_table(ukbb_phenotype_path())
+    geo_ht = geo_ht.key_by(key).select(*data_mapping)
+    data_mapping.update({f"{key}": "ukbb_app_26041_id"})
+    geo_ht = geo_ht.rename(data_mapping)
+    geo_ht.write(geographical_ht_path(), overwrite=True)
 
 
 # Interval resources
