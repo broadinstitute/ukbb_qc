@@ -521,6 +521,16 @@ def phenotype_ht_path() -> str:
     return "gs://broad-ukbb/resources/ukb24295.phenotypes.ht"
 
 
+def geographical_ht_path() -> str:
+    """
+    Returns path to location Table.
+
+    :return: Path to location Table
+    :rtype: str
+    """
+    return "gs://broad-ukbb/resources/geographical_data.ht"
+
+
 # Release resources
 def get_release_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
