@@ -9,6 +9,7 @@ from ukbb_qc.assessment.sanity_checks import sample_check, summarize_mt
 from ukbb_qc.load_data.utils import (
     import_array_exome_id_map_ht,
     import_capture_intervals,
+    import_location_ht,
     import_phenotype_ht,
     import_vqsr,
     load_clinvar_path,
@@ -71,6 +72,10 @@ def main(args):
         if args.load_pan_ancestry:
             logger.info("Loading pan-ancestry information...")
             load_pan_ancestry()
+
+        if args.load_location:
+            logger.info("Importing location data...")
+            import_location_ht()
 
         if args.load_capture_intervals:
             logger.info("Importing capture intervals...")
@@ -167,6 +172,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--load_pan_ancestry",
         help="Loads pan-ancestry information from text file and writes Table",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--load_location",
+        help="Loads location information from phenotype text file and writes Table",
         action="store_true",
     )
 
