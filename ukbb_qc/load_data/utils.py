@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import hail as hl
 
@@ -12,6 +12,7 @@ from ukbb_qc.resources.basics import (
     array_sample_map_ht_path,
     capture_ht_path,
     excluded_samples_path,
+    location_ht_path,
     pan_ancestry_txt_path,
     pan_ancestry_ht_path,
     phenotype_ht_path,
@@ -33,6 +34,18 @@ from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("load_data")
 logger.setLevel(logging.INFO)
+
+
+LOCATION_FIELDS = ["f.129.0.0", "f.130.0.0", "f.1647.0.0"]
+"""
+Names of fields in UKBB phenotype text file that contain location information.
+Currently pulls place of birth (north coordinate: 129, east coordinate: 130), 
+and country of birth (1647).
+
+Field 129: https://biobank.ndph.ox.ac.uk/showcase/field.cgi?id=129
+Field 130: https://biobank.ndph.ox.ac.uk/showcase/field.cgi?id=130
+Field 1647: https://biobank.ndph.ox.ac.uk/showcase/field.cgi?id=1647
+"""
 
 
 # Sample resources
@@ -168,6 +181,21 @@ def load_pan_ancestry() -> None:
     """
     ht = hl.import_table(pan_ancestry_txt_path(), impute=True)
     ht = ht.key_by("s").write(pan_ancestry_ht_path(), overwrite=True)
+
+
+def import_location_ht(
+    key: str = "f.eid", data_fields: List[str] = LOCATION_FIELDS
+) -> None:
+    """
+    Opens UKBB phenotype text file, extracts location fields, and imports into a Table.
+
+    Opens text file because the previously written phenotype HT throws class too large errors.
+
+    :param List[str] fields: List of fields to extract. Default is LOCATION_FIELDS.
+    """
+    location_ht = hl.import_table(ukbb_phenotype_path())
+    location_ht = location_ht.key_by(key).select(*data_fields)
+    location_ht.write(location_ht_path(), overwrite=True)
 
 
 # Interval resources
