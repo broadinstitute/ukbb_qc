@@ -528,7 +528,7 @@ def geographical_ht_path() -> str:
     :return: Path to location Table
     :rtype: str
     """
-    return "gs://broad-ukbb/resources/location.ht"
+    return "gs://broad-ukbb/resources/geographical_data.ht"
 
 
 # Release resources
