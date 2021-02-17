@@ -73,8 +73,8 @@ def main(args):
             logger.info("Loading pan-ancestry information...")
             load_pan_ancestry()
 
-        if args.load_location:
-            logger.info("Importing location data...")
+        if args.load_geographical_data:
+            logger.info("Importing geographical data...")
             import_geographical_ht()
 
         if args.load_capture_intervals:
@@ -175,8 +175,8 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--load_location",
-        help="Loads location information from phenotype text file and writes Table",
+        "--load_geographical_data",
+        help="Loads geographical information from phenotype text file and writes Table",
         action="store_true",
     )
 
