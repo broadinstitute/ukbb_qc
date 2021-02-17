@@ -12,6 +12,7 @@ from ukbb_qc.resources.basics import (
     array_sample_map_ht_path,
     capture_ht_path,
     excluded_samples_path,
+    geographical_ht_path,
     pan_ancestry_txt_path,
     pan_ancestry_ht_path,
     phenotype_ht_path,
@@ -33,6 +34,18 @@ from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("load_data")
 logger.setLevel(logging.INFO)
+
+
+GEOGRAPHICAL_MAPPING = {"f.129.0.0": "north", "f.130.0.0": "east", "f.1647.0.0": "country"}
+"""
+Names of fields in UKBB phenotype text file that contain geographical information.
+Currently pulls place of birth (north coordinate: 129, east coordinate: 130), 
+and country of birth (1647).
+
+Field 129: https://biobank.ndph.ox.ac.uk/showcase/field.cgi?id=129
+Field 130: https://biobank.ndph.ox.ac.uk/showcase/field.cgi?id=130
+Field 1647: https://biobank.ndph.ox.ac.uk/showcase/field.cgi?id=1647
+"""
 
 
 # Sample resources
@@ -168,6 +181,26 @@ def load_pan_ancestry() -> None:
     """
     ht = hl.import_table(pan_ancestry_txt_path(), impute=True)
     ht = ht.key_by("s").write(pan_ancestry_ht_path(), overwrite=True)
+
+
+def import_geographical_ht(
+    key: str = "f.eid", data_mapping: Dict[str, str] = GEOGRAPHICAL_MAPPING,
+) -> None:
+    """
+    Opens UKBB phenotype text file, extracts location fields, and imports into a Table.
+
+    Opens text file because the previously written phenotype HT threw class too large errors.
+    Phenotype HT was then overwritten with only phenotype fields relevant to sample QC.
+
+    :param Dist[str,str] data_mapping: Dictionary containing fields to extract (keys) 
+        and their contents (values).
+    :return: None
+    """
+    geo_ht = hl.import_table(ukbb_phenotype_path())
+    geo_ht = geo_ht.key_by(key).select(*data_mapping)
+    data_mapping.update({f"{key}": "ukbb_app_26041_id"})
+    geo_ht = geo_ht.rename(data_mapping)
+    geo_ht.write(geographical_ht_path(), overwrite=True)
 
 
 # Interval resources
