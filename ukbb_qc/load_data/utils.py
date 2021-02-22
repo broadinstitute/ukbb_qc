@@ -196,6 +196,7 @@ def load_pan_ancestry(freeze: int = CURRENT_FREEZE) -> None:
         "ukbb_app_26041_id"
     )
     ht = ht.annotate(s=sample_map_ht[hl.str(ht.ukbb_app_26041_id)].s)
+    ht = ht.filter(hl.is_defined(ht.s))
     ht = ht.key_by("s").write(pan_ancestry_ht_path(), overwrite=True)
 
 
