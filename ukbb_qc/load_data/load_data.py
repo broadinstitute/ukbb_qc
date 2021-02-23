@@ -71,7 +71,7 @@ def main(args):
 
         if args.load_pan_ancestry:
             logger.info("Loading pan-ancestry information...")
-            load_pan_ancestry()
+            load_pan_ancestry(freeze)
 
         if args.load_geographical_data:
             logger.info("Importing geographical data...")
