@@ -13,6 +13,7 @@ from ukbb_qc.resources.basics import (
     capture_ht_path,
     excluded_samples_path,
     geographical_ht_path,
+    pan_ancestry_bridge_path,
     pan_ancestry_txt_path,
     pan_ancestry_ht_path,
     phenotype_ht_path,
@@ -36,7 +37,11 @@ logger = logging.getLogger("load_data")
 logger.setLevel(logging.INFO)
 
 
-GEOGRAPHICAL_MAPPING = {"f.129.0.0": "north", "f.130.0.0": "east", "f.1647.0.0": "country"}
+GEOGRAPHICAL_MAPPING = {
+    "f.129.0.0": "north",
+    "f.130.0.0": "east",
+    "f.1647.0.0": "country",
+}
 """
 Names of fields in UKBB phenotype text file that contain geographical information.
 Currently pulls place of birth (north coordinate: 129, east coordinate: 130), 
@@ -170,16 +175,27 @@ def load_self_reported_ancestry(freeze: int) -> None:
     ukbb_ancestry_ht.write(get_ukbb_self_reported_ancestry_path(freeze), overwrite=True)
 
 
-def load_pan_ancestry() -> None:
+def load_pan_ancestry(freeze: int = CURRENT_FREEZE) -> None:
     """
     Loads pan-ancestry information for all UKBB samples (contains data for all freezes).
 
     Writes HT to pan_ancestry_ht_path().
 
+    :param int freeze: One of the data freezes. Default is CURRENT_FREEZE.
+        Used to load correct version of sample map using `array_sample_map_ht_path()`.
     :return: None
     :rtype: None
     """
     ht = hl.import_table(pan_ancestry_txt_path(), impute=True)
+    bridge = hl.import_table(pan_ancestry_bridge_path(), impute=True).key_by(
+        "eid_31063"
+    )
+    ht = ht.key_by(ukbb_app_26041_id=hl.str(bridge[hl.str(ht.s)].eid_26041))
+    sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze)).key_by(
+        "ukbb_app_26041_id"
+    )
+    ht = ht.annotate(s=sample_map_ht[hl.str(ht.ukbb_app_26041_id)].s)
+    ht = ht.filter(hl.is_defined(ht.s))
     ht = ht.key_by("s").write(pan_ancestry_ht_path(), overwrite=True)
 
 

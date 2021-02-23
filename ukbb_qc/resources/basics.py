@@ -36,6 +36,16 @@ def pan_ancestry_ht_path() -> str:
     return "gs://broad-ukbb/resources/pan_ancestry.ht"
 
 
+def pan_ancestry_bridge_path() -> str:
+    """
+    Returns path to text file that contains sample ID mappings for pan-ancestry labels.
+
+    :return: Path to text file that contains pan-ancestry sample ID mappings.
+    :rtype: str
+    """
+    return "gs://broad-ukbb/resources/bridge_26041_31063.csv"
+
+
 def excluded_samples_path(freeze: int = CURRENT_FREEZE) -> str:
     """
     Returns path to list of samples to exclude from QC due to withdrawn consents
