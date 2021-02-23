@@ -182,16 +182,15 @@ def load_pan_ancestry(freeze: int = CURRENT_FREEZE) -> None:
     Writes HT to pan_ancestry_ht_path().
 
     :param int freeze: One of the data freezes. Default is CURRENT_FREEZE.
+        Used to load correct version of sample map using `array_sample_map_ht_path()`.
     :return: None
     :rtype: None
     """
-    ht = hl.import_table(pan_ancestry_txt_path(), impute=True).key_by("s")
+    ht = hl.import_table(pan_ancestry_txt_path(), impute=True)
     bridge = hl.import_table(pan_ancestry_bridge_path(), impute=True).key_by(
         "eid_31063"
     )
-    ht = ht.annotate(ukbb_app_26041_id=bridge[ht.s].eid_26041).key_by(
-        "ukbb_app_26041_id"
-    )
+    ht = ht.key_by(ukbb_app_26041_id=hl.str(bridge[hl.str(ht.s)].eid_26041))
     sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze)).key_by(
         "ukbb_app_26041_id"
     )
