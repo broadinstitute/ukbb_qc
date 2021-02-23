@@ -261,6 +261,10 @@ def main(args):
             # Filter to high quality UKBB samples only
             mt = mt.filter_cols(mt.meta.sample_filters.high_quality)
             mt = mt.filter_cols(hl.is_defined(mt.meta.ukbb_meta.batch))
+
+            # Filter to samples with defined pan-ancestry labels
+            # NOTE: 37876 samples are missing pan-ancestry labels
+            mt = mt.filter_cols(hl.is_defined(mt.meta.pan_ancestry_meta.pop))
             mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
 
             if args.by_tranche:
