@@ -187,7 +187,7 @@ def load_pan_ancestry(freeze: int = CURRENT_FREEZE) -> None:
     :rtype: None
     """
     ht = hl.import_table(pan_ancestry_txt_path(), impute=True)
-    bridge = hl.import_table(pan_ancestry_bridge_path(), impute=True).key_by(
+    bridge = hl.import_table(pan_ancestry_bridge_path(), delimiter=",").key_by(
         "eid_31063"
     )
     ht = ht.key_by(ukbb_app_26041_id=hl.str(bridge[hl.str(ht.s)].eid_26041))
