@@ -45,8 +45,9 @@ RF_FIELDS.append("rf_tp_probability")
 # Remove InbreedingCoeff from allele-specific fields (processed separately from other fields)
 AS_FIELDS.remove("InbreedingCoeff")
 
-# Remove BaseQRankSum from site fields (not present in info HT)
+# Remove BaseQRankSum from site and allele-specific fields (not present in info HT)
 SITE_FIELDS.remove("BaseQRankSum")
+AS_FIELDS.remove("AS_BaseQRankSum")
 
 
 def flag_problematic_regions(
