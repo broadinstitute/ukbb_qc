@@ -603,6 +603,22 @@ def main(args):
             mt = hl.experimental.sparse_split_multi(mt)
             mt = mt.select_entries(*ENTRIES)
 
+            # Temporary hotfix for depletion of homozygous alternate genotypes
+            logger.info(
+                "Setting het genotypes at sites with >1% AF (using v3.0 frequencies) and > 0.9 AB to homalt..."
+            )
+            freq_ht = hl.read_table(release_ht_path(*tranche_data)).select("freq")
+            freq_ht = freq_ht.select(AF=freq_ht.freq[0].AF)
+            mt = mt.annotate_entries(
+                GT=hl.if_else(
+                    mt.GT.is_het()
+                    & (freq_ht[mt.row_key].AF > 0.01)
+                    & (mt.AD[1] / mt.DP > 0.9),
+                    hl.call(1, 1),
+                    mt.GT,
+                )
+            )
+
             logger.info("Reading in release HT and annotating onto raw MT...")
             ht = hl.read_table(release_ht_path(*tranche_data))
             mt = mt.annotate_rows(**ht[mt.row_key])
