@@ -53,7 +53,7 @@ def generate_cohort_frequency_data(
     mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
 
     logger.info("Generating frequency data...")
-    mt = annotate_freq(mt, sex_expr=mt._sex)
+    mt = annotate_freq(mt, sex_expr=mt._sex, pop_expr=mt._pop)
     mt = mt.drop("_pop", "_sex")
     mt = mt.select_rows(cohort_freq=mt.freq)
     cohort_freq_meta = hl.eval(mt.freq_meta)
@@ -136,7 +136,6 @@ def generate_frequency_data(
         mt,
         sex_expr=mt.meta.sex_imputation.sex_karyotype,
         pop_expr=mt.meta.pan_ancestry_meta.pop,
-        subpop_expr=mt.meta.hybrid_pop_data.pop,
         additional_strata_expr=additional_strata_expr,
     )
 
@@ -263,6 +262,7 @@ def main(args):
             mt = mt.filter_cols(hl.is_defined(mt.meta.ukbb_meta.batch))
             mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
 
+            platform_strata = args.by_tranche or args.by_platform
             if args.by_tranche:
                 platform_expr = mt.meta.ukbb_meta.batch
             elif args.by_platform:
@@ -296,7 +296,7 @@ def main(args):
                 freeze,
                 pops_to_remove_for_popmax,
                 cohort_frequency_pops,
-                args.by_platform,
+                platform_strata,
                 args.by_tranche,
                 platform_expr,
             )
