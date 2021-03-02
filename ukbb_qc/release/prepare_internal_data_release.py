@@ -109,7 +109,6 @@ def prepare_annotations(
             InbreedingCoeff=freq_ht[info_ht.key].InbreedingCoeff,
         )
     )
-    rf_ht = rf_ht.select(*RF_FIELDS)
     vep_ht = vep_ht.transmute(vep=vep_ht.vep.drop("colocated_variants"))
     vqsr_ht = vqsr_ht.transmute(info=vqsr_ht.info.select(*VQSR_FIELDS)).select("info")
     dbsnp_ht = dbsnp.ht().select("rsid")
@@ -117,7 +116,7 @@ def prepare_annotations(
     logger.info(
         "Annotating HT with random forest HT and flagging problematic regions..."
     )
-    ht = ht.annotate(rf=rf_ht[ht.key], filters=rf_ht[ht.key].filters)
+    ht = ht.annotate(filters=rf_ht[ht.key].filters, rf=rf_ht[ht.key].select(*RF_FIELDS))
     ht = ht.annotate_globals(rf_globals=rf_ht.index_globals())
     ht = ht.annotate(region_flag=flag_problematic_regions(ht))
     ht = ht.transmute(rf=ht.rf.drop("interval_qc_pass", "in_capture_interval"))
