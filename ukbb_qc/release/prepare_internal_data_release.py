@@ -39,9 +39,6 @@ logger.setLevel(logging.INFO)
 ADDITIONAL_RF_FIELDS = ["in_capture_interval", "interval_qc_pass"]
 RF_FIELDS.extend(ADDITIONAL_RF_FIELDS)
 
-# Rename RF probability in RF fields
-RF_FIELDS.append("rf_tp_probability")
-
 # Remove InbreedingCoeff from allele-specific fields (processed separately from other fields)
 AS_FIELDS.remove("InbreedingCoeff")
 
