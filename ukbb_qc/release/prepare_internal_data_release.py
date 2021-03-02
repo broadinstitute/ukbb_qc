@@ -99,9 +99,9 @@ def prepare_annotations(
     # Adding QUALapprox here (needed in variant annotation histograms code downstream)
     SITE_FIELDS.append("QUALapprox")
     info_fields = SITE_FIELDS + AS_FIELDS
-    info_ht = info_ht.annotate(
-        qual=info_ht.info.QUALapprox, info=info_ht.info.select(*info_fields)
-    ).select("info", "qual")
+    info_ht = info_ht.select(
+        qual=info_ht.info.QUALapprox, info=info_ht.info.select(*info_fields),
+    )
     info_ht = info_ht.transmute(
         info=info_ht.info.annotate(
             sibling_singleton=rf_ht[info_ht.key].sibling_singleton,
