@@ -109,6 +109,7 @@ KEEP_POPS = ["afr", "amr", "asj", "eas", "fin", "nfe", "oth", "sas"]
 UKBB_POPS = {
     "EUR": "European",
     "CSA": "Central/South Asian",
+    "AFR": "African",
     "EAS": "East Asian",
     "MID": "Middle Eastern",
     "AMR": "Admixed American",
