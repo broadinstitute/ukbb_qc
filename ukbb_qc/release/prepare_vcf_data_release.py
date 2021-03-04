@@ -158,7 +158,7 @@ def populate_info_dict(
     :param List[str] ukbb_sexes: UKBB sample sexes used in VCF export. Default is SEXES_UKBB.
     :param List[str] gnomad_nfe_subpops: List of nfe subpopulations in gnomAD. Default is GNOMAD_NFE_SUBPOPS.
     :param List[str] gnomad_eas_subpops: List of eas subpopulations in gnomAD. Default is GNOMAD_EAS_SUBPOPS.
-    :param Dict[str, List[str]] subpops: Dictionary of global population names (keys)
+    :param Optional[Dict[str, List[str]]] subpops: Dictionary of global population names (keys)
         and all hybrid population cluster names associated with that global pop (values). 
     :rtype: Dict[str, Dict[str, str]]
     """
@@ -395,7 +395,11 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
 
 
 def unfurl_nested_annotations(
-    t: Union[hl.MatrixTable, hl.Table], gnomad: bool, genome: bool, pops: List[str],
+    t: Union[hl.MatrixTable, hl.Table],
+    gnomad: bool,
+    genome: bool,
+    pops: List[str],
+    subpops: List[str] = None,
 ) -> Dict[str, hl.expr.Expression]:
     """
     Create dictionary keyed by the variant annotation labels to be extracted from variant annotation arrays, where the values
@@ -405,6 +409,7 @@ def unfurl_nested_annotations(
     :param bool gnomad: Whether the annotations are from gnomAD.
     :param bool genome: Whether the annotations are from genome data (relevant only to gnomAD data).
     :param List[str] pops: List of global populations in frequency array. 
+    :param List[str] subpops: List of all UKBB subpops (possible hybrid population cluster names). Default is None.
     :return: Dictionary containing variant annotations and their corresponding values.
     :rtype: Dict[str, hl.expr.Expression]
     """
@@ -419,15 +424,22 @@ def unfurl_nested_annotations(
         freq = f"{gnomad_prefix}_freq"
         faf_idx = hl.eval(t.globals[f"{gnomad_prefix}_faf_index_dict"])
         freq_idx = make_index_dict(
-            t=t, freq_meta_str=f"{gnomad_prefix}_freq_meta", pops=pops,
+            t=t,
+            freq_meta_str=f"{gnomad_prefix}_freq_meta",
+            pops=pops,
+            subpops=[GNOMAD_NFE_SUBPOPS + GNOMAD_EAS_SUBPOPS],
         )
 
     else:
         faf = "faf"
         freq = "freq"
-        faf_idx = make_index_dict(t=t, freq_meta_str="faf_meta", pops=pops)
+        faf_idx = make_index_dict(
+            t=t, freq_meta_str="faf_meta", pops=pops, subpops=subpops
+        )
         popmax = "popmax"
-        freq_idx = make_index_dict(t=t, freq_meta_str="freq_meta", pops=pops)
+        freq_idx = make_index_dict(
+            t=t, freq_meta_str="freq_meta", pops=pops, subpops=subpops
+        )
 
     # Unfurl freq index dict
     # Cycles through each key and index (e.g., k=adj_afr, i=31)
