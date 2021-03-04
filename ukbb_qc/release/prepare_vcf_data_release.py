@@ -2,7 +2,7 @@ import argparse
 import logging
 import pickle
 import sys
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Union
 
 import hail as hl
 
@@ -105,11 +105,11 @@ KEEP_POPS.extend(GNOMAD_NFE_SUBPOPS)
 KEEP_POPS.extend(GNOMAD_EAS_SUBPOPS)
 
 # Remove unnecessary pop names from pops dict
-POPS = {pop: POP_NAMES[pop] for pop in KEEP_POPS}
+# Store this as GNOMAD_EXOMES_POPS
+GNOMAD_EXOMES_POPS = {pop: POP_NAMES[pop] for pop in KEEP_POPS}
 
 # Separating gnomad exome/genome pops and adding 'ami', 'mde' to gnomAD genomes pops
-GNOMAD_EXOMES_POPS = POPS.copy()
-GNOMAD_GENOMES_POPS = POPS.copy()
+GNOMAD_GENOMES_POPS = GNOMAD_EXOMES_POPS.copy()
 GNOMAD_GENOMES_POPS["ami"] = "Amish"
 GNOMAD_GENOMES_POPS["mde"] = "Middle Eastern"
 
@@ -128,6 +128,7 @@ def populate_info_dict(
     ukbb_sexes: List[str] = SEXES_UKBB,
     gnomad_nfe_subpops: List[str] = GNOMAD_NFE_SUBPOPS,
     gnomad_eas_subpops: List[str] = GNOMAD_EAS_SUBPOPS,
+    subpops: Optional[Dict[str, List[str]]] = None,
 ) -> Dict[str, Dict[str, str]]:
     """
     Calls `make_info_dict` and `make_hist_dict` to populate INFO dictionary with specific sexes, population names, and filtering allele frequency (faf) pops.
@@ -140,6 +141,9 @@ def populate_info_dict(
         - INFO fields for AC, AN, AF, nhomalt for each combination of sample population, sex, and subpopulation, both for adj and raw data
         - INFO fields for filtering allele frequency (faf) annotations 
         - INFO fields for variant histograms (hist_bin_freq, hist_n_smaller, hist_n_larger for each histogram)
+
+    .. note ::
+        If `subpops` is specified, `ukbb_pops` MUST include a description for each population in `subpops`.
 
     :param Dict[str, str] bin_edges: Dictionary of variant annotation histograms and their associated bin edges.
     :param str age_hist_data: Pipe-delimited string of age histograms, from `get_age_distributions`.
@@ -154,6 +158,8 @@ def populate_info_dict(
     :param List[str] ukbb_sexes: UKBB sample sexes used in VCF export. Default is SEXES_UKBB.
     :param List[str] gnomad_nfe_subpops: List of nfe subpopulations in gnomAD. Default is GNOMAD_NFE_SUBPOPS.
     :param List[str] gnomad_eas_subpops: List of eas subpopulations in gnomAD. Default is GNOMAD_EAS_SUBPOPS.
+    :param Dict[str, List[str]] subpops: Dictionary of global population names (keys)
+        and all hybrid population cluster names associated with that global pop (values). 
     :rtype: Dict[str, Dict[str, str]]
     """
     vcf_info_dict = info_dict
@@ -306,6 +312,24 @@ def populate_info_dict(
                     bin_edges=bin_edges,
                     popmax=True,
                     age_hist_data="|".join(str(x) for x in age_hist_data),
+                )
+            )
+
+    if subpops:
+        logger.info(
+            "Adding UKBB subpops (hybrid pops) to UKBB population description dict..."
+        )
+        for pop in subpops:
+            for cluster in subpops[pop]:
+                ukbb_pops[
+                    f"{cluster}"
+                ] = f"{ukbb_pops[pop]} and hybrid population cluster {cluster}"
+        for pop in subpops:
+            vcf_info_dict.update(
+                make_info_dict(
+                    prefix="",
+                    pop_names=ukbb_pops,
+                    label_groups=dict(group=["adj"], pop=[pop], subpop=subpops[pop]),
                 )
             )
 
