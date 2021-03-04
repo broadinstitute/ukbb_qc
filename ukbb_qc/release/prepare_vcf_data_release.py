@@ -111,7 +111,7 @@ GNOMAD_EXOMES_POPS = {pop: POP_NAMES[pop] for pop in KEEP_POPS}
 # Separating gnomad exome/genome pops and adding 'ami', 'mde' to gnomAD genomes pops
 GNOMAD_GENOMES_POPS = GNOMAD_EXOMES_POPS.copy()
 GNOMAD_GENOMES_POPS["ami"] = "Amish"
-GNOMAD_GENOMES_POPS["mde"] = "Middle Eastern"
+GNOMAD_GENOMES_POPS["mid"] = "Middle Eastern"
 
 
 def populate_info_dict(
