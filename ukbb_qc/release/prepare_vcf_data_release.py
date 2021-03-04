@@ -295,6 +295,8 @@ def populate_info_dict(
                     )
                 )
 
+            # NOTE: Using `ukbb_pops` here because all frequency calculations were run on pan-ancestry labels this tranche
+            # `faf_pops` contains only gnomAD population labels
             faf_label_groups = _create_label_groups(pops=ukbb_pops, sexes=ukbb_sexes)
             for label_group in faf_label_groups:
                 vcf_info_dict.update(
