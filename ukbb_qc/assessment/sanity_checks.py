@@ -640,6 +640,9 @@ def sanity_check_release_mt(
     subsets: List[str],
     missingness_threshold: float = 0.5,
     verbose: bool = False,
+    n_alt_alleles_hist_start: int = 1,
+    n_alt_alleles_hist_end: int = 1000,
+    n_alt_alleles_hist_bins: int = 100,
 ) -> None:
     """
     Perform a battery of sanity checks on a specified group of subsets in a MatrixTable containing variant annotations.
@@ -656,16 +659,29 @@ def sanity_check_release_mt(
     :param float missingness_threshold: Upper cutoff for allowed amount of missingness. Default is 0.5
     :param bool verbose: If True, display top values of relevant annotations being checked, regardless of whether check
         conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
+    :param int n_alt_alleles_hist_start: Start of range for `n_alt_alleles` histogram. Default is 1.
+    :param int n_alt_alleles_hist_end: End of range for `n_alt_alleles` histogram. Default is 1000.
+    :param int n_alt_alleles_hist_bins: Number of bins for `n_alt_alleles` histogram. Default is 100.
     :return: None (terminal display of results from the battery of sanity checks).
     :rtype: None
     """
-    # Perform basic checks -- number of variants, number of contigs, number of samples
+    # Perform basic checks -- number of variants, number of contigs, number of samples,
+    # number of alternate alleles histogram
     logger.info("BASIC SUMMARY OF INPUT TABLE:")
     n_samples = mt.count_cols()
     ht = mt.rows()
     n_sites = ht.count()
     contigs = ht.aggregate(hl.agg.collect_as_set(ht.locus.contig))
+    n_alt_alleles_hist = ht.aggregate(
+        hl.agg.hist(
+            ht.allele_info.n_alt_alleles,
+            start=n_alt_alleles_hist_start,
+            end=n_alt_alleles_hist_end,
+            bins=n_alt_alleles_hist_bins,
+        )
+    )
     logger.info(f"Found {n_sites} sites in contigs {contigs} in {n_samples} samples")
+    logger.info(f"n_alt_alleles histogram: {n_alt_alleles_hist}")
 
     logger.info("VARIANT FILTER SUMMARIES:")
     filters_sanity_check(ht)
