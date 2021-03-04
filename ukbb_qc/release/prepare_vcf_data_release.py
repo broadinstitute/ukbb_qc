@@ -50,7 +50,7 @@ from ukbb_qc.resources.basics import (
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import info_ht_path
 from ukbb_qc.slack_creds import slack_token
-from ukbb_qc.utils.constants import SEXES_UKBB
+from ukbb_qc.utils.constants import SEXES_UKBB, UKBB_POPS
 from ukbb_qc.utils.utils import make_index_dict
 
 
@@ -83,8 +83,7 @@ REGION_FLAG_FIELDS = [
 ]
 REGION_FLAG_FIELDS.extend(INTERVAL_FIELDS)
 
-# Remove BaseQRankSum from site and allele-specific fields
-# BaseQRankSum is a legacy annotation
+# Remove BaseQRankSum from site and allele-specific fields (this is a legacy annotation)
 SITE_FIELDS.remove("BaseQRankSum")
 AS_FIELDS.remove("AS_BaseQRankSum")
 
@@ -102,19 +101,6 @@ GNOMAD_EAS_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["EAS"]))
 # This removes pop names we don't want to use in the UKBB release
 # (e.g., "uniform", "consanguineous") to reduce clutter
 KEEP_POPS = ["afr", "amr", "asj", "eas", "fin", "nfe", "oth", "sas"]
-
-# Create dictionary of pop names and their labels for UKBB
-# This is a dict of pan-ancestry labels. Descriptions taken from:
-# https://pan.ukbb.broadinstitute.org/docs/technical-overview
-UKBB_POPS = {
-    "EUR": "European",
-    "CSA": "Central/South Asian",
-    "AFR": "African",
-    "EAS": "East Asian",
-    "MID": "Middle Eastern",
-    "AMR": "Admixed American",
-}
-
 KEEP_POPS.extend(GNOMAD_NFE_SUBPOPS)
 KEEP_POPS.extend(GNOMAD_EAS_SUBPOPS)
 
@@ -407,9 +393,7 @@ def unfurl_nested_annotations(
         freq = f"{gnomad_prefix}_freq"
         faf_idx = hl.eval(t.globals[f"{gnomad_prefix}_faf_index_dict"])
         freq_idx = make_index_dict(
-            t=t,
-            freq_meta_str=f"{gnomad_prefix}_freq_meta",
-            pops=pops,
+            t=t, freq_meta_str=f"{gnomad_prefix}_freq_meta", pops=pops,
         )
 
     else:
