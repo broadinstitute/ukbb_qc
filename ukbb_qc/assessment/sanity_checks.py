@@ -8,13 +8,11 @@ from gnomad.assessment.sanity_checks import (
     make_filters_sanity_check_expr,
     sample_sum_check,
 )
+from gnomad.resources.grch38.gnomad import SEXES
 from gnomad.resources.grch37.gnomad import SUBPOPS
 from gnomad.sample_qc.ancestry import POP_NAMES
-from gnomad.utils.vcf import (
-    HISTS,
-    SEXES,
-)
-from ukbb_qc.utils.constants import SEXES_UKBB
+from gnomad.utils.vcf import HISTS
+from gnomad.utils.vcf import SEXES as SEXES_STR
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -462,12 +460,15 @@ def sample_sum_sanity_checks(
     for subset in subsets:
         # Check if pops are present
         if "gnomad" in subset:
-            sexes = SEXES
+            if "exomes" in subset:
+                sexes = SEXES_STR
+            else:
+                sexes = SEXES
             pop_adjusted = list(
                 set([x for x in info_metrics if (subset in x) and ("raw" not in x)])
             )
         else:
-            sexes = SEXES_UKBB
+            sexes = SEXES
             pop_adjusted = list(
                 set(
                     [
