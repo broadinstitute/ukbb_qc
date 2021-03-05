@@ -4,6 +4,7 @@ from typing import Dict, List, Union
 
 import hail as hl
 
+from gnomad.resources.grch38.resources.gnomad import SEXES
 from gnomad.resources.grch38.reference_data import lcr_intervals
 from gnomad.resources.resource_utils import DataException
 from gnomad.sample_qc.relatedness import UNRELATED
@@ -17,8 +18,8 @@ from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.vcf import (
     GROUPS,
     make_label_combos,
-    SEXES,
 )
+from gnomad.utils.vcf import SEXES as SEXES_STR
 from gnomad.variant_qc.random_forest import get_rf_runs
 from gnomad_qc.v2.variant_qc.prepare_data_release import (
     EAS_SUBPOPS as GNOMAD_EAS_SUBPOPS,
@@ -41,7 +42,6 @@ from ukbb_qc.resources.sample_qc import (
     qc_sites_path,
 )
 from ukbb_qc.resources.variant_qc import vqsr_run_path
-from ukbb_qc.utils.constants import SEXES_UKBB
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -518,8 +518,8 @@ def make_freq_meta_index_dict(
     gnomad_nfe_subpops: List[str] = GNOMAD_NFE_SUBPOPS,
     gnomad_eas_subpops: List[str] = GNOMAD_EAS_SUBPOPS,
     groups: List[str] = GROUPS,
-    gnomad_sexes: List[str] = SEXES,
-    ukbb_sexes: List[str] = SEXES_UKBB,
+    gnomad_sexes: List[str] = SEXES_STR,
+    ukbb_sexes: List[str] = SEXES,
 ) -> Dict[str, int]:
     """
     Makes a dictionary of the entries in the frequency array annotation, where keys are the grouping combinations and the values
@@ -534,8 +534,8 @@ def make_freq_meta_index_dict(
     :param List[str] gnomad_nfe_subpops: List of nfe subpopulations in gnomAD. Default is GNOMAD_NFE_SUBPOPS.
     :param List[str] gnomad_eas_subpops: List of eas subpopulations in gnomAD. Default is GNOMAD_EAS_SUBPOPS.
     :param List[str] groups: Group names used to generate labels for high quality genotypes and all raw genotypes. Default is GROUPS.
-    :param List[str] sexes: gnomAD sample sexes used in VCF export. Default is SEXES. 
-    :param List[str] ukbb_sexes: UKBB sample sexes used in VCF export. Default is SEXES_UKBB.
+    :param List[str] sexes: gnomAD sample sexes ("male", "female") used in VCF export. Default is SEXES_STR. 
+    :param List[str] ukbb_sexes: UKBB sample sexes ("XX", "XY") used in VCF export. Default is SEXES.
     :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
         of each grouping entry in the frequency array
     :rtype: Dict[str, int]
