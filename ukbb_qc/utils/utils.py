@@ -534,8 +534,8 @@ def make_freq_meta_index_dict(
     :param List[str] gnomad_nfe_subpops: List of nfe subpopulations in gnomAD. Default is GNOMAD_NFE_SUBPOPS.
     :param List[str] gnomad_eas_subpops: List of eas subpopulations in gnomAD. Default is GNOMAD_EAS_SUBPOPS.
     :param List[str] groups: Group names used to generate labels for high quality genotypes and all raw genotypes. Default is GROUPS.
-    :param List[str] sexes: gnomAD sample sexes ("male", "female") used in VCF export. Default is SEXES_STR. 
-    :param List[str] ukbb_sexes: UKBB sample sexes ("XX", "XY") used in VCF export. Default is SEXES.
+    :param List[str] sexes: gnomAD v2 sample sexes ("male", "female") used in VCF export. Default is SEXES_STR. 
+    :param List[str] ukbb_sexes: UKBB, gnomAD v3 sample sexes ("XX", "XY") used in VCF export. Default is SEXES.
     :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
         of each grouping entry in the frequency array
     :rtype: Dict[str, int]
