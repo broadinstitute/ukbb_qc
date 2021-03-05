@@ -68,8 +68,8 @@ ENTRIES.append("END")
 
 # Add capture region and sibling singletons to vcf_info_dict
 VCF_INFO_DICT = INFO_DICT
-VCF_INFO_DICT["in_capture_region"] = {
-    "Description": "Variant falls within an exome capture region"
+VCF_INFO_DICT["outside_capture_region"] = {
+    "Description": "Variant falls outside exome capture regions"
 }
 VCF_INFO_DICT["sibling_singleton"] = {
     "Description": "Variant was a callset-wide doubleton that was present only within a sibling pair"
@@ -77,7 +77,7 @@ VCF_INFO_DICT["sibling_singleton"] = {
 
 # Add interval QC, capture region to REGION_FLAG_FIELDS and remove decoy
 # NOTE: MISSING_REGION_FIELDS could change for 500K if we get hg38 files
-INTERVAL_FIELDS = ["fail_interval_qc", "in_capture_region"]
+INTERVAL_FIELDS = ["fail_interval_qc", "outside_capture_region"]
 MISSING_REGION_FIELDS = ["decoy"]
 REGION_FLAG_FIELDS = [
     field for field in REGION_FLAG_FIELDS if field not in MISSING_REGION_FIELDS
