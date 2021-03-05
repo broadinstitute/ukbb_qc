@@ -270,7 +270,7 @@ def populate_info_dict(
                     vcf_info_dict.update(
                         make_info_dict(
                             prefix=subset,
-                            pop_names=gnomad_exomes_pops,
+                            pop_names=gnomad_genomes_pops,
                             label_groups=label_group,
                             faf=True,
                         )
