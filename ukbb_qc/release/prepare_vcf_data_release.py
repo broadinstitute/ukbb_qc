@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Union
 import hail as hl
 
 from gnomad.resources.grch37.gnomad import SUBPOPS
+from gnomad.resources.grch38.gnomad import SEXES
 from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.sample_qc.sex import adjust_sex_ploidy
 from gnomad.utils.reference_genome import get_reference_genome
@@ -30,10 +31,10 @@ from gnomad.utils.vcf import (
     RF_FIELDS,
     SITE_FIELDS,
     set_female_y_metrics_to_na,
-    SEXES,
     SPARSE_ENTRIES,
     VQSR_FIELDS,
 )
+from gnomad.utils.vcf import SEXES as SEXES_STR
 from ukbb_qc.assessment.sanity_checks import (
     sanity_check_release_mt,
     vcf_field_check,
@@ -50,7 +51,7 @@ from ukbb_qc.resources.basics import (
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import info_ht_path
 from ukbb_qc.slack_creds import slack_token
-from ukbb_qc.utils.constants import SEXES_UKBB, UKBB_POPS
+from ukbb_qc.utils.constants import UKBB_POPS
 from ukbb_qc.utils.utils import make_index_dict
 
 
@@ -108,7 +109,7 @@ KEEP_POPS.extend(GNOMAD_EAS_SUBPOPS)
 # Store this as GNOMAD_EXOMES_POPS
 GNOMAD_EXOMES_POPS = {pop: POP_NAMES[pop] for pop in KEEP_POPS}
 
-# Separating gnomad exome/genome pops and adding 'ami', 'mde' to gnomAD genomes pops
+# Separating gnomad exome/genome pops and adding 'ami', 'mid' to gnomAD genomes pops
 GNOMAD_GENOMES_POPS = GNOMAD_EXOMES_POPS.copy()
 GNOMAD_GENOMES_POPS["ami"] = "Amish"
 GNOMAD_GENOMES_POPS["mid"] = "Middle Eastern"
@@ -124,8 +125,8 @@ def populate_info_dict(
     gnomad_exomes_pops: Dict[str, str] = GNOMAD_EXOMES_POPS,
     gnomad_genomes_pops: Dict[str, str] = GNOMAD_GENOMES_POPS,
     faf_pops: List[str] = FAF_POPS,
-    gnomad_sexes: List[str] = SEXES,
-    ukbb_sexes: List[str] = SEXES_UKBB,
+    gnomad_sexes: List[str] = SEXES_STR,
+    ukbb_sexes: List[str] = SEXES,
     gnomad_nfe_subpops: List[str] = GNOMAD_NFE_SUBPOPS,
     gnomad_eas_subpops: List[str] = GNOMAD_EAS_SUBPOPS,
     subpops: Optional[Dict[str, List[str]]] = None,
@@ -142,7 +143,7 @@ def populate_info_dict(
         - INFO fields for filtering allele frequency (faf) annotations 
         - INFO fields for variant histograms (hist_bin_freq, hist_n_smaller, hist_n_larger for each histogram)
 
-    .. note ::
+    .. note::
         If `subpops` is specified, `ukbb_pops` MUST include a description for each population in `subpops`.
 
     :param Dict[str, str] bin_edges: Dictionary of variant annotation histograms and their associated bin edges.
@@ -154,8 +155,8 @@ def populate_info_dict(
     :param Dict[str, str] gnomad_exomes_pops: List of sample global population names for gnomAD exomes. Default is GNOMAD_EXOMES_POPS.
     :param Dict[str, str] gnomad_genomes_pops: List of sample global population names for gnomAD genomes. Default is GNOMAD_GENOMES_POPS.
     :param List[str] faf_pops: List of faf population names. Default is FAF_POPS.
-    :param List[str] gnomad_sexes: gnomAD sample sexes used in VCF export. Default is SEXES. 
-    :param List[str] ukbb_sexes: UKBB sample sexes used in VCF export. Default is SEXES_UKBB.
+    :param List[str] gnomad_sexes: gnomAD v2 sample sexes ("male", "female") used in VCF export. Default is SEXES_STR. 
+    :param List[str] ukbb_sexes: UKBB, gnomAD v3 sample sexes ("XX", "XY") used in VCF export. Default is SEXES.
     :param List[str] gnomad_nfe_subpops: List of nfe subpopulations in gnomAD. Default is GNOMAD_NFE_SUBPOPS.
     :param List[str] gnomad_eas_subpops: List of eas subpopulations in gnomAD. Default is GNOMAD_EAS_SUBPOPS.
     :param Optional[Dict[str, List[str]]] subpops: Dictionary of global population names (keys)
@@ -204,19 +205,20 @@ def populate_info_dict(
         if "gnomad" in subset:
             description_text = " in gnomAD"
 
-            # faf labels are the same for exomes/genomes
-            faf_label_groups = _create_label_groups(pops=faf_pops, sexes=gnomad_sexes)
-            for label_group in faf_label_groups:
-                vcf_info_dict.update(
-                    make_info_dict(
-                        prefix=subset,
-                        pop_names=gnomad_exomes_pops,
-                        label_groups=label_group,
-                        faf=True,
-                    )
-                )
-
             if "exomes" in subset:
+                faf_label_groups = _create_label_groups(
+                    pops=faf_pops, sexes=gnomad_sexes
+                )
+                for label_group in faf_label_groups:
+                    vcf_info_dict.update(
+                        make_info_dict(
+                            prefix=subset,
+                            pop_names=gnomad_exomes_pops,
+                            label_groups=label_group,
+                            faf=True,
+                        )
+                    )
+
                 gnomad_exomes_label_groups = _create_label_groups(
                     pops=gnomad_exomes_pops, sexes=gnomad_sexes
                 )
@@ -263,8 +265,18 @@ def populate_info_dict(
                 )
 
             else:
+                faf_label_groups = _create_label_groups(pops=faf_pops, sexes=ukbb_sexes)
+                for label_group in faf_label_groups:
+                    vcf_info_dict.update(
+                        make_info_dict(
+                            prefix=subset,
+                            pop_names=gnomad_exomes_pops,
+                            label_groups=label_group,
+                            faf=True,
+                        )
+                    )
                 gnomad_genomes_label_groups = _create_label_groups(
-                    pops=gnomad_genomes_pops, sexes=gnomad_sexes
+                    pops=gnomad_genomes_pops, sexes=ukbb_sexes
                 )
                 for label_group in gnomad_genomes_label_groups:
                     vcf_info_dict.update(
@@ -399,7 +411,7 @@ def unfurl_nested_annotations(
     gnomad: bool,
     genome: bool,
     pops: List[str],
-    subpops: List[str] = None,
+    subpops: Optional[List[str]] = None,
 ) -> Dict[str, hl.expr.Expression]:
     """
     Create dictionary keyed by the variant annotation labels to be extracted from variant annotation arrays, where the values
