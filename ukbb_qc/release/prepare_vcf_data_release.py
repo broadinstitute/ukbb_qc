@@ -435,12 +435,16 @@ def unfurl_nested_annotations(
         faf = f"{gnomad_prefix}_faf"
         freq = f"{gnomad_prefix}_freq"
         faf_idx = hl.eval(t.globals[f"{gnomad_prefix}_faf_index_dict"])
-        freq_idx = make_index_dict(
-            t=t,
-            freq_meta_str=f"{gnomad_prefix}_freq_meta",
-            pops=pops,
-            subpops=[GNOMAD_NFE_SUBPOPS + GNOMAD_EAS_SUBPOPS],
-        )
+        # Create freq index dict for exomes only
+        if data_type == "exomes":
+            freq_idx = make_index_dict(
+                t=t,
+                freq_meta_str=f"{gnomad_prefix}_freq_meta",
+                pops=pops,
+                subpops=[GNOMAD_NFE_SUBPOPS + GNOMAD_EAS_SUBPOPS],
+            )
+        else:
+            freq_idx = hl.eval(t.globals[f"{gnomad_prefix}_freq_index_dict"])
 
     else:
         faf = "faf"
@@ -500,17 +504,33 @@ def unfurl_nested_annotations(
                 combo_fields = entry[1:] + ["adj"]
                 combo = "_".join(combo_fields)
 
-            prefix = f"{gnomad_prefix}_"
-            combo_dict = {
-                f"{prefix}faf95_{combo}": hl.or_missing(
-                    hl.set(t[faf][i].meta.values()) == set(combo_fields),
-                    t[faf][i].faf95,
-                ),
-                f"{prefix}faf99_{combo}": hl.or_missing(
-                    hl.set(t[faf][i].meta.values()) == set(combo_fields),
-                    t[faf][i].faf99,
-                ),
-            }
+                prefix = f"{gnomad_prefix}_"
+                combo_dict = {
+                    f"{prefix}faf95_{combo}": hl.or_missing(
+                        hl.set(t[faf][i].meta.values()) == set(combo_fields),
+                        t[faf][i].faf95,
+                    ),
+                    f"{prefix}faf99_{combo}": hl.or_missing(
+                        hl.set(t[faf][i].meta.values()) == set(combo_fields),
+                        t[faf][i].faf99,
+                    ),
+                }
+
+            else:
+                # NOTE: faf format in v3.1 changed; no longer has `meta` field
+                prefix = f"{gnomad_prefix}_"
+                combo_dict = {
+                    f"{prefix}faf95_{combo}": hl.or_missing(
+                        hl.set(hl.eval(t.gnomad_genomes_faf_meta[i].values()))
+                        == set(combo_fields),
+                        t[faf][i].faf95,
+                    ),
+                    f"{prefix}faf99_{combo}": hl.or_missing(
+                        hl.set(hl.eval(t.gnomad_genomes_faf_meta[i].values()))
+                        == set(combo_fields),
+                        t[faf][i].faf99,
+                    ),
+                }
 
         else:
             # Set combo to equal entry
