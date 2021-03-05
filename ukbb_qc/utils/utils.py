@@ -4,7 +4,7 @@ from typing import Dict, List, Union
 
 import hail as hl
 
-from gnomad.resources.grch38.resources.gnomad import SEXES
+from gnomad.resources.grch38.gnomad import SEXES
 from gnomad.resources.grch38.reference_data import lcr_intervals
 from gnomad.resources.resource_utils import DataException
 from gnomad.sample_qc.relatedness import UNRELATED
