@@ -1,13 +1,13 @@
 import argparse
-import json
 import logging
 import pickle
 import sys
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Union
 
 import hail as hl
 
 from gnomad.resources.grch37.gnomad import SUBPOPS
+from gnomad.resources.grch38.gnomad import SEXES
 from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.sample_qc.sex import adjust_sex_ploidy
 from gnomad.utils.reference_genome import get_reference_genome
@@ -31,10 +31,10 @@ from gnomad.utils.vcf import (
     RF_FIELDS,
     SITE_FIELDS,
     set_female_y_metrics_to_na,
-    SEXES,
     SPARSE_ENTRIES,
     VQSR_FIELDS,
 )
+from gnomad.utils.vcf import SEXES as SEXES_STR
 from ukbb_qc.assessment.sanity_checks import (
     sanity_check_release_mt,
     vcf_field_check,
@@ -51,7 +51,7 @@ from ukbb_qc.resources.basics import (
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import info_ht_path
 from ukbb_qc.slack_creds import slack_token
-from ukbb_qc.utils.constants import SEXES_UKBB
+from ukbb_qc.utils.constants import UKBB_POPS
 from ukbb_qc.utils.utils import make_index_dict
 
 
@@ -84,8 +84,9 @@ REGION_FLAG_FIELDS = [
 ]
 REGION_FLAG_FIELDS.extend(INTERVAL_FIELDS)
 
-# Remove BaseQRankSum from site fields (doesn't exist in UKBB 300K)
+# Remove BaseQRankSum from site and allele-specific fields (this is a legacy annotation)
 SITE_FIELDS.remove("BaseQRankSum")
+AS_FIELDS.remove("AS_BaseQRankSum")
 
 # Add sibling singletons to AS_FIELDS
 AS_FIELDS.append("sibling_singleton")
@@ -101,22 +102,20 @@ GNOMAD_EAS_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["EAS"]))
 # This removes pop names we don't want to use in the UKBB release
 # (e.g., "uniform", "consanguineous") to reduce clutter
 KEEP_POPS = ["afr", "amr", "asj", "eas", "fin", "nfe", "oth", "sas"]
-UKBB_POPS = {pop: POP_NAMES[pop] for pop in KEEP_POPS}
-
 KEEP_POPS.extend(GNOMAD_NFE_SUBPOPS)
 KEEP_POPS.extend(GNOMAD_EAS_SUBPOPS)
 
 # Remove unnecessary pop names from pops dict
-POPS = {pop: POP_NAMES[pop] for pop in KEEP_POPS}
+# Store this as GNOMAD_EXOMES_POPS
+GNOMAD_EXOMES_POPS = {pop: POP_NAMES[pop] for pop in KEEP_POPS}
 
-# Separating gnomad exome/genome pops and adding 'ami' to gnomAD genomes pops
-GNOMAD_EXOMES_POPS = POPS.copy()
-GNOMAD_GENOMES_POPS = POPS.copy()
+# Separating gnomad exome/genome pops and adding 'ami', 'mid' to gnomAD genomes pops
+GNOMAD_GENOMES_POPS = GNOMAD_EXOMES_POPS.copy()
 GNOMAD_GENOMES_POPS["ami"] = "Amish"
+GNOMAD_GENOMES_POPS["mid"] = "Middle Eastern"
 
 
 def populate_info_dict(
-    subpops: Dict[str, List[str]],
     bin_edges: Dict[str, str],
     age_hist_data: str,
     info_dict: Dict[str, Dict[str, str]] = VCF_INFO_DICT,
@@ -126,10 +125,11 @@ def populate_info_dict(
     gnomad_exomes_pops: Dict[str, str] = GNOMAD_EXOMES_POPS,
     gnomad_genomes_pops: Dict[str, str] = GNOMAD_GENOMES_POPS,
     faf_pops: List[str] = FAF_POPS,
-    gnomad_sexes: List[str] = SEXES,
-    ukbb_sexes: List[str] = SEXES_UKBB,
+    gnomad_sexes: List[str] = SEXES_STR,
+    ukbb_sexes: List[str] = SEXES,
     gnomad_nfe_subpops: List[str] = GNOMAD_NFE_SUBPOPS,
     gnomad_eas_subpops: List[str] = GNOMAD_EAS_SUBPOPS,
+    subpops: Optional[Dict[str, List[str]]] = None,
 ) -> Dict[str, Dict[str, str]]:
     """
     Calls `make_info_dict` and `make_hist_dict` to populate INFO dictionary with specific sexes, population names, and filtering allele frequency (faf) pops.
@@ -143,8 +143,9 @@ def populate_info_dict(
         - INFO fields for filtering allele frequency (faf) annotations 
         - INFO fields for variant histograms (hist_bin_freq, hist_n_smaller, hist_n_larger for each histogram)
 
-    :param Dict[str, List[str]] subpops: Dictionary of global population names (keys)
-        and all hybrid population cluster names associated with that global pop (values). 
+    .. note::
+        If `subpops` is specified, `ukbb_pops` MUST include a description for each population in `subpops`.
+
     :param Dict[str, str] bin_edges: Dictionary of variant annotation histograms and their associated bin edges.
     :param str age_hist_data: Pipe-delimited string of age histograms, from `get_age_distributions`.
     :param Dict[str, Dict[str, str]] info_dict: INFO dict to be populated.
@@ -154,10 +155,12 @@ def populate_info_dict(
     :param Dict[str, str] gnomad_exomes_pops: List of sample global population names for gnomAD exomes. Default is GNOMAD_EXOMES_POPS.
     :param Dict[str, str] gnomad_genomes_pops: List of sample global population names for gnomAD genomes. Default is GNOMAD_GENOMES_POPS.
     :param List[str] faf_pops: List of faf population names. Default is FAF_POPS.
-    :param List[str] gnomad_sexes: gnomAD sample sexes used in VCF export. Default is SEXES. 
-    :param List[str] ukbb_sexes: UKBB sample sexes used in VCF export. Default is SEXES_UKBB.
+    :param List[str] gnomad_sexes: gnomAD v2 sample sexes ("male", "female") used in VCF export. Default is SEXES_STR. 
+    :param List[str] ukbb_sexes: UKBB, gnomAD v3 sample sexes ("XX", "XY") used in VCF export. Default is SEXES.
     :param List[str] gnomad_nfe_subpops: List of nfe subpopulations in gnomAD. Default is GNOMAD_NFE_SUBPOPS.
     :param List[str] gnomad_eas_subpops: List of eas subpopulations in gnomAD. Default is GNOMAD_EAS_SUBPOPS.
+    :param Optional[Dict[str, List[str]]] subpops: Dictionary of global population names (keys)
+        and all hybrid population cluster names associated with that global pop (values). 
     :rtype: Dict[str, Dict[str, str]]
     """
     vcf_info_dict = info_dict
@@ -175,14 +178,16 @@ def populate_info_dict(
     )
 
     def _create_label_groups(
-        pops: Dict[str, str], sexes: List[str], group: List[str] = ["adj"],
+        pops: Union[Dict[str, str], List[str]],
+        sexes: List[str],
+        group: List[str] = ["adj"],
     ) -> List[Dict[str, List[str]]]:
         """
         Generates list of label group dictionaries needed to populate info dictionary.
 
         Label dictionaries are passed as input to `make_info_dict`.
 
-        :param Dict[str, str] pops: List of population names.
+        :param Union[Dict[str, str], List[str]] pops: Dict or list of population names.
         :param List[str] sexes: List of sample sexes.
         :param List[str] group: List of data types (adj, raw). Default is ["adj"].
         :return: List of label group dictionaries.
@@ -200,19 +205,20 @@ def populate_info_dict(
         if "gnomad" in subset:
             description_text = " in gnomAD"
 
-            # faf labels are the same for exomes/genomes
-            faf_label_groups = _create_label_groups(pops=faf_pops, sexes=gnomad_sexes)
-            for label_group in faf_label_groups:
-                vcf_info_dict.update(
-                    make_info_dict(
-                        prefix=subset,
-                        pop_names=gnomad_exomes_pops,
-                        label_groups=label_group,
-                        faf=True,
-                    )
-                )
-
             if "exomes" in subset:
+                faf_label_groups = _create_label_groups(
+                    pops=faf_pops, sexes=gnomad_sexes
+                )
+                for label_group in faf_label_groups:
+                    vcf_info_dict.update(
+                        make_info_dict(
+                            prefix=subset,
+                            pop_names=gnomad_exomes_pops,
+                            label_groups=label_group,
+                            faf=True,
+                        )
+                    )
+
                 gnomad_exomes_label_groups = _create_label_groups(
                     pops=gnomad_exomes_pops, sexes=gnomad_sexes
                 )
@@ -259,8 +265,18 @@ def populate_info_dict(
                 )
 
             else:
+                faf_label_groups = _create_label_groups(pops=faf_pops, sexes=ukbb_sexes)
+                for label_group in faf_label_groups:
+                    vcf_info_dict.update(
+                        make_info_dict(
+                            prefix=subset,
+                            pop_names=gnomad_genomes_pops,
+                            label_groups=label_group,
+                            faf=True,
+                        )
+                    )
                 gnomad_genomes_label_groups = _create_label_groups(
-                    pops=gnomad_genomes_pops, sexes=gnomad_sexes
+                    pops=gnomad_genomes_pops, sexes=ukbb_sexes
                 )
                 for label_group in gnomad_genomes_label_groups:
                     vcf_info_dict.update(
@@ -291,7 +307,9 @@ def populate_info_dict(
                     )
                 )
 
-            faf_label_groups = _create_label_groups(pops=faf_pops, sexes=ukbb_sexes)
+            # NOTE: Using `ukbb_pops` here because all frequency calculations were run on pan-ancestry labels this tranche
+            # `faf_pops` contains only gnomAD population labels
+            faf_label_groups = _create_label_groups(pops=ukbb_pops, sexes=ukbb_sexes)
             for label_group in faf_label_groups:
                 vcf_info_dict.update(
                     make_info_dict(
@@ -311,22 +329,23 @@ def populate_info_dict(
                 )
             )
 
-    logger.info(
-        "Adding UKBB subpops (hybrid pops) to UKBB population description dict..."
-    )
-    for pop in subpops:
-        for cluster in subpops[pop]:
-            ukbb_pops[
-                f"{cluster}"
-            ] = f"{ukbb_pops[pop]} and hybrid population cluster {cluster}"
-    for pop in subpops:
-        vcf_info_dict.update(
-            make_info_dict(
-                prefix="",
-                pop_names=ukbb_pops,
-                label_groups=dict(group=["adj"], pop=[pop], subpop=subpops[pop]),
-            )
+    if subpops:
+        logger.info(
+            "Adding UKBB subpops (hybrid pops) to UKBB population description dict..."
         )
+        for pop in subpops:
+            for cluster in subpops[pop]:
+                ukbb_pops[
+                    f"{cluster}"
+                ] = f"{ukbb_pops[pop]} and hybrid population cluster {cluster}"
+        for pop in subpops:
+            vcf_info_dict.update(
+                make_info_dict(
+                    prefix="",
+                    pop_names=ukbb_pops,
+                    label_groups=dict(group=["adj"], pop=[pop], subpop=subpops[pop]),
+                )
+            )
 
     # Add variant quality histograms to info dict
     vcf_info_dict.update(make_hist_dict(bin_edges, adj=True))
@@ -392,7 +411,7 @@ def unfurl_nested_annotations(
     gnomad: bool,
     genome: bool,
     pops: List[str],
-    subpops: List[str],
+    subpops: Optional[List[str]] = None,
 ) -> Dict[str, hl.expr.Expression]:
     """
     Create dictionary keyed by the variant annotation labels to be extracted from variant annotation arrays, where the values
@@ -402,7 +421,7 @@ def unfurl_nested_annotations(
     :param bool gnomad: Whether the annotations are from gnomAD.
     :param bool genome: Whether the annotations are from genome data (relevant only to gnomAD data).
     :param List[str] pops: List of global populations in frequency array. 
-    :param List[str] subpops: List of all UKBB subpops (possible hybrid population cluster names). 
+    :param List[str] subpops: List of all UKBB subpops (possible hybrid population cluster names). Default is None.
     :return: Dictionary containing variant annotations and their corresponding values.
     :rtype: Dict[str, hl.expr.Expression]
     """
@@ -563,11 +582,6 @@ def main(args):
     try:
 
         if args.prepare_vcf_mt:
-            hybrid_pop_map = args.hybrid_pop_map
-            hybrid_pops = [
-                pop for sublist in list(hybrid_pop_map.values()) for pop in sublist
-            ]
-
             logger.info("Starting VCF process...")
             logger.info("Getting raw MT and dropping all unnecessary entries...")
 
@@ -607,7 +621,13 @@ def main(args):
             logger.info(
                 "Setting het genotypes at sites with >1% AF and > 0.9 AB to homalt..."
             )
-            freq_ht = hl.read_table(release_ht_path(*tranche_data)).select("freq")
+            # NOTE: Reading release HT here because frequency annotation was updated
+            # Only `join_freq` and release HT have updated frequency annotation
+            freq_ht = (
+                hl.read_table(release_ht_path(*tranche_data))
+                .select_globals()
+                .select("freq")
+            )
             freq_ht = freq_ht.select(AF=freq_ht.freq[0].AF)
             mt = mt.annotate_entries(
                 GT=hl.if_else(
@@ -625,12 +645,14 @@ def main(args):
             mt = mt.annotate_globals(**ht.index_globals())
 
             logger.info(
-                "Dropping cohort frequencies (necessary only for internal use; at last four indices of freq struct)..."
+                "Dropping cohort frequencies (necessary only for internal use)..."
             )
-            # Cohort freq has 4 entries in freq and freq meta:
-            # cohort (adj), cohort (raw), cohort (XX), and cohort (XY)
-            mt = mt.annotate_rows(freq=mt.freq[:-4])
-            mt = mt.annotate_globals(freq_meta=mt.freq_meta[:-4])
+            # Cohort freq has 22 entries in freq and freq meta:
+            # cohort (adj), cohort (raw), cohort (pop), cohort (sex), cohort (pop and sex)
+            # Two sexes: XX, XY
+            # Six pops (pan-ancestry labels): CSA, MID, AFR, EAS, AMR, EUR
+            mt = mt.annotate_rows(freq=mt.freq[:22])
+            mt = mt.annotate_globals(freq_meta=mt.freq_meta[:22])
 
             logger.info("Making histogram bin edges...")
             # NOTE: using release HT here because age histograms aren't necessarily defined
@@ -642,9 +664,7 @@ def main(args):
 
             logger.info("Making INFO dict for VCF...")
             vcf_info_dict = populate_info_dict(
-                subpops=hybrid_pop_map,
-                bin_edges=bin_edges,
-                age_hist_data=age_hist_data,
+                bin_edges=bin_edges, age_hist_data=age_hist_data,
             )
 
             # Add interval QC parameters to INFO dict
@@ -681,11 +701,7 @@ def main(args):
             mt = mt.annotate_rows(
                 info=mt.info.annotate(
                     **unfurl_nested_annotations(
-                        mt,
-                        gnomad=False,
-                        genome=False,
-                        pops=UKBB_POPS,
-                        subpops=hybrid_pops,
+                        mt, gnomad=False, genome=False, pops=UKBB_POPS,
                     )
                 )
             )
@@ -693,11 +709,7 @@ def main(args):
             mt = mt.annotate_rows(
                 info=mt.info.annotate(
                     **unfurl_nested_annotations(
-                        mt,
-                        gnomad=True,
-                        genome=True,
-                        pops=GNOMAD_GENOMES_POPS,
-                        subpops=hybrid_pops,
+                        mt, gnomad=True, genome=True, pops=GNOMAD_GENOMES_POPS,
                     )
                 )
             )
@@ -705,11 +717,7 @@ def main(args):
             mt = mt.annotate_rows(
                 info=mt.info.annotate(
                     **unfurl_nested_annotations(
-                        mt,
-                        gnomad=True,
-                        genome=False,
-                        pops=GNOMAD_EXOMES_POPS,
-                        subpops=hybrid_pops,
+                        mt, gnomad=True, genome=False, pops=GNOMAD_EXOMES_POPS,
                     )
                 )
             )
@@ -910,13 +918,6 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--prepare_vcf_mt", help="Use release mt to create vcf mt", action="store_true"
-    )
-    parser.add_argument(
-        "--hybrid_pop_map",
-        help='Dictionary mapping global populations (keys) to \
-        list of all hybrid populations associated with that global population name (values).\n\
-        e.g., \'{"nfe": [1,2,3], "afr": [4]}\'',
-        type=json.loads,
     )
     parser.add_argument(
         "--sanity_check", help="Run sanity checks function", action="store_true"
