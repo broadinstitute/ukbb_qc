@@ -75,7 +75,7 @@ def dup_resolution_path(freeze: int = CURRENT_FREEZE) -> str:
         raise DataException(
             "Duplicate resolution bucket only exists for freeze 7/450k!"
         )
-    return "gs://broad-ukbb/broad.freeze_{freeze}/duplicate_resolution"
+    return f"gs://broad-ukbb/broad.freeze_{freeze}/duplicate_resolution"
 
 
 def dup_gvcf_path(freeze: int = CURRENT_FREEZE) -> str:
