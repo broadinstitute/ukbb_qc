@@ -201,9 +201,7 @@ def join_gnomad(ht: hl.Table, data_type: str) -> hl.Table:
             liftover(data_type)
             .ht()
             .select("freq", "popmax", "faf")
-            .select_globals(
-                "freq_meta", "popmax_index_dict", "faf_index_dict", "freq_index_dict",
-            )
+            .select_globals("freq_meta", "popmax_index_dict", "faf_index_dict",)
         )
         ht = ht.join(gnomad_ht, how="left")
         ht = ht.rename(
@@ -214,7 +212,6 @@ def join_gnomad(ht: hl.Table, data_type: str) -> hl.Table:
                 "freq_meta_1": f"gnomad_{data_type}_freq_meta",
                 "popmax_index_dict": f"gnomad_{data_type}_popmax_index_dict",
                 "faf_index_dict": f"gnomad_{data_type}_faf_index_dict",
-                "freq_index_dict": f"gnomad_{data_type}_freq_index_dict",
             }
         )
 
@@ -223,9 +220,7 @@ def join_gnomad(ht: hl.Table, data_type: str) -> hl.Table:
             public_release(data_type)
             .ht()
             .select("freq", "popmax", "faf")
-            .select_globals(
-                "freq_meta", "faf_index_dict", "faf_meta", "freq_index_dict",
-            )
+            .select_globals("freq_meta", "faf_index_dict", "faf_meta",)
         )
         ht = ht.join(gnomad_ht, how="left")
         ht = ht.rename(
@@ -235,7 +230,6 @@ def join_gnomad(ht: hl.Table, data_type: str) -> hl.Table:
                 "faf_1": f"gnomad_{data_type}_faf",
                 "freq_meta_1": f"gnomad_{data_type}_freq_meta",
                 "faf_index_dict": f"gnomad_{data_type}_faf_index_dict",
-                "freq_index_dict": f"gnomad_{data_type}_freq_index_dict",
             }
         )
     return ht
