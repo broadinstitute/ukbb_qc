@@ -220,7 +220,7 @@ def join_gnomad(ht: hl.Table, data_type: str) -> hl.Table:
             public_release(data_type)
             .ht()
             .select("freq", "popmax", "faf")
-            .select_globals("freq_meta", "faf_index_dict")
+            .select_globals("freq_meta", "faf_index_dict", "faf_meta")
         )
         ht = ht.join(gnomad_ht, how="left")
         ht = ht.rename(
