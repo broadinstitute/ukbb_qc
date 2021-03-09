@@ -586,6 +586,20 @@ def release_ht_path(data_source: str, freeze: int) -> str:
     return f"{get_release_path(data_source, freeze)}/ht/{data_source}.freeze_{freeze}.release.sites.ht"
 
 
+def release_vcf_ht_path(data_source: str, freeze: int) -> str:
+    """
+    Fetch filepath for release Hail Table with annotations reformatted for VCF export
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes. Resource only exists for freeze 7.
+    :return: Filepath for release VCF Table
+    :rtype: str
+    """
+    if freeze != 7:
+        raise DataException("Release VCF HT only exists for freeze 7/455K!")
+    return f"{get_release_path(data_source, freeze)}/ht/{data_source}.freeze_{freeze}.release.sites.vcf.ht"
+
+
 def release_var_hist_path(data_source: str, freeze: int) -> str:
     """
     Fetch bucket for release variant histograms (json files)

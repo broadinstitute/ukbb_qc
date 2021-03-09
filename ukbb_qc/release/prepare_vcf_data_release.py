@@ -46,6 +46,7 @@ from ukbb_qc.resources.basics import (
     release_header_path,
     release_ht_path,
     release_mt_path,
+    release_vcf_ht_path,
     release_vcf_path,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
@@ -600,7 +601,7 @@ def main(args):
 
     try:
 
-        if args.prepare_vcf_mt:
+        if args.prepare_vcf_annotations:
             logger.info("Starting VCF process...")
             logger.info("Reading in release HT...")
             ht = hl.read_table(release_ht_path(*tranche_data))
@@ -695,9 +696,8 @@ def main(args):
                 "Selecting relevant fields for VCF export and checkpointing HT..."
             )
             ht = ht.select("info", "filters", "rsid", "qual")
-            ht = ht.checkpoint(
-                get_checkpoint_path(*tranche_data, name="vcf_annotations", mt=False),
-                overwrite=True,
+            ht.write(
+                release_vcf_ht_path(*tranche_data), overwrite=args.overwrite,
             )
 
             # Make filter dict and add field for MonoAllelic filter
@@ -719,6 +719,7 @@ def main(args):
             with hl.hadoop_open(release_header_path(*tranche_data), "wb") as p:
                 pickle.dump(header_dict, p, protocol=pickle.HIGHEST_PROTOCOL)
 
+        if args.prepare_vcf_mt:
             logger.info("Getting raw MT and dropping all unnecessary entries...")
             # NOTE: reading in raw MatrixTable to be able to return all samples/variants
             mt = get_ukbb_data(
@@ -775,6 +776,7 @@ def main(args):
             )
 
             logger.info("Annotating release MT with HT annotations...")
+            ht = hl.read_table(release_vcf_ht_path(*tranche_data))
             mt = mt.annotate_rows(**ht[mt.row_key])
             mt = mt.annotate_globals(**ht.index_globals())
             mt.write(release_mt_path(*tranche_data), args.overwrite)
@@ -943,7 +945,12 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--prepare_vcf_mt", help="Use release mt to create vcf mt", action="store_true"
+        "--prepare_vcf_annotations",
+        help="Use release HT to reformat VCF annotations",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--prepare_vcf_mt", help="Use release MT to create VCF MT", action="store_true"
     )
     parser.add_argument(
         "--sanity_check", help="Run sanity checks function", action="store_true"
