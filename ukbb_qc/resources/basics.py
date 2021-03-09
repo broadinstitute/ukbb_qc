@@ -592,7 +592,7 @@ def release_vcf_ht_path(data_source: str, freeze: int) -> str:
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes. Resource only exists for freeze 7.
-    :return: Filepath for release Table
+    :return: Filepath for release VCF Table
     :rtype: str
     """
     if freeze != 7:
