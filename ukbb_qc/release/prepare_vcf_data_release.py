@@ -642,7 +642,7 @@ def main(args):
             }
 
             # Add non-PAR annotation
-            ht = ht.annotate_rows(
+            ht = ht.annotate(
                 region_flag=ht.region_flag.annotate(
                     nonpar=(ht.locus.in_x_nonpar() | ht.locus.in_y_nonpar())
                 )
@@ -656,7 +656,7 @@ def main(args):
             #   region_flag struct, and
             #   raw_qual_hists/qual_hists structs.
 
-            ht = ht.annotate_rows(info=hl.struct(**make_info_expr(ht)))
+            ht = ht.annotate(info=hl.struct(**make_info_expr(ht)))
 
             # Unfurl nested UKBB frequency annotations and add to INFO field
             ht = ht.annotate(
@@ -695,7 +695,10 @@ def main(args):
                 "Selecting relevant fields for VCF export and checkpointing HT..."
             )
             ht = ht.select("info", "filters", "rsid", "qual")
-            ht = get_checkpoint_path(*tranche_data, name="vcf_annotations", mt=False)
+            ht = ht.checkpoint(
+                get_checkpoint_path(*tranche_data, name="vcf_annotations", mt=False),
+                overwrite=True,
+            )
 
             # Make filter dict and add field for MonoAllelic filter
             filter_dict = make_vcf_filter_dict(
