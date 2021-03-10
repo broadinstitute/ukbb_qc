@@ -438,13 +438,13 @@ def unfurl_nested_annotations(
         faf_idx = hl.eval(t.globals[f"{gnomad_prefix}_faf_index_dict"])
         if data_type != "genomes":
             subpops = [GNOMAD_NFE_SUBPOPS + GNOMAD_EAS_SUBPOPS]
-        else:
-            freq_idx = freq_idx = make_index_dict(
-                t=t,
-                freq_meta_str=f"{gnomad_prefix}_freq_meta",
-                pops=pops,
-                subpops=subpops,
-            )
+
+        freq_idx = make_index_dict(
+            t=t,
+            freq_meta_str=f"{gnomad_prefix}_freq_meta",
+            pops=pops,
+            subpops=subpops,
+        )
 
     else:
         faf = "faf"
@@ -733,9 +733,13 @@ def main(args):
                 meta_root="meta",
             ).select_entries(*SPARSE_ENTRIES)
             mt = mt.transmute_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype)
+            mt = mt.naive_coalesce(10000)
 
             logger.info("Removing chrM...")
             mt = hl.filter_intervals(mt, [hl.parse_locus_interval("chrM")], keep=False)
+
+            logger.info("Keeping only chr22 + sex chr...")
+            mt = hl.filter_intervals(mt, [hl.parse_locus_interval("chr1-chr21")], keep=False)
 
             if args.test:
                 logger.info("Filtering to chr20 and chrX (for tests only)...")
@@ -777,9 +781,14 @@ def main(args):
 
             logger.info("Annotating release MT with HT annotations...")
             ht = hl.read_table(release_vcf_ht_path(*tranche_data))
+
+            logger.info("Keeping only chr22 + sex chr in HT...")
+            ht = hl.filter_intervals(ht, [hl.parse_locus_interval("chr1-chr21")], keep=False)
+
             mt = mt.annotate_rows(**ht[mt.row_key])
             mt = mt.annotate_globals(**ht.index_globals())
-            mt.write(release_mt_path(*tranche_data), args.overwrite)
+            #mt.write(release_mt_path(*tranche_data), args.overwrite)
+            mt.write(get_checkpoint_path(*tranche_data, name="vcf_test", mt=True), overwrite=args.overwrite)
 
         if args.sanity_check:
             mt = hl.read_matrix_table(release_mt_path(*tranche_data))
