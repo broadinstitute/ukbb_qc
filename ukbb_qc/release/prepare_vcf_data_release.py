@@ -734,11 +734,6 @@ def main(args):
             logger.info("Removing chrM...")
             mt = hl.filter_intervals(mt, [hl.parse_locus_interval("chrM")], keep=False)
 
-            logger.info("Keeping only chr22 + sex chr...")
-            mt = hl.filter_intervals(
-                mt, [hl.parse_locus_interval("chr1-chr21")], keep=False
-            )
-
             if args.test:
                 logger.info("Filtering to chr20 and chrX (for tests only)...")
                 # Using filter intervals to keep all the work done by get_ukbb_data
@@ -779,12 +774,6 @@ def main(args):
 
             logger.info("Annotating release MT with HT annotations...")
             ht = hl.read_table(release_vcf_ht_path(*tranche_data))
-
-            logger.info("Keeping only chr22 + sex chr in HT...")
-            ht = hl.filter_intervals(
-                ht, [hl.parse_locus_interval("chr1-chr21")], keep=False
-            )
-
             mt = mt.annotate_rows(**ht[mt.row_key])
             mt = mt.annotate_globals(**ht.index_globals())
             mt.write(release_mt_path(*tranche_data), args.overwrite)
