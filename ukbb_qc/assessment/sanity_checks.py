@@ -10,7 +10,6 @@ from gnomad.assessment.sanity_checks import (
 )
 from gnomad.resources.grch38.gnomad import SEXES
 from gnomad.resources.grch37.gnomad import SUBPOPS
-from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.utils.vcf import HISTS
 from gnomad.utils.vcf import SEXES as SEXES_STR
 
@@ -426,7 +425,9 @@ def sample_sum_sanity_checks(
     subsets: List[str],
     info_metrics: List[str],
     verbose: bool,
-    pop_names: Dict[str, str] = POP_NAMES,
+    ukbb_pops: Dict[str, str],
+    gnomad_exomes_pops: Dict[str, str],
+    gnomad_genomes_pops: Dict[str, str],
 ) -> None:
     """
     Performs sanity checks on sample sums in input Table.
@@ -639,6 +640,9 @@ def missingness_sanity_checks(
 def sanity_check_release_mt(
     mt: hl.MatrixTable,
     subsets: List[str],
+    ukbb_pops: Dict[str, str],
+    gnomad_exomes_pops: Dict[str, str],
+    gnomad_genomes_pops: Dict[str, str],
     missingness_threshold: float = 0.5,
     verbose: bool = False,
     n_alt_alleles_hist_start: int = 1,
@@ -657,6 +661,9 @@ def sanity_check_release_mt(
 
     :param MatrixTable mt: MatrixTable containing variant annotations to check.
     :param List[str] subsets: List of subsets to be checked.
+    :param ukbb_pops: Dict with UKBB population names (keys) and population descriptions (values).
+    :param gnomad_exomes_pops: Dict with gnomAD v2 exomes population names (keys) and population descriptions (values).
+    :param gnomad_genomes_pops: Dict with gnomAD v3 genomes population names (keys) and population descriptions (values).
     :param float missingness_threshold: Upper cutoff for allowed amount of missingness. Default is 0.5
     :param bool verbose: If True, display top values of relevant annotations being checked, regardless of whether check
         conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
@@ -675,7 +682,7 @@ def sanity_check_release_mt(
     contigs = ht.aggregate(hl.agg.collect_as_set(ht.locus.contig))
     n_alt_alleles_hist = ht.aggregate(
         hl.agg.hist(
-            ht.allele_info.n_alt_alleles,
+            ht.info.n_alt_alleles,
             start=n_alt_alleles_hist_start,
             end=n_alt_alleles_hist_end,
             bins=n_alt_alleles_hist_bins,
@@ -687,8 +694,12 @@ def sanity_check_release_mt(
     logger.info("VARIANT FILTER SUMMARIES:")
     filters_sanity_check(ht)
 
-    logger.info("HISTOGRAM CHECKS:")
-    histograms_sanity_check(ht, verbose=verbose)
+    # NOTE: This check won't work in the 455k tranche
+    # We dropped all `_n_smaller` histograms since we don't export them
+    # We only keep the `_n_larger` DP histograms, but there is a note
+    # in `histograms_sanity_check` that these do not need to be checked
+    # logger.info("HISTOGRAM CHECKS:")
+    # histograms_sanity_check(ht, verbose=verbose)
 
     logger.info("RAW AND ADJ CHECKS:")
     raw_and_adj_sanity_checks(ht, subsets, verbose)
@@ -702,7 +713,15 @@ def sanity_check_release_mt(
     non_info_metrics.remove("info")
 
     logger.info("SAMPLE SUM CHECKS:")
-    sample_sum_sanity_checks(ht, subsets, info_metrics, verbose)
+    sample_sum_sanity_checks(
+        ht,
+        subsets,
+        info_metrics,
+        verbose,
+        ukbb_pops,
+        gnomad_exomes_pops,
+        gnomad_genomes_pops,
+    )
 
     logger.info("SEX CHROMOSOME ANNOTATION CHECKS:")
     sex_chr_sanity_checks(ht, info_metrics, contigs, verbose)
@@ -735,15 +754,10 @@ def vcf_field_check(
     hist_fields = []
     for hist in hists:
         hist_fields.extend(
-            [
-                f"{hist}_bin_freq",
-                f"{hist}_n_smaller",
-                f"{hist}_n_larger",
-                f"{hist}_raw_bin_freq",
-                f"{hist}_raw_n_smaller",
-                f"{hist}_raw_n_larger",
-            ]
+            [f"{hist}_bin_freq", f"{hist}_raw_bin_freq",]
         )
+        if "dp" in hist:
+            hist_fields.extend([f"{hist}_n_larger", f"{hist}_raw_n_larger"])
 
     missing_fields = []
     missing_descriptions = []
