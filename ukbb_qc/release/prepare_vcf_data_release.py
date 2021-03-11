@@ -103,17 +103,17 @@ GNOMAD_EAS_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["EAS"]))
 # This removes pop names we don't want to use in the UKBB release
 # (e.g., "uniform", "consanguineous") to reduce clutter
 KEEP_POPS = ["afr", "amr", "asj", "eas", "fin", "nfe", "oth", "sas"]
-KEEP_POPS.extend(GNOMAD_NFE_SUBPOPS)
-KEEP_POPS.extend(GNOMAD_EAS_SUBPOPS)
+
+# Separating gnomad exome/genome pops and adding 'ami', 'mid' to gnomAD genomes pops
+GNOMAD_GENOMES_POPS = {pop: POP_NAMES[pop] for pop in KEEP_POPS}
+GNOMAD_GENOMES_POPS["ami"] = "Amish"
+GNOMAD_GENOMES_POPS["mid"] = "Middle Eastern"
 
 # Remove unnecessary pop names from pops dict
 # Store this as GNOMAD_EXOMES_POPS
+KEEP_POPS.extend(GNOMAD_NFE_SUBPOPS)
+KEEP_POPS.extend(GNOMAD_EAS_SUBPOPS)
 GNOMAD_EXOMES_POPS = {pop: POP_NAMES[pop] for pop in KEEP_POPS}
-
-# Separating gnomad exome/genome pops and adding 'ami', 'mid' to gnomAD genomes pops
-GNOMAD_GENOMES_POPS = GNOMAD_EXOMES_POPS.copy()
-GNOMAD_GENOMES_POPS["ami"] = "Amish"
-GNOMAD_GENOMES_POPS["mid"] = "Middle Eastern"
 
 
 def populate_info_dict(
@@ -787,7 +787,13 @@ def main(args):
                 & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
             )
             sanity_check_release_mt(
-                mt, SUBSET_LIST, missingness_threshold=0.5, verbose=args.verbose
+                mt,
+                SUBSET_LIST,
+                missingness_threshold=0.5,
+                verbose=args.verbose,
+                ukbb_pops=UKBB_POPS,
+                gnomad_exome_pops=GNOMAD_EXOMES_POPS,
+                gnomad_genomes_pops=GNOMAD_GENOMES_POPS,
             )
 
         if args.prepare_release_vcf:
