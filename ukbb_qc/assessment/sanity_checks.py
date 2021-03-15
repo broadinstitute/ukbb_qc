@@ -525,7 +525,7 @@ def sample_sum_sanity_checks(
                     subset,
                     dict(group=["adj"], pop=["nfe"], subpop=GNOMAD_NFE_SUBPOPS),
                     verbose,
-                    subpop=True,
+                    subpop="nfe",
                 )
             eas_subpop_adjusted = list(
                 set(
@@ -542,7 +542,7 @@ def sample_sum_sanity_checks(
                     subset,
                     dict(group=["adj"], pop=["eas"], subpop=GNOMAD_EAS_SUBPOPS),
                     verbose,
-                    subpop=True,
+                    subpop="eas",
                 )
 
 
