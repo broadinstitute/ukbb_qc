@@ -789,11 +789,11 @@ def main(args):
             sanity_check_release_mt(
                 mt,
                 SUBSET_LIST,
+                ukbb_pops=UKBB_POPS,
+                gnomad_exomes_pops=GNOMAD_EXOMES_POPS,
+                gnomad_genomes_pops=GNOMAD_GENOMES_POPS,
                 missingness_threshold=0.5,
                 verbose=args.verbose,
-                ukbb_pops=UKBB_POPS,
-                gnomad_exome_pops=GNOMAD_EXOMES_POPS,
-                gnomad_genomes_pops=GNOMAD_GENOMES_POPS,
             )
 
         if args.prepare_release_vcf:
