@@ -456,7 +456,12 @@ def sample_sum_sanity_checks(
         if "gnomad" in subset:
             if "exomes" in subset:
                 sexes = SEXES_STR
+
+                # Remove subpops here -- they have a different format in the info annotations
+                # and are checked later in this function
                 pops = gnomad_exomes_pops
+                for subpop in GNOMAD_NFE_SUBPOPS + GNOMAD_EAS_SUBPOPS:
+                    pops.pop(subpop, None)
             else:
                 sexes = SEXES
                 pops = gnomad_genomes_pops
