@@ -689,6 +689,16 @@ def main(args):
                 {"vep": {"Description": hl.eval(ht.vep_csq_header)}}
             )
 
+            # NOTE: Correcting rsid here because this was discovered after release HT was created
+            logger.info("Reformatting rsid...")
+            # dbsnp might have multiple identifiers for one variant
+            # thus, rsid is a set annotation, starting with version b154 for dbsnp resource:
+            # https://github.com/broadinstitute/gnomad_methods/blob/master/gnomad/resources/grch38/reference_data.py#L136
+            # `export_vcf` expects this field to be a string, and vcf specs
+            # say this field may be delimited by a semi-colon:
+            # https://samtools.github.io/hts-specs/VCFv4.2.pdf
+            ht = ht.annotate(rsid=hl.str(";").join(ht.rsid))
+
             logger.info(
                 "Selecting relevant fields for VCF export and checkpointing HT..."
             )
@@ -780,6 +790,7 @@ def main(args):
 
         if args.sanity_check:
             mt = hl.read_matrix_table(release_mt_path(*tranche_data))
+
             # NOTE: removing lowqual and star alleles here to avoid having additional failed missingness checks
             info_ht = hl.read_table(info_ht_path(data_source, freeze))
             mt = mt.filter_rows(
