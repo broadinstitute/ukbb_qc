@@ -450,16 +450,9 @@ def sample_sum_sanity_checks(
     GNOMAD_NFE_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["NFE"]))
     GNOMAD_EAS_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["EAS"]))
 
-    # Remove unnecessary population names from pop_names dict
-    # This is to avoid checking for populations we don't need to check
-    KEEP_GNOMAD_POPS = ["afr", "amr", "asj", "eas", "fin", "nfe", "oth", "sas"]
-
-    for pop in pop_names.copy():
-        if pop not in KEEP_GNOMAD_POPS:
-            pop_names.pop(pop)
-
+    # Check if pops are present
+    # Get list of all pops present in HT
     for subset in subsets:
-        # Check if pops are present
         if "gnomad" in subset:
             if "exomes" in subset:
                 sexes = SEXES_STR
@@ -497,9 +490,18 @@ def sample_sum_sanity_checks(
                 )
 
         # Print any missing pops to terminal
-        missing_pops = set(pop_names.keys()) - set(pop_found)
-        if len(missing_pops) != 0:
-            logger.warning(f"Missing {missing_pops} pops in {subset} subset!")
+        for subset in subsets:
+            # Check if pops are present
+            if "gnomad" in subset:
+                if "exomes" in subset:
+                    missing_pops = set(gnomad_exomes_pops.keys()) - set(pop_found)
+                else:
+                    missing_pops = set(gnomad_genomes_pops.keys()) - set(pop_found)
+            else:
+                missing_pops = set(ukbb_pops.keys()) - set(pop_found)
+
+            if len(missing_pops) != 0:
+                logger.warning(f"Missing {missing_pops} pops in {subset} subset!")
 
         # Perform sample sum checks
         sample_sum_check(
@@ -513,7 +515,7 @@ def sample_sum_sanity_checks(
             verbose,
         )
 
-        if "gnomad" in subset:
+        if "gnomad" in subset and "exomes" in subset:
             # Adjust subpops to those found in subset
             nfe_subpop_adjusted = list(
                 set([x for x in pop_adjusted if "nfe_" in x and "male" not in x])
