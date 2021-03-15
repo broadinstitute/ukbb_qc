@@ -756,10 +756,15 @@ def vcf_field_check(
     hist_fields = []
     for hist in hists:
         hist_fields.extend(
-            [f"{hist}_bin_freq", f"{hist}_raw_bin_freq",]
+            [
+                f"{hist}_bin_freq",
+                f"{hist}_n_smaller",
+                f"{hist}_n_larger",
+                f"{hist}_raw_bin_freq",
+                f"{hist}_raw_n_smaller",
+                f"{hist}_raw_n_larger",
+            ],
         )
-        if "dp" in hist:
-            hist_fields.extend([f"{hist}_n_larger", f"{hist}_raw_n_larger"])
 
     missing_fields = []
     missing_descriptions = []
