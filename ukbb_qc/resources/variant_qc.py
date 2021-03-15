@@ -21,13 +21,13 @@ String representation for NA12878 truth sample
 TRUTH_SAMPLES = {
     "syndip": {
         "s": SYNDIP,
-        "truth_mt_path": grch38.syndip.path,
-        "hc_intervals_path": grch38.syndip_hc_intervals.path,
+        "truth_mt": grch38.syndip,
+        "hc_intervals_path": grch38.syndip_hc_intervals,
     },
     "NA12878": {
         "s": NA12878,
-        "truth_mt_path": grch38.na12878_giab.path,
-        "hc_intervals_path": grch38.na12878_giab_hc_intervals.path,
+        "truth_mt": grch38.na12878_giab,
+        "hc_intervals": grch38.na12878_giab_hc_intervals,
     },
 }
 """
@@ -68,7 +68,7 @@ def get_truth_sample_data(
     - hc_intervals: high confidence interval Table in truth sample
     - callset_truth_mt: truth sample MatrixTable (subset from callset)
     
-    's', 'truth_mt_path' and 'hc_intervals_path' are assumed be present in the `truth_sample_dict` and `callset_truth_mt` will
+    's', 'truth_mt' and 'hc_intervals' are assumed be present in the `truth_sample_dict` and `callset_truth_mt` will
     be retrieved using `truth_sample_mt_path(truth_sample, data_source, freeze)` 
 
     :param str data_source: One of 'regeneron' or 'broad'
@@ -102,10 +102,10 @@ def get_truth_sample_data(
             truth_sample_mt_path(truth_sample, data_source, freeze)
         )
     if data_type == "truth_mt":
-        return hl.read_matrix_table(truth_samples_info[data_type])
+        return truth_samples_info[data_type].mt()
 
     if data_type == "hc_intervals":
-        return hl.read_table(truth_samples_info[data_type])
+        return truth_samples_info[data_type].ht()
 
     return truth_samples_info[data_type]
 
