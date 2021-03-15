@@ -456,13 +456,16 @@ def sample_sum_sanity_checks(
         if "gnomad" in subset:
             if "exomes" in subset:
                 sexes = SEXES_STR
+                pops = gnomad_exomes_pops
             else:
                 sexes = SEXES
+                pops = gnomad_genomes_pops
             pop_adjusted = list(
                 set([x for x in info_metrics if (subset in x) and ("raw" not in x)])
             )
         else:
             sexes = SEXES
+            pops = ukbb_pops
             pop_adjusted = list(
                 set(
                     [
@@ -490,35 +493,21 @@ def sample_sum_sanity_checks(
                 )
 
         # Print any missing pops to terminal
-        for subset in subsets:
-            # Check if pops are present
-            sexes = SEXES
-            if "gnomad" in subset:
-                if "exomes" in subset:
-                    missing_pops = set(gnomad_exomes_pops.keys()) - set(pop_found)
-                    pops = gnomad_exomes_pops
-                    sexes = SEXES_STR
-                else:
-                    missing_pops = set(gnomad_genomes_pops.keys()) - set(pop_found)
-                    pops = gnomad_genomes_pops
-            else:
-                missing_pops = set(ukbb_pops.keys()) - set(pop_found)
-                pops = ukbb_pops
+        missing_pops = set(pops.keys()) - set(pop_found)
+        if len(missing_pops) != 0:
+            logger.warning(f"Missing {missing_pops} pops in {subset} subset!")
 
-            if len(missing_pops) != 0:
-                logger.warning(f"Missing {missing_pops} pops in {subset} subset!")
-
-            # Perform sample sum checks
-            sample_sum_check(
-                ht, subset, dict(group=["adj"], pop=list(set(pops))), verbose
-            )
-            sample_sum_check(ht, subset, dict(group=["adj"], sex=sexes), verbose)
-            sample_sum_check(
-                ht,
-                subset,
-                dict(group=["adj"], pop=list(set(pops)), sex=sexes),
-                verbose,
-            )
+        # Perform sample sum checks
+        sample_sum_check(
+            ht, subset, dict(group=["adj"], pop=list(set(pop_found))), verbose
+        )
+        sample_sum_check(ht, subset, dict(group=["adj"], sex=sexes), verbose)
+        sample_sum_check(
+            ht,
+            subset,
+            dict(group=["adj"], pop=list(set(pop_found)), sex=sexes),
+            verbose,
+        )
 
         if "gnomad" in subset and "exomes" in subset:
             # Adjust subpops to those found in subset
