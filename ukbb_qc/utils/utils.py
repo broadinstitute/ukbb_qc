@@ -4,6 +4,7 @@ from typing import Dict, List, Union
 
 import hail as hl
 
+from gnomad.resources.grch37.gnomad import SUBPOPS
 from gnomad.resources.grch38.gnomad import SEXES
 from gnomad.resources.grch38.reference_data import lcr_intervals
 from gnomad.resources.resource_utils import DataException
@@ -21,12 +22,7 @@ from gnomad.utils.vcf import (
 )
 from gnomad.utils.vcf import SEXES as SEXES_STR
 from gnomad.variant_qc.random_forest import get_rf_runs
-from gnomad_qc.v2.variant_qc.prepare_data_release import (
-    EAS_SUBPOPS as GNOMAD_EAS_SUBPOPS,
-)
-from gnomad_qc.v2.variant_qc.prepare_data_release import (
-    NFE_SUBPOPS as GNOMAD_NFE_SUBPOPS,
-)
+
 from ukbb_qc.load_data.utils import import_phenotype_ht
 from ukbb_qc.resources.basics import (
     array_sample_map_ht_path,
@@ -47,6 +43,21 @@ from ukbb_qc.resources.variant_qc import vqsr_run_path
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("utils")
 logger.setLevel(logging.INFO)
+
+
+GNOMAD_NFE_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["NFE"]))
+"""
+Dictionary of gnomAD v2 nfe subpop labels and description. 
+
+Used in VCF export.
+"""
+
+GNOMAD_EAS_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["EAS"]))
+"""
+Dictionary of gnomAD v2 eas subpop labels and description. 
+
+Used in VCF export.
+"""
 
 
 # Generic
