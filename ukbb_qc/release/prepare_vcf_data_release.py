@@ -801,7 +801,7 @@ def main(args):
             # NOTE: Fixing chrY metrics here for 455k tranche
             # because fix to `set_female_y_metrics_to_na` was pushed
             # after VCF MT generated
-            mt = mt.annotate_rows(**set_female_y_metrics_to_na)
+            mt = mt.annotate_rows(**set_female_y_metrics_to_na(mt))
 
             sanity_check_release_mt(
                 mt,
@@ -826,7 +826,7 @@ def main(args):
             # NOTE: Fixing chrY metrics here for 455k tranche
             # because fix to `set_female_y_metrics_to_na` was pushed
             # after VCF MT generated
-            mt = mt.annotate_rows(**set_female_y_metrics_to_na)
+            mt = mt.annotate_rows(**set_female_y_metrics_to_na(mt))
 
             if args.test:
                 logger.info("Filtering to chr20 and chrX (for tests only)...")
