@@ -699,9 +699,9 @@ def sanity_check_release_mt(
     filters_sanity_check(ht)
 
     # NOTE: This check won't work in the 455k tranche
-    # We dropped all `_n_smaller` histograms since we don't export them
-    # We only keep the `_n_larger` DP histograms, but there is a note
-    # in `histograms_sanity_check` that these do not need to be checked
+    # The `histograms_sanity_check` code checks `_n_smaller` for all hists and
+    # `_n_larger` for every hist except the DP hists
+    # ^ we dropped all of these annotations in the 455k tranche
     # logger.info("HISTOGRAM CHECKS:")
     # histograms_sanity_check(ht, verbose=verbose)
 
