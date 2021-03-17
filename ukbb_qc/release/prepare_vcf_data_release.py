@@ -436,7 +436,11 @@ def unfurl_nested_annotations(
             subpops = [GNOMAD_NFE_SUBPOPS + GNOMAD_EAS_SUBPOPS]
 
         freq_idx = make_index_dict(
-            t=t, freq_meta_str=f"{gnomad_prefix}_freq_meta", pops=pops, subpops=subpops,
+            t=t,
+            freq_meta_str=f"{gnomad_prefix}_freq_meta",
+            pops=pops,
+            subpops=subpops,
+            data_type=data_type,
         )
 
     else:
