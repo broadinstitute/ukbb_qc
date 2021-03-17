@@ -40,6 +40,7 @@ from ukbb_qc.assessment.sanity_checks import (
     vcf_field_check,
 )
 from ukbb_qc.resources.basics import (
+    append_to_vcf_header_path,
     get_checkpoint_path,
     get_ukbb_data,
     logging_path,
@@ -922,6 +923,8 @@ def main(args):
                         mt.select_cols(),
                         release_vcf_path(*tranche_data, contig=contig),
                         metadata=header_dict,
+                        append_to_header=append_to_vcf_header_path,
+                        tabix=True,
                     )
 
             # Export sharded VCF
@@ -951,6 +954,8 @@ def main(args):
                     release_vcf_path(*tranche_data),
                     parallel="header_per_shard",
                     metadata=header_dict,
+                    append_to_header=append_to_vcf_header_path,
+                    tabix=True,
                 )
     finally:
         logger.info("Copying hail log to logging bucket...")
