@@ -438,9 +438,10 @@ def unfurl_nested_annotations(
         faf_idx = hl.eval(t.globals[f"{gnomad_prefix}_faf_index_dict"])
         if data_type != "genomes":
             subpops = [GNOMAD_NFE_SUBPOPS + GNOMAD_EAS_SUBPOPS]
-            
+
         freq_idx = make_index_dict(
             t=t, freq_meta_str=f"{gnomad_prefix}_freq_meta", pops=pops, subpops=subpops,
+        )
 
     else:
         faf = "faf"
@@ -822,6 +823,23 @@ def main(args):
                 sys.exit(1)
 
             mt = hl.read_matrix_table(release_mt_path(*tranche_data))
+            # NOTE: Fixing chrY metrics here for 455k tranche
+            # because fix to `set_female_y_metrics_to_na` was pushed
+            # after VCF MT generated
+            mt = mt.annotate_rows(**set_female_y_metrics_to_na)
+
+            if args.test:
+                logger.info("Filtering to chr20 and chrX (for tests only)...")
+                # Using filter intervals to keep all the work done by get_ukbb_data
+                # (removing sample with withdrawn consent/their ref blocks/variants,
+                # also keeping meta col annotations)
+                # Using chr20 to test a small autosome and chrX to test a sex chromosome
+                # Some annotations (like FAF) are 100% missing on autosomes
+                mt = hl.filter_intervals(
+                    mt,
+                    [hl.parse_locus_interval("chr20"), hl.parse_locus_interval("chrX")],
+                )
+
             logger.info("Reading header dict from pickle...")
             with hl.hadoop_open(release_header_path(*tranche_data), "rb") as p:
                 header_dict = pickle.load(p)
@@ -838,11 +856,6 @@ def main(args):
             info_annot_mapping = dict(
                 zip(new_row_annots, [mt.info[f"{x}"] for x in row_annots])
             )
-
-            # NOTE: Fixing chrY metrics here for 455k tranche
-            # because fix to `set_female_y_metrics_to_na` was pushed
-            # after VCF MT generated
-            mt = mt.annotate_rows(**set_female_y_metrics_to_na)
 
             # Confirm all VCF fields and descriptions are present
             if not vcf_field_check(mt, header_dict, new_row_annots, list(mt.entry)):
