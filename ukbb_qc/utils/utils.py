@@ -526,6 +526,7 @@ def make_freq_meta_index_dict(
     gnomad: bool,
     pops: List[str],
     subpops: List[str] = None,
+    data_type: str = None,
     gnomad_nfe_subpops: List[str] = GNOMAD_NFE_SUBPOPS,
     gnomad_eas_subpops: List[str] = GNOMAD_EAS_SUBPOPS,
     groups: List[str] = GROUPS,
@@ -542,6 +543,7 @@ def make_freq_meta_index_dict(
     :param List[str] pops: List of global populations in frequency array. Used for both gnomAD and UKBB. 
         Can handle populations to unique to gnomAD/UKBB or a union of all population names.
     :param List[str] subpops: List of UKBB subpopulations in frequency array. Default is None.
+    :param str data_type: Data type: one of "exomes" or "genomes". Required only for gnomAD data. Default is None.
     :param List[str] gnomad_nfe_subpops: List of nfe subpopulations in gnomAD. Default is GNOMAD_NFE_SUBPOPS.
     :param List[str] gnomad_eas_subpops: List of eas subpopulations in gnomAD. Default is GNOMAD_EAS_SUBPOPS.
     :param List[str] groups: Group names used to generate labels for high quality genotypes and all raw genotypes. Default is GROUPS.
@@ -552,11 +554,9 @@ def make_freq_meta_index_dict(
     :rtype: Dict[str, int]
     """
     if gnomad:
-        # If gnomad is True and subpops are defined, then function is working on v2 exomes
         # v2 exomes used "male" and "female" labels
-        if subpops:
+        if data_type == "exomes":
             sexes = gnomad_sexes
-        # If gnomad is True and subpops are not defined, then function is working on v3 genomes
         # v3 genomes used "XX" and "XY" labels (same as UKBB)
         else:
             sexes = ukbb_sexes
@@ -594,6 +594,7 @@ def make_index_dict(
     freq_meta_str: str,
     pops: List[str],
     subpops: List[str],
+    data_type: str = None,
 ) -> Dict[str, int]:
     """
     Create a look-up Dictionary for entries contained in the frequency annotation array.
@@ -603,6 +604,7 @@ def make_index_dict(
     :param List[str] pops: List of global populations in frequency array. Used for both gnomAD and UKBB. 
         Can handle populations to unique to gnomAD/UKBB or a union of all population names.
     :param List[str] subpops: List of subpops in frequency array. Required for gnomAD populations.
+    :param str data_type: Data type: one of "exomes" or "genomes". Required only for gnomAD data. Default is None.
     :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
         of each grouping entry in the frequency array
     :rtype: Dict of str: int
@@ -611,7 +613,7 @@ def make_index_dict(
     # check if indexing gnomAD data
     if "gnomad" in freq_meta_str:
         index_dict = make_freq_meta_index_dict(
-            freq_meta, gnomad=True, pops=pops, subpops=subpops
+            freq_meta, gnomad=True, pops=pops, subpops=subpops, data_type=data_type,
         )
     else:
         if subpops:
