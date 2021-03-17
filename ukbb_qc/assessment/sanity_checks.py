@@ -13,6 +13,8 @@ from gnomad.resources.grch37.gnomad import SUBPOPS
 from gnomad.utils.vcf import HISTS
 from gnomad.utils.vcf import SEXES as SEXES_STR
 
+from ukbb_qc.utils.utils import GNOMAD_EAS_SUBPOPS, GNOMAD_NFE_SUBPOPS
+
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
     datefmt="%m/%d/%Y %I:%M:%S %p",
@@ -442,14 +444,12 @@ def sample_sum_sanity_checks(
     :param List[str] info_metrics: List of metrics in info struct of input Table.
     :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
         show only top values of annotations that fail checks.
-    :param pop_names: Dict with global population names (keys) and population descriptions (values).
+    :param Dict[str, str] ukbb_names: Dict with UKBB population names (keys) and population descriptions (values).
+    :param Dict[str, str] gnomad_exomes_pops: Dict with gnomAD v2 exomes population names (keys) and population descriptions (values).
+    :param Dict[str, str] gnomad_genomes_pops: Dict with gnomAD v3 genomes population names (keys) and population descriptions (values).
     :return: None
     :rtype: None
     """
-    # Get gnomAD subpops
-    GNOMAD_NFE_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["NFE"]))
-    GNOMAD_EAS_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["EAS"]))
-
     # Check if pops are present
     # Get list of all pops present in HT
     for subset in subsets:
@@ -459,6 +459,7 @@ def sample_sum_sanity_checks(
 
                 # Remove subpops here -- they have a different format in the info annotations
                 # and are checked later in this function
+                # genomes do not have subpops yet, so this only applies to exomes
                 pops = gnomad_exomes_pops
                 for subpop in GNOMAD_NFE_SUBPOPS + GNOMAD_EAS_SUBPOPS:
                     pops.pop(subpop, None)

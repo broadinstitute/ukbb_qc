@@ -6,7 +6,6 @@ from typing import Dict, List, Optional, Union
 
 import hail as hl
 
-from gnomad.resources.grch37.gnomad import SUBPOPS
 from gnomad.resources.grch38.gnomad import SEXES
 from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.sample_qc.sex import adjust_sex_ploidy
@@ -54,7 +53,7 @@ from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import info_ht_path
 from ukbb_qc.slack_creds import slack_token
 from ukbb_qc.utils.constants import UKBB_POPS
-from ukbb_qc.utils.utils import make_index_dict
+from ukbb_qc.utils.utils import make_index_dict, GNOMAD_EAS_SUBPOPS, GNOMAD_NFE_SUBPOPS
 
 
 logging.basicConfig(
@@ -95,10 +94,6 @@ AS_FIELDS.append("sibling_singleton")
 
 # Make subset list (used in properly filling out VCF header descriptions and naming VCF info fields)
 SUBSET_LIST = ["", "gnomad_exomes", "gnomad_genomes"]  # empty for ukbb
-
-# Get gnomAD subpop names
-GNOMAD_NFE_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["NFE"]))
-GNOMAD_EAS_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["EAS"]))
 
 # Select populations to keep from the list of population names in POP_NAMES
 # This removes pop names we don't want to use in the UKBB release
