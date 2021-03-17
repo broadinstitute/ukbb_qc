@@ -483,8 +483,11 @@ def sample_sum_sanity_checks(
         pop_adjusted = [i.replace("_adj", "") for i in pop_adjusted]
 
         # NOTE: Added filter to remove subset here
-        # This is a fix to prevent sample sum checks from
+        # We don't retain any gnomAD subset info in the UKBB release files
+        # This filter is a fix to prevent sample sum checks from
         # checking for HGDP/TGP population labels (gnomAD v3)
+        # HGDP/TGP population labels are more granular than the global pops
+        # and are not included in the UKBB release
         pop_found = ht[f"{subset + '_' if subset != '' else subset}freq_meta"].filter(
             lambda x: x.contains("pop") & ~x.contains("subset")
         )
