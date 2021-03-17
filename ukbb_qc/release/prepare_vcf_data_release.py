@@ -853,6 +853,7 @@ def main(args):
                     mt,
                     [hl.parse_locus_interval("chr20"), hl.parse_locus_interval("chrX")],
                 )
+                mt = mt._filter_partitions(range(2))
 
             logger.info("Reading header dict from pickle...")
             with hl.hadoop_open(release_header_path(*tranche_data), "rb") as p:
@@ -932,7 +933,7 @@ def main(args):
                         mt.select_cols(),
                         release_vcf_path(*tranche_data, contig=contig),
                         metadata=header_dict,
-                        append_to_header=append_to_vcf_header_path,
+                        append_to_header=append_to_vcf_header_path(*tranche_data),
                         tabix=True,
                     )
 
@@ -960,7 +961,7 @@ def main(args):
                     release_vcf_path(*tranche_data),
                     parallel="header_per_shard",
                     metadata=header_dict,
-                    append_to_header=append_to_vcf_header_path,
+                    append_to_header=append_to_vcf_header_path(*tranche_data),
                     tabix=True,
                 )
     finally:
