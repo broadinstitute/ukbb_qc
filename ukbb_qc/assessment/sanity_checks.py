@@ -520,8 +520,9 @@ def sample_sum_sanity_checks(
             verbose,
         )
 
-        if "gnomad" in subset and "exomes" in subset:
+        if "gnomad" in subset:
             # Adjust subpops to those found in subset
+            # This is checking v2 exomes subpops
             nfe_subpop_adjusted = list(
                 set([x for x in pop_adjusted if "nfe_" in x and "male" not in x])
             )
