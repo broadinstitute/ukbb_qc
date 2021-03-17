@@ -438,10 +438,9 @@ def unfurl_nested_annotations(
         faf_idx = hl.eval(t.globals[f"{gnomad_prefix}_faf_index_dict"])
         if data_type != "genomes":
             subpops = [GNOMAD_NFE_SUBPOPS + GNOMAD_EAS_SUBPOPS]
-
+            
         freq_idx = make_index_dict(
             t=t, freq_meta_str=f"{gnomad_prefix}_freq_meta", pops=pops, subpops=subpops,
-        )
 
     else:
         faf = "faf"
