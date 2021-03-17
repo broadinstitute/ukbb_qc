@@ -9,7 +9,6 @@ from gnomad.assessment.sanity_checks import (
     sample_sum_check,
 )
 from gnomad.resources.grch38.gnomad import SEXES
-from gnomad.resources.grch37.gnomad import SUBPOPS
 from gnomad.utils.vcf import HISTS
 from gnomad.utils.vcf import SEXES as SEXES_STR
 

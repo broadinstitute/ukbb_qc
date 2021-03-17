@@ -797,6 +797,7 @@ def main(args):
             # NOTE: Fixing chrY metrics here for 455k tranche
             # because fix to `set_female_y_metrics_to_na` was pushed
             # after VCF MT generated
+            # https://github.com/broadinstitute/gnomad_methods/pull/347
             mt = mt.annotate_rows(
                 info=mt.info.annotate(**set_female_y_metrics_to_na(mt))
             )
@@ -821,9 +822,11 @@ def main(args):
                 sys.exit(1)
 
             mt = hl.read_matrix_table(release_mt_path(*tranche_data))
+
             # NOTE: Fixing chrY metrics here for 455k tranche
             # because fix to `set_female_y_metrics_to_na` was pushed
             # after VCF MT generated
+            # https://github.com/broadinstitute/gnomad_methods/pull/347
             mt = mt.annotate_rows(
                 info=mt.info.annotate(**set_female_y_metrics_to_na(mt))
             )
