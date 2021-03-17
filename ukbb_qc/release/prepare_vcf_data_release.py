@@ -825,7 +825,9 @@ def main(args):
                 logger.error("Need to choose how to export the release VCF. Exiting...")
                 sys.exit(1)
 
-            mt = hl.read_matrix_table(release_mt_path(*tranche_data))
+            mt = hl.read_matrix_table(
+                release_mt_path(*tranche_data), _n_partitions=args.n_shards
+            )
 
             # NOTE: Fixing chrY metrics here for 455k tranche
             # because fix to `set_female_y_metrics_to_na` was pushed
@@ -953,9 +955,6 @@ def main(args):
                 )
                 mt = mt.select_cols()
 
-                if args.n_shards:
-                    mt = mt.naive_coalesce(args.n_shards)
-
                 hl.export_vcf(
                     mt,
                     release_vcf_path(*tranche_data),
@@ -1029,7 +1028,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--n_shards",
-        help="Desired number of shards for output VCF (if --parallelize is set)",
+        help="Desired number of shards for output VCF (if --parallelize is set). Will be used to repartition raw MT on read",
         type=int,
     )
     parser.add_argument(
