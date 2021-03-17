@@ -835,6 +835,11 @@ def main(args):
                 info=mt.info.annotate(**set_female_y_metrics_to_na(mt))
             )
 
+            # NOTE: `qual` annotation is actually `QUALapprox` annotation in 455k tranche
+            # Need to convert this field to a float because `export_vcf` won't export this field
+            # if the type isn't float64
+            mt = mt.annotate_rows(qual=hl.float(mt.qual))
+
             if args.test:
                 logger.info("Filtering to chr20 and chrX (for tests only)...")
                 # Using filter intervals to keep all the work done by get_ukbb_data
