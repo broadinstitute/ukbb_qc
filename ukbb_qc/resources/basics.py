@@ -642,6 +642,26 @@ def release_vcf_path(data_source: str, freeze: int, contig: str = None) -> str:
         return f"{get_release_path(data_source, freeze)}/vcf/sharded_vcf/{data_source}.freeze_{freeze}.bgz"
 
 
+def append_to_vcf_header_path(data_source: str, freeze: int) -> str:
+    """
+    Fetch path to TSV file containing extra fields to append to VCF header.
+
+    Extra fields are VEP and dbSNP versions.
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :return: Filepath for extra fields TSV file
+    :rtype: str
+    """
+    if freeze != 7:
+        raise DataException(
+            "Extra fields to append to VCF header TSV only exists for freeze 7/455K!"
+        )
+    return (
+        f"gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/append_to_vcf_header.tsv"
+    )
+
+
 def annotation_hists_path(data_source: str, freeze: int) -> str:
     """
     Returns path to file containing ANNOTATIONS_HISTS dictionary.

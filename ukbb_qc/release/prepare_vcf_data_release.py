@@ -6,7 +6,6 @@ from typing import Dict, List, Optional, Union
 
 import hail as hl
 
-from gnomad.resources.grch37.gnomad import SUBPOPS
 from gnomad.resources.grch38.gnomad import SEXES
 from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.sample_qc.sex import adjust_sex_ploidy
@@ -40,6 +39,7 @@ from ukbb_qc.assessment.sanity_checks import (
     vcf_field_check,
 )
 from ukbb_qc.resources.basics import (
+    append_to_vcf_header_path,
     get_checkpoint_path,
     get_ukbb_data,
     logging_path,
@@ -53,7 +53,7 @@ from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import info_ht_path
 from ukbb_qc.slack_creds import slack_token
 from ukbb_qc.utils.constants import UKBB_POPS
-from ukbb_qc.utils.utils import make_index_dict
+from ukbb_qc.utils.utils import GNOMAD_EAS_SUBPOPS, GNOMAD_NFE_SUBPOPS, make_index_dict
 
 
 logging.basicConfig(
@@ -95,25 +95,21 @@ AS_FIELDS.append("sibling_singleton")
 # Make subset list (used in properly filling out VCF header descriptions and naming VCF info fields)
 SUBSET_LIST = ["", "gnomad_exomes", "gnomad_genomes"]  # empty for ukbb
 
-# Get gnomAD subpop names
-GNOMAD_NFE_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["NFE"]))
-GNOMAD_EAS_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["EAS"]))
-
 # Select populations to keep from the list of population names in POP_NAMES
 # This removes pop names we don't want to use in the UKBB release
 # (e.g., "uniform", "consanguineous") to reduce clutter
 KEEP_POPS = ["afr", "amr", "asj", "eas", "fin", "nfe", "oth", "sas"]
-KEEP_POPS.extend(GNOMAD_NFE_SUBPOPS)
-KEEP_POPS.extend(GNOMAD_EAS_SUBPOPS)
+
+# Separating gnomad exome/genome pops and adding 'ami', 'mid' to gnomAD genomes pops
+GNOMAD_GENOMES_POPS = {pop: POP_NAMES[pop] for pop in KEEP_POPS}
+GNOMAD_GENOMES_POPS["ami"] = "Amish"
+GNOMAD_GENOMES_POPS["mid"] = "Middle Eastern"
 
 # Remove unnecessary pop names from pops dict
 # Store this as GNOMAD_EXOMES_POPS
+KEEP_POPS.extend(GNOMAD_NFE_SUBPOPS)
+KEEP_POPS.extend(GNOMAD_EAS_SUBPOPS)
 GNOMAD_EXOMES_POPS = {pop: POP_NAMES[pop] for pop in KEEP_POPS}
-
-# Separating gnomad exome/genome pops and adding 'ami', 'mid' to gnomAD genomes pops
-GNOMAD_GENOMES_POPS = GNOMAD_EXOMES_POPS.copy()
-GNOMAD_GENOMES_POPS["ami"] = "Amish"
-GNOMAD_GENOMES_POPS["mid"] = "Middle Eastern"
 
 
 def populate_info_dict(
@@ -438,13 +434,14 @@ def unfurl_nested_annotations(
         faf_idx = hl.eval(t.globals[f"{gnomad_prefix}_faf_index_dict"])
         if data_type != "genomes":
             subpops = [GNOMAD_NFE_SUBPOPS + GNOMAD_EAS_SUBPOPS]
-        else:
-            freq_idx = freq_idx = make_index_dict(
-                t=t,
-                freq_meta_str=f"{gnomad_prefix}_freq_meta",
-                pops=pops,
-                subpops=subpops,
-            )
+
+        freq_idx = make_index_dict(
+            t=t,
+            freq_meta_str=f"{gnomad_prefix}_freq_meta",
+            pops=pops,
+            subpops=subpops,
+            data_type=data_type,
+        )
 
     else:
         faf = "faf"
@@ -692,6 +689,16 @@ def main(args):
                 {"vep": {"Description": hl.eval(ht.vep_csq_header)}}
             )
 
+            # NOTE: Correcting rsid here because this was discovered after release HT was created
+            logger.info("Reformatting rsid...")
+            # dbsnp might have multiple identifiers for one variant
+            # thus, rsid is a set annotation, starting with version b154 for dbsnp resource:
+            # https://github.com/broadinstitute/gnomad_methods/blob/master/gnomad/resources/grch38/reference_data.py#L136
+            # `export_vcf` expects this field to be a string, and vcf specs
+            # say this field may be delimited by a semi-colon:
+            # https://samtools.github.io/hts-specs/VCFv4.2.pdf
+            ht = ht.annotate(rsid=hl.str(";").join(ht.rsid))
+
             logger.info(
                 "Selecting relevant fields for VCF export and checkpointing HT..."
             )
@@ -783,14 +790,30 @@ def main(args):
 
         if args.sanity_check:
             mt = hl.read_matrix_table(release_mt_path(*tranche_data))
+
             # NOTE: removing lowqual and star alleles here to avoid having additional failed missingness checks
             info_ht = hl.read_table(info_ht_path(data_source, freeze))
             mt = mt.filter_rows(
                 (~info_ht[mt.row_key].AS_lowqual)
                 & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
             )
+
+            # NOTE: Fixing chrY metrics here for 455k tranche
+            # because fix to `set_female_y_metrics_to_na` was pushed
+            # after VCF MT generated
+            # https://github.com/broadinstitute/gnomad_methods/pull/347
+            mt = mt.annotate_rows(
+                info=mt.info.annotate(**set_female_y_metrics_to_na(mt))
+            )
+
             sanity_check_release_mt(
-                mt, SUBSET_LIST, missingness_threshold=0.5, verbose=args.verbose
+                mt,
+                SUBSET_LIST,
+                ukbb_pops=UKBB_POPS,
+                gnomad_exomes_pops=GNOMAD_EXOMES_POPS,
+                gnomad_genomes_pops=GNOMAD_GENOMES_POPS,
+                missingness_threshold=0.5,
+                verbose=args.verbose,
             )
 
         if args.prepare_release_vcf:
@@ -803,6 +826,32 @@ def main(args):
                 sys.exit(1)
 
             mt = hl.read_matrix_table(release_mt_path(*tranche_data))
+
+            # NOTE: Fixing chrY metrics here for 455k tranche
+            # because fix to `set_female_y_metrics_to_na` was pushed
+            # after VCF MT generated
+            # https://github.com/broadinstitute/gnomad_methods/pull/347
+            mt = mt.annotate_rows(
+                info=mt.info.annotate(**set_female_y_metrics_to_na(mt))
+            )
+
+            # NOTE: `qual` annotation is actually `QUALapprox` annotation in 455k tranche
+            # Need to convert this field to a float because `export_vcf` won't export this field
+            # if the type isn't float64
+            mt = mt.annotate_rows(qual=hl.float(mt.qual))
+
+            if args.test:
+                logger.info("Filtering to chr20 and chrX (for tests only)...")
+                # Using filter intervals to keep all the work done by get_ukbb_data
+                # (removing sample with withdrawn consent/their ref blocks/variants,
+                # also keeping meta col annotations)
+                # Using chr20 to test a small autosome and chrX to test a sex chromosome
+                # Some annotations (like FAF) are 100% missing on autosomes
+                mt = hl.filter_intervals(
+                    mt,
+                    [hl.parse_locus_interval("chr20"), hl.parse_locus_interval("chrX")],
+                )
+
             logger.info("Reading header dict from pickle...")
             with hl.hadoop_open(release_header_path(*tranche_data), "rb") as p:
                 header_dict = pickle.load(p)
@@ -881,6 +930,8 @@ def main(args):
                         mt.select_cols(),
                         release_vcf_path(*tranche_data, contig=contig),
                         metadata=header_dict,
+                        append_to_header=append_to_vcf_header_path,
+                        tabix=True,
                     )
 
             # Export sharded VCF
@@ -910,6 +961,8 @@ def main(args):
                     release_vcf_path(*tranche_data),
                     parallel="header_per_shard",
                     metadata=header_dict,
+                    append_to_header=append_to_vcf_header_path,
+                    tabix=True,
                 )
     finally:
         logger.info("Copying hail log to logging bucket...")
