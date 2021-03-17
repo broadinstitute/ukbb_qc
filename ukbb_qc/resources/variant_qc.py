@@ -2,7 +2,11 @@ from typing import Dict, Optional, Union
 
 import hail as hl
 
-from gnomad.resources.resource_utils import DataException
+from gnomad.resources.resource_utils import (
+    DataException,
+    VersionedTableResource,
+    VersionedMatrixTableResource,
+)
 import gnomad.resources.grch38 as grch38
 from gnomad.utils.file_utils import file_exists
 from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES
@@ -22,7 +26,7 @@ TRUTH_SAMPLES = {
     "syndip": {
         "s": SYNDIP,
         "truth_mt": grch38.syndip,
-        "hc_intervals_path": grch38.syndip_hc_intervals,
+        "hc_intervals": grch38.syndip_hc_intervals,
     },
     "NA12878": {
         "s": NA12878,
@@ -52,7 +56,7 @@ def get_truth_sample_data(
     data_source: str,
     freeze: int = CURRENT_FREEZE,
     truth_sample_dict: Dict[
-        str, Dict[str, Union[str, hl.Table, hl.MatrixTable]]
+        str, Dict[str, Union[str, VersionedTableResource, VersionedMatrixTableResource]]
     ] = TRUTH_SAMPLES,
     truth_sample: str = None,
     data_type: str = None,
@@ -73,7 +77,7 @@ def get_truth_sample_data(
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param str freeze: One of the data freezes
-    :param str truth_sample_dict: Dictionary containing 's', 'truth_mt_path' and 'hc_intervals_path' information for `truth_sample`
+    :param str truth_sample_dict: Dictionary containing 's', 'truth_mt' and 'hc_intervals' information for `truth_sample`
     :param str truth_sample: Name of the truth sample. One of the truth samples with information in `truth_sample_dict`
     :param str data_type: Truth sample data type. One of 's', 'truth_mt', 'hc_intervals', or 'callset_truth_mt'. 
     :return: Sample name, Table, or MatrixTable of requested truth sample data
