@@ -797,6 +797,12 @@ def main(args):
                 (~info_ht[mt.row_key].AS_lowqual)
                 & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
             )
+
+            # NOTE: Fixing chrY metrics here for 455k tranche
+            # because fix to `set_female_y_metrics_to_na` was pushed
+            # after VCF MT generated
+            mt = mt.annotate_rows(**set_female_y_metrics_to_na)
+
             sanity_check_release_mt(
                 mt,
                 SUBSET_LIST,
@@ -833,6 +839,11 @@ def main(args):
             info_annot_mapping = dict(
                 zip(new_row_annots, [mt.info[f"{x}"] for x in row_annots])
             )
+
+            # NOTE: Fixing chrY metrics here for 455k tranche
+            # because fix to `set_female_y_metrics_to_na` was pushed
+            # after VCF MT generated
+            mt = mt.annotate_rows(**set_female_y_metrics_to_na)
 
             # Confirm all VCF fields and descriptions are present
             if not vcf_field_check(mt, header_dict, new_row_annots, list(mt.entry)):

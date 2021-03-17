@@ -541,7 +541,14 @@ def make_freq_meta_index_dict(
     :rtype: Dict[str, int]
     """
     if gnomad:
-        sexes = gnomad_sexes
+        # If gnomad is True and subpops are defined, then function is working on v2 exomes
+        # v2 exomes used "male" and "female" labels
+        if subpops:
+            sexes = gnomad_sexes
+        # If gnomad is True and subpops are not defined, then function is working on v3 genomes
+        # v3 genomes used "XX" and "XY" labels (same as UKBB)
+        else:
+            sexes = ukbb_sexes
     else:
         sexes = ukbb_sexes
 
