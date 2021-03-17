@@ -53,7 +53,7 @@ from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import info_ht_path
 from ukbb_qc.slack_creds import slack_token
 from ukbb_qc.utils.constants import UKBB_POPS
-from ukbb_qc.utils.utils import make_index_dict, GNOMAD_EAS_SUBPOPS, GNOMAD_NFE_SUBPOPS
+from ukbb_qc.utils.utils import GNOMAD_EAS_SUBPOPS, GNOMAD_NFE_SUBPOPS, make_index_dict
 
 
 logging.basicConfig(
