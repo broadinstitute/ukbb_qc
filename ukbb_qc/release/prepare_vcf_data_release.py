@@ -842,7 +842,6 @@ def main(args):
                     mt,
                     [hl.parse_locus_interval("chr20"), hl.parse_locus_interval("chrX")],
                 )
-                mt = mt._filter_partitions(range(2))
 
             logger.info("Reading header dict from pickle...")
             with hl.hadoop_open(release_header_path(*tranche_data), "rb") as p:
