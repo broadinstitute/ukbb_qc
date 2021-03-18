@@ -200,6 +200,7 @@ def populate_info_dict(
     for subset in subset_list:
 
         if "gnomad" in subset:
+            description_text = " in gnomAD"
 
             if "exomes" in subset:
                 faf_label_groups = _create_label_groups(
@@ -212,6 +213,7 @@ def populate_info_dict(
                             pop_names=gnomad_exomes_pops,
                             label_groups=label_group,
                             faf=True,
+                            description_text=description_text,
                         )
                     )
 
@@ -224,13 +226,17 @@ def populate_info_dict(
                             prefix=subset,
                             pop_names=gnomad_exomes_pops,
                             label_groups=label_group,
+                            description_text=description_text,
                         )
                     )
 
                 # Add popmax to info dict
                 vcf_info_dict.update(
                     make_info_dict(
-                        prefix=subset, pop_names=gnomad_exomes_pops, popmax=True
+                        prefix=subset,
+                        pop_names=gnomad_exomes_pops,
+                        popmax=True,
+                        description_text=description_text,
                     )
                 )
 
@@ -242,6 +248,7 @@ def populate_info_dict(
                         label_groups=dict(
                             group=["adj"], pop=["nfe"], subpop=gnomad_nfe_subpops
                         ),
+                        description_text=description_text,
                     )
                 )
                 vcf_info_dict.update(
@@ -251,6 +258,7 @@ def populate_info_dict(
                         label_groups=dict(
                             group=["adj"], pop=["eas"], subpop=gnomad_eas_subpops
                         ),
+                        description_text=description_text,
                     )
                 )
 
@@ -263,6 +271,7 @@ def populate_info_dict(
                             pop_names=gnomad_genomes_pops,
                             label_groups=label_group,
                             faf=True,
+                            description_text=description_text,
                         )
                     )
                 gnomad_genomes_label_groups = _create_label_groups(
@@ -274,13 +283,17 @@ def populate_info_dict(
                             prefix=subset,
                             pop_names=gnomad_genomes_pops,
                             label_groups=label_group,
+                            description_text=description_text,
                         )
                     )
 
                 # Add popmax to info dict
                 vcf_info_dict.update(
                     make_info_dict(
-                        prefix=subset, pop_names=gnomad_genomes_pops, popmax=True
+                        prefix=subset,
+                        pop_names=gnomad_genomes_pops,
+                        popmax=True,
+                        description_text=description_text,
                     )
                 )
 
