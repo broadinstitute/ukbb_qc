@@ -1032,6 +1032,7 @@ if __name__ == "__main__":
         "--n_shards",
         help="Desired number of shards for output VCF (if --parallelize is set). Will be used to repartition raw MT on read",
         type=int,
+        default=25000,
     )
     parser.add_argument(
         "--slack_channel", help="Slack channel to post results and notifications to."
