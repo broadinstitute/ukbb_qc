@@ -48,7 +48,6 @@ def checksums(
             logger.info("Writing file size and md5 for tabix indices...")
             for index in indices:
                 index_url = f"{release_vcf_path(*tranche_data, contig=None)}/{index}"
-                print(index_url)
                 size, _, md5 = get_file_stats(index_url)
                 o.write(f"{index}\t{size}\t{md5}\n")
 
