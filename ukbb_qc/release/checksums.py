@@ -48,6 +48,7 @@ def checksums(
             logger.info("Writing file size and md5 for tabix indices...")
             for index in indices:
                 index_url = f"{release_vcf_path(*tranche_data, contig=None)}/{index}"
+                print(index_url)
                 size, _, md5 = get_file_stats(index_url)
                 o.write(f"{shard}\t{size}\t{md5}\n")
 
@@ -62,18 +63,18 @@ def main(args):
 
     # Get names of vcf shards
     path = release_vcf_path(*tranche_data, contig=None)
-    shards = (
+    files = (
         subprocess.check_output(["gsutil", "ls", path])
         .decode("utf8")
         .strip()
         .split("\n")
     )
-    shards = [os.path.split(f)[-1] for f in shards if f.endswith(".bgz")]
+    shards = [os.path.split(f)[-1] for f in files if f.endswith(".bgz")]
 
     # Get names of tabix indices if args.indices is set
     indices = None
     if args.indices:
-        indices = [os.path.split(f)[-1] for f in shards if f.endswith(".tbi")]
+        indices = [os.path.split(f)[-1] for f in files if f.endswith(".tbi")]
 
     logger.info("Generating checksums...")
     checksums(tranche_data, out_file, shards, indices)
