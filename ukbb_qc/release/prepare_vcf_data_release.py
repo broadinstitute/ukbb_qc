@@ -213,6 +213,7 @@ def populate_info_dict(
                             pop_names=gnomad_exomes_pops,
                             label_groups=label_group,
                             faf=True,
+                            description_text=description_text,
                         )
                     )
 
@@ -270,6 +271,7 @@ def populate_info_dict(
                             pop_names=gnomad_genomes_pops,
                             label_groups=label_group,
                             faf=True,
+                            description_text=description_text,
                         )
                     )
                 gnomad_genomes_label_groups = _create_label_groups(
@@ -825,7 +827,9 @@ def main(args):
                 logger.error("Need to choose how to export the release VCF. Exiting...")
                 sys.exit(1)
 
-            mt = hl.read_matrix_table(release_mt_path(*tranche_data))
+            mt = hl.read_matrix_table(
+                release_mt_path(*tranche_data), _n_partitions=args.n_shards
+            )
 
             # NOTE: Fixing chrY metrics here for 455k tranche
             # because fix to `set_female_y_metrics_to_na` was pushed
@@ -930,7 +934,7 @@ def main(args):
                         mt.select_cols(),
                         release_vcf_path(*tranche_data, contig=contig),
                         metadata=header_dict,
-                        append_to_header=append_to_vcf_header_path,
+                        append_to_header=append_to_vcf_header_path(*tranche_data),
                         tabix=True,
                     )
 
@@ -953,15 +957,12 @@ def main(args):
                 )
                 mt = mt.select_cols()
 
-                if args.n_shards:
-                    mt = mt.naive_coalesce(args.n_shards)
-
                 hl.export_vcf(
                     mt,
                     release_vcf_path(*tranche_data),
                     parallel="header_per_shard",
                     metadata=header_dict,
-                    append_to_header=append_to_vcf_header_path,
+                    append_to_header=append_to_vcf_header_path(*tranche_data),
                     tabix=True,
                 )
     finally:
@@ -1029,8 +1030,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--n_shards",
-        help="Desired number of shards for output VCF (if --parallelize is set)",
+        help="Desired number of shards for output VCF (if --parallelize is set). Will be used to repartition raw MT on read",
         type=int,
+        default=25000,
     )
     parser.add_argument(
         "--slack_channel", help="Slack channel to post results and notifications to."
