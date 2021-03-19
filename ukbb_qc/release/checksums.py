@@ -50,7 +50,7 @@ def checksums(
                 index_url = f"{release_vcf_path(*tranche_data, contig=None)}/{index}"
                 print(index_url)
                 size, _, md5 = get_file_stats(index_url)
-                o.write(f"{shard}\t{size}\t{md5}\n")
+                o.write(f"{index}\t{size}\t{md5}\n")
 
 
 def main(args):
