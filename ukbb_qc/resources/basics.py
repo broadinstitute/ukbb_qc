@@ -783,7 +783,7 @@ def get_pair_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: One of the data freezes
     :return: Path to comparison pairs HT
-    :rtype: hl.Table
+    :rtype: str
     """
     if freeze not in (6, 7):
         raise DataException(
@@ -793,6 +793,39 @@ def get_pair_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return (
         f"{get_release_path(data_source, freeze)}/summary/doubleton/comparison_pairs.ht"
     )
+
+
+# Readviz resources
+def unique_variants_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Returns path to HT containing variants unique to the UKBB (not present in gnomAD).
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: Data freeze. Must be 7.
+    :return: Path to UKBB unique variants HT
+    :rtype: str   
+    """
+    if freeze != 7:
+        raise DataException(
+            "UKBB unique variants HT path only exists for freeze 7/450K!"
+        )
+    return f"{get_release_path(data_source, freeze)}/readviz/ukbb_unique_variants.ht"
+
+
+def readviz_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Returns path to HT containing variants unique to the UKBB (not present in gnomAD).
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: Data freeze. Must be 7.
+    :return: Path to UKBB unique variants HT
+    :rtype: str   
+    """
+    if freeze != 7:
+        raise DataException(
+            "UKBB unique variants HT path only exists for freeze 7/450K!"
+        )
+    return f"{get_release_path(data_source, freeze)}/readviz/ukbb_unique_variants.ht"
 
 
 # logging path
