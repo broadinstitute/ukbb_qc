@@ -44,7 +44,7 @@ def hemi_expr(mt: hl.MatrixTable) -> hl.expr.BooleanExpression:
     """
     return hl.or_missing(
         mt.locus.in_x_nonpar() | mt.locus.in_y_nonpar(),
-        mt.GT.is_haploid() & (mt.meta.sex == "male") & (mt.GT[0] == 1),
+        mt.GT.is_haploid() & (mt.meta.sex == "XY") & (mt.GT[0] == 1),
     )
 
 
