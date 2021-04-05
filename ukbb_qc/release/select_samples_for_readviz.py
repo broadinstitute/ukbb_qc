@@ -112,11 +112,15 @@ def main(args):
         logger.info("Getting gnomAD variants...")
         gnomad_ht = get_gnomad_variants()
 
-        logger.info("Filtering to variants NOT present in gnomAD...")
+        logger.info("Extracting variants NOT present in gnomAD...")
         ht = ht.anti_join_rows(gnomad_ht)
         ht.write(unique_variants_ht_path(*tranche_data), overwrite=args.overwrite)
 
     if args.get_samples:
+        logger.info("Filtering to variants not present in gnomAD...")
+        unique_variants_ht = hl.read_table(unique_variants_ht_path(*tranche_data))
+        mt = mt.filter_rows(hl.is_defined(unique_variants_ht[mt.row_key]))
+
         logger.info(
             f"Taking up to {args.num_samples} samples per site where samples are het, hom_var, or hemi"
         )
