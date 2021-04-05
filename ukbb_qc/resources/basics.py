@@ -798,7 +798,7 @@ def get_pair_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
 # Readviz resources
 def unique_variants_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
-    Returns path to HT containing variants unique to the UKBB (not present in gnomAD).
+    Return path to HT containing variants unique to the UKBB (not present in gnomAD).
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: Data freeze. Must be 7.
