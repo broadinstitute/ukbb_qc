@@ -56,7 +56,7 @@ def hom_expr(mt: hl.MatrixTable) -> hl.expr.BooleanExpression:
 
 def hemi_expr(mt: hl.MatrixTable) -> hl.expr.BooleanExpression:
     """
-    Returns whether genotypes are hemizygous.
+    Return whether genotypes are hemizygous.
 
     Returns missing expression if locus is not in chrX/chrY non-PAR regions.
 
