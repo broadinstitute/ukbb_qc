@@ -44,6 +44,8 @@ def hemi_expr(mt: hl.MatrixTable) -> hl.expr.BooleanExpression:
     """
     return hl.or_missing(
         mt.locus.in_x_nonpar() | mt.locus.in_y_nonpar(),
+        # Haploid genotypes have a single integer, so checking if 
+        # mt.GT[0] is alternate allele
         mt.GT.is_haploid() & (mt.meta.sex == "XY") & (mt.GT[0] == 1),
     )
 
