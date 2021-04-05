@@ -4,7 +4,7 @@ import logging
 import hail as hl
 
 from gnomad.resources.grch37.gnomad import liftover
-from gnomad.resources.grch38.gnomad import public_release
+from gnomad.resources.grch38.gnomad import _public_release_ht_path
 from gnomad.utils.slack import slack_notifications
 
 from ukbb_qc.resources.basics import (
@@ -56,7 +56,13 @@ def get_gnomad_variants() -> hl.Table:
     :rtype: hl.Table
     """
     exomes_ht = liftover("exomes").ht().select().select_globals()
-    genomes_ht = public_release("genomes").ht().select().select_globals()
+    # NOTE: Using `_public_release_ht_path` instead of `public_release` to ensure this function always
+    # reads in 3.1 gnomAD release
+    genomes_ht = (
+        hl.read_table(_public_release_ht_path(data_type="genomes", version="3.1"))
+        .select()
+        .select_globals()
+    )
     return exomes_ht.join(genomes_ht, how="outer")
 
 
