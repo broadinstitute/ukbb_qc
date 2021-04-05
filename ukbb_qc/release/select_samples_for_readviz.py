@@ -45,7 +45,7 @@ def het_expr(mt: hl.MatrixTable) -> hl.expr.BooleanExpression:
 
 def hom_expr(mt: hl.MatrixTable) -> hl.expr.BooleanExpression:
     """
-    Returns whether genotypes are diploid and homozygous variant.
+    Return whether genotypes are diploid and homozygous variant.
 
     :param hl.MatrixTable mt: Input MatrixTable.
     :return: BooleanExpression indicating whether genotypes are diploid and homvar.
