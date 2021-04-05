@@ -32,28 +32,6 @@ def het_hom_hemi_take_expr(mt: hl.MatrixTable) -> hl.expr.StructExpression:
     return hl.struct(S=mt.s, GQ=mt.GQ)
 
 
-def het_expr(mt: hl.MatrixTable) -> hl.expr.BooleanExpression:
-    """
-    Returns whether genotypes are heterozygous.
-
-    :param hl.MatrixTable mt: Input MatrixTable.
-    :return: BooleanExpression indicating whether genotypes are het.
-    :rtype: hl.expr.BooleanExpression
-    """
-    return mt.GT.is_het()
-
-
-def hom_expr(mt: hl.MatrixTable) -> hl.expr.BooleanExpression:
-    """
-    Return whether genotypes are diploid and homozygous variant.
-
-    :param hl.MatrixTable mt: Input MatrixTable.
-    :return: BooleanExpression indicating whether genotypes are diploid and homvar.
-    :rtype: hl.expr.BooleanExpression
-    """
-    return mt.GT.is_diploid() & mt.GT.is_hom_var()
-
-
 def hemi_expr(mt: hl.MatrixTable) -> hl.expr.BooleanExpression:
     """
     Return whether genotypes are hemizygous.
@@ -126,13 +104,13 @@ def main(args):
         )
         mt = mt.annotate_rows(
             samples_w_het_var=hl.agg.filter(
-                het_expr(mt),
+                mt.GT.is_het(),
                 hl.agg.take(
                     het_hom_hemi_take_expr(mt), args.num_samples, ordering=-mt.GQ
                 ),
             ),
             samples_w_hom_var=hl.agg.filter(
-                hom_expr(mt),
+                mt.GT.is_hom_var() & mt.GT.is_diploid(),
                 hl.agg.take(
                     het_hom_hemi_take_expr(mt), args.num_samples, ordering=-mt.GQ
                 ),
