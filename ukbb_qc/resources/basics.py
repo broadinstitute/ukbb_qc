@@ -809,7 +809,7 @@ def non_gnomad_var_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> st
         raise DataException(
             "UKBB unique variants (not in gnomAD) HT path only exists for freeze 7/450K!"
         )
-    return f"{get_release_path(data_source, freeze)}/readviz/ukbb_unique_variants.ht"
+    return "gs://gnomad-readviz/ukbb/not_in_gnomad_variants/ukbb_unique_variants.ht"
 
 
 def readviz_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
@@ -825,7 +825,7 @@ def readviz_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
         raise DataException(
             "UKBB unique variants (not in gnomAD) HT path only exists for freeze 7/450K!"
         )
-    return f"{get_release_path(data_source, freeze)}/readviz/ukbb_unique_variants.ht"
+    return "gs://gnomad-readviz/ukbb/not_in_gnomad_variants/ukbb_unique_variants.ht"
 
 
 # logging path
