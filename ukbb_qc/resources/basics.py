@@ -796,9 +796,9 @@ def get_pair_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
 
 
 # Readviz resources
-def unique_variants_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+def non_gnomad_var_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
-    Return path to HT containing variants unique to the UKBB (not present in gnomAD).
+    Return path to HT containing variants unique to the UKBB (not present in gnomAD v2.1.1 or v3.1).
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: Data freeze. Must be 7.
@@ -807,14 +807,14 @@ def unique_variants_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> s
     """
     if freeze != 7:
         raise DataException(
-            "UKBB unique variants HT path only exists for freeze 7/450K!"
+            "UKBB unique variants (not in gnomAD) HT path only exists for freeze 7/450K!"
         )
     return f"{get_release_path(data_source, freeze)}/readviz/ukbb_unique_variants.ht"
 
 
 def readviz_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
-    Returns path to HT containing variants unique to the UKBB (not present in gnomAD).
+    Returns path to HT containing variants unique to the UKBB (not present in gnomAD v2.1.1 or v3.1).
 
     :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: Data freeze. Must be 7.
@@ -823,7 +823,7 @@ def readviz_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
     if freeze != 7:
         raise DataException(
-            "UKBB unique variants HT path only exists for freeze 7/450K!"
+            "UKBB unique variants (not in gnomAD) HT path only exists for freeze 7/450K!"
         )
     return f"{get_release_path(data_source, freeze)}/readviz/ukbb_unique_variants.ht"
 
