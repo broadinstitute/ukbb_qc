@@ -5,7 +5,7 @@ import hail as hl
 
 from gnomad.resources.grch37.gnomad import liftover
 from gnomad.resources.grch38.gnomad import _public_release_ht_path
-from gnomad.utils.annotation import hemi_expr, readviz_struct_expr
+from gnomad.utils.annotation import hemi_expr
 from gnomad.utils.slack import slack_notifications
 
 from ukbb_qc.resources.basics import (
@@ -85,17 +85,19 @@ def main(args):
             samples_w_het_var=hl.agg.filter(
                 mt.GT.is_het(),
                 hl.agg.take(
-                    readviz_struct_expr(mt.s, mt.GQ), args.num_samples, ordering=-mt.GQ
+                    hl.struct(s=mt.s, GQ=mt.GQ), args.num_samples, ordering=-mt.GQ
                 ),
             ),
             samples_w_hom_var=hl.agg.filter(
                 mt.GT.is_hom_var() & mt.GT.is_diploid(),
-                hl.agg.take(readviz_struct_expr(mt), args.num_samples, ordering=-mt.GQ),
+                hl.agg.take(
+                    hl.struct(s=mt.s, GQ=mt.GQ), args.num_samples, ordering=-mt.GQ
+                ),
             ),
             samples_w_hemi_var=hl.agg.filter(
                 hemi_expr(mt.locus, mt.meta.sex_imputation.sex_karyotype, mt.GT),
                 hl.agg.take(
-                    readviz_struct_expr(mt.s, mt.GQ), args.num_samples, ordering=-mt.GQ
+                    hl.struct(s=mt.s, GQ=mt.GQ), args.num_samples, ordering=-mt.GQ
                 ),
             ),
         )
