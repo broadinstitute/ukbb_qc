@@ -9,6 +9,7 @@ from gnomad.utils.annotation import hemi_expr
 from gnomad.utils.slack import slack_notifications
 
 from ukbb_qc.resources.basics import (
+    cram_map_path,
     get_ukbb_data,
     readviz_ht_path,
     unique_variants_ht_path,
@@ -62,6 +63,12 @@ def main(args):
         mt.meta.sample_filters.release & ~mt.meta.sample_filters.related
     )
     mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
+
+    logger.info("Filtering to samples with crams...")
+    cram_ht = hl.import_table(cram_map_path(*tranche_data), no_header=True).key_by(
+        "f0"
+    )
+    mt = mt.filter_cols(hl.is_defined(cram_ht[mt.s]))
 
     if args.get_variants:
 
