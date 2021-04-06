@@ -5,6 +5,7 @@ import hail as hl
 
 from gnomad.resources.grch37.gnomad import liftover
 from gnomad.resources.grch38.gnomad import _public_release_ht_path
+from gnomad.utils.annotation import hemi_expr, readviz_struct_expr
 from gnomad.utils.slack import slack_notifications
 
 from ukbb_qc.resources.basics import (
@@ -18,36 +19,6 @@ from ukbb_qc.slack_creds import slack_token
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("get_samples_for_readviz")
 logger.setLevel(logging.INFO)
-
-
-# Not sure if these should be put into some common repo?
-def het_hom_hemi_take_expr(mt: hl.MatrixTable) -> hl.expr.StructExpression:
-    """
-    Extracts sample ID and genotype quality from input MatrixTable.
-
-    :param hl.MatrixTable mt: Input MatrixTable.
-    :return: StructExpression of sample ID and GQ.
-    :rtype: hl.expr.StructExpression
-    """
-    return hl.struct(S=mt.s, GQ=mt.GQ)
-
-
-def hemi_expr(mt: hl.MatrixTable) -> hl.expr.BooleanExpression:
-    """
-    Return whether genotypes are hemizygous.
-
-    Return missing expression if locus is not in chrX/chrY non-PAR regions.
-
-    :param hl.MatrixTable mt: Input MatrixTable.
-    :return: BooleanExpression indicating whether genotypes are hemizygous.
-    :rtype: hl.expr.BooleanExpression
-    """
-    return hl.or_missing(
-        mt.locus.in_x_nonpar() | mt.locus.in_y_nonpar(),
-        # Haploid genotypes have a single integer, so checking if 
-        # mt.GT[0] is alternate allele
-        mt.GT.is_haploid() & (mt.meta.sex == "XY") & (mt.GT[0] == 1),
-    )
 
 
 def get_gnomad_variants() -> hl.Table:
@@ -114,19 +85,17 @@ def main(args):
             samples_w_het_var=hl.agg.filter(
                 mt.GT.is_het(),
                 hl.agg.take(
-                    het_hom_hemi_take_expr(mt), args.num_samples, ordering=-mt.GQ
+                    readviz_struct_expr(mt.s, mt.GQ), args.num_samples, ordering=-mt.GQ
                 ),
             ),
             samples_w_hom_var=hl.agg.filter(
                 mt.GT.is_hom_var() & mt.GT.is_diploid(),
-                hl.agg.take(
-                    het_hom_hemi_take_expr(mt), args.num_samples, ordering=-mt.GQ
-                ),
+                hl.agg.take(readviz_struct_expr(mt), args.num_samples, ordering=-mt.GQ),
             ),
             samples_w_hemi_var=hl.agg.filter(
-                hemi_expr(mt),
+                hemi_expr(mt.locus, mt.meta.sex_imputation.sex_karyotype, mt.GT),
                 hl.agg.take(
-                    het_hom_hemi_take_expr(mt), args.num_samples, ordering=-mt.GQ
+                    readviz_struct_expr(mt.s, mt.GQ), args.num_samples, ordering=-mt.GQ
                 ),
             ),
         )
