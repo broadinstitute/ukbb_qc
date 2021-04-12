@@ -4,15 +4,15 @@ import logging
 import hail as hl
 
 from gnomad.resources.grch37.gnomad import liftover
-from gnomad.resources.grch38.gnomad import _public_release_ht_path
+from gnomad.resources.grch38.gnomad import public_release
 from gnomad.utils.annotation import hemi_expr
 from gnomad.utils.slack import slack_notifications
 
 from ukbb_qc.resources.basics import (
     cram_map_path,
     get_ukbb_data,
+    non_gnomad_var_ht_path,
     readviz_ht_path,
-    unique_variants_ht_path,
 )
 from ukbb_qc.slack_creds import slack_token
 
@@ -30,10 +30,11 @@ def get_gnomad_variants() -> hl.Table:
     :rtype: hl.Table
     """
     exomes_ht = liftover("exomes").ht().select().select_globals()
-    # NOTE: Using `_public_release_ht_path` instead of `public_release` to ensure this function always
-    # reads in 3.1 gnomAD release
+    # NOTE: Specifying 3.1 for gnomAD genomes version
     genomes_ht = (
-        hl.read_table(_public_release_ht_path(data_type="genomes", version="3.1"))
+        public_release(data_type="genomes")
+        .versions["3.1"]
+        .ht()
         .select()
         .select_globals()
     )
@@ -62,13 +63,11 @@ def main(args):
     mt = mt.filter_cols(
         mt.meta.sample_filters.release & ~mt.meta.sample_filters.related
     )
-    mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
 
     logger.info("Filtering to samples with crams...")
-    cram_ht = hl.import_table(cram_map_path(*tranche_data), no_header=True).key_by(
-        "f0"
-    )
+    cram_ht = hl.import_table(cram_map_path(*tranche_data), no_header=True).key_by("f0")
     mt = mt.filter_cols(hl.is_defined(cram_ht[mt.s]))
+    mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
 
     if args.get_variants:
 
@@ -78,12 +77,12 @@ def main(args):
 
         logger.info("Extracting variants NOT present in gnomAD...")
         ht = ht.anti_join_rows(gnomad_ht)
-        ht.write(unique_variants_ht_path(*tranche_data), overwrite=args.overwrite)
+        ht.write(non_gnomad_var_ht_path(*tranche_data), overwrite=args.overwrite)
 
     if args.get_samples:
         logger.info("Filtering to variants not present in gnomAD...")
-        unique_variants_ht = hl.read_table(unique_variants_ht_path(*tranche_data))
-        mt = mt.filter_rows(hl.is_defined(unique_variants_ht[mt.row_key]))
+        non_gnomad_var_ht = hl.read_table(non_gnomad_var_ht_path(*tranche_data))
+        mt = mt.filter_rows(hl.is_defined(non_gnomad_var_ht[mt.row_key]))
 
         logger.info(
             f"Taking up to {args.num_samples} samples per site where samples are het, hom_var, or hemi"
@@ -124,15 +123,15 @@ def main(args):
             'locus': locus<GRCh38>
             'alleles': array<str>
             'samples_w_het_var': array<struct {
-                S: str,
+                s: str,
                 GQ: int32
             }>
             'samples_w_hom_var': array<struct {
-                S: str,
+                s: str,
                 GQ: int32
             }>
             'samples_w_hemi_var': array<struct {
-                S: str,
+                s: str,
                 GQ: int32
             }>
         ----------------------------------------
