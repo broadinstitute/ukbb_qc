@@ -5,7 +5,7 @@ import hail as hl
 
 from gnomad.resources.grch37.gnomad import liftover
 from gnomad.resources.grch38.gnomad import public_release
-from gnomad.utils.annotation import hemi_expr
+from gnomad.utils.annotations import hemi_expr
 from gnomad.utils.slack import slack_notifications
 
 from ukbb_qc.resources.basics import (
@@ -159,6 +159,7 @@ if __name__ == "__main__":
         help="Number of samples to take from each genotype category at each site",
         default=10,
     )
+    parser.add_argument("--slack_channel", help="Send message to Slack channel/user")
     args = parser.parse_args()
 
     if args.slack_channel:
