@@ -76,7 +76,7 @@ def main(args):
         gnomad_ht = get_gnomad_variants()
 
         logger.info("Extracting variants NOT present in gnomAD...")
-        ht = ht.anti_join_rows(gnomad_ht)
+        ht = ht.anti_join(gnomad_ht)
         ht.write(non_gnomad_var_ht_path(*tranche_data), overwrite=args.overwrite)
 
     if args.get_samples:
