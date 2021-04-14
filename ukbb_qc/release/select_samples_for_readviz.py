@@ -1,5 +1,6 @@
 import argparse
 import logging
+from typing import Tuple
 
 import hail as hl
 
@@ -84,6 +85,26 @@ def main(args):
         non_gnomad_var_ht = hl.read_table(non_gnomad_var_ht_path(*tranche_data))
         mt = mt.filter_rows(hl.is_defined(non_gnomad_var_ht[mt.row_key]))
 
+        def _sample_ordering_expr(
+            mt,
+        ) -> Tuple[hl.expr.Int32Expression, hl.expr.Float64Expression]:
+            """
+            Add random number to genotype quality.
+
+            Used to order sample IDs.
+
+            It can be problematic for downstream steps in the readviz pipeline when 
+            several samples have many times more variants selected than in other samples. 
+            To avoid this, and distribute variants more evenly across samples, add a random number as the secondary sort order. 
+            This way, when many samples have an identically high GQ (as often happens for common variants), 
+            the same few samples don't get selected repeatedly for all common variants.
+
+            :param hl.MatrixTable mt: Input MatrixTable.
+            :return: Tuple of genotype quality (made into a negative integer) and random float.
+            :rtype: Tuple[hl.expr.Int32Expression, hl.expr.Float64Expression]
+            """
+            return -mt.GQ, hl.rand_unif(0, 1, seed=1)
+
         logger.info(
             f"Taking up to {args.num_samples} samples per site where samples are het, hom_var, or hemi"
         )
@@ -91,19 +112,25 @@ def main(args):
             samples_w_het_var=hl.agg.filter(
                 mt.GT.is_het(),
                 hl.agg.take(
-                    hl.struct(s=mt.s, GQ=mt.GQ), args.num_samples, ordering=-mt.GQ
+                    hl.struct(s=mt.s, GQ=mt.GQ),
+                    args.num_samples,
+                    ordering=_sample_ordering_expr(mt),
                 ),
             ),
             samples_w_hom_var=hl.agg.filter(
                 mt.GT.is_hom_var() & mt.GT.is_diploid(),
                 hl.agg.take(
-                    hl.struct(s=mt.s, GQ=mt.GQ), args.num_samples, ordering=-mt.GQ
+                    hl.struct(s=mt.s, GQ=mt.GQ),
+                    args.num_samples,
+                    ordering=_sample_ordering_expr(mt),
                 ),
             ),
             samples_w_hemi_var=hl.agg.filter(
                 hemi_expr(mt.locus, mt.meta.sex_imputation.sex_karyotype, mt.GT),
                 hl.agg.take(
-                    hl.struct(s=mt.s, GQ=mt.GQ), args.num_samples, ordering=-mt.GQ
+                    hl.struct(s=mt.s, GQ=mt.GQ),
+                    args.num_samples,
+                    ordering=_sample_ordering_expr(mt),
                 ),
             ),
         )
