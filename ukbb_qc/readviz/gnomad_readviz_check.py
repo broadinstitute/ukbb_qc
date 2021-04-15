@@ -29,7 +29,7 @@ def main(args):
     This script outputs TSVs which will be imported into hail Tables in a downstream step.
     
     .. note::
-        Script assumes that all sqlite databases are on the same machine that script is being run (i.e., local computer or cloud VM)
+        Script assumes that all sqlite databases are on the same machine that script is being run (i.e., local computer or cloud VM).
     """
 
     def _check_sample_counts(row_iter: sqlite3.Cursor) -> List[str]:
