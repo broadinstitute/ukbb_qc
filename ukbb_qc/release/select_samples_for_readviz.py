@@ -1,11 +1,12 @@
 import argparse
 import logging
+from typing import Tuple
 
 import hail as hl
 
 from gnomad.resources.grch37.gnomad import liftover
 from gnomad.resources.grch38.gnomad import public_release
-from gnomad.utils.annotation import hemi_expr
+from gnomad.utils.annotations import hemi_expr
 from gnomad.utils.slack import slack_notifications
 
 from ukbb_qc.resources.basics import (
@@ -48,6 +49,24 @@ def main(args):
     freeze = 7
     tranche_data = (data_source, freeze)
 
+    def _sample_ordering_expr(
+        mt: hl.MatrixTable,
+    ) -> Tuple[hl.expr.Int32Expression, hl.expr.Float64Expression]:
+        """
+            Generate a random number to be used along with genotype quality for ordering sample IDs.
+
+            It can be problematic for downstream steps in the readviz pipeline when 
+            several samples have many times more variants selected than in other samples. 
+            To avoid this, and distribute variants more evenly across samples, add a random number as the secondary sort order. 
+            This way, when many samples have an identically high GQ (as often happens for common variants), 
+            the same few samples don't get selected repeatedly for all common variants.
+
+            :param hl.MatrixTable mt: Input MatrixTable.
+            :return: Tuple of genotype quality (made into a negative integer) and random float.
+            :rtype: Tuple[hl.expr.Int32Expression, hl.expr.Float64Expression]
+            """
+        return -mt.GQ, hl.rand_unif(0, 1, seed=1)
+
     logger.info("Reading in hardcalls MT (filtered to adj)...")
     # NOTE: sex ploidies have already been adjusted in hardcalls
     # Keeping only necessary entries
@@ -76,7 +95,7 @@ def main(args):
         gnomad_ht = get_gnomad_variants()
 
         logger.info("Extracting variants NOT present in gnomAD...")
-        ht = ht.anti_join_rows(gnomad_ht)
+        ht = ht.anti_join(gnomad_ht)
         ht.write(non_gnomad_var_ht_path(*tranche_data), overwrite=args.overwrite)
 
     if args.get_samples:
@@ -91,19 +110,25 @@ def main(args):
             samples_w_het_var=hl.agg.filter(
                 mt.GT.is_het(),
                 hl.agg.take(
-                    hl.struct(s=mt.s, GQ=mt.GQ), args.num_samples, ordering=-mt.GQ
+                    hl.struct(s=mt.s, GQ=mt.GQ),
+                    args.num_samples,
+                    ordering=_sample_ordering_expr(mt),
                 ),
             ),
             samples_w_hom_var=hl.agg.filter(
                 mt.GT.is_hom_var() & mt.GT.is_diploid(),
                 hl.agg.take(
-                    hl.struct(s=mt.s, GQ=mt.GQ), args.num_samples, ordering=-mt.GQ
+                    hl.struct(s=mt.s, GQ=mt.GQ),
+                    args.num_samples,
+                    ordering=_sample_ordering_expr(mt),
                 ),
             ),
             samples_w_hemi_var=hl.agg.filter(
                 hemi_expr(mt.locus, mt.meta.sex_imputation.sex_karyotype, mt.GT),
                 hl.agg.take(
-                    hl.struct(s=mt.s, GQ=mt.GQ), args.num_samples, ordering=-mt.GQ
+                    hl.struct(s=mt.s, GQ=mt.GQ),
+                    args.num_samples,
+                    ordering=_sample_ordering_expr(mt),
                 ),
             ),
         )
@@ -159,6 +184,7 @@ if __name__ == "__main__":
         help="Number of samples to take from each genotype category at each site",
         default=10,
     )
+    parser.add_argument("--slack_channel", help="Send message to Slack channel/user")
     args = parser.parse_args()
 
     if args.slack_channel:
