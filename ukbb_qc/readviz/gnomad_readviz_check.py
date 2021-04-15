@@ -8,12 +8,12 @@ logger = logging.getLogger("gnomad_readviz_check")
 logger.setLevel(logging.INFO)
 
 
-CONTIGS = [i for i in range(23)] + ["X", "Y"]
+CONTIGS = [f"chr{i}" for i in range(1, 23)] + ["chrX", "chrY"]
 """
 List of contigs to include.
 """
 
-EXTRA_GENOME_CONTIGS = ["M"]
+EXTRA_GENOME_CONTIGS = ["chrM"]
 """
 Extra contigs to include for gnomAD genomes.
 
@@ -50,7 +50,7 @@ def main(args):
                 n_zeroes = 3 - len(str(db))
 
                 with sqlite3.connect(
-                    f"{args.db_path}/combined_chr{contig}_{'0' * n_zeroes}{db}.db"
+                    f"{args.db_path}/combined_{contig}_{'0' * n_zeroes}{db}.db"
                 ) as conn:
                     row_iter = conn.execute(
                         "SELECT chrom, pos, ref, alt, het_or_hom_or_hemi, n_available_samples FROM t"
@@ -91,7 +91,7 @@ def main(args):
 
             # Base for gnomAD genomes databases is 'all_variants_s42811_gs50_gn857'
             with sqlite3.connect(
-                f"{args.db_path}/all_variants_s42811_gs50_gn857.chr{contig}.db"
+                f"{args.db_path}/all_variants_s42811_gs50_gn857.{contig}.db"
             ) as conn:
                 # NOTE: Instead of storing 1 row per variant, het_or_hom_or_hemi, and the number of available tracks),
                 # the genome dbs store 1 row per available readviz track, so you have to group by to get the number of available samples
