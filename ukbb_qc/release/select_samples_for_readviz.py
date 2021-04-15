@@ -49,6 +49,24 @@ def main(args):
     freeze = 7
     tranche_data = (data_source, freeze)
 
+    def _sample_ordering_expr(
+        mt: hl.MatrixTable,
+    ) -> Tuple[hl.expr.Int32Expression, hl.expr.Float64Expression]:
+        """
+            Generate a random number to be used along with genotype quality for ordering sample IDs.
+
+            It can be problematic for downstream steps in the readviz pipeline when 
+            several samples have many times more variants selected than in other samples. 
+            To avoid this, and distribute variants more evenly across samples, add a random number as the secondary sort order. 
+            This way, when many samples have an identically high GQ (as often happens for common variants), 
+            the same few samples don't get selected repeatedly for all common variants.
+
+            :param hl.MatrixTable mt: Input MatrixTable.
+            :return: Tuple of genotype quality (made into a negative integer) and random float.
+            :rtype: Tuple[hl.expr.Int32Expression, hl.expr.Float64Expression]
+            """
+        return -mt.GQ, hl.rand_unif(0, 1, seed=1)
+
     logger.info("Reading in hardcalls MT (filtered to adj)...")
     # NOTE: sex ploidies have already been adjusted in hardcalls
     # Keeping only necessary entries
@@ -84,26 +102,6 @@ def main(args):
         logger.info("Filtering to variants not present in gnomAD...")
         non_gnomad_var_ht = hl.read_table(non_gnomad_var_ht_path(*tranche_data))
         mt = mt.filter_rows(hl.is_defined(non_gnomad_var_ht[mt.row_key]))
-
-        def _sample_ordering_expr(
-            mt,
-        ) -> Tuple[hl.expr.Int32Expression, hl.expr.Float64Expression]:
-            """
-            Add random number to genotype quality.
-
-            Used to order sample IDs.
-
-            It can be problematic for downstream steps in the readviz pipeline when 
-            several samples have many times more variants selected than in other samples. 
-            To avoid this, and distribute variants more evenly across samples, add a random number as the secondary sort order. 
-            This way, when many samples have an identically high GQ (as often happens for common variants), 
-            the same few samples don't get selected repeatedly for all common variants.
-
-            :param hl.MatrixTable mt: Input MatrixTable.
-            :return: Tuple of genotype quality (made into a negative integer) and random float.
-            :rtype: Tuple[hl.expr.Int32Expression, hl.expr.Float64Expression]
-            """
-            return -mt.GQ, hl.rand_unif(0, 1, seed=1)
 
         logger.info(
             f"Taking up to {args.num_samples} samples per site where samples are het, hom_var, or hemi"
