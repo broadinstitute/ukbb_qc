@@ -1,6 +1,7 @@
 import argparse
 import logging
 import sqlite3
+from typing import List
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -17,7 +18,7 @@ EXTRA_GENOME_CONTIGS = ["chrM"]
 """
 Extra contigs to include for gnomAD genomes.
 
-gnomAD exomes chrM calls.
+gnomAD exomes does not have chrM calls.
 """
 
 
@@ -29,52 +30,75 @@ def main(args):
     
     Run this script locally.
     """
+
+    def _check_sample_counts(row_iter: sqlite3.Cursor) -> List[str]:
+        """
+        Iterate through sqlite curosr and extract variants with fewer than max number of samples displayed.
+
+        :param sqlite3.Cursor row_iter: sqlite Cursor object containing variants to be checked.
+        :return: List of variants that have fewer than the max number of samples displayed for readviz.
+        :rtype: List[str]
+        """
+        lines = []
+
+        for (
+            chrom,
+            pos,
+            ref,
+            alt,
+            het_or_hom_or_hemi,
+            n_available_samples,
+        ) in row_iter:
+            # Store variant if it has fewer than max number of samples displayed
+            if n_available_samples < 3:
+                lines.append(
+                    "\t".join(
+                        map(
+                            str,
+                            [
+                                chrom,
+                                pos,
+                                ref,
+                                alt,
+                                het_or_hom_or_hemi,
+                                n_available_samples,
+                            ],
+                        )
+                    )
+                    + "\n"
+                )
+        return lines
+
     if args.exomes:
         logger.info("Working on gnomAD v2.1 exomes...")
         # Fields in exomes databases are:
         # 'id', 'chrom', 'pos', 'ref', 'alt', 'het_or_hom_or_hemi',
         # 'variant_id', 'n_expected_samples', 'n_available_samples'
         # gnomAD v2.1 has 1000 sqlite databases per chromosome
-        num_db_per_chrom = 1000
+        num_db_per_chrom = 1
 
-        variants = {}
-        for contig in CONTIGS:
-            variants[contig] = [
-                "chrom\tpos\tref\talt\thet_or_hom_or_hemi\tn_available_samples\n"
-            ]
+        for contig in ["chr22"]:
 
-            # Check each database for contig
-            for db in range(num_db_per_chrom):
-                # Add variable to format db name with correct number of zeroes
-                # e.g., correct name is combined_chr20_000.db, not combined_chr20_0.db
-                n_zeroes = 3 - len(str(db))
+            with open(f"{args.tsv_dir_path}/{contig}.tsv", "w") as o:
+                logger.info("Writing header to file...")
+                o.write(
+                    "chrom\tpos\tref\talt\thet_or_hom_or_hemi\tn_available_samples\n"
+                )
 
-                with sqlite3.connect(
-                    f"{args.db_path}/combined_{contig}_{'0' * n_zeroes}{db}.db"
-                ) as conn:
-                    row_iter = conn.execute(
-                        "SELECT chrom, pos, ref, alt, het_or_hom_or_hemi, n_available_samples FROM t"
-                    )
-                    for (
-                        chrom,
-                        pos,
-                        ref,
-                        alt,
-                        het_or_hom_or_hemi,
-                        n_available_samples,
-                    ) in row_iter:
-                        # Store variant if it has fewer than max number of samples displayed
-                        if n_available_samples < args.max_n_samples:
-                            variants[contig].append(
-                                f"{chrom}\t{pos}\t{ref}\t{alt}\t{het_or_hom_or_hemi}\t{n_available_samples}\n"
-                            )
+                # Check each database for contig
+                for db in range(num_db_per_chrom):
+                    # Add variable to format db name with correct number of zeroes
+                    # e.g., correct name is combined_chr20_000.db, not combined_chr20_0.db
+                    n_zeroes = 3 - len(str(db))
 
-            # Write TSV with variants to output
-            # NOTE: These TSVs will contain variants in GRCh37 --
-            # they will need to be lifted over to GRCh38
-            with open(f"{args.tsv_dir_path}/chr{contig}.tsv", "w") as o:
-                for line in variants[contig]:
-                    o.write(line)
+                    with sqlite3.connect(
+                        f"{args.db_path}/combined_{contig}_{'0' * n_zeroes}{db}.db"
+                    ) as conn:
+                        row_iter = conn.execute(
+                            "SELECT chrom, pos, ref, alt, het_or_hom_or_hemi, n_available_samples FROM t"
+                        )
+                        for line in _check_sample_counts(row_iter):
+                            o.write(line)
 
     if args.genomes:
         logger.info("Working on gnomAD v3.1 genomes...")
@@ -82,40 +106,25 @@ def main(args):
         # 'id', 'chrom', 'pos', 'ref', 'alt', 'zygosity',
         # 'qual', 'combined_bamout_id', 'read_group_id'
 
-        variants = {}
         contigs = CONTIGS + EXTRA_GENOME_CONTIGS
         for contig in contigs:
-            variants[contig] = [
-                "chrom\tpos\tref\talt\thet_or_hom_or_hemi\tn_available_samples\n"
-            ]
-
-            # Base for gnomAD genomes databases is 'all_variants_s42811_gs50_gn857'
-            with sqlite3.connect(
-                f"{args.db_path}/all_variants_s42811_gs50_gn857.{contig}.db"
-            ) as conn:
-                # NOTE: Instead of storing 1 row per variant, het_or_hom_or_hemi, and the number of available tracks),
-                # the genome dbs store 1 row per available readviz track, so you have to group by to get the number of available samples
-                row_iter = conn.execute(
-                    "SELECT chrom, pos, ref, alt, zygosity, count(*) FROM variants GROUP BY chrom, pos, ref, alt, zygosity"
+            with open(f"{args.tsv_dir_path}/{contig}.tsv", "w") as o:
+                logger.info("Writing header to file...")
+                o.write(
+                    "chrom\tpos\tref\talt\thet_or_hom_or_hemi\tn_available_samples\n"
                 )
-                for (
-                    chrom,
-                    pos,
-                    ref,
-                    alt,
-                    het_or_hom_or_hemi,
-                    n_available_samples,
-                ) in row_iter:
-                    # Store variant if it has fewer than max number of samples displayed
-                    if n_available_samples < args.max_n_samples:
-                        variants[contig].append(
-                            f"{chrom}\t{pos}\t{ref}\t{alt}\t{het_or_hom_or_hemi}\t{n_available_samples}\n"
-                        )
 
-            # Write TSV with variants to output
-            with open(f"{args.tsv_dir_path}/chr{contig}.tsv", "w") as o:
-                for line in variants[contig]:
-                    o.write(line)
+                # Base for gnomAD genomes databases is 'all_variants_s42811_gs50_gn857'
+                with sqlite3.connect(
+                    f"{args.db_path}/all_variants_s42811_gs50_gn857.{contig}.db"
+                ) as conn:
+                    # NOTE: Instead of storing 1 row per variant, het_or_hom_or_hemi, and the number of available tracks),
+                    # the genome dbs store 1 row per available readviz track, so you have to group by to get the number of available samples
+                    row_iter = conn.execute(
+                        "SELECT chrom, pos, ref, alt, zygosity, count(*) FROM variants GROUP BY chrom, pos, ref, alt, zygosity"
+                    )
+                    for line in _check_sample_counts(row_iter):
+                        o.write(line)
 
 
 if __name__ == "__main__":
