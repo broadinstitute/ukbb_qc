@@ -76,9 +76,9 @@ def main(args):
         # 'id', 'chrom', 'pos', 'ref', 'alt', 'het_or_hom_or_hemi',
         # 'variant_id', 'n_expected_samples', 'n_available_samples'
         # gnomAD v2.1 has 1000 sqlite databases per chromosome
-        num_db_per_chrom = 1
+        num_db_per_chrom = 1000
 
-        for contig in ["chr22"]:
+        for contig in CONTIGS:
 
             with open(f"{args.tsv_dir_path}/{contig}.tsv", "w") as o:
                 logger.info("Writing header to file...")
