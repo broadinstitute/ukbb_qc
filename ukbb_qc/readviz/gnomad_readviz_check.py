@@ -1,7 +1,7 @@
 import argparse
+import io
 import logging
 import sqlite3
-from typing import List
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -32,43 +32,22 @@ def main(args):
         Script assumes that all sqlite databases are on the same machine that script is being run (i.e., local computer or cloud VM).
     """
 
-    def _check_sample_counts(row_iter: sqlite3.Cursor) -> List[str]:
+    def _check_sample_counts(
+        row_iter: sqlite3.Cursor, out_file_object: io.TextIOWrapper
+    ) -> None:
         """
         Iterate through sqlite curosr and extract variants with fewer than max number of samples displayed.
 
-        :param sqlite3.Cursor row_iter: sqlite Cursor object containing variants to be checked.
-        :return: List of variants that have fewer than the max number of samples displayed for readviz.
-        :rtype: List[str]
-        """
-        lines = []
+        Write variants to output TSV.
 
-        for (
-            chrom,
-            pos,
-            ref,
-            alt,
-            het_or_hom_or_hemi,
-            n_available_samples,
-        ) in row_iter:
-            # Store variant if it has fewer than max number of samples displayed
-            if n_available_samples < 3:
-                lines.append(
-                    "\t".join(
-                        map(
-                            str,
-                            [
-                                chrom,
-                                pos,
-                                ref,
-                                alt,
-                                het_or_hom_or_hemi,
-                                n_available_samples,
-                            ],
-                        )
-                    )
-                    + "\n"
-                )
-        return lines
+        :param sqlite3.Cursor row_iter: sqlite Cursor object containing variants to be checked.
+        :param _io.TextIOWrapper out_file_object: Open file object for output TSV.
+        :return: None
+        """
+        for row in row_iter:
+            # Write variant to output TSV if it has fewer than max number of samples displayed
+            if row[-1] < 3:
+                out_file_object.write("\t".join(map(str, row)) + "\n")
 
     if args.exomes:
         logger.info("Working on gnomAD v2.1 exomes...")
@@ -98,8 +77,7 @@ def main(args):
                         row_iter = conn.execute(
                             "SELECT chrom, pos, ref, alt, het_or_hom_or_hemi, n_available_samples FROM t"
                         )
-                        for line in _check_sample_counts(row_iter):
-                            o.write(line)
+                        _check_sample_counts(row_iter, o)
 
     if args.genomes:
         logger.info("Working on gnomAD v3.1 genomes...")
@@ -124,8 +102,7 @@ def main(args):
                     row_iter = conn.execute(
                         "SELECT chrom, pos, ref, alt, zygosity, count(*) FROM variants GROUP BY chrom, pos, ref, alt, zygosity"
                     )
-                    for line in _check_sample_counts(row_iter):
-                        o.write(line)
+                    _check_sample_counts(row_iter, o)
 
 
 if __name__ == "__main__":
