@@ -21,6 +21,11 @@ Extra contigs to include for gnomAD genomes.
 gnomAD exomes does not have chrM calls.
 """
 
+TSV_HEADER = "chrom\tpos\tref\talt\thet_or_hom_or_hemi\tn_available_samples\n"
+"""
+String to be written as header for output TSV file.
+"""
+
 
 def main(args):
     """
@@ -33,20 +38,23 @@ def main(args):
     """
 
     def _check_sample_counts(
-        row_iter: sqlite3.Cursor, out_file_object: io.TextIOWrapper
+        row_iter: sqlite3.Cursor,
+        out_file_object: io.TextIOWrapper,
+        max_n_samples: int = args.max_n_samples,
     ) -> None:
         """
-        Iterate through sqlite curosr and extract variants with fewer than max number of samples displayed.
+        Iterate through sqlite cursor and extract variants with fewer than max number of samples displayed.
 
         Write variants to output TSV.
 
         :param sqlite3.Cursor row_iter: sqlite Cursor object containing variants to be checked.
         :param _io.TextIOWrapper out_file_object: Open file object for output TSV.
+        :param int max_n_samples: Max number of samples displayed for readviz. Default is args.max_n_samples (default for arg is 3).
         :return: None
         """
         for row in row_iter:
             # Write variant to output TSV if it has fewer than max number of samples displayed
-            if row[-1] < 3:
+            if row[-1] < max_n_samples:
                 out_file_object.write("\t".join(map(str, row)) + "\n")
 
     if args.exomes:
@@ -61,9 +69,7 @@ def main(args):
 
             with open(f"{args.tsv_dir_path}/{contig}.tsv", "w") as o:
                 logger.info("Writing header to file...")
-                o.write(
-                    "chrom\tpos\tref\talt\thet_or_hom_or_hemi\tn_available_samples\n"
-                )
+                o.write(TSV_HEADER)
 
                 # Check each database for contig
                 for db in range(num_db_per_chrom):
@@ -89,9 +95,7 @@ def main(args):
         for contig in contigs:
             with open(f"{args.tsv_dir_path}/{contig}.tsv", "w") as o:
                 logger.info("Writing header to file...")
-                o.write(
-                    "chrom\tpos\tref\talt\thet_or_hom_or_hemi\tn_available_samples\n"
-                )
+                o.write(TSV_HEADER)
 
                 # Base for gnomAD genomes databases is 'all_variants_s42811_gs50_gn857'
                 with sqlite3.connect(
