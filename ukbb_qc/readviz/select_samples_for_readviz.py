@@ -23,9 +23,9 @@ logger = logging.getLogger("get_samples_for_readviz")
 logger.setLevel(logging.INFO)
 
 
-def get_gnomad_variants() -> hl.Table:
+def get_all_gnomad_variants() -> hl.Table:
     """
-    Joins gnomAD v2 exomes liftover and v3.1 genomes variants.
+    Join gnomAD v2 exomes liftover and v3.1 genomes variants.
 
     :return: Table containing all gnomAD variants.
     :rtype: hl.Table
@@ -40,6 +40,59 @@ def get_gnomad_variants() -> hl.Table:
         .select_globals()
     )
     return exomes_ht.join(genomes_ht, how="outer")
+
+
+def get_additional_gnomad_variants(data_type: str, input_tsv_path: str) -> hl.Table:
+    """
+    Get additional gnomAD variants with fewer than the maximum number of samples displayed.
+
+    If getting gnomAD v2.1 exome variants, lift variants from GRCh37 to GRCh38.
+    """
+
+    def _liftover_gnomad_exomes_variants(ht: hl.Table) -> hl.Table:
+        """
+        Lift gnomAD v2.1 exomes variants to GRCh38 using public liftover table annotations.
+
+        :param hl.Table ht: Input table of gnomAD v2.1 exomes variants.
+        :return: gnomAD v2.1 exomes variants lifted over from GRCh37 to GRCh38.
+        :rtype: hl.Table
+        """
+        # Not sure where this resource is/will be stored in gnomad methods/qc
+        # Liftover table re-created with original alleles
+        # This table has the following fields:
+        """
+        'locus': locus<grch37>
+        'alleles': array<str>
+        'liftover_proc_id': struct {
+            'part_idx': int32
+            'block_idx': int32
+        }
+        'liftover_locus': locus<grch38>
+        'liftover_alleles': array<str>
+        Key: ['locus', 'alleles']
+        """
+        ht = ht.annotate(locus=hl.locus(ht.f0, ht.f1, reference_genome="GRCh37"))
+        ht = ht.key_by("locus", "alleles")
+        exomes_ht = hl.read_table(
+            "gs://gnomad-browser/gnomad-liftover/output.ht"
+        ).select("liftover_locus", "liftover_alleles")
+        ht = ht.annotate(**exomes_ht[ht.key])
+        ht = ht.key_by()
+        return ht.key_by(locus=ht.liftover_locus, alleles=ht.liftover_alleles)
+
+    ht = hl.import_table(input_tsv_path, no_header=True)
+    if data_type == "exomes":
+        ht = _liftover_gnomad_exomes_variants(ht)
+        ht = ht.transmute(
+            alleles=[ht.f2, ht.f3], het_or_hom_or_hemi=ht.f4, n_available_samples=ht.f5,
+        )
+        # Drop extra field in TSV (extra count taken with sqlite query)
+        return ht.drop("f6")
+    else:
+        ht = ht.annotate(locus=hl.locus(ht.f0, ht.f1))
+        return ht.transmute(
+            alleles=[ht.f2, ht.f3], zygosity=ht.f4, n_available_samples=ht.f5,
+        )
 
 
 def main(args):
@@ -92,7 +145,7 @@ def main(args):
 
         ht = mt.rows()
         logger.info("Getting gnomAD variants...")
-        gnomad_ht = get_gnomad_variants()
+        gnomad_ht = get_all_gnomad_variants()
 
         logger.info("Extracting variants NOT present in gnomAD...")
         ht = ht.anti_join(gnomad_ht)
@@ -102,6 +155,24 @@ def main(args):
         logger.info("Filtering to variants not present in gnomAD...")
         non_gnomad_var_ht = hl.read_table(non_gnomad_var_ht_path(*tranche_data))
         mt = mt.filter_rows(hl.is_defined(non_gnomad_var_ht[mt.row_key]))
+
+        logger.info(
+            "Getting gnomAD variants that need additional samples for readviz..."
+        )
+        gnomad_exomes_ht = get_additional_gnomad_variants(
+            data_type="exomes", input_tsv_path=args.exomes_tsv_path
+        )
+        gnomad_genomes_ht = get_additional_gnomad_variants(
+            data_type="genomes", input_tsv_path=args.genomes_tsv_path
+        )
+        mt = mt.annotate_rows(
+            gnomad_exomes=hl.struct(**gnomad_exomes_ht[mt.row_key]),
+            gnomad_genomes=hl.struct(**gnomad_genomes_ht[mt.row_key]),
+        )
+        mt = mt.filter_rows(
+            hl.is_missing(mt.gnomad_exomes) & hl.is_missing(mt.gnomad_genomes),
+            keep=False,
+        )
 
         logger.info(
             f"Taking up to {args.num_samples} samples per site where samples are het, hom_var, or hemi"
