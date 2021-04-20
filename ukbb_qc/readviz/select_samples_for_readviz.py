@@ -48,7 +48,7 @@ def get_additional_gnomad_variants(data_type: str, input_tsv_path: str) -> hl.Ta
 
     If getting gnomAD v2.1 exome variants, lift variants from GRCh37 to GRCh38.
     """
-    ht = hl.import_table(input_tsv_path, no_header=True)
+    ht = hl.import_table(input_tsv_path, impute=True)
 
     if data_type == "exomes":
         # Not sure where this resource is/will be stored in gnomad methods/qc
@@ -68,18 +68,13 @@ def get_additional_gnomad_variants(data_type: str, input_tsv_path: str) -> hl.Ta
         exomes_ht = hl.read_table(
             "gs://gnomad-browser/gnomad-liftover/output.ht"
         ).select("liftover_locus", "liftover_alleles")
+        ht = ht.annotate(locus=hl.locus(ht.chrom, ht.pos, reference_genome="GRCh37"))
         ht = ht.annotate(**exomes_ht[ht.key])
         ht = ht.key_by(locus=ht.liftover_locus, alleles=ht.liftover_alleles)
-        return ht.transmute(
-            original_alleles=[ht.f2, ht.f3],
-            het_or_hom_or_hemi=ht.f4,
-            n_available_samples=ht.f5,
-        )
+        return ht.transmute(original_alleles=[ht.ref, ht.alt])
     else:
-        ht = ht.annotate(locus=hl.locus(ht.f0, ht.f1))
-        return ht.transmute(
-            alleles=[ht.f2, ht.f3], zygosity=ht.f4, n_available_samples=ht.f5,
-        )
+        ht = ht.annotate(locus=hl.locus(ht.chrom, ht.pos))
+        return ht.transmute(alleles=[ht.ref, ht.alt])
 
 
 def main(args):
