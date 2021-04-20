@@ -48,15 +48,9 @@ def get_additional_gnomad_variants(data_type: str, input_tsv_path: str) -> hl.Ta
 
     If getting gnomAD v2.1 exome variants, lift variants from GRCh37 to GRCh38.
     """
+    ht = hl.import_table(input_tsv_path, no_header=True)
 
-    def _liftover_gnomad_exomes_variants(ht: hl.Table) -> hl.Table:
-        """
-        Lift gnomAD v2.1 exomes variants to GRCh38 using public liftover table annotations.
-
-        :param hl.Table ht: Input table of gnomAD v2.1 exomes variants.
-        :return: gnomAD v2.1 exomes variants lifted over from GRCh37 to GRCh38.
-        :rtype: hl.Table
-        """
+    if data_type == "exomes":
         # Not sure where this resource is/will be stored in gnomad methods/qc
         # Liftover table re-created with original alleles
         # This table has the following fields:
@@ -71,17 +65,11 @@ def get_additional_gnomad_variants(data_type: str, input_tsv_path: str) -> hl.Ta
         'liftover_alleles': array<str>
         Key: ['locus', 'alleles']
         """
-        ht = ht.annotate(locus=hl.locus(ht.f0, ht.f1, reference_genome="GRCh37"))
-        ht = ht.key_by("locus", "alleles")
         exomes_ht = hl.read_table(
             "gs://gnomad-browser/gnomad-liftover/output.ht"
         ).select("liftover_locus", "liftover_alleles")
         ht = ht.annotate(**exomes_ht[ht.key])
-        return ht.key_by(locus=ht.liftover_locus, alleles=ht.liftover_alleles)
-
-    ht = hl.import_table(input_tsv_path, no_header=True)
-    if data_type == "exomes":
-        ht = _liftover_gnomad_exomes_variants(ht)
+        ht = ht.key_by(locus=ht.liftover_locus, alleles=ht.liftover_alleles)
         return ht.transmute(
             original_alleles=[ht.f2, ht.f3],
             het_or_hom_or_hemi=ht.f4,
