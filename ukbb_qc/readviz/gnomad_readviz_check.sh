@@ -65,7 +65,7 @@ do
       output_tsv=${tsv_path}/chr${i}_${part}.tsv.gz
       set -x
       (
-        sqlite3 -separator $'\t' $j 'SELECT * FROM (SELECT chrom, pos, ref, alt, het_or_hom_or_hemi, n_available_samples, count(*) AS c FROM t GROUP BY chrom, pos, ref, alt, het_or_hom_or_hemi, n_available_samples)  WHERE c < 3' | gzip -c -  > $output_tsv
+        sqlite3 -separator $'\t' $j "SELECT chrom, pos, ref, alt, het_or_hom_or_hemi, n_available_samples FROM t WHERE n_available_samples <= ${max_n_samples}" | gzip -c -  > $output_tsv
       ) &> ${tsv_path}/exomes.log &
       set +x
     done
@@ -81,7 +81,7 @@ do
       output_tsv=${tsv_path}/chr${i}.tsv.gz
       set -x
       (
-        sqlite3 -separator $'\t' $j 'SELECT * FROM (SELECT chrom, pos, ref, alt, zygosity, count(*) AS c FROM variants GROUP BY chrom, pos, ref, alt, zygosity)  WHERE c < 3' | gzip -c -  > $output_tsv
+        sqlite3 -separator $'\t' $j "SELECT * FROM (SELECT chrom, pos, ref, alt, zygosity, count(*) AS c FROM variants GROUP BY chrom, pos, ref, alt, zygosity)  WHERE c < ${max_n_samples}" | gzip -c -  > $output_tsv
       ) &> ${tsv_path}/genomes.log &
     done
   fi
