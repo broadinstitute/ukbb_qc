@@ -77,17 +77,16 @@ def get_additional_gnomad_variants(data_type: str, input_tsv_path: str) -> hl.Ta
             "gs://gnomad-browser/gnomad-liftover/output.ht"
         ).select("liftover_locus", "liftover_alleles")
         ht = ht.annotate(**exomes_ht[ht.key])
-        ht = ht.key_by()
         return ht.key_by(locus=ht.liftover_locus, alleles=ht.liftover_alleles)
 
     ht = hl.import_table(input_tsv_path, no_header=True)
     if data_type == "exomes":
         ht = _liftover_gnomad_exomes_variants(ht)
-        ht = ht.transmute(
-            alleles=[ht.f2, ht.f3], het_or_hom_or_hemi=ht.f4, n_available_samples=ht.f5,
+        return ht.transmute(
+            original_alleles=[ht.f2, ht.f3],
+            het_or_hom_or_hemi=ht.f4,
+            n_available_samples=ht.f5,
         )
-        # Drop extra field in TSV (extra count taken with sqlite query)
-        return ht.drop("f6")
     else:
         ht = ht.annotate(locus=hl.locus(ht.f0, ht.f1))
         return ht.transmute(
