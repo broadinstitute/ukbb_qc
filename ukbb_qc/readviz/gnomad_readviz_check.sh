@@ -8,7 +8,7 @@ cat << EOF
     Script assumes that all sqlite databases are on the same machine that script is being run (i.e., local computer or cloud VM).
 
     Inputs:
-        -n    Maximum number of samples displayed for readviz. Default should be 3.
+        -n    Maximum number of samples displayed for readviz. Default is 3.
         -d    Data type (should be one of 'exomes' or 'genomes').
         -p    Absolute path to directory that contains sqlite databases.
         -t    Absolute path to directory to store output (temporary) TSV files.
@@ -22,6 +22,8 @@ if [[ $# -lt 8 ]]; then
 fi
 
 # Parse command line args
+# Set default for max n samples
+max_n_samples=3
 while getopts "n:d:p:t:h" opt; do
     case $opt in
         n)
