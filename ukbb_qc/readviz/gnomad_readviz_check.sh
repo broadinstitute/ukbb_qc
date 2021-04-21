@@ -68,7 +68,7 @@ do
       set -x
       (
         echo -e "chrom\tpos\tref\talt\thet_or_hom_or_hemi\tn_available_samples" | gzip -c - > $output_tsv
-        sqlite3 -separator $'\t' $j "SELECT chrom, pos, ref, alt, het_or_hom_or_hemi, n_available_samples FROM t WHERE n_available_samples <= ${max_n_samples}" | gzip -c -  >> $output_tsv
+        sqlite3 -separator $'\t' $j "SELECT chrom, pos, ref, alt, het_or_hom_or_hemi, n_available_samples FROM t WHERE n_available_samples < ${max_n_samples}" | gzip -c -  >> $output_tsv
       ) &> ${tsv_path}/exomes.log &
       set +x
     done
