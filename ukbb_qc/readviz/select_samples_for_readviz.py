@@ -163,7 +163,7 @@ def main(args):
             samples_w_het_var=hl.agg.filter(
                 mt.GT.is_het(),
                 hl.agg.take(
-                    hl.struct(s=mt.s, GQ=mt.GQ),
+                    hl.struct(s=mt.s, GQ=mt.GQ, het_or_hom_or_hemi=args.het_int),
                     args.num_samples,
                     ordering=_sample_ordering_expr(mt),
                 ),
@@ -171,7 +171,7 @@ def main(args):
             samples_w_hom_var=hl.agg.filter(
                 mt.GT.is_hom_var() & mt.GT.is_diploid(),
                 hl.agg.take(
-                    hl.struct(s=mt.s, GQ=mt.GQ),
+                    hl.struct(s=mt.s, GQ=mt.GQ, het_or_hom_or_hemi=args.hom_int),
                     args.num_samples,
                     ordering=_sample_ordering_expr(mt),
                 ),
@@ -179,7 +179,7 @@ def main(args):
             samples_w_hemi_var=hl.agg.filter(
                 hemi_expr(mt.locus, mt.meta.sex_imputation.sex_karyotype, mt.GT),
                 hl.agg.take(
-                    hl.struct(s=mt.s, GQ=mt.GQ),
+                    hl.struct(s=mt.s, GQ=mt.GQ, het_or_hom_or_hemi=args.hemi_int),
                     args.num_samples,
                     ordering=_sample_ordering_expr(mt),
                 ),
@@ -202,15 +202,18 @@ def main(args):
             'alleles': array<str>
             'samples_w_het_var': array<struct {
                 s: str,
-                GQ: int32
+                GQ: int32,
+                het_or_hom_or_hemi: int32,
             }>
             'samples_w_hom_var': array<struct {
                 s: str,
-                GQ: int32
+                GQ: int32,
+                het_or_hom_or_hemi: int32,
             }>
             'samples_w_hemi_var': array<struct {
                 s: str,
-                GQ: int32
+                GQ: int32:
+                het_or_hom_or_hemi: int32,
             }>
         ----------------------------------------
         Key: ['locus', 'alleles']
@@ -232,10 +235,28 @@ if __name__ == "__main__":
         "--overwrite", help="Overwrite output data", action="store_true",
     )
     parser.add_argument(
-        "--num-samples",
+        "--num_samples",
         type=int,
         help="Number of samples to take from each genotype category at each site",
         default=10,
+    )
+    parser.add_argument(
+        "--het_int",
+        type=int,
+        help="Integer to represent samples with heterozygous variants",
+        default=1,
+    )
+    parser.add_argument(
+        "--hom_int",
+        type=int,
+        help="Integer to represent samples with homozygous alternate variants",
+        default=2,
+    )
+    parser.add_argument(
+        "--hemi_int",
+        type=int,
+        help="Integer to represent samples with hemizygous variants",
+        default=3,
     )
     parser.add_argument("--slack_channel", help="Send message to Slack channel/user")
     args = parser.parse_args()
