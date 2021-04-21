@@ -16,6 +16,8 @@ EOF
 }
 
 # Check num of command line args
+# NOTE: This number is 8 here because it counts both the flag and the value 
+# e.g., counts both the flag "-d" and the value "exomes"
 if [[ $# -lt 8 ]]; then
     usage
     exit 0
