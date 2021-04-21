@@ -123,7 +123,7 @@ def main(args):
     mt = mt.filter_cols(hl.is_defined(cram_ht[mt.s]))
     mt = mt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
 
-    if args.get-variants:
+    if args.get_variants:
 
         ht = mt.rows()
         logger.info("Getting gnomAD variants...")
@@ -133,7 +133,7 @@ def main(args):
         ht = ht.anti_join(gnomad_ht)
         ht.write(non_gnomad_var_ht_path(*tranche_data), overwrite=args.overwrite)
 
-    if args.get-samples:
+    if args.get_samples:
         logger.info("Filtering to variants not present in gnomAD...")
         non_gnomad_var_ht = hl.read_table(non_gnomad_var_ht_path(*tranche_data))
         mt = mt.filter_rows(hl.is_defined(non_gnomad_var_ht[mt.row_key]))
@@ -142,10 +142,10 @@ def main(args):
             "Getting gnomAD variants that need additional samples for readviz..."
         )
         gnomad_exomes_ht = get_additional_gnomad_variants(
-            data_type="exomes", input_tsv_path=args.exomes-tsv-path
+            data_type="exomes", input_tsv_path=args.exomes_tsv_path
         )
         gnomad_genomes_ht = get_additional_gnomad_variants(
-            data_type="genomes", input_tsv_path=args.genomes-tsv-path
+            data_type="genomes", input_tsv_path=args.genomes_tsv_path
         )
         mt = mt.annotate_rows(
             gnomad_exomes=hl.struct(**gnomad_exomes_ht[mt.row_key]),
@@ -157,30 +157,30 @@ def main(args):
         )
 
         logger.info(
-            f"Taking up to {args.num-samples} samples per site where samples are het, hom_var, or hemi"
+            f"Taking up to {args.num_samples} samples per site where samples are het, hom_var, or hemi"
         )
         mt = mt.annotate_rows(
             samples_w_het_var=hl.agg.filter(
                 mt.GT.is_het(),
                 hl.agg.take(
-                    hl.struct(s=mt.s, GQ=mt.GQ, het_or_hom_or_hemi=args.het-int),
-                    args.num - samples,
+                    hl.struct(s=mt.s, GQ=mt.GQ, het_or_hom_or_hemi=args.het_int),
+                    args.num_samples,
                     ordering=_sample_ordering_expr(mt),
                 ),
             ),
             samples_w_hom_var=hl.agg.filter(
                 mt.GT.is_hom_var() & mt.GT.is_diploid(),
                 hl.agg.take(
-                    hl.struct(s=mt.s, GQ=mt.GQ, het_or_hom_or_hemi=args.hom-int),
-                    args.num - samples,
+                    hl.struct(s=mt.s, GQ=mt.GQ, het_or_hom_or_hemi=args.hom_int),
+                    args.num_samples,
                     ordering=_sample_ordering_expr(mt),
                 ),
             ),
             samples_w_hemi_var=hl.agg.filter(
                 hemi_expr(mt.locus, mt.meta.sex_imputation.sex_karyotype, mt.GT),
                 hl.agg.take(
-                    hl.struct(s=mt.s, GQ=mt.GQ, het_or_hom_or_hemi=args.hemi-int),
-                    args.num - samples,
+                    hl.struct(s=mt.s, GQ=mt.GQ, het_or_hom_or_hemi=args.hemi_int),
+                    args.num_samples,
                     ordering=_sample_ordering_expr(mt),
                 ),
             ),
