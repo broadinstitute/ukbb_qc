@@ -23,9 +23,9 @@ logger = logging.getLogger("get_samples_for_readviz")
 logger.setLevel(logging.INFO)
 
 
-def get_gnomad_variants() -> hl.Table:
+def get_all_gnomad_variants() -> hl.Table:
     """
-    Joins gnomAD v2 exomes liftover and v3.1 genomes variants.
+    Join gnomAD v2 exomes liftover and v3.1 genomes variants.
 
     :return: Table containing all gnomAD variants.
     :rtype: hl.Table
@@ -40,6 +40,41 @@ def get_gnomad_variants() -> hl.Table:
         .select_globals()
     )
     return exomes_ht.join(genomes_ht, how="outer")
+
+
+def get_additional_gnomad_variants(data_type: str, input_tsv_path: str) -> hl.Table:
+    """
+    Get additional gnomAD variants with fewer than the maximum number of samples displayed.
+
+    If getting gnomAD v2.1 exome variants, lift variants from GRCh37 to GRCh38.
+    """
+    ht = hl.import_table(input_tsv_path, impute=True)
+
+    if data_type == "exomes":
+        # Not sure where this resource is/will be stored in gnomad methods/qc
+        # Liftover table re-created with original alleles
+        # This table has the following fields:
+        """
+        'locus': locus<grch37>
+        'alleles': array<str>
+        'liftover_proc_id': struct {
+            'part_idx': int32
+            'block_idx': int32
+        }
+        'liftover_locus': locus<grch38>
+        'liftover_alleles': array<str>
+        Key: ['locus', 'alleles']
+        """
+        exomes_ht = hl.read_table(
+            "gs://gnomad-browser/gnomad-liftover/output.ht"
+        ).select("liftover_locus", "liftover_alleles")
+        ht = ht.annotate(locus=hl.locus(ht.chrom, ht.pos, reference_genome="GRCh37"))
+        ht = ht.annotate(**exomes_ht[ht.key])
+        ht = ht.key_by(locus=ht.liftover_locus, alleles=ht.liftover_alleles)
+        return ht.transmute(original_alleles=[ht.ref, ht.alt])
+    else:
+        ht = ht.annotate(locus=hl.locus(ht.chrom, ht.pos))
+        return ht.transmute(alleles=[ht.ref, ht.alt])
 
 
 def main(args):
@@ -92,7 +127,7 @@ def main(args):
 
         ht = mt.rows()
         logger.info("Getting gnomAD variants...")
-        gnomad_ht = get_gnomad_variants()
+        gnomad_ht = get_all_gnomad_variants()
 
         logger.info("Extracting variants NOT present in gnomAD...")
         ht = ht.anti_join(gnomad_ht)
@@ -104,13 +139,31 @@ def main(args):
         mt = mt.filter_rows(hl.is_defined(non_gnomad_var_ht[mt.row_key]))
 
         logger.info(
+            "Getting gnomAD variants that need additional samples for readviz..."
+        )
+        gnomad_exomes_ht = get_additional_gnomad_variants(
+            data_type="exomes", input_tsv_path=args.exomes_tsv_path
+        )
+        gnomad_genomes_ht = get_additional_gnomad_variants(
+            data_type="genomes", input_tsv_path=args.genomes_tsv_path
+        )
+        mt = mt.annotate_rows(
+            gnomad_exomes=hl.struct(**gnomad_exomes_ht[mt.row_key]),
+            gnomad_genomes=hl.struct(**gnomad_genomes_ht[mt.row_key]),
+        )
+        mt = mt.filter_rows(
+            hl.is_missing(mt.gnomad_exomes) & hl.is_missing(mt.gnomad_genomes),
+            keep=False,
+        )
+
+        logger.info(
             f"Taking up to {args.num_samples} samples per site where samples are het, hom_var, or hemi"
         )
         mt = mt.annotate_rows(
             samples_w_het_var=hl.agg.filter(
                 mt.GT.is_het(),
                 hl.agg.take(
-                    hl.struct(s=mt.s, GQ=mt.GQ),
+                    hl.struct(s=mt.s, GQ=mt.GQ, het_or_hom_or_hemi=args.het_int),
                     args.num_samples,
                     ordering=_sample_ordering_expr(mt),
                 ),
@@ -118,7 +171,7 @@ def main(args):
             samples_w_hom_var=hl.agg.filter(
                 mt.GT.is_hom_var() & mt.GT.is_diploid(),
                 hl.agg.take(
-                    hl.struct(s=mt.s, GQ=mt.GQ),
+                    hl.struct(s=mt.s, GQ=mt.GQ, het_or_hom_or_hemi=args.hom_int),
                     args.num_samples,
                     ordering=_sample_ordering_expr(mt),
                 ),
@@ -126,7 +179,7 @@ def main(args):
             samples_w_hemi_var=hl.agg.filter(
                 hemi_expr(mt.locus, mt.meta.sex_imputation.sex_karyotype, mt.GT),
                 hl.agg.take(
-                    hl.struct(s=mt.s, GQ=mt.GQ),
+                    hl.struct(s=mt.s, GQ=mt.GQ, het_or_hom_or_hemi=args.hemi_int),
                     args.num_samples,
                     ordering=_sample_ordering_expr(mt),
                 ),
@@ -149,15 +202,18 @@ def main(args):
             'alleles': array<str>
             'samples_w_het_var': array<struct {
                 s: str,
-                GQ: int32
+                GQ: int32,
+                het_or_hom_or_hemi: int32,
             }>
             'samples_w_hom_var': array<struct {
                 s: str,
-                GQ: int32
+                GQ: int32,
+                het_or_hom_or_hemi: int32,
             }>
             'samples_w_hemi_var': array<struct {
                 s: str,
-                GQ: int32
+                GQ: int32:
+                het_or_hom_or_hemi: int32,
             }>
         ----------------------------------------
         Key: ['locus', 'alleles']
@@ -168,12 +224,20 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--get_variants",
+        "--get-variants",
         help="Get variants unique to UKBB (not in gnomAD)",
         action="store_true",
     )
     parser.add_argument(
-        "--get_samples", help="Extract samples for readviz", action="store_true",
+        "--get-samples", help="Extract samples for readviz", action="store_true",
+    )
+    parser.add_argument(
+        "--exomes-tsv-path",
+        help="Path to TSV that contains variants in gnomAD v2.1 exomes that need additional samples for readviz",
+    )
+    parser.add_argument(
+        "--genomes-tsv-path",
+        help="Path to TSV that contains variants in gnomAD v2.1 exomes that need additional samples for readviz",
     )
     parser.add_argument(
         "--overwrite", help="Overwrite output data", action="store_true",
@@ -183,6 +247,24 @@ if __name__ == "__main__":
         type=int,
         help="Number of samples to take from each genotype category at each site",
         default=10,
+    )
+    parser.add_argument(
+        "--het-int",
+        type=int,
+        help="Integer to represent samples with heterozygous variants",
+        default=1,
+    )
+    parser.add_argument(
+        "--hom-int",
+        type=int,
+        help="Integer to represent samples with homozygous alternate variants",
+        default=2,
+    )
+    parser.add_argument(
+        "--hemi-int",
+        type=int,
+        help="Integer to represent samples with hemizygous variants",
+        default=3,
     )
     parser.add_argument("--slack_channel", help="Send message to Slack channel/user")
     args = parser.parse_args()
