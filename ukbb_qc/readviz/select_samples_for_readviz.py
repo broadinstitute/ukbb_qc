@@ -65,13 +65,15 @@ def get_additional_gnomad_variants(data_type: str, input_tsv_path: str) -> hl.Ta
         'liftover_alleles': array<str>
         Key: ['locus', 'alleles']
         """
-        exomes_ht = hl.read_table(
-            "gs://gnomad-browser/gnomad-liftover/output.ht"
-        ).select("liftover_locus", "liftover_alleles")
+        exomes_ht = liftover("exomes").select("original_locus", "original_alleles")
+        exomes_ht = exomes_ht.rename(
+            {"locus": "liftover_locus", "alleles": "liftover_alleles"}
+        )
+        exomes_ht = exomes_ht.key_by("original_locus", "original_alleles")
         ht = ht.annotate(locus=hl.locus(ht.chrom, ht.pos, reference_genome="GRCh37"))
         ht = ht.annotate(**exomes_ht[ht.key])
-        ht = ht.key_by(locus=ht.liftover_locus, alleles=ht.liftover_alleles)
-        return ht.transmute(original_alleles=[ht.ref, ht.alt])
+        return ht.key_by(locus=ht.liftover_locus, alleles=ht.liftover_alleles)
+
     else:
         ht = ht.annotate(locus=hl.locus(ht.chrom, ht.pos))
         return ht.transmute(alleles=[ht.ref, ht.alt])
