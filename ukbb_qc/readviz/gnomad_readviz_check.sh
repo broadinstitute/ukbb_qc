@@ -80,7 +80,7 @@ do
     # 'id', 'chrom', 'pos', 'ref', 'alt', 'zygosity',
     # 'qual', 'combined_bamout_id', 'read_group_id'
     files=(
-        ${db_path}/all_variants_s42811_gs50_gn857.chr${i}_*.db
+        ${db_path}/all_variants_s42811_gs50_gn857.chr${i}.db
     )
     for j in "${files[@]}"; do
       output_tsv=${tsv_path}/chr${i}.tsv.gz
