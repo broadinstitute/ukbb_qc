@@ -48,7 +48,7 @@ def get_additional_gnomad_variants(data_type: str, input_tsv_path: str) -> hl.Ta
 
     If getting gnomAD v2.1 exome variants, lift variants from GRCh37 to GRCh38.
     """
-    ht = hl.import_table(input_tsv_path, impute=True)
+    ht = hl.import_table(f"{input_tsv_path}/chr*gz", force=True, impute=True)
 
     if data_type == "exomes":
         # Not sure where this resource is/will be stored in gnomad methods/qc
