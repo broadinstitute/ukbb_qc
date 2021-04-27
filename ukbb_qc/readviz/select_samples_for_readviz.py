@@ -65,7 +65,7 @@ def get_additional_gnomad_variants(data_type: str, input_tsv_path: str) -> hl.Ta
         'liftover_alleles': array<str>
         Key: ['locus', 'alleles']
         """
-        exomes_ht = liftover("exomes").select("original_locus", "original_alleles")
+        exomes_ht = liftover("exomes").ht().select("original_locus", "original_alleles")
         exomes_ht = exomes_ht.rename(
             {"locus": "liftover_locus", "alleles": "liftover_alleles"}
         )
