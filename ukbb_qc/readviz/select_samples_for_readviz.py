@@ -79,9 +79,9 @@ def get_additional_gnomad_variants(data_type: str, input_tsv_path: str) -> hl.Ta
         return ht.key_by(locus=ht.liftover_locus, alleles=ht.liftover_alleles)
 
     else:
-        ht = ht.annotate(locus=hl.locus(ht.chrom, ht.pos))
-        ht = ht.transmute(alleles=[ht.ref, ht.alt])
-        return ht.key_by("locus", "alleles")
+        return ht.key_by(
+            locus=hl.locus(ht.chrom, ht.pos), alleles=[ht.ref, ht.alt]
+        ).drop("ref", "alt")
 
 
 def main(args):
