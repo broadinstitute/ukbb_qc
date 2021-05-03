@@ -61,7 +61,7 @@ do
     # 'variant_id', 'n_expected_samples', 'n_available_samples'
     # gnomAD v2.1 has 1000 sqlite databases per chromosome
     files=(
-        ${tsv_path}/combined_chr${i}_*.db
+        ${db_path}/combined_chr${i}_*.db
     )
     for j in "${files[@]}"
     do
@@ -80,7 +80,7 @@ do
     # 'id', 'chrom', 'pos', 'ref', 'alt', 'zygosity',
     # 'qual', 'combined_bamout_id', 'read_group_id'
     files=(
-        ${tsv_path}/all_variants_s42811_gs50_gn857.chr${i}_*.db
+        ${db_path}/all_variants_s42811_gs50_gn857.chr${i}.db
     )
     for j in "${files[@]}"; do
       output_tsv=${tsv_path}/chr${i}.tsv.gz
