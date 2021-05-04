@@ -187,3 +187,96 @@ hailctl dataproc submit kc1 create_meta_ht.py -f 5
 Job ID: `9fe731aa0d224ccc85b12bf334238570`
 Job page: https://console.cloud.google.com/dataproc/jobs/9fe731aa0d224ccc85b12bf334238570?region=us-central1&project=maclab-ukbb
 Completed in 4 minutes 1 second; meta HT later modified with this job ID: `56c7374b71be4e65963d7bed2e8c49f0`.
+
+## Release
+
+### Frequency
+#### Unrelated frequency
+Cluster:
+```
+hailctl dataproc start kc --master-machine-type n1-highmem-8 --worker-machine-type n1-highmem-8 --init gs://broad-ukbb/broad.freeze_5/temp/temp_init.sh --worker-boot-disk-size=100 --project maclab-ukbb --max-idle=30m --properties=spark:spark.executor-memory=35g,spark:spark.speculation=true,spark:spark.speculation.quantile=0.9,spark:spark.speculation.multiplier=3 --packages=holoviews,statsmodels,matplotlib,seaborn --num-workers=100
+```
+
+Command: 
+```
+hailctl dataproc submit kc generate_frequency_data.py -f 5 --pops "1,2,3,4,7,8,9,10,11,12,afr,amr,asj,eas,fin,oth,sas" --filter_related --calculate_frequencies --by_platform --join_gnomad --overwrite
+```
+
+Job ID: `ad038eee487544bcb2b1f3b8fb41bd1a`
+Job page: https://console.cloud.google.com/dataproc/jobs/ad038eee487544bcb2b1f3b8fb41bd1a?region=us-central1&project=maclab-ukbb
+Completed in 1 day 7 minutes.
+
+#### Cohort frequency
+Cluster: 
+```
+hailctl dataproc start kc1 --master-machine-type n1-highmem-8 --worker-machine-type n1-highmem-8 --init gs://broad-ukbb/broad.freeze_5/temp/temp_init.sh --worker-boot-disk-size=100 --project maclab-ukbb --max-idle=15m --properties=spark:spark.executor-memory=35g,spark:spark.speculation=true,spark:spark.speculation.quantile=0.9,spark:spark.speculation.multiplier=3 --packages=holoviews,statsmodels,matplotlib,seaborn --num-workers=100
+```
+
+Command:
+```
+hailctl dataproc submit kc1 get_cohort_freq.py -f 5 --pops "nfe,13" --calculate_frequencies
+```
+
+Job ID: `cb598e8310fb45e78cefc6f50dc97005`
+Job page: https://console.cloud.google.com/dataproc/jobs/cb598e8310fb45e78cefc6f50dc97005?region=us-central1&project=maclab-ukbb
+Completed in 4 hours 28 minutes.
+
+### Release MT
+Cluster:
+```
+hailctl dataproc start kc1 --master-machine-type n1-highmem-8 --worker-machine-type n1-highmem-8 --init gs://broad-ukbb/broad.freeze_5/temp/temp_init.sh --worker-boot-disk-size=100 --project maclab-ukbb --max-idle=30m --properties=spark:spark.executor-memory=35g,spark:spark.speculation=true,spark:spark.speculation.quantile=0.9,spark:spark.speculation.multiplier=3 --packages=holoviews,statsmodels,matplotlib,seaborn --num-workers=100
+```
+
+Command:
+```
+hailctl dataproc submit kc1 prepare_data_release.py --prepare_internal_mt -f 5 --overwrite
+```
+
+Job ID: `7298d6186d6247b2a909bfba5ddc7f31`
+Job page: https://console.cloud.google.com/dataproc/jobs/7298d6186d6247b2a909bfba5ddc7f31?region=us-central1&project=maclab-ukbb
+Complete in 14 hours 22 minutes.
+
+### Release HT
+Cluster:
+```
+hailctl dataproc start kc1 --master-machine-type n1-highmem-8 --worker-machine-type n1-highmem-8 --init gs://broad-ukbb/broad.freeze_5/temp/temp_init.sh --worker-boot-disk-size=100 --project maclab-ukbb --max-idle=30m --properties=spark:spark.executor-memory=35g,spark:spark.speculation=true,spark:spark.speculation.quantile=0.9,spark:spark.speculation.multiplier=3 --packages=holoviews,statsmodels,matplotlib,seaborn --num-workers=100
+```
+
+Command: 
+```
+hailctl dataproc start kc1 --master-machine-type n1-highmem-8 --worker-machine-type n1-highmem-8 --init gs://broad-ukbb/broad.freeze_5/temp/temp_init.sh --worker-boot-disk-size=100 --project maclab-ukbb --max-idle=30m --properties=spark:spark.executor-memory=35g,spark:spark.speculation=true,spark:spark.speculation.quantile=0.9,spark:spark.speculation.multiplier=3 --packages=holoviews,statsmodels,matplotlib,seaborn --num-workers=100
+```
+Job ID: `4fe1caa8ab7d465988559154bffd048b`
+Job page: https://console.cloud.google.com/dataproc/jobs/4fe1caa8ab7d465988559154bffd048b?region=us-central1&project=maclab-ukbb
+Completed in 56 minutes 28 seconds.
+
+### Sanity checks
+Cluster:
+```
+hailctl dataproc start kc1 --master-machine-type n1-highmem-8 --worker-machine-type n1-highmem-8 --init gs://broad-ukbb/broad.freeze_5/temp/temp_init.sh --worker-boot-disk-size=100 --project maclab-ukbb --max-idle=120m --properties=spark:spark.executor-memory=35g,spark:spark.speculation=true,spark:spark.speculation.quantile=0.9,spark:spark.speculation.multiplier=3 --packages=holoviews,statsmodels,matplotlib,seaborn --num-workers=100
+```
+
+Command:
+```
+hailctl dataproc submit kc1 prepare_data_release.py -f 5 --sanity_check_sites
+```
+
+Job ID: `0ee2a9be695443369e6efd357e389e67`
+Job page: https://console.cloud.google.com/dataproc/jobs/0ee2a9be695443369e6efd357e389e67?region=us-central1&project=maclab-ukbb
+Completed in 14 minutes 3 seconds.
+
+
+### Release VCFs
+Cluster:
+```
+hailctl dataproc start kc1 --autoscaling-policy=autoscale_densify --master-machine-type n1-standard-8 --worker-machine-type n1-standard-8 --init gs://broad-ukbb/broad.freeze_5/temp/temp_init.sh --worker-boot-disk-size=100 --project maclab-ukbb --max-idle=120m --properties=spark:spark.executor-memory=35g,spark:spark.speculation=true,spark:spark.speculation.quantile=0.9,spark:spark.speculation.multiplier=3 --packages=holoviews,statsmodels,matplotlib,seaborn
+```
+
+Command:
+```
+hailctl dataproc submit kc1 release/prepare_data_release.py --prepare_vcf_mt --prepare_release_vcf --h_per_shard
+```
+
+Job ID: `27e4976e59d34b3da843438f908b0c7d`
+Job page: https://console.cloud.google.com/dataproc/jobs/27e4976e59d34b3da843438f908b0c7d?region=us-central1&project=maclab-ukbb
+Completed in 4 hours 43 minutes.
