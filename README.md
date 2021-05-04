@@ -166,8 +166,24 @@ hailctl dataproc submit kc1 outlier_filter.py --overwrite
 ```
 
 Job IDs:
- 02b26328594742be976cd45d27f3cb6f
-62e33a0cc2a64d6db9eb4978d408ae7e
-a098d8b3cd074f28bf539cdf8f74c795
+[02b26328594742be976cd45d27f3cb6f](https://console.cloud.google.com/dataproc/jobs/02b26328594742be976cd45d27f3cb6f?region=us-central1&project=maclab-ukbb): Crashed after 3 hours 19 minutes; completed mini sample QC but crashed on downstream step
+[62e33a0cc2a64d6db9eb4978d408ae7e](https://console.cloud.google.com/dataproc/jobs/62e33a0cc2a64d6db9eb4978d408ae7e?region=us-central1&project=maclab-ukbb): Completed in 45 seconds
+[a098d8b3cd074f28bf539cdf8f74c795](https://console.cloud.google.com/dataproc/jobs/a098d8b3cd074f28bf539cdf8f74c795?region=us-central1&project=maclab-ukbb): Completed in 56 seconds
+
+### Array concordance
+I do not have notes for `array_concordance.py`, but this script was also run on the 200K data tranche.
 
 ### Meta HT
+Cluster:
+```
+hailctl dataproc start kc1 --master-machine-type n1-highmem-8 --worker-machine-type n1-highmem-8 --init gs://broad-ukbb/broad.freeze_5/temp/temp_init.sh --max-idle=30m --worker-boot-disk-size=100 --project maclab-ukbb --properties=spark:spark.executor-memory=35g,spark:spark.speculation=true,spark:spark.speculation.quantile=0.9,spark:spark.speculation.multiplier=3 --packages=holoviews,statsmodels,matplotlib,seaborn --num-workers=15
+```
+
+Command:
+```
+hailctl dataproc submit kc1 create_meta_ht.py -f 5
+```
+
+Job ID: `9fe731aa0d224ccc85b12bf334238570`
+Job page: https://console.cloud.google.com/dataproc/jobs/9fe731aa0d224ccc85b12bf334238570?region=us-central1&project=maclab-ukbb
+Completed in 4 minutes 1 second; meta HT later modified with this job ID: `7b02c12b4a614fb6b6f12a51c94b3306`.
