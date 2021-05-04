@@ -105,7 +105,7 @@ Command:
 hailctl dataproc submit kc platform_pca.py --assign_platforms --overwrite
 ```
 
-Job ID: ``
+Job ID: (unlogged)
 
 ### Relatedness inference
 Cluster:
