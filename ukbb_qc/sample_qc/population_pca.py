@@ -163,7 +163,7 @@ def apply_rf_by_batch(
     fit: Any = None,  # Type should be RandomForestClassifier but we do not want to import sklearn.RandomForestClassifier outside
 ) -> hl.Table:
     """
-    Splits input HT (HT with scores from PC project) into desired batches and applies gnomAD's RF.
+    Split input HT (HT with scores from PC project) into desired batches and applies gnomAD's RF.
 
     Splitting helps prevent out of memory issues during sample aggregations. 
     Necessary only for freeze 7/455k. 
