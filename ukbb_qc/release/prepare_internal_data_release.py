@@ -39,14 +39,12 @@ logger.setLevel(logging.INFO)
 ADDITIONAL_RF_FIELDS = ["in_capture_interval", "interval_qc_pass"]
 RF_FIELDS.extend(ADDITIONAL_RF_FIELDS)
 
-# Rename RF probability in RF fields
-RF_FIELDS.append("rf_tp_probability")
-
 # Remove InbreedingCoeff from allele-specific fields (processed separately from other fields)
 AS_FIELDS.remove("InbreedingCoeff")
 
-# Remove BaseQRankSum from site fields (not present in info HT)
+# Remove BaseQRankSum from site and allele-specific fields (not present in info HT)
 SITE_FIELDS.remove("BaseQRankSum")
+AS_FIELDS.remove("AS_BaseQRankSum")
 
 
 def flag_problematic_regions(
@@ -101,8 +99,8 @@ def prepare_annotations(
     # Adding QUALapprox here (needed in variant annotation histograms code downstream)
     SITE_FIELDS.append("QUALapprox")
     info_fields = SITE_FIELDS + AS_FIELDS
-    info_ht = info_ht.transmute(info=info_ht.info.select(*info_fields)).select(
-        "info", "qual"
+    info_ht = info_ht.select(
+        qual=info_ht.info.QUALapprox, info=info_ht.info.select(*info_fields),
     )
     info_ht = info_ht.transmute(
         info=info_ht.info.annotate(
@@ -111,7 +109,6 @@ def prepare_annotations(
             InbreedingCoeff=freq_ht[info_ht.key].InbreedingCoeff,
         )
     )
-    rf_ht = rf_ht.select(*RF_FIELDS)
     vep_ht = vep_ht.transmute(vep=vep_ht.vep.drop("colocated_variants"))
     vqsr_ht = vqsr_ht.transmute(info=vqsr_ht.info.select(*VQSR_FIELDS)).select("info")
     dbsnp_ht = dbsnp.ht().select("rsid")
@@ -119,7 +116,7 @@ def prepare_annotations(
     logger.info(
         "Annotating HT with random forest HT and flagging problematic regions..."
     )
-    ht = ht.annotate(rf=rf_ht[ht.key], filters=rf_ht[ht.key].filters)
+    ht = ht.annotate(filters=rf_ht[ht.key].filters, rf=rf_ht[ht.key].select(*RF_FIELDS))
     ht = ht.annotate_globals(rf_globals=rf_ht.index_globals())
     ht = ht.annotate(region_flag=flag_problematic_regions(ht))
     ht = ht.transmute(rf=ht.rf.drop("interval_qc_pass", "in_capture_interval"))

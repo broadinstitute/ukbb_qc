@@ -8,13 +8,11 @@ from gnomad.assessment.sanity_checks import (
     make_filters_sanity_check_expr,
     sample_sum_check,
 )
-from gnomad.resources.grch37.gnomad import SUBPOPS
-from gnomad.sample_qc.ancestry import POP_NAMES
-from gnomad.utils.vcf import (
-    HISTS,
-    SEXES,
-)
-from ukbb_qc.utils.constants import SEXES_UKBB
+from gnomad.resources.grch38.gnomad import SEXES
+from gnomad.utils.vcf import HISTS
+from gnomad.utils.vcf import SEXES as SEXES_STR
+
+from ukbb_qc.utils.utils import GNOMAD_EAS_SUBPOPS, GNOMAD_NFE_SUBPOPS
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -428,7 +426,9 @@ def sample_sum_sanity_checks(
     subsets: List[str],
     info_metrics: List[str],
     verbose: bool,
-    pop_names: Dict[str, str] = POP_NAMES,
+    ukbb_pops: Dict[str, str],
+    gnomad_exomes_pops: Dict[str, str],
+    gnomad_genomes_pops: Dict[str, str],
 ) -> None:
     """
     Performs sanity checks on sample sums in input Table.
@@ -443,31 +443,34 @@ def sample_sum_sanity_checks(
     :param List[str] info_metrics: List of metrics in info struct of input Table.
     :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
         show only top values of annotations that fail checks.
-    :param pop_names: Dict with global population names (keys) and population descriptions (values).
+    :param Dict[str, str] ukbb_names: Dict with UKBB population names (keys) and population descriptions (values).
+    :param Dict[str, str] gnomad_exomes_pops: Dict with gnomAD v2 exomes population names (keys) and population descriptions (values).
+    :param Dict[str, str] gnomad_genomes_pops: Dict with gnomAD v3 genomes population names (keys) and population descriptions (values).
     :return: None
     :rtype: None
     """
-    # Get gnomAD subpops
-    GNOMAD_NFE_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["NFE"]))
-    GNOMAD_EAS_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["EAS"]))
-
-    # Remove unnecessary population names from pop_names dict
-    # This is to avoid checking for populations we don't need to check
-    KEEP_GNOMAD_POPS = ["afr", "amr", "asj", "eas", "fin", "nfe", "oth", "sas"]
-
-    for pop in pop_names.copy():
-        if pop not in KEEP_GNOMAD_POPS:
-            pop_names.pop(pop)
-
+    # Check if pops are present
+    # Get list of all pops present in HT
     for subset in subsets:
-        # Check if pops are present
         if "gnomad" in subset:
-            sexes = SEXES
+            if "exomes" in subset:
+                sexes = SEXES_STR
+
+                # Remove subpops here -- they have a different format in the info annotations
+                # and are checked later in this function
+                # genomes do not have subpops yet, so this only applies to exomes
+                pops = gnomad_exomes_pops
+                for subpop in GNOMAD_NFE_SUBPOPS + GNOMAD_EAS_SUBPOPS:
+                    pops.pop(subpop, None)
+            else:
+                sexes = SEXES
+                pops = gnomad_genomes_pops
             pop_adjusted = list(
                 set([x for x in info_metrics if (subset in x) and ("raw" not in x)])
             )
         else:
-            sexes = SEXES_UKBB
+            sexes = SEXES
+            pops = ukbb_pops
             pop_adjusted = list(
                 set(
                     [
@@ -479,8 +482,14 @@ def sample_sum_sanity_checks(
             )
         pop_adjusted = [i.replace("_adj", "") for i in pop_adjusted]
 
+        # NOTE: Added filter to remove subset here
+        # We don't retain any gnomAD subset info in the UKBB release files
+        # This filter is a fix to prevent sample sum checks from
+        # checking for HGDP/TGP population labels (gnomAD v3)
+        # HGDP/TGP population labels are more granular than the global pops
+        # and are not included in the UKBB release
         pop_found = ht[f"{subset + '_' if subset != '' else subset}freq_meta"].filter(
-            lambda x: x.contains("pop")
+            lambda x: x.contains("pop") & ~x.contains("subset")
         )
         pop_found = list(hl.eval(pop_found.group_by(lambda x: x["pop"])).keys())
         for pop in pop_found:
@@ -495,7 +504,7 @@ def sample_sum_sanity_checks(
                 )
 
         # Print any missing pops to terminal
-        missing_pops = set(pop_names.keys()) - set(pop_found)
+        missing_pops = set(pops.keys()) - set(pop_found)
         if len(missing_pops) != 0:
             logger.warning(f"Missing {missing_pops} pops in {subset} subset!")
 
@@ -513,6 +522,7 @@ def sample_sum_sanity_checks(
 
         if "gnomad" in subset:
             # Adjust subpops to those found in subset
+            # This is checking v2 exomes subpops
             nfe_subpop_adjusted = list(
                 set([x for x in pop_adjusted if "nfe_" in x and "male" not in x])
             )
@@ -638,8 +648,14 @@ def missingness_sanity_checks(
 def sanity_check_release_mt(
     mt: hl.MatrixTable,
     subsets: List[str],
+    ukbb_pops: Dict[str, str],
+    gnomad_exomes_pops: Dict[str, str],
+    gnomad_genomes_pops: Dict[str, str],
     missingness_threshold: float = 0.5,
     verbose: bool = False,
+    n_alt_alleles_hist_start: int = 1,
+    n_alt_alleles_hist_end: int = 1000,
+    n_alt_alleles_hist_bins: int = 100,
 ) -> None:
     """
     Perform a battery of sanity checks on a specified group of subsets in a MatrixTable containing variant annotations.
@@ -653,25 +669,45 @@ def sanity_check_release_mt(
 
     :param MatrixTable mt: MatrixTable containing variant annotations to check.
     :param List[str] subsets: List of subsets to be checked.
+    :param ukbb_pops: Dict with UKBB population names (keys) and population descriptions (values).
+    :param gnomad_exomes_pops: Dict with gnomAD v2 exomes population names (keys) and population descriptions (values).
+    :param gnomad_genomes_pops: Dict with gnomAD v3 genomes population names (keys) and population descriptions (values).
     :param float missingness_threshold: Upper cutoff for allowed amount of missingness. Default is 0.5
     :param bool verbose: If True, display top values of relevant annotations being checked, regardless of whether check
         conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
+    :param int n_alt_alleles_hist_start: Start of range for `n_alt_alleles` histogram. Default is 1.
+    :param int n_alt_alleles_hist_end: End of range for `n_alt_alleles` histogram. Default is 1000.
+    :param int n_alt_alleles_hist_bins: Number of bins for `n_alt_alleles` histogram. Default is 100.
     :return: None (terminal display of results from the battery of sanity checks).
     :rtype: None
     """
-    # Perform basic checks -- number of variants, number of contigs, number of samples
+    # Perform basic checks -- number of variants, number of contigs, number of samples,
+    # number of alternate alleles histogram
     logger.info("BASIC SUMMARY OF INPUT TABLE:")
     n_samples = mt.count_cols()
     ht = mt.rows()
     n_sites = ht.count()
     contigs = ht.aggregate(hl.agg.collect_as_set(ht.locus.contig))
+    n_alt_alleles_hist = ht.aggregate(
+        hl.agg.hist(
+            ht.info.n_alt_alleles,
+            start=n_alt_alleles_hist_start,
+            end=n_alt_alleles_hist_end,
+            bins=n_alt_alleles_hist_bins,
+        )
+    )
     logger.info(f"Found {n_sites} sites in contigs {contigs} in {n_samples} samples")
+    logger.info(f"n_alt_alleles histogram: {n_alt_alleles_hist}")
 
     logger.info("VARIANT FILTER SUMMARIES:")
     filters_sanity_check(ht)
 
-    logger.info("HISTOGRAM CHECKS:")
-    histograms_sanity_check(ht, verbose=verbose)
+    # NOTE: This check won't work in the 455k tranche
+    # The `histograms_sanity_check` code checks `_n_smaller` for all hists and
+    # `_n_larger` for every hist except the DP hists
+    # ^ we dropped all of these annotations in the 455k tranche
+    # logger.info("HISTOGRAM CHECKS:")
+    # histograms_sanity_check(ht, verbose=verbose)
 
     logger.info("RAW AND ADJ CHECKS:")
     raw_and_adj_sanity_checks(ht, subsets, verbose)
@@ -685,7 +721,15 @@ def sanity_check_release_mt(
     non_info_metrics.remove("info")
 
     logger.info("SAMPLE SUM CHECKS:")
-    sample_sum_sanity_checks(ht, subsets, info_metrics, verbose)
+    sample_sum_sanity_checks(
+        ht,
+        subsets,
+        info_metrics,
+        verbose,
+        ukbb_pops,
+        gnomad_exomes_pops,
+        gnomad_genomes_pops,
+    )
 
     logger.info("SEX CHROMOSOME ANNOTATION CHECKS:")
     sex_chr_sanity_checks(ht, info_metrics, contigs, verbose)
@@ -725,7 +769,7 @@ def vcf_field_check(
                 f"{hist}_raw_bin_freq",
                 f"{hist}_raw_n_smaller",
                 f"{hist}_raw_n_larger",
-            ]
+            ],
         )
 
     missing_fields = []
