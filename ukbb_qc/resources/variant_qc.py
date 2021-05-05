@@ -1,10 +1,15 @@
-import hail as hl
-from typing import Any, Dict, Optional, Union
+from typing import Dict, Optional, Union
 
-from gnomad.resources.resource_utils import DataException
+import hail as hl
+
+from gnomad.resources.resource_utils import (
+    DataException,
+    VersionedTableResource,
+    VersionedMatrixTableResource,
+)
 import gnomad.resources.grch38 as grch38
 from gnomad.utils.file_utils import file_exists
-from .resource_utils import CURRENT_FREEZE, CURRENT_HAIL_VERSION, DATA_SOURCES, FREEZES
+from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES
 
 
 SYNDIP = "CHMI_CHMI3_Nex1"
@@ -20,13 +25,13 @@ String representation for NA12878 truth sample
 TRUTH_SAMPLES = {
     "syndip": {
         "s": SYNDIP,
-        "truth_mt": grch38.syndip.mt(),
-        "hc_intervals": grch38.syndip_hc_intervals.ht(),
+        "truth_mt": grch38.syndip,
+        "hc_intervals": grch38.syndip_hc_intervals,
     },
     "NA12878": {
         "s": NA12878,
-        "truth_mt": grch38.na12878_giab.mt(),
-        "hc_intervals": grch38.na12878_giab_hc_intervals.ht(),
+        "truth_mt": grch38.na12878_giab,
+        "hc_intervals": grch38.na12878_giab_hc_intervals,
     },
 }
 """
@@ -51,7 +56,7 @@ def get_truth_sample_data(
     data_source: str,
     freeze: int = CURRENT_FREEZE,
     truth_sample_dict: Dict[
-        str, Dict[str, Union[str, hl.Table, hl.MatrixTable]]
+        str, Dict[str, Union[str, VersionedTableResource, VersionedMatrixTableResource]]
     ] = TRUTH_SAMPLES,
     truth_sample: str = None,
     data_type: str = None,
@@ -100,8 +105,13 @@ def get_truth_sample_data(
         return hl.read_matrix_table(
             truth_sample_mt_path(truth_sample, data_source, freeze)
         )
-    else:
-        return truth_samples_info[data_type]
+    if data_type == "truth_mt":
+        return truth_samples_info[data_type].mt()
+
+    if data_type == "hc_intervals":
+        return truth_samples_info[data_type].ht()
+
+    return truth_samples_info[data_type]
 
 
 def variant_qc_prefix(data_source: str, freeze: int = CURRENT_FREEZE) -> str:

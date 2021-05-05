@@ -36,6 +36,16 @@ def pan_ancestry_ht_path() -> str:
     return "gs://broad-ukbb/resources/pan_ancestry.ht"
 
 
+def pan_ancestry_bridge_path() -> str:
+    """
+    Returns path to text file that contains sample ID mappings for pan-ancestry labels.
+
+    :return: Path to text file that contains pan-ancestry sample ID mappings.
+    :rtype: str
+    """
+    return "gs://broad-ukbb/resources/bridge_26041_31063.csv"
+
+
 def excluded_samples_path(freeze: int = CURRENT_FREEZE) -> str:
     """
     Returns path to list of samples to exclude from QC due to withdrawn consents
@@ -65,7 +75,7 @@ def dup_resolution_path(freeze: int = CURRENT_FREEZE) -> str:
         raise DataException(
             "Duplicate resolution bucket only exists for freeze 7/450k!"
         )
-    return "gs://broad-ukbb/broad.freeze_{freeze}/duplicate_resolution"
+    return f"gs://broad-ukbb/broad.freeze_{freeze}/duplicate_resolution"
 
 
 def dup_gvcf_path(freeze: int = CURRENT_FREEZE) -> str:
@@ -521,6 +531,16 @@ def phenotype_ht_path() -> str:
     return "gs://broad-ukbb/resources/ukb24295.phenotypes.ht"
 
 
+def geographical_ht_path() -> str:
+    """
+    Returns path to location Table.
+
+    :return: Path to location Table
+    :rtype: str
+    """
+    return "gs://broad-ukbb/resources/geographical_data.ht"
+
+
 # Release resources
 def get_release_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
@@ -566,6 +586,20 @@ def release_ht_path(data_source: str, freeze: int) -> str:
     return f"{get_release_path(data_source, freeze)}/ht/{data_source}.freeze_{freeze}.release.sites.ht"
 
 
+def release_vcf_ht_path(data_source: str, freeze: int) -> str:
+    """
+    Fetch filepath for release Hail Table with annotations reformatted for VCF export
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes. Resource only exists for freeze 7.
+    :return: Filepath for release VCF Table
+    :rtype: str
+    """
+    if freeze != 7:
+        raise DataException("Release VCF HT only exists for freeze 7/455K!")
+    return f"{get_release_path(data_source, freeze)}/ht/{data_source}.freeze_{freeze}.release.sites.vcf.ht"
+
+
 def release_var_hist_path(data_source: str, freeze: int) -> str:
     """
     Fetch bucket for release variant histograms (json files)
@@ -606,6 +640,26 @@ def release_vcf_path(data_source: str, freeze: int, contig: str = None) -> str:
         # if contig is None, return path to sharded vcf bucket
         # NOTE: need to add .bgz or else hail will not bgzip shards
         return f"{get_release_path(data_source, freeze)}/vcf/sharded_vcf/{data_source}.freeze_{freeze}.bgz"
+
+
+def append_to_vcf_header_path(data_source: str, freeze: int) -> str:
+    """
+    Fetch path to TSV file containing extra fields to append to VCF header.
+
+    Extra fields are VEP and dbSNP versions.
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :return: Filepath for extra fields TSV file
+    :rtype: str
+    """
+    if freeze != 7:
+        raise DataException(
+            "Extra fields to append to VCF header TSV only exists for freeze 7/455K!"
+        )
+    return (
+        f"gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/append_to_vcf_header.tsv"
+    )
 
 
 def annotation_hists_path(data_source: str, freeze: int) -> str:
@@ -698,6 +752,94 @@ def release_lof_ht_path(
         )
 
     return f"{get_release_path(data_source, freeze)}/summary/gene_lof_matrix_summary{'_intervals' if intervals else ''}.ht"
+
+
+def get_doubleton_ht_path(
+    data_source: str, freeze: int = CURRENT_FREEZE, unrelated_only: bool = False
+) -> str:
+    """
+    Returns path to HT containing doubletons and relevant sample IDs.
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :param bool unrelated_only: Whether the HT contains only unrelated samples. Default is False.
+    :return: Path to doubletons HT
+    :rtype: str
+    """
+    if freeze not in (6, 7):
+        raise DataException(
+            "Doubleton HT path only exists for freezes 6/300K and 7/450K!"
+        )
+
+    return f"{get_release_path(data_source, freeze)}/summary/doubleton/doubletons{'_unrelated' if unrelated_only else ''}.ht"
+
+
+def get_pair_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Returns path to HT containing randomly selected sample pairs.
+
+    Used to compare to pairs in doubleton HT.
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes
+    :return: Path to comparison pairs HT
+    :rtype: str
+    """
+    if freeze not in (6, 7):
+        raise DataException(
+            "Comparison pairs HT path only exists for freezes 6/300K and 7/450K!"
+        )
+
+    return (
+        f"{get_release_path(data_source, freeze)}/summary/doubleton/comparison_pairs.ht"
+    )
+
+
+# Readviz resources
+def cram_map_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Return path to TSV containing UKBB samples and their cram paths.
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: Data freeze. Must be 7.
+    :return: Path to TSV containing UKBB samples and their cram paths
+    :rtype: str  
+    """
+    if freeze != 7:
+        raise DataException("UKBB cram map path only exists for freeze 7/450K!")
+    return "gs://gnomad-readviz/ukbb/sample_cram_map.tsv"
+
+
+def non_gnomad_var_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Return path to HT containing variants unique to the UKBB (not present in gnomAD v2.1.1 or v3.1).
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: Data freeze. Must be 7.
+    :return: Path to UKBB unique variants HT
+    :rtype: str   
+    """
+    if freeze != 7:
+        raise DataException(
+            "UKBB unique variants (not in gnomAD) HT path only exists for freeze 7/450K!"
+        )
+    return "gs://gnomad-readviz/ukbb/not_in_gnomad_variants/ukbb_unique_variants.ht"
+
+
+def readviz_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Returns path to HT containing variants unique to the UKBB (not present in gnomAD v2.1.1 or v3.1).
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: Data freeze. Must be 7.
+    :return: Path to UKBB unique variants HT
+    :rtype: str   
+    """
+    if freeze != 7:
+        raise DataException(
+            "UKBB unique variants (not in gnomAD) HT path only exists for freeze 7/450K!"
+        )
+    return "gs://gnomad-readviz/ukbb/not_in_gnomad_variants/samples_for_readviz.ht"
 
 
 # logging path
