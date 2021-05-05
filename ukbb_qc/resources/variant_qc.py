@@ -265,7 +265,11 @@ def score_bin_path(
 
 
 def binned_concordance_path(
-    truth_sample: str, metric: str, data_source: str, freeze: int = CURRENT_FREEZE
+    truth_sample: str,
+    metric: str,
+    data_source: str,
+    freeze: int = CURRENT_FREEZE,
+    adj: bool = False,
 ):
     """
     Returns the path to a truth sample concordance Table (containing TP, FP, FN) between a truth sample within the callset and the samples truth data grouped by ranked bins of a metric (RF or VQSR scores)
@@ -274,7 +278,8 @@ def binned_concordance_path(
     :param str metric: One of the evaluation metrics (RF hash or vqsr)
     :param str data_source: One of 'regeneron' or 'broad' 
     :param int freeze: One of the data freezes
+    :param bool adj: Whether to load 'adj' or 'raw'
     :return: Path to binned truth data concordance Hail Table
     :rtype: str
     """
-    return f"{variant_qc_prefix(data_source, freeze)}/rf/{truth_sample}.{metric}.binned_concordance.ht"
+    return f"{variant_qc_prefix(data_source, freeze)}/rf/{truth_sample}.{metric}.binned_concordance{'' if adj else '.raw'}.ht"
