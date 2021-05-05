@@ -221,7 +221,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--adj",
-        help="Will perform the bin_truth_sample_concordance with adj passing variants only.",
+        help="Performs the bin_truth_sample_concordance with adj passing variants only.",
         action="store_true",
     )
     args = parser.parse_args()
