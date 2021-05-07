@@ -758,6 +758,12 @@ def main(args):
                     [hl.parse_locus_interval("chr20"), hl.parse_locus_interval("chrX")],
                 )
 
+            logger.info("Adding het_non_ref annotation...")
+            # Adding a Boolean for whether a sample had a heterozygous non-reference genotype
+            # Need to add this prior to splitting MT to make sure these genotypes
+            # are not adjusted by the homalt hotfix downstream
+            mt = mt.annotate_entries(het_non_ref=mt.LGT.is_het_non_ref())
+
             logger.info("Splitting raw MT...")
             mt = hl.experimental.sparse_split_multi(mt)
             mt = mt.select_entries(*ENTRIES)
@@ -777,6 +783,7 @@ def main(args):
             mt = mt.annotate_entries(
                 GT=hl.if_else(
                     mt.GT.is_het()
+                    & ~mt.het_non_ref
                     & (freq_ht[mt.row_key].AF > 0.01)
                     & (mt.AD[1] / mt.DP > 0.9),
                     hl.call(1, 1),
