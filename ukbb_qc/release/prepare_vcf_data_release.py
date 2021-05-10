@@ -783,6 +783,7 @@ def main(args):
             mt = mt.annotate_entries(
                 GT=hl.if_else(
                     mt.GT.is_het()
+                    # Skip adjusting genotypes if sample originally had a het nonref genotype
                     & ~mt.het_non_ref
                     & (freq_ht[mt.row_key].AF > 0.01)
                     & (mt.AD[1] / mt.DP > 0.9),
@@ -948,8 +949,17 @@ def main(args):
             # Export sharded VCF
             if args.parallelize:
 
+                logger.info("Loading het non ref sites to fix...")
+                sites_ht = hl.read_matrix_table(args.het_non_ref).rows()
+
                 logger.info("Densifying...")
-                mt = hl.experimental.densify(mt)
+                # mt = hl.experimental.densify(mt)
+                from gnomad.utils.sparse_mt import densify_sites
+                from ukbb_qc.resources.basics import last_END_positions_ht_path
+
+                mt = densify_sites(
+                    mt, sites_ht, hl.read_table(last_END_positions_ht_path(freeze))
+                )
 
                 logger.info("Removing low QUAL variants and * alleles...")
                 info_ht = hl.read_table(info_ht_path(data_source, freeze))
@@ -1012,6 +1022,11 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--prepare_vcf_mt", help="Use release MT to create VCF MT", action="store_true"
+    )
+    parser.add_argument(
+        "--het_non_ref",
+        help="Path to MT with het non ref sites to be fixed",
+        action="store_true",
     )
     parser.add_argument(
         "--sanity_check", help="Run sanity checks function", action="store_true"
