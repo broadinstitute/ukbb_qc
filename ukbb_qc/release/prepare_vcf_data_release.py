@@ -29,9 +29,7 @@ from gnomad.utils.vcf import (
     VQSR_FIELDS,
 )
 from gnomad.utils.vcf import SEXES as SEXES_STR
-from ukbb_qc.assessment.sanity_checks import (
-    vcf_field_check,
-)
+from ukbb_qc.assessment.sanity_checks import vcf_field_check
 from ukbb_qc.resources.basics import (
     append_to_vcf_header_path,
     get_ukbb_data,
@@ -607,8 +605,19 @@ def main(args):
         ).select_entries(*SPARSE_ENTRIES)
         mt = mt.transmute_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype)
 
-        logger.info("Removing chrM...")
-        mt = hl.filter_intervals(mt, [hl.parse_locus_interval("chrM")], keep=False)
+        logger.info("Loading het non ref sites to fix...")
+        sites_ht = hl.read_matrix_table(args.het_non_ref).rows()
+
+        logger.info("Densifying...")
+        from gnomad.utils.sparse_mt import densify_sites
+        from ukbb_qc.resources.basics import (
+            last_END_positions_ht_path,
+            get_release_path,
+        )
+
+        mt = densify_sites(
+            mt, sites_ht, hl.read_table(last_END_positions_ht_path(freeze))
+        )
 
         logger.info("Adding het_non_ref annotation...")
         # Adding a Boolean for whether a sample had a heterozygous non-reference genotype
@@ -616,9 +625,16 @@ def main(args):
         # are not adjusted by the homalt hotfix downstream
         mt = mt.annotate_entries(het_non_ref=mt.LGT.is_het_non_ref())
 
-        logger.info("Splitting raw MT...")
+        logger.info("Splitting densified MT...")
         mt = hl.experimental.sparse_split_multi(mt)
         mt = mt.select_entries(*ENTRIES)
+
+        logger.info("Removing low QUAL variants and * alleles...")
+        info_ht = hl.read_table(info_ht_path(data_source, freeze))
+        mt = mt.filter_rows(
+            (~info_ht[mt.row_key].AS_lowqual)
+            & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
+        )
 
         logger.info("Adjusting sex ploidy...")
         mt = adjust_sex_ploidy(mt, mt.sex_karyotype, male_str="XY", female_str="XX")
@@ -652,27 +668,6 @@ def main(args):
         ht = hl.read_table(release_vcf_ht_path(*tranche_data)).drop("freq_meta")
         mt = mt.annotate_rows(**ht[mt.row_key])
         mt = mt.annotate_globals(**ht.index_globals())
-
-        logger.info("Loading het non ref sites to fix...")
-        sites_ht = hl.read_matrix_table(args.het_non_ref).rows()
-
-        logger.info("Densifying...")
-        from gnomad.utils.sparse_mt import densify_sites
-        from ukbb_qc.resources.basics import (
-            last_END_positions_ht_path,
-            get_release_path,
-        )
-
-        mt = densify_sites(
-            mt, sites_ht, hl.read_table(last_END_positions_ht_path(freeze))
-        )
-
-        logger.info("Removing low QUAL variants and * alleles...")
-        info_ht = hl.read_table(info_ht_path(data_source, freeze))
-        mt = mt.filter_rows(
-            (~info_ht[mt.row_key].AS_lowqual)
-            & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
-        )
 
         logger.info("Re-calculating frequency...")
         from gnomad.utils.annotations import (
