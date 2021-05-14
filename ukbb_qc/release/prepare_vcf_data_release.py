@@ -29,7 +29,10 @@ from gnomad.utils.vcf import (
     VQSR_FIELDS,
 )
 from gnomad.utils.vcf import SEXES as SEXES_STR
-from ukbb_qc.assessment.sanity_checks import vcf_field_check
+from ukbb_qc.assessment.sanity_checks import (
+    sanity_check_release_mt,
+    vcf_field_check,
+)
 from ukbb_qc.resources.basics import (
     append_to_vcf_header_path,
     get_checkpoint_path,
@@ -733,6 +736,17 @@ def main(args):
         # https://github.com/broadinstitute/gnomad_methods/pull/347
         mt = mt.annotate_rows(info=mt.info.annotate(**set_female_y_metrics_to_na(mt)))
 
+        logger.info("Sanity checking release MT...")
+        sanity_check_release_mt(
+            mt,
+            SUBSET_LIST,
+            ukbb_pops=UKBB_POPS,
+            gnomad_exomes_pops=GNOMAD_EXOMES_POPS,
+            gnomad_genomes_pops=GNOMAD_GENOMES_POPS,
+            missingness_threshold=0.5,
+            verbose=args.verbose,
+        )
+
         # Reformat names to remove "adj" pre-export
         # e.g, renaming "AC_adj" to "AC"
         # All unlabeled frequency information is assumed to be adj
@@ -805,6 +819,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--het_non_ref",
         help="Path to MT with het non ref sites to be fixed",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--verbose",
+        help="Run sanity checks function with verbose output",
         action="store_true",
     )
     parser.add_argument(
