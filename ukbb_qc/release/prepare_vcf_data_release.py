@@ -618,13 +618,13 @@ def main(args):
             get_release_path,
         )
 
-        # NOTE: Setting semi_join_rows to False here because Tim thinks this option will be faster
+        # NOTE: Set semi_join_rows to False here in case it was faster caused the job to crash
         # https://github.com/broadinstitute/gnomad_methods/blob/master/gnomad/utils/sparse_mt.py#L88
         mt = densify_sites(
             mt,
             sites_ht,
             hl.read_table(last_END_positions_ht_path(freeze)),
-            semi_join_rows=False,
+            semi_join_rows=True,
         )
         mt = mt.checkpoint(
             get_checkpoint_path(*tranche_data, name="het_non_ref_dense", mt=True)
