@@ -603,7 +603,6 @@ def main(args):
             n_partitions=args.raw_partitions,
             meta_root="meta",
         ).select_entries(*SPARSE_ENTRIES)
-        mt = mt.transmute_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype)
 
         logger.info("Loading het non ref sites to fix...")
         sites_ht = hl.read_matrix_table(args.het_non_ref).rows()
@@ -637,6 +636,7 @@ def main(args):
         )
 
         logger.info("Adjusting sex ploidy...")
+        mt = mt.annotate_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype)
         mt = adjust_sex_ploidy(mt, mt.sex_karyotype, male_str="XY", female_str="XX")
 
         # Temporary hotfix for depletion of homozygous alternate genotypes
