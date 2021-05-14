@@ -32,6 +32,7 @@ from gnomad.utils.vcf import SEXES as SEXES_STR
 from ukbb_qc.assessment.sanity_checks import vcf_field_check
 from ukbb_qc.resources.basics import (
     append_to_vcf_header_path,
+    get_checkpoint_path,
     get_ukbb_data,
     release_header_path,
     release_ht_path,
@@ -619,6 +620,9 @@ def main(args):
         mt = densify_sites(
             mt, sites_ht, hl.read_table(last_END_positions_ht_path(freeze))
         )
+        mt = mt.checkpoint(
+            get_checkpoint_path(*tranche_data, name="het_non_ref_dense", mt=True)
+        )
 
         logger.info("Adding het_non_ref annotation...")
         # Adding a Boolean for whether a sample had a heterozygous non-reference genotype
@@ -630,15 +634,14 @@ def main(args):
         mt = hl.experimental.sparse_split_multi(mt)
         mt = mt.select_entries(*ENTRIES)
 
-        logger.info("Filtering only to the impacted variants (filtering on alleles)...")
         # NOTE: densify_sites operates using only the locus (not the alleles)
-        mt = mt.filter_rows(hl.is_defined(sites_ht[mt.row_key]))
-
+        logger.info("Filtering only to the impacted variants (filtering on alleles)...")
         logger.info("Removing low QUAL variants and * alleles...")
         info_ht = hl.read_table(info_ht_path(data_source, freeze))
         mt = mt.filter_rows(
             (~info_ht[mt.row_key].AS_lowqual)
             & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
+            & (hl.is_defined(sites_ht[mt.row_key]))
         )
 
         logger.info("Adjusting sex ploidy...")
@@ -696,6 +699,10 @@ def main(args):
         popmax = pop_max_expr(mt_filt.freq, mt_filt.freq_meta)
         logger.info("Calculating faf and popmax...")
         freq_ht = mt_filt.annotate_rows(faf=faf, popmax=popmax).rows()
+        # TODO: Will need to update release HT frequencies at these het nonref sites
+        freq_ht = freq_ht.checkpoint(
+            get_checkpoint_path(*tranche_data, name="ukb_freq_het_non_ref")
+        )
 
         logger.info("Annotating new frequency struct and globals onto MT...")
         mt = mt.annotate_rows(**freq_ht[mt.row_key])
