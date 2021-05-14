@@ -590,9 +590,11 @@ def main(args):
 
     try:
         logger.info("Reading header dict from pickle...")
-        # NOTE: I moved this file out of the temp bucket for permanent storage 
+        # NOTE: I moved this file out of the temp bucket for permanent storage
         # We deleted the temp bucket to save on storage, and I wanted to keep this file
-        with hl.hadoop_open("gs://broad-ukbb/broad.freeze_7/release/vcf/header_dict.pickle", "rb") as p:
+        with hl.hadoop_open(
+            "gs://broad-ukbb/broad.freeze_7/release/vcf/header_dict.pickle", "rb"
+        ) as p:
             header_dict = pickle.load(p)
 
         logger.info("Getting raw MT and dropping all unnecessary entries...")
@@ -618,13 +620,13 @@ def main(args):
             get_release_path,
         )
 
-        # NOTE: Set semi_join_rows to False here in case it was faster caused the job to crash
+        # NOTE: Set semi_join_rows to False here in case it's faster
         # https://github.com/broadinstitute/gnomad_methods/blob/master/gnomad/utils/sparse_mt.py#L88
         mt = densify_sites(
             mt,
             sites_ht,
             hl.read_table(last_END_positions_ht_path(freeze)),
-            semi_join_rows=True,
+            semi_join_rows=False,
         )
         mt = mt.checkpoint(
             get_checkpoint_path(*tranche_data, name="het_non_ref_dense", mt=True)
@@ -821,8 +823,7 @@ if __name__ == "__main__":
         type=int,
     )
     parser.add_argument(
-        "--het_non_ref",
-        help="Path to MT with het non ref sites to be fixed",
+        "--het_non_ref", help="Path to MT with het non ref sites to be fixed",
     )
     parser.add_argument(
         "--verbose",
