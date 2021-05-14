@@ -34,10 +34,8 @@ from ukbb_qc.assessment.sanity_checks import (
     vcf_field_check,
 )
 from ukbb_qc.resources.basics import (
-    append_to_vcf_header_path,
     get_checkpoint_path,
     get_ukbb_data,
-    release_header_path,
     release_ht_path,
     release_vcf_ht_path,
 )
@@ -592,7 +590,9 @@ def main(args):
 
     try:
         logger.info("Reading header dict from pickle...")
-        with hl.hadoop_open(release_header_path(*tranche_data), "rb") as p:
+        # NOTE: I moved this file out of the temp bucket for permanent storage 
+        # We deleted the temp bucket to save on storage, and I wanted to keep this file
+        with hl.hadoop_open("gs://broad-ukbb/broad.freeze_7/release/vcf/header_dict.pickle", "rb") as p:
             header_dict = pickle.load(p)
 
         logger.info("Getting raw MT and dropping all unnecessary entries...")
@@ -787,7 +787,8 @@ def main(args):
             output=f"{get_release_path(*tranche_data)}/vcf/sharded_vcf/broad.freeze_7.patch.bgz",
             parallel=None,
             metadata=header_dict,
-            append_to_header=append_to_vcf_header_path(*tranche_data),
+            # NOTE: I also moved this file out of temp when we were deleting temporary files
+            append_to_header="gs://broad-ukbb/broad.freeze_7/release/vcf/append_to_vcf_header.tsv",
             tabix=True,
         )
 
