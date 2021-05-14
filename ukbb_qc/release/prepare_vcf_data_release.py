@@ -822,7 +822,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--het_non_ref",
         help="Path to MT with het non ref sites to be fixed",
-        action="store_true",
     )
     parser.add_argument(
         "--verbose",
