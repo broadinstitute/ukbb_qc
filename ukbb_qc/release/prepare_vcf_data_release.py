@@ -607,13 +607,15 @@ def main(args):
         logger.info("Loading het non ref sites to fix...")
         sites_ht = hl.read_matrix_table(args.het_non_ref).rows()
 
-        logger.info("Densifying...")
+        logger.info("Densifying to het non ref sites only...")
         from gnomad.utils.sparse_mt import densify_sites
         from ukbb_qc.resources.basics import (
             last_END_positions_ht_path,
             get_release_path,
         )
 
+        # Should I set semi_join_rows to False here?
+        # https://github.com/broadinstitute/gnomad_methods/blob/master/gnomad/utils/sparse_mt.py#L88
         mt = densify_sites(
             mt, sites_ht, hl.read_table(last_END_positions_ht_path(freeze))
         )
@@ -627,6 +629,10 @@ def main(args):
         logger.info("Splitting densified MT...")
         mt = hl.experimental.sparse_split_multi(mt)
         mt = mt.select_entries(*ENTRIES)
+
+        logger.info("Filtering only to the impacted variants (filtering on alleles)...")
+        # NOTE: densify_sites operates using only the locus (not the alleles)
+        mt = mt.filter_rows(hl.is_defined(sites_ht[mt.row_key]))
 
         logger.info("Removing low QUAL variants and * alleles...")
         info_ht = hl.read_table(info_ht_path(data_source, freeze))
