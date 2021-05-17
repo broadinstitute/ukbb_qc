@@ -640,7 +640,7 @@ def main(args):
         mt = mt.annotate_entries(het_non_ref=mt.LGT.is_het_non_ref())
 
         logger.info("Splitting densified MT...")
-        mt = hl.experimental.sparse_split_multi(mt)
+        mt = hl.split_multi_hts(mt)
         mt = mt.select_entries(*ENTRIES)
 
         # NOTE: densify_sites operates using only the locus (not the alleles)
