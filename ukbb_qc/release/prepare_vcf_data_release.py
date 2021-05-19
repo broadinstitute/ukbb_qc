@@ -55,7 +55,7 @@ logger.setLevel(logging.INFO)
 
 
 # Add END to entries
-ENTRIES.append("END")
+#ENTRIES.append("END")
 
 # Add capture region and sibling singletons to vcf_info_dict
 VCF_INFO_DICT = INFO_DICT
@@ -567,7 +567,7 @@ def unfurl_nested_annotations(
     # Unfurl UKBB ages
     # We previously dropped:
     # age_hist_hom_bin_edges, age_hist_het_bin_edges
-    if not gnomad:
+    """if not gnomad:
         age_hist_dict = {
             "age_hist_het_bin_freq": hl.delimit(t.age_hist_het.bin_freq, delimiter="|"),
             "age_hist_het_n_smaller": t.age_hist_het.n_smaller,
@@ -576,7 +576,8 @@ def unfurl_nested_annotations(
             "age_hist_hom_n_smaller": t.age_hist_hom.n_smaller,
             "age_hist_hom_n_larger": t.age_hist_hom.n_larger,
         }
-        expr_dict.update(age_hist_dict)
+        expr_dict.update(age_hist_dict
+    """
 
     return expr_dict
 
@@ -638,20 +639,36 @@ def main(args):
         # Need to add this prior to splitting MT to make sure these genotypes
         # are not adjusted by the homalt hotfix downstream
         mt = mt.annotate_entries(het_non_ref=mt.LGT.is_het_non_ref())
+        
+
+        logger.info("Reading in densified MT and sites HT...")
+        mt = hl.read_matrix_table(get_checkpoint_path(*tranche_data, name="het_non_ref_dense", mt=True))
+        sites_ht = hl.read_matrix_table(args.het_non_ref).rows()
+        mt = mt.annotate_entries(het_non_ref=mt.LGT.is_het_non_ref())
 
         logger.info("Splitting densified MT...")
-        mt = hl.split_multi_hts(mt)
+        # Adding this here because I forgot to filter on allele length before checkpointing
+        mt = mt.filter_rows(hl.len(mt.alleles) > 1)
+        mt = hl.experimental.sparse_split_multi(mt)
+
+        # Add het_non_ref to ENTRIES (otherwise annotation gets accidentally dropped here)
+        ENTRIES.append("het_non_ref")
         mt = mt.select_entries(*ENTRIES)
 
         # NOTE: densify_sites operates using only the locus (not the alleles)
         logger.info("Filtering only to the impacted variants (filtering on alleles)...")
-        logger.info("Removing low QUAL variants and * alleles...")
+        logger.info("Removing low QUAL variants and star alleles...")
         info_ht = hl.read_table(info_ht_path(data_source, freeze))
         mt = mt.filter_rows(
             (~info_ht[mt.row_key].AS_lowqual)
             & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
             & (hl.is_defined(sites_ht[mt.row_key]))
         )
+
+        # NOTE: Annotate with adj here (required for frequency calculations)
+        logger.info("Annotating with adj...")
+        from gnomad.utils.annotations import annotate_adj
+        mt = annotate_adj(mt)
 
         logger.info("Adjusting sex ploidy...")
         mt = mt.annotate_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype)
@@ -697,7 +714,7 @@ def main(args):
         logger.info("Filtering related samples and their variants...")
         mt_filt = mt.select_rows().select_globals()
         mt_filt = mt_filt.filter_cols(~mt_filt.meta.sample_filters.related)
-        mt_filt = mt_filt.filter_rows(hl.agg.any(mt.GT.is_non_ref()))
+        mt_filt = mt_filt.filter_rows(hl.agg.any(mt_filt.GT.is_non_ref()))
         mt_filt = annotate_freq(
             mt_filt,
             sex_expr=mt_filt.meta.sex_imputation.sex_karyotype,
@@ -741,6 +758,8 @@ def main(args):
         # after VCF MT generated
         # https://github.com/broadinstitute/gnomad_methods/pull/347
         mt = mt.annotate_rows(info=mt.info.annotate(**set_female_y_metrics_to_na(mt)))
+        # NOTE: Checkpointed here to avoid long sanity checks run
+        mt = mt.checkpoint(get_checkpoint_path(*tranche_data, name="het_non_ref_dense_annot", mt=True))
 
         logger.info("Sanity checking release MT...")
         sanity_check_release_mt(
@@ -756,6 +775,11 @@ def main(args):
         # Reformat names to remove "adj" pre-export
         # e.g, renaming "AC_adj" to "AC"
         # All unlabeled frequency information is assumed to be adj
+        # NOTE: Fixed hyphens in gnomAD genomes frequency in this notebook:
+        # gs://broad-ukbb/broad.freeze_7/notebooks/rename_gnomad_pops.ipynb
+        # and checkpointed MT to this path below
+        mt = hl.read_matrix_table("gs://broad-ukbb/broad.freeze_7/temp/het_non_ref_dense_annot_no_hyphen.mt")
+        mt = mt.drop("het_non_ref", "adj")
         row_annots = list(mt.row.info)
         new_row_annots = []
         for x in row_annots:
