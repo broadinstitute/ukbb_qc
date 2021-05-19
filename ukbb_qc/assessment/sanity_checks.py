@@ -520,7 +520,7 @@ def sample_sum_sanity_checks(
             verbose,
         )
 
-        if "gnomad" in subset:
+        if "gnomad" in subset and "exomes" in subset:
             # Adjust subpops to those found in subset
             # This is checking v2 exomes subpops
             nfe_subpop_adjusted = list(
@@ -706,8 +706,8 @@ def sanity_check_release_mt(
     # The `histograms_sanity_check` code checks `_n_smaller` for all hists and
     # `_n_larger` for every hist except the DP hists
     # ^ we dropped all of these annotations in the 455k tranche
-    # logger.info("HISTOGRAM CHECKS:")
-    # histograms_sanity_check(ht, verbose=verbose)
+    logger.info("HISTOGRAM CHECKS:")
+    histograms_sanity_check(ht, verbose=verbose)
 
     logger.info("RAW AND ADJ CHECKS:")
     raw_and_adj_sanity_checks(ht, subsets, verbose)
