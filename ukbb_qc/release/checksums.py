@@ -40,14 +40,14 @@ def checksums(
         # Write size and md5 for each shard
         logger.info("Writing file size and md5 for VCF shards...")
         for shard in shards:
-            vcf_url = f"{release_vcf_path(*tranche_data, contig=None)}/{shard}"
+            vcf_url = shard
             size, _, md5 = get_file_stats(vcf_url)
             o.write(f"{shard}\t{size}\t{md5}\n")
 
         if indices:
             logger.info("Writing file size and md5 for tabix indices...")
             for index in indices:
-                index_url = f"{release_vcf_path(*tranche_data, contig=None)}/{index}"
+                index_url = index
                 size, _, md5 = get_file_stats(index_url)
                 o.write(f"{index}\t{size}\t{md5}\n")
 
