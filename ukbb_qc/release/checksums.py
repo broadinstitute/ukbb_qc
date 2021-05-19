@@ -5,7 +5,7 @@ import subprocess
 from typing import List, Tuple
 
 from gnomad.utils.file_utils import get_file_stats
-from ukbb_qc.resources.basics import release_vcf_path
+from ukbb_qc.resources.basics import get_release_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 
 
@@ -35,7 +35,7 @@ def checksums(
     """
     with open(out_file, "w") as o:
         # Write header
-        o.write("shard\tsize\tmd5\n")
+        o.write("file\tsize\tmd5\n")
 
         # Write size and md5 for each shard
         logger.info("Writing file size and md5 for VCF shards...")
@@ -60,23 +60,12 @@ def main(args):
     tranche_data = (data_source, freeze)
     out_file = args.out
 
-    # Get names of vcf shards
-    path = release_vcf_path(*tranche_data, contig=None)
-    files = (
-        subprocess.check_output(["gsutil", "ls", path])
-        .decode("utf8")
-        .strip()
-        .split("\n")
-    )
-    shards = [os.path.split(f)[-1] for f in files if f.endswith(".bgz")]
-
-    # Get names of tabix indices if args.indices is set
-    indices = None
-    if args.indices:
-        indices = [os.path.split(f)[-1] for f in files if f.endswith(".tbi")]
+    # Get names of output files
+    vcf = f"{get_release_path(*tranche_data)}/vcf/sharded_vcf/broad.freeze_7.patch.bgz"
+    index = f"{get_release_path(*tranche_data)}/vcf/sharded_vcf/broad.freeze_7.patch.bgz.tbi"
 
     logger.info("Generating checksums...")
-    checksums(tranche_data, out_file, shards, indices)
+    checksums(tranche_data, out_file, [vcf], [index])
 
 
 if __name__ == "__main__":
