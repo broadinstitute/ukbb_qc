@@ -631,6 +631,8 @@ def main(args):
                 hl.read_table(last_END_positions_ht_path(freeze)),
                 semi_join_rows=True,
             )
+            # Remove rows with only ref block information
+            mt = mt.filter_rows(hl.len(mt.alleles) > 1)
             mt.write(
                 get_checkpoint_path(*tranche_data, name="het_non_ref_dense", mt=True),
                 overwrite=args.overwrite,
@@ -650,8 +652,6 @@ def main(args):
             mt = mt.annotate_entries(het_non_ref=mt.LGT.is_het_non_ref())
 
             logger.info("Splitting densified MT...")
-            # Adding this here because I forgot to filter on allele length before checkpointing
-            mt = mt.filter_rows(hl.len(mt.alleles) > 1)
             mt = hl.experimental.sparse_split_multi(mt)
 
             # Add het_non_ref to ENTRIES (otherwise annotation gets accidentally dropped here)
