@@ -55,7 +55,7 @@ logger.setLevel(logging.INFO)
 
 
 # Add END to entries
-#ENTRIES.append("END")
+# ENTRIES.append("END")
 
 # Add capture region and sibling singletons to vcf_info_dict
 VCF_INFO_DICT = INFO_DICT
@@ -639,10 +639,11 @@ def main(args):
         # Need to add this prior to splitting MT to make sure these genotypes
         # are not adjusted by the homalt hotfix downstream
         mt = mt.annotate_entries(het_non_ref=mt.LGT.is_het_non_ref())
-        
 
         logger.info("Reading in densified MT and sites HT...")
-        mt = hl.read_matrix_table(get_checkpoint_path(*tranche_data, name="het_non_ref_dense", mt=True))
+        mt = hl.read_matrix_table(
+            get_checkpoint_path(*tranche_data, name="het_non_ref_dense", mt=True)
+        )
         sites_ht = hl.read_matrix_table(args.het_non_ref).rows()
         mt = mt.annotate_entries(het_non_ref=mt.LGT.is_het_non_ref())
 
@@ -668,6 +669,7 @@ def main(args):
         # NOTE: Annotate with adj here (required for frequency calculations)
         logger.info("Annotating with adj...")
         from gnomad.utils.annotations import annotate_adj
+
         mt = annotate_adj(mt)
 
         logger.info("Adjusting sex ploidy...")
@@ -713,6 +715,7 @@ def main(args):
 
         logger.info("Filtering related samples and their variants...")
         mt_filt = mt.select_rows().select_globals()
+        mt_filt = mt_filt.filter_cols(mt_filt.meta.sample_filters.high_quality)
         mt_filt = mt_filt.filter_cols(~mt_filt.meta.sample_filters.related)
         mt_filt = mt_filt.filter_rows(hl.agg.any(mt_filt.GT.is_non_ref()))
         mt_filt = annotate_freq(
@@ -759,7 +762,9 @@ def main(args):
         # https://github.com/broadinstitute/gnomad_methods/pull/347
         mt = mt.annotate_rows(info=mt.info.annotate(**set_female_y_metrics_to_na(mt)))
         # NOTE: Checkpointed here to avoid long sanity checks run
-        mt = mt.checkpoint(get_checkpoint_path(*tranche_data, name="het_non_ref_dense_annot", mt=True))
+        mt = mt.checkpoint(
+            get_checkpoint_path(*tranche_data, name="het_non_ref_dense_annot", mt=True)
+        )
 
         logger.info("Sanity checking release MT...")
         sanity_check_release_mt(
@@ -778,7 +783,9 @@ def main(args):
         # NOTE: Fixed hyphens in gnomAD genomes frequency in this notebook:
         # gs://broad-ukbb/broad.freeze_7/notebooks/rename_gnomad_pops.ipynb
         # and checkpointed MT to this path below
-        mt = hl.read_matrix_table("gs://broad-ukbb/broad.freeze_7/temp/het_non_ref_dense_annot_no_hyphen.mt")
+        mt = hl.read_matrix_table(
+            "gs://broad-ukbb/broad.freeze_7/temp/het_non_ref_dense_annot_no_hyphen.mt"
+        )
         mt = mt.drop("het_non_ref", "adj")
         row_annots = list(mt.row.info)
         new_row_annots = []
