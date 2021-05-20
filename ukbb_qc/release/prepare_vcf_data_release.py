@@ -598,233 +598,251 @@ def main(args):
         ) as p:
             header_dict = pickle.load(p)
 
-        logger.info("Getting raw MT and dropping all unnecessary entries...")
-        # NOTE: reading in raw MatrixTable to be able to return all samples/variants
-        mt = get_ukbb_data(
-            data_source,
-            freeze,
-            key_by_locus_and_alleles=args.key_by_locus_and_alleles,
-            split=False,
-            raw=True,
-            repartition=args.repartition,
-            n_partitions=args.raw_partitions,
-            meta_root="meta",
-        ).select_entries(*SPARSE_ENTRIES)
+        if args.densify:
+            logger.info("Getting raw MT and dropping all unnecessary entries...")
+            # NOTE: reading in raw MatrixTable to be able to return all samples/variants
+            mt = get_ukbb_data(
+                data_source,
+                freeze,
+                key_by_locus_and_alleles=args.key_by_locus_and_alleles,
+                split=False,
+                raw=True,
+                repartition=args.repartition,
+                n_partitions=args.raw_partitions,
+                meta_root="meta",
+            ).select_entries(*SPARSE_ENTRIES)
 
-        logger.info("Loading het non ref sites to fix...")
-        sites_ht = hl.read_matrix_table(args.het_non_ref).rows()
+            logger.info("Loading het non ref sites to fix...")
+            sites_ht = hl.read_matrix_table(args.het_non_ref).rows()
 
-        logger.info("Densifying to het non ref sites only...")
-        from gnomad.utils.sparse_mt import densify_sites
-        from ukbb_qc.resources.basics import (
-            last_END_positions_ht_path,
-            get_release_path,
-        )
-
-        # NOTE: Set semi_join_rows to True here because setting it to False causes jobs to crash
-        # NOTE: This densify required a highmem-32 master node
-        # https://github.com/broadinstitute/gnomad_methods/blob/master/gnomad/utils/sparse_mt.py#L88
-        mt = densify_sites(
-            mt,
-            sites_ht,
-            hl.read_table(last_END_positions_ht_path(freeze)),
-            semi_join_rows=True,
-        )
-        mt = mt.checkpoint(
-            get_checkpoint_path(*tranche_data, name="het_non_ref_dense", mt=True)
-        )
-
-        logger.info("Adding het_non_ref annotation...")
-        # Adding a Boolean for whether a sample had a heterozygous non-reference genotype
-        # Need to add this prior to splitting MT to make sure these genotypes
-        # are not adjusted by the homalt hotfix downstream
-        mt = mt.annotate_entries(het_non_ref=mt.LGT.is_het_non_ref())
-
-        logger.info("Reading in densified MT and sites HT...")
-        mt = hl.read_matrix_table(
-            get_checkpoint_path(*tranche_data, name="het_non_ref_dense", mt=True)
-        )
-        sites_ht = hl.read_matrix_table(args.het_non_ref).rows()
-        mt = mt.annotate_entries(het_non_ref=mt.LGT.is_het_non_ref())
-
-        logger.info("Splitting densified MT...")
-        # Adding this here because I forgot to filter on allele length before checkpointing
-        mt = mt.filter_rows(hl.len(mt.alleles) > 1)
-        mt = hl.experimental.sparse_split_multi(mt)
-
-        # Add het_non_ref to ENTRIES (otherwise annotation gets accidentally dropped here)
-        ENTRIES.append("het_non_ref")
-        mt = mt.select_entries(*ENTRIES)
-
-        # NOTE: densify_sites operates using only the locus (not the alleles)
-        logger.info("Filtering only to the impacted variants (filtering on alleles)...")
-        logger.info("Removing low QUAL variants and star alleles...")
-        info_ht = hl.read_table(info_ht_path(data_source, freeze))
-        mt = mt.filter_rows(
-            (~info_ht[mt.row_key].AS_lowqual)
-            & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
-            & (hl.is_defined(sites_ht[mt.row_key]))
-        )
-
-        # NOTE: Annotate with adj here (required for frequency calculations)
-        logger.info("Annotating with adj...")
-        from gnomad.utils.annotations import annotate_adj
-
-        mt = annotate_adj(mt)
-
-        logger.info("Adjusting sex ploidy...")
-        mt = mt.annotate_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype)
-        mt = adjust_sex_ploidy(mt, mt.sex_karyotype, male_str="XY", female_str="XX")
-
-        # Temporary hotfix for depletion of homozygous alternate genotypes
-        logger.info(
-            "Setting het genotypes at sites with >1% AF and > 0.9 AB to homalt..."
-        )
-        # NOTE: Reading release HT here because frequency annotation was updated
-        # Only `join_freq` and release HT have updated frequency annotation
-        freq_ht = (
-            hl.read_table(release_ht_path(*tranche_data))
-            .select_globals()
-            .select("freq")
-        )
-        freq_ht = freq_ht.select(AF=freq_ht.freq[0].AF)
-        mt = mt.annotate_entries(
-            GT=hl.if_else(
-                mt.GT.is_het()
-                # Skip adjusting genotypes if sample originally had a het nonref genotype
-                & ~mt.het_non_ref
-                & (freq_ht[mt.row_key].AF > 0.01)
-                & (mt.AD[1] / mt.DP > 0.9),
-                hl.call(1, 1),
-                mt.GT,
+            logger.info("Densifying to het non ref sites only...")
+            from gnomad.utils.sparse_mt import densify_sites
+            from ukbb_qc.resources.basics import (
+                last_END_positions_ht_path,
+                get_release_path,
             )
-        )
 
-        logger.info("Annotating release MT with HT annotations...")
-        logger.info("Dropping frequency globals...")
-        ht = hl.read_table(release_vcf_ht_path(*tranche_data)).drop("freq_meta")
-        mt = mt.annotate_rows(**ht[mt.row_key])
-        mt = mt.annotate_globals(**ht.index_globals())
+            # NOTE: Set semi_join_rows to True here because setting it to False causes jobs to crash
+            # NOTE: This densify required a highmem-32 master node
+            # https://github.com/broadinstitute/gnomad_methods/blob/master/gnomad/utils/sparse_mt.py#L88
+            mt = densify_sites(
+                mt,
+                sites_ht,
+                hl.read_table(last_END_positions_ht_path(freeze)),
+                semi_join_rows=True,
+            )
+            mt.write(
+                get_checkpoint_path(*tranche_data, name="het_non_ref_dense", mt=True),
+                overwrite=args.overwrite,
+            )
 
-        logger.info("Re-calculating frequency...")
-        from gnomad.utils.annotations import (
-            annotate_freq,
-            faf_expr,
-            pop_max_expr,
-        )
+        if args.recalculate_frequency:
+            logger.info("Reading in densified MT and sites HT...")
+            mt = hl.read_matrix_table(
+                get_checkpoint_path(*tranche_data, name="het_non_ref_dense", mt=True)
+            )
+            sites_ht = hl.read_matrix_table(args.het_non_ref).rows()
 
-        logger.info("Filtering related samples and their variants...")
-        mt_filt = mt.select_rows().select_globals()
-        mt_filt = mt_filt.filter_cols(mt_filt.meta.sample_filters.high_quality)
-        mt_filt = mt_filt.filter_cols(~mt_filt.meta.sample_filters.related)
-        mt_filt = mt_filt.filter_rows(hl.agg.any(mt_filt.GT.is_non_ref()))
-        mt_filt = annotate_freq(
-            mt_filt,
-            sex_expr=mt_filt.meta.sex_imputation.sex_karyotype,
-            pop_expr=mt_filt.meta.pan_ancestry_meta.pop,
-            additional_strata_expr=None,
-        )
-        faf, faf_meta = faf_expr(mt_filt.freq, mt_filt.freq_meta, mt_filt.locus)
-        popmax = pop_max_expr(mt_filt.freq, mt_filt.freq_meta)
-        logger.info("Calculating faf and popmax...")
-        freq_ht = mt_filt.annotate_rows(faf=faf, popmax=popmax).rows()
-        # TODO: Will need to update release HT frequencies at these het nonref sites
-        freq_ht = freq_ht.checkpoint(
-            get_checkpoint_path(*tranche_data, name="ukb_freq_het_non_ref")
-        )
+            logger.info("Adding het_non_ref annotation...")
+            # Adding a Boolean for whether a sample had a heterozygous non-reference genotype
+            # Need to add this prior to splitting MT to make sure these genotypes
+            # are not adjusted by the homalt hotfix downstream
+            mt = mt.annotate_entries(het_non_ref=mt.LGT.is_het_non_ref())
 
-        logger.info("Annotating new frequency struct and globals onto MT...")
-        mt = mt.annotate_rows(**freq_ht[mt.row_key])
-        mt = mt.annotate_globals(**freq_ht.index_globals())
+            logger.info("Splitting densified MT...")
+            # Adding this here because I forgot to filter on allele length before checkpointing
+            mt = mt.filter_rows(hl.len(mt.alleles) > 1)
+            mt = hl.experimental.sparse_split_multi(mt)
 
-        logger.info(
-            "Unfurling new UKBB frequency annotations and adding to INFO field..."
-        )
-        mt = mt.annotate_rows(
-            info=mt.info.annotate(
-                **unfurl_nested_annotations(
-                    mt, gnomad=False, genome=False, pops=UKBB_POPS,
+            # Add het_non_ref to ENTRIES (otherwise annotation gets accidentally dropped here)
+            ENTRIES.append("het_non_ref")
+            mt = mt.select_entries(*ENTRIES)
+
+            # NOTE: densify_sites operates using only the locus (not the alleles)
+            logger.info(
+                "Filtering only to the impacted variants (filtering on alleles)..."
+            )
+            logger.info("Removing low QUAL variants and star alleles...")
+            info_ht = hl.read_table(info_ht_path(data_source, freeze))
+            mt = mt.filter_rows(
+                (~info_ht[mt.row_key].AS_lowqual)
+                & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
+                & (hl.is_defined(sites_ht[mt.row_key]))
+            )
+
+            # NOTE: Annotate with adj here (required for frequency calculations)
+            logger.info("Annotating with adj...")
+            from gnomad.utils.annotations import annotate_adj
+
+            mt = annotate_adj(mt)
+
+            logger.info("Adjusting sex ploidy...")
+            mt = mt.annotate_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype)
+            mt = adjust_sex_ploidy(mt, mt.sex_karyotype, male_str="XY", female_str="XX")
+
+            # Temporary hotfix for depletion of homozygous alternate genotypes
+            logger.info(
+                "Setting het genotypes at sites with >1% AF and > 0.9 AB to homalt..."
+            )
+            # NOTE: Reading release HT here because frequency annotation was updated
+            # Only `join_freq` and release HT have updated frequency annotation
+            freq_ht = (
+                hl.read_table(release_ht_path(*tranche_data))
+                .select_globals()
+                .select("freq")
+            )
+            freq_ht = freq_ht.select(AF=freq_ht.freq[0].AF)
+            mt = mt.annotate_entries(
+                GT=hl.if_else(
+                    mt.GT.is_het()
+                    # Skip adjusting genotypes if sample originally had a het nonref genotype
+                    & ~mt.het_non_ref
+                    & (freq_ht[mt.row_key].AF > 0.01)
+                    & (mt.AD[1] / mt.DP > 0.9),
+                    hl.call(1, 1),
+                    mt.GT,
                 )
             )
-        )
 
-        logger.info("Dropping column annotations...")
-        mt = mt.select_cols()
+            logger.info("Annotating release MT with HT annotations...")
+            logger.info("Dropping frequency globals...")
+            ht = hl.read_table(release_vcf_ht_path(*tranche_data)).drop("freq_meta")
+            mt = mt.annotate_rows(**ht[mt.row_key])
+            mt = mt.annotate_globals(**ht.index_globals())
 
-        # NOTE: `qual` annotation is actually `QUALapprox` annotation in 455k tranche
-        # Need to convert this field to a float because `export_vcf` won't export this field
-        # if the type isn't float64
-        mt = mt.annotate_rows(qual=hl.float(mt.qual))
-
-        # NOTE: Fixing chrY metrics here for 455k tranche
-        # because fix to `set_female_y_metrics_to_na` was pushed
-        # after VCF MT generated
-        # https://github.com/broadinstitute/gnomad_methods/pull/347
-        mt = mt.annotate_rows(info=mt.info.annotate(**set_female_y_metrics_to_na(mt)))
-        # NOTE: Checkpointed here to avoid long sanity checks run
-        mt = mt.checkpoint(
-            get_checkpoint_path(*tranche_data, name="het_non_ref_dense_annot", mt=True)
-        )
-
-        logger.info("Sanity checking release MT...")
-        sanity_check_release_mt(
-            mt,
-            SUBSET_LIST,
-            ukbb_pops=UKBB_POPS,
-            gnomad_exomes_pops=GNOMAD_EXOMES_POPS,
-            gnomad_genomes_pops=GNOMAD_GENOMES_POPS,
-            missingness_threshold=0.5,
-            verbose=args.verbose,
-        )
-
-        # Reformat names to remove "adj" pre-export
-        # e.g, renaming "AC_adj" to "AC"
-        # All unlabeled frequency information is assumed to be adj
-        # NOTE: Fixed hyphens in gnomAD genomes frequency in this notebook:
-        # gs://broad-ukbb/broad.freeze_7/notebooks/rename_gnomad_pops.ipynb
-        # and checkpointed MT to this path below
-        mt = hl.read_matrix_table(
-            "gs://broad-ukbb/broad.freeze_7/temp/het_non_ref_dense_annot_no_hyphen.mt"
-        )
-        mt = mt.drop("het_non_ref", "adj")
-        row_annots = list(mt.row.info)
-        new_row_annots = []
-        for x in row_annots:
-            x = x.replace("_adj", "")
-            new_row_annots.append(x)
-
-        info_annot_mapping = dict(
-            zip(new_row_annots, [mt.info[f"{x}"] for x in row_annots])
-        )
-
-        # Confirm all VCF fields and descriptions are present
-        if not vcf_field_check(mt, header_dict, new_row_annots, list(mt.entry)):
-            logger.error("Did not pass VCF field check.")
-            return
-
-        mt = mt.transmute_rows(info=hl.struct(**info_annot_mapping))
-
-        # Rearrange INFO field in desired ordering
-        mt = mt.annotate_rows(
-            info=mt.info.select(
-                "AC",
-                "AN",
-                "AF",
-                "rf_tp_probability",
-                *mt.info.drop("AC", "AN", "AF", "rf_tp_probability"),
+            logger.info("Re-calculating frequency...")
+            from gnomad.utils.annotations import (
+                annotate_freq,
+                faf_expr,
+                pop_max_expr,
             )
-        )
 
-        logger.info("Exporting VCF...")
-        hl.export_vcf(
-            dataset=mt,
-            output=f"{get_release_path(*tranche_data)}/vcf/sharded_vcf/broad.freeze_7.patch.bgz",
-            parallel=None,
-            metadata=header_dict,
-            # NOTE: I also moved this file out of temp when we were deleting temporary files
-            append_to_header="gs://broad-ukbb/broad.freeze_7/release/vcf/append_to_vcf_header.tsv",
-            tabix=True,
-        )
+            logger.info("Filtering related samples and their variants...")
+            mt_filt = mt.select_rows().select_globals()
+            mt_filt = mt_filt.filter_cols(mt_filt.meta.sample_filters.high_quality)
+            mt_filt = mt_filt.filter_cols(~mt_filt.meta.sample_filters.related)
+            mt_filt = mt_filt.filter_rows(hl.agg.any(mt_filt.GT.is_non_ref()))
+            mt_filt = annotate_freq(
+                mt_filt,
+                sex_expr=mt_filt.meta.sex_imputation.sex_karyotype,
+                pop_expr=mt_filt.meta.pan_ancestry_meta.pop,
+                additional_strata_expr=None,
+            )
+            faf, faf_meta = faf_expr(mt_filt.freq, mt_filt.freq_meta, mt_filt.locus)
+            popmax = pop_max_expr(mt_filt.freq, mt_filt.freq_meta)
+            logger.info("Calculating faf and popmax...")
+            freq_ht = mt_filt.annotate_rows(faf=faf, popmax=popmax).rows()
+            # TODO: Will need to update release HT frequencies at these het nonref sites
+            freq_ht = freq_ht.checkpoint(
+                get_checkpoint_path(*tranche_data, name="ukb_freq_het_non_ref"),
+                overwrite=args.overwrite,
+            )
+
+            logger.info("Annotating new frequency struct and globals onto MT...")
+            mt = mt.annotate_rows(**freq_ht[mt.row_key])
+            mt = mt.annotate_globals(**freq_ht.index_globals())
+
+            logger.info(
+                "Unfurling new UKBB frequency annotations and adding to INFO field..."
+            )
+            mt = mt.annotate_rows(
+                info=mt.info.annotate(
+                    **unfurl_nested_annotations(
+                        mt, gnomad=False, genome=False, pops=UKBB_POPS,
+                    )
+                )
+            )
+
+            logger.info("Dropping column annotations...")
+            mt = mt.select_cols()
+
+            # NOTE: `qual` annotation is actually `QUALapprox` annotation in 455k tranche
+            # Need to convert this field to a float because `export_vcf` won't export this field
+            # if the type isn't float64
+            mt = mt.annotate_rows(qual=hl.float(mt.qual))
+
+            # NOTE: Fixing chrY metrics here for 455k tranche
+            # because fix to `set_female_y_metrics_to_na` was pushed
+            # after VCF MT generated
+            # https://github.com/broadinstitute/gnomad_methods/pull/347
+            mt = mt.annotate_rows(
+                info=mt.info.annotate(**set_female_y_metrics_to_na(mt))
+            )
+            # NOTE: Checkpointed here to avoid long sanity checks run
+            mt.write(
+                get_checkpoint_path(
+                    *tranche_data, name="het_non_ref_dense_annot", mt=True
+                ),
+                overwrite=args.overwrite,
+            )
+
+        if args.sanity_check:
+            logger.info("Sanity checking release MT...")
+            # NOTE: Fixed hyphens in gnomAD genomes frequency in this notebook:
+            # gs://broad-ukbb/broad.freeze_7/notebooks/rename_gnomad_pops.ipynb
+            # and checkpointed MT to this path below
+            # This was necessary because I added annotations using the VCF HT,
+            # which was generated prior to fixing the hyphens and gnomad genomes unfurling
+            mt = hl.read_matrix_table(
+                "gs://broad-ukbb/broad.freeze_7/temp/het_non_ref_dense_annot_no_hyphen.mt"
+            )
+            sanity_check_release_mt(
+                mt,
+                SUBSET_LIST,
+                ukbb_pops=UKBB_POPS,
+                gnomad_exomes_pops=GNOMAD_EXOMES_POPS,
+                gnomad_genomes_pops=GNOMAD_GENOMES_POPS,
+                missingness_threshold=0.5,
+                verbose=args.verbose,
+            )
+
+        if args.export_vcf:
+            mt = hl.read_matrix_table(
+                "gs://broad-ukbb/broad.freeze_7/temp/het_non_ref_dense_annot_no_hyphen.mt"
+            )
+
+            # Reformat names to remove "adj" pre-export
+            # e.g, renaming "AC_adj" to "AC"
+            # All unlabeled frequency information is assumed to be adj
+            mt = mt.drop("het_non_ref", "adj")
+            row_annots = list(mt.row.info)
+            new_row_annots = []
+            for x in row_annots:
+                x = x.replace("_adj", "")
+                new_row_annots.append(x)
+
+            info_annot_mapping = dict(
+                zip(new_row_annots, [mt.info[f"{x}"] for x in row_annots])
+            )
+
+            # Confirm all VCF fields and descriptions are present
+            if not vcf_field_check(mt, header_dict, new_row_annots, list(mt.entry)):
+                logger.error("Did not pass VCF field check.")
+                return
+
+            mt = mt.transmute_rows(info=hl.struct(**info_annot_mapping))
+
+            # Rearrange INFO field in desired ordering
+            mt = mt.annotate_rows(
+                info=mt.info.select(
+                    "AC",
+                    "AN",
+                    "AF",
+                    "rf_tp_probability",
+                    *mt.info.drop("AC", "AN", "AF", "rf_tp_probability"),
+                )
+            )
+
+            logger.info("Exporting VCF...")
+            hl.export_vcf(
+                dataset=mt,
+                output=f"{get_release_path(*tranche_data)}/vcf/sharded_vcf/broad.freeze_7.patch.vcf.bgz",
+                parallel=None,
+                metadata=header_dict,
+                # NOTE: I also moved this file out of temp when we were deleting temporary files
+                append_to_header="gs://broad-ukbb/broad.freeze_7/release/vcf/append_to_vcf_header.tsv",
+                tabix=True,
+            )
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -856,6 +874,22 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--het_non_ref", help="Path to MT with het non ref sites to be fixed",
+    )
+    parser.add_argument(
+        "--densify",
+        help="Whether to densify to het non ref sites",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--recalculate_frequency",
+        help="Whether to recalculate frequency at het non ref sites",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--sanity_check", help="Whether to run sanity checks", action="store_true",
+    )
+    parser.add_argument(
+        "--export_vcf", help="Whether to export VCF", action="store_true",
     )
     parser.add_argument(
         "--verbose",
