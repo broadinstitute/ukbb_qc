@@ -834,6 +834,7 @@ def main(args):
             )
 
             logger.info("Exporting VCF...")
+            from ukbb_qc.resources.basics import get_release_path
             hl.export_vcf(
                 dataset=mt,
                 output=f"{get_release_path(*tranche_data)}/vcf/sharded_vcf/broad.freeze_7.patch.vcf.bgz",
