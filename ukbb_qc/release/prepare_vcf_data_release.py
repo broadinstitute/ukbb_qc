@@ -622,14 +622,14 @@ def main(args):
                 get_release_path,
             )
 
-            # NOTE: Set semi_join_rows to True here because setting it to False causes jobs to crash
+            # NOTE: Set semi_join_rows to False here because sites HT is small
             # NOTE: This densify required a highmem-32 master node
             # https://github.com/broadinstitute/gnomad_methods/blob/master/gnomad/utils/sparse_mt.py#L88
             mt = densify_sites(
                 mt,
                 sites_ht,
                 hl.read_table(last_END_positions_ht_path(freeze)),
-                semi_join_rows=True,
+                semi_join_rows=False,
             )
             # Remove rows with only ref block information
             mt = mt.filter_rows(hl.len(mt.alleles) > 1)
