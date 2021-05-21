@@ -61,8 +61,8 @@ def main(args):
     out_file = args.out
 
     # Get names of output files
-    vcf = f"{get_release_path(*tranche_data)}/vcf/sharded_vcf/broad.freeze_7.patch.bgz"
-    index = f"{get_release_path(*tranche_data)}/vcf/sharded_vcf/broad.freeze_7.patch.bgz.tbi"
+    vcf = f"{get_release_path(*tranche_data)}/vcf/sharded_vcf/broad.freeze_7.patch.vcf.bgz"
+    index = f"{get_release_path(*tranche_data)}/vcf/sharded_vcf/broad.freeze_7.patch.vcf.bgz.tbi"
 
     logger.info("Generating checksums...")
     checksums(tranche_data, out_file, [vcf], [index])
