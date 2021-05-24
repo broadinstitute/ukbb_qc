@@ -48,20 +48,17 @@ def main(args):
         j = b.new_job(name=sample)
         j.image("gcr.io/broad-mpg-gnomad/tgg-methods-vm")
         j.storage("50Gi")
-        # NOTE: the number of cpus specified with `local` must match this number
         j.cpu(1)
         j.command(
             f"""
-            import hail as hl \
-
-            hl.init(local='local[1]') \ 
-            ht = hl.read_table({input}) \
-            ht = ht.filter(ht.s == {sample}) \
-            ht = ht.naive_coalesce(1) \
-            ht.export({j.ofile}) \
+            import hail as hl 
+            hl.init() 
+            ht = hl.read_table({input}) 
+            ht = ht.filter(ht.s == '{sample}') 
+            ht = ht.naive_coalesce(1) 
+            ht.export({j.ofile}) 
             """
         )
-
         b.write_output(j.ofile, f"{readviz_per_sample_tsv_path()}/{sample}.tsv")
 
     b.run(wait=False)
