@@ -34,9 +34,6 @@ def get_sample_ids(ids_file: str, header: bool = False) -> List[str]:
 
 
 def main(args):
-    data_source = "broad"
-    freeze = 7
-    tranche_data = (data_source, freeze)
 
     backend = hb.ServiceBackend("kchao-trial", "gs://gnomad-kc/temp/")
     b = hb.Batch(backend=backend)
@@ -65,9 +62,7 @@ def main(args):
             """
         )
 
-        b.write_output(
-            j.ofile, f"{readviz_per_sample_tsv_path(*tranche_data)}/{sample}.tsv"
-        )
+        b.write_output(j.ofile, f"{readviz_per_sample_tsv_path()}/{sample}.tsv")
 
     b.run(wait=False)
 
