@@ -826,20 +826,24 @@ def non_gnomad_var_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> st
     return "gs://gnomad-readviz/ukbb/not_in_gnomad_variants/ukbb_unique_variants.ht"
 
 
-def readviz_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+def readviz_ht_path() -> str:
     """
     Returns path to HT containing variants unique to the UKBB (not present in gnomAD v2.1.1 or v3.1).
 
-    :param str data_source: One of 'regeneron' or 'broad'
-    :param int freeze: Data freeze. Must be 7.
     :return: Path to UKBB unique variants HT
     :rtype: str   
     """
-    if freeze != 7:
-        raise DataException(
-            "UKBB unique variants (not in gnomAD) HT path only exists for freeze 7/450K!"
-        )
     return "gs://gnomad-readviz/ukbb/not_in_gnomad_variants/samples_for_readviz.ht"
+
+
+def readviz_per_sample_tsv_path() -> str:
+    """
+    Returns path to bucket containing TSVs per sample.
+
+    :return: Path to per sample TSV bucket.
+    :rtype: str   
+    """
+    return "gs://gnomad-readviz/ukbb/per_sample_tsv"
 
 
 # logging path
