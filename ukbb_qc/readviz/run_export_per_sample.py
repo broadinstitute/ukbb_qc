@@ -54,7 +54,7 @@ def main(args):
             f"""
             import hail as hl \
 
-            hl.init(local=local[1]) \ 
+            hl.init(local='local[1]') \ 
             ht = hl.read_table({input}) \
             ht = ht.filter(ht.s == {sample}) \
             ht = ht.naive_coalesce(1) \
