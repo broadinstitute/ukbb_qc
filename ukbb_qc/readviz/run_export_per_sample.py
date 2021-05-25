@@ -51,12 +51,14 @@ def main(args):
         j.cpu(1)
         j.command(
             f"""
+            python3 << EOF
             import hail as hl 
             hl.init() 
             ht = hl.read_table({input}) 
             ht = ht.filter(ht.s == '{sample}') 
             ht = ht.naive_coalesce(1) 
             ht.export({j.ofile}) 
+            EOF
             """
         )
         b.write_output(j.ofile, f"{readviz_per_sample_tsv_path()}/{sample}.tsv")
