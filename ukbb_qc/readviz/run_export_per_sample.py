@@ -37,15 +37,16 @@ def get_sample_ids(ids_file: str, header: bool = False) -> List[str]:
     return sample_ids
 
 
-def export_tsv(ht: hl.Table, sample_id: str, tsv_path: str) -> None:
+def export_tsv(ht_path: str, sample_id: str, tsv_path: str) -> None:
     """
     Read in hail Table, filter to specified sample ID, and export TSV.
 
-    :param hl.Table ht: Input hail Table.
+    :param str ht_path: Path to input hail Table.
     :param str sample_id: Sample for which to export a TSV.
     :param str tsv_path: Path to output TSV.
     :return: None
     """
+    ht = hl.read_table(ht_path)
     ht = ht.filter(ht.S == sample_id)
     ht = ht.naive_coalesce(1)
     ht.export(tsv_path)
@@ -65,7 +66,7 @@ def main(args):
         j = b.new_python_job(name=sample)
         j.call(
             export_tsv,
-            hl.read_table(readviz_ht_exploded_path()),
+            readviz_ht_exploded_path(),
             sample,
             f"{readviz_per_sample_tsv_path()}/{sample}.tsv",
         )
