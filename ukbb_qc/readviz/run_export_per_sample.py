@@ -56,7 +56,10 @@ def main(args):
 
     backend = hb.ServiceBackend("gnomad-production", "gs://gnomad-kc/temp/")
     b = hb.Batch(
-        backend=backend, default_cpu=1, default_python_image="hailgenetics/hail:0.2.67"
+        backend=backend,
+        default_cpu=1,
+        default_python_image="hailgenetics/hail:0.2.67",
+        project="broad-mpg-gnomad",
     )
 
     logger.info("Extracting sample IDs...")
