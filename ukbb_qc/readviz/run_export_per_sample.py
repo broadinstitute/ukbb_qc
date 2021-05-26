@@ -43,7 +43,7 @@ def export_tsv(ht: hl.Table, sample_id: str, tsv_path: str) -> None:
     :param str tsv_path: Path to output TSV.
     :return: None
     """
-    ht = ht.filter(ht.s == sample_id)
+    ht = ht.filter(ht.S == sample_id)
     ht = ht.naive_coalesce(1)
     ht.export(tsv_path)
 
