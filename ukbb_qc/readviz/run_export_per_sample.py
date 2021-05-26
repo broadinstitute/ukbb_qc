@@ -7,7 +7,10 @@ import hail as hl
 
 from gnomad.utils.slack import slack_notifications
 
-from ukbb_qc.resources.basics import readviz_ht_path, readviz_per_sample_tsv_path
+from ukbb_qc.resources.basics import (
+    readviz_ht_exploded_path,
+    readviz_per_sample_tsv_path,
+)
 from ukbb_qc.slack_creds import slack_token
 
 
@@ -57,34 +60,16 @@ def main(args):
     sample_ids = get_sample_ids(args.ids_file, args.header)
 
     logger.info("Preparing to start batch job...")
-    # input = b.read_input(readviz_ht_path())
-
     for sample in sample_ids:
-        # j = b.new_job(name=sample)
-        # j.image("gcr.io/broad-mpg-gnomad/tgg-methods-vm")
+        logger.info("Working on %s", sample)
         j = b.new_python_job(name=sample)
-        # Python jobs do not have the following parameters
-        # j.storage("50Gi")
-        # j.cpu(1)
-        # j.command(
-        #    f"""
-        #    import hail as hl
-        #    hl.init()
-        #    ht = hl.read_table({input})
-        #    ht = ht.filter(ht.s == '{sample}')
-        #    ht = ht.naive_coalesce(1)
-        #    ht.export({j.ofile})
-        #    """
-        # )
         j.call(
             export_tsv(
-                hl.read_table(readviz_ht_path()),
+                hl.read_table(readviz_ht_exploded_path()),
                 sample,
                 f"{readviz_per_sample_tsv_path()}/{sample}.tsv",
             )
         )
-
-        # b.write_output(j.ofile, f"{readviz_per_sample_tsv_path()}/{sample}.tsv")
 
     b.run(wait=False)
 
