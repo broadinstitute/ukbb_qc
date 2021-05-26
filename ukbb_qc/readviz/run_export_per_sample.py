@@ -58,7 +58,7 @@ def main(args):
     sample_ids = get_sample_ids(args.ids_file, args.header)
 
     logger.info("Preparing to start batch job...")
-    input = b.read_input(readviz_ht_path())
+    # input = b.read_input(readviz_ht_path())
 
     for sample in sample_ids:
         # j = b.new_job(name=sample)
@@ -78,7 +78,11 @@ def main(args):
         #    """
         # )
         j.call(
-            export_tsv(input, sample, f"{readviz_per_sample_tsv_path()}/{sample}.tsv")
+            export_tsv(
+                hl.read_table(readviz_ht_path()),
+                sample,
+                f"{readviz_per_sample_tsv_path()}/{sample}.tsv",
+            )
         )
 
         # b.write_output(j.ofile, f"{readviz_per_sample_tsv_path()}/{sample}.tsv")
