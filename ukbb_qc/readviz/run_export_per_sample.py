@@ -54,7 +54,7 @@ def export_tsv(ht_path: str, sample_id: str, tsv_path: str) -> None:
 
 def main(args):
 
-    backend = hb.ServiceBackend("gnomad-production", "gs://gnomad-kc/temp/")
+    backend = hb.ServiceBackend("gnomad-production", "gnomad-kc")
     b = hb.Batch(
         backend=backend,
         default_cpu=1,
