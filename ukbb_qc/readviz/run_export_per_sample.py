@@ -54,8 +54,10 @@ def export_tsv(ht_path: str, sample_id: str, tsv_path: str) -> None:
 
 def main(args):
 
-    backend = hb.ServiceBackend("kchao-trial", "gs://gnomad-kc/temp/")
-    b = hb.Batch(backend=backend, default_python_image="hailgenetics/hail:0.2.67")
+    backend = hb.ServiceBackend("gnomad-production", "gs://gnomad-kc/temp/")
+    b = hb.Batch(
+        backend=backend, default_cpu=1, default_python_image="hailgenetics/hail:0.2.67"
+    )
 
     logger.info("Extracting sample IDs...")
     sample_ids = get_sample_ids(args.ids_file, args.header)
