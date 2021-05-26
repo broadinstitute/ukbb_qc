@@ -828,17 +828,27 @@ def non_gnomad_var_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> st
 
 def readviz_ht_path() -> str:
     """
-    Returns path to HT containing variants unique to the UKBB (not present in gnomAD v2.1.1 or v3.1).
+    Return path to HT containing variants unique to the UKBB (not present in gnomAD v2.1.1 or v3.1).
 
-    :return: Path to UKBB unique variants HT
+    :return: Path to UKBB unique variants HT.
     :rtype: str   
     """
     return "gs://gnomad-readviz/ukbb/not_in_gnomad_variants/samples_for_readviz.ht"
 
 
+def readviz_ht_exploded_path() -> str:
+    """
+    Return path to HT containing variants unique to the UKBB that is exploded and keyed by sample.
+
+    :return: Path to UKBB unique variants HT keyed by sample.
+    :rtype: str   
+    """
+    return "gs://gnomad-readviz/ukbb/not_in_gnomad_variants/samples_for_readviz_exploded_keyed_by_sample.ht"
+
+
 def readviz_per_sample_tsv_path() -> str:
     """
-    Returns path to bucket containing TSVs per sample.
+    Return path to bucket containing TSVs per sample.
 
     :return: Path to per sample TSV bucket.
     :rtype: str   
