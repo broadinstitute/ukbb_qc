@@ -3,6 +3,7 @@ import logging
 from typing import List
 
 import hailtop.batch as hb
+import hail as hl
 
 from gnomad.utils.slack import slack_notifications
 
@@ -19,7 +20,7 @@ def get_sample_ids(ids_file: str, header: bool = False) -> List[str]:
     """
     Open file with all sample IDs and stores IDs in a list.
 
-    :param str ids_file: List of sample IDs with variants to extract for readviz.
+    :param str ids_file: Path to file containing sample IDs with variants to extract for readviz.
     :param bool header: Whether IDs file has a header line. Default is False.
     :return: List of sample IDs
     :rtype: List[str]
@@ -33,10 +34,25 @@ def get_sample_ids(ids_file: str, header: bool = False) -> List[str]:
     return sample_ids
 
 
+def export_tsv(ht: hl.Table, sample_id: str, tsv_path: str) -> None:
+    """
+    Read in hail Table, filter to specified sample ID, and export TSV.
+
+    :param hl.Table ht: Input hail Table.
+    :param str sample_id: Sample for which to export a TSV.
+    :param str tsv_path: Path to output TSV.
+    :return: None
+    """
+    ht = hl.read_table(ht)
+    ht = ht.filter(ht.s == sample_id)
+    ht = ht.naive_coalesce(1)
+    ht.export(tsv_path)
+
+
 def main(args):
 
     backend = hb.ServiceBackend("kchao-trial", "gs://gnomad-kc/temp/")
-    b = hb.Batch(backend=backend)
+    b = hb.Batch(backend=backend, default_python_image="hailgenetics/hail:0.2.67")
 
     logger.info("Extracting sample IDs...")
     sample_ids = get_sample_ids(args.ids_file, args.header)
@@ -45,23 +61,27 @@ def main(args):
     input = b.read_input(readviz_ht_path())
 
     for sample in sample_ids:
-        j = b.new_job(name=sample)
-        j.image("gcr.io/broad-mpg-gnomad/tgg-methods-vm")
-        j.storage("50Gi")
-        j.cpu(1)
-        j.command(
-            f"""
-            python3 << EOF
-            import hail as hl 
-            hl.init() 
-            ht = hl.read_table({input}) 
-            ht = ht.filter(ht.s == '{sample}') 
-            ht = ht.naive_coalesce(1) 
-            ht.export({j.ofile}) 
-            EOF
-            """
+        # j = b.new_job(name=sample)
+        # j.image("gcr.io/broad-mpg-gnomad/tgg-methods-vm")
+        j = b.new_python_job(name=sample)
+        # Python jobs do not have the following parameters
+        # j.storage("50Gi")
+        # j.cpu(1)
+        # j.command(
+        #    f"""
+        #    import hail as hl
+        #    hl.init()
+        #    ht = hl.read_table({input})
+        #    ht = ht.filter(ht.s == '{sample}')
+        #    ht = ht.naive_coalesce(1)
+        #    ht.export({j.ofile})
+        #    """
+        # )
+        j.call(
+            export_tsv(input, sample, f"{readviz_per_sample_tsv_path()}/{sample}.tsv")
         )
-        b.write_output(j.ofile, f"{readviz_per_sample_tsv_path()}/{sample}.tsv")
+
+        # b.write_output(j.ofile, f"{readviz_per_sample_tsv_path()}/{sample}.tsv")
 
     b.run(wait=False)
 
