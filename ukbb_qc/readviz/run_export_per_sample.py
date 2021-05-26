@@ -64,11 +64,10 @@ def main(args):
         logger.info("Working on %s", sample)
         j = b.new_python_job(name=sample)
         j.call(
-            export_tsv(
-                hl.read_table(readviz_ht_exploded_path()),
-                sample,
-                f"{readviz_per_sample_tsv_path()}/{sample}.tsv",
-            )
+            export_tsv,
+            hl.read_table(readviz_ht_exploded_path()),
+            sample,
+            f"{readviz_per_sample_tsv_path()}/{sample}.tsv",
         )
 
     b.run(wait=False)
