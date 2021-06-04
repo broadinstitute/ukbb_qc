@@ -58,7 +58,7 @@ def main(args):
     b = hb.Batch(
         backend=backend,
         default_cpu=1,
-        default_python_image="hailgenetics/hail:0.2.67",
+        default_python_image="gcr.io/broad-mpg-gnomad/tgg-methods-vm@sha256:fe12ab1dd82ff6d61f28f65310eda26f5112cc42c1d56ad3b47d82b5a6dbf62b",
         project="broad-mpg-gnomad",
     )
 
