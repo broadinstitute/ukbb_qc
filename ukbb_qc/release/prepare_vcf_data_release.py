@@ -1,7 +1,6 @@
 import argparse
 import logging
 import pickle
-import sys
 from typing import Dict, List, Optional, Union
 
 import hail as hl
@@ -9,23 +8,19 @@ import hail as hl
 from gnomad.resources.grch38.gnomad import SEXES
 from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.sample_qc.sex import adjust_sex_ploidy
-from gnomad.utils.reference_genome import get_reference_genome
+
 from gnomad.utils.slack import slack_notifications
-from gnomad.utils.vep import vep_struct_to_csq
 from gnomad.utils.vcf import (
     add_as_info_dict,
     ALLELE_TYPE_FIELDS,
     AS_FIELDS,
     ENTRIES,
     FAF_POPS,
-    FORMAT_DICT,
     GROUPS,
     HISTS,
     INFO_DICT,
-    make_hist_bin_edges_expr,
     make_hist_dict,
     make_info_dict,
-    make_vcf_filter_dict,
     REGION_FLAG_FIELDS,
     RF_FIELDS,
     SITE_FIELDS,
@@ -39,15 +34,10 @@ from ukbb_qc.assessment.sanity_checks import (
     vcf_field_check,
 )
 from ukbb_qc.resources.basics import (
-    append_to_vcf_header_path,
     get_checkpoint_path,
     get_ukbb_data,
-    logging_path,
-    release_header_path,
     release_ht_path,
-    release_mt_path,
     release_vcf_ht_path,
-    release_vcf_path,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import info_ht_path
@@ -65,7 +55,7 @@ logger.setLevel(logging.INFO)
 
 
 # Add END to entries
-ENTRIES.append("END")
+# ENTRIES.append("END")
 
 # Add capture region and sibling singletons to vcf_info_dict
 VCF_INFO_DICT = INFO_DICT
@@ -577,7 +567,7 @@ def unfurl_nested_annotations(
     # Unfurl UKBB ages
     # We previously dropped:
     # age_hist_hom_bin_edges, age_hist_het_bin_edges
-    if not gnomad:
+    """if not gnomad:
         age_hist_dict = {
             "age_hist_het_bin_freq": hl.delimit(t.age_hist_het.bin_freq, delimiter="|"),
             "age_hist_het_n_smaller": t.age_hist_het.n_smaller,
@@ -586,149 +576,29 @@ def unfurl_nested_annotations(
             "age_hist_hom_n_smaller": t.age_hist_hom.n_smaller,
             "age_hist_hom_n_larger": t.age_hist_hom.n_larger,
         }
-        expr_dict.update(age_hist_dict)
+        expr_dict.update(age_hist_dict
+    """
 
     return expr_dict
 
 
 def main(args):
 
-    hl.init(log="/vcf_release.log", default_reference="GRCh38")
+    hl.init(log="/vcf_release_patch.log", default_reference="GRCh38")
     data_source = "broad"
     freeze = args.freeze
     tranche_data = (data_source, freeze)
 
     try:
+        logger.info("Reading header dict from pickle...")
+        # NOTE: I moved this file out of the temp bucket for permanent storage
+        # We deleted the temp bucket to save on storage, and I wanted to keep this file
+        with hl.hadoop_open(
+            "gs://broad-ukbb/broad.freeze_7/release/vcf/header_dict.pickle", "rb"
+        ) as p:
+            header_dict = pickle.load(p)
 
-        if args.prepare_vcf_annotations:
-            logger.info("Starting VCF process...")
-            logger.info("Reading in release HT...")
-            ht = hl.read_table(release_ht_path(*tranche_data))
-
-            logger.info(
-                "Dropping cohort frequencies (necessary only for internal use)..."
-            )
-            # Cohort freq has 22 entries in freq and freq meta:
-            # cohort (adj), cohort (raw), cohort (pop), cohort (sex), cohort (pop and sex)
-            # Two sexes: XX, XY
-            # Six pops (pan-ancestry labels): CSA, MID, AFR, EAS, AMR, EUR
-            ht = ht.annotate(freq=ht.freq[:22])
-            ht = ht.annotate_globals(freq_meta=ht.freq_meta[:22])
-
-            logger.info("Making histogram bin edges...")
-            # NOTE: using release HT here because age histograms aren't necessarily defined
-            # in the first row of the raw MT (we may have filtered that row because it was low qual)
-            bin_edges = make_hist_bin_edges_expr(ht, prefix="")
-
-            logger.info("Getting age hist data...")
-            age_hist_data = hl.eval(ht.age_distribution)
-
-            logger.info("Making INFO dict for VCF...")
-            vcf_info_dict = populate_info_dict(
-                bin_edges=bin_edges, age_hist_data=age_hist_data,
-            )
-
-            # Add interval QC parameters to INFO dict
-            pct_samples = hl.eval(ht.rf_globals.interval_qc_cutoffs.pct_samples) * 100
-            autosome_cov = hl.eval(ht.rf_globals.interval_qc_cutoffs.autosome_cov)
-            allosome_cov = hl.eval(ht.rf_globals.interval_qc_cutoffs.xy_cov)
-            vcf_info_dict["fail_interval_qc"] = {
-                "Description": f"Variant falls within a region where less than {pct_samples}% of samples had a mean coverage of {autosome_cov}X on autosomes and {allosome_cov}X on sex chromosomes"
-            }
-
-            # Adjust keys to remove adj tags before exporting to VCF
-            new_vcf_info_dict = {
-                i.replace("_adj", ""): j for i, j in vcf_info_dict.items()
-            }
-
-            # Add non-PAR annotation
-            ht = ht.annotate(
-                region_flag=ht.region_flag.annotate(
-                    nonpar=(ht.locus.in_x_nonpar() | ht.locus.in_y_nonpar())
-                )
-            )
-
-            logger.info("Constructing INFO field")
-            # Add variant annotations to INFO field
-            # This adds annotations from:
-            #   RF struct, VQSR struct, allele_info struct,
-            #   info struct (site and allele-specific annotations),
-            #   region_flag struct, and
-            #   raw_qual_hists/qual_hists structs.
-
-            ht = ht.annotate(info=hl.struct(**make_info_expr(ht)))
-
-            # Unfurl nested UKBB frequency annotations and add to INFO field
-            ht = ht.annotate(
-                info=ht.info.annotate(
-                    **unfurl_nested_annotations(
-                        ht, gnomad=False, genome=False, pops=UKBB_POPS,
-                    )
-                )
-            )
-            # Unfurl nested gnomAD genome frequency annotations and add to info field
-            ht = ht.annotate(
-                info=ht.info.annotate(
-                    **unfurl_nested_annotations(
-                        ht, gnomad=True, genome=True, pops=GNOMAD_GENOMES_POPS,
-                    )
-                )
-            )
-            # Unfurl nested gnomAD exome frequency annotations and add to info field
-            ht = ht.annotate(
-                info=ht.info.annotate(
-                    **unfurl_nested_annotations(
-                        ht, gnomad=True, genome=False, pops=GNOMAD_EXOMES_POPS,
-                    )
-                )
-            )
-            ht = ht.annotate(**set_female_y_metrics_to_na(ht))
-
-            # Reformat vep annotation
-            ht = ht.annotate(vep=vep_struct_to_csq(ht.vep))
-            ht = ht.annotate(info=ht.info.annotate(vep=ht.vep))
-            new_vcf_info_dict.update(
-                {"vep": {"Description": hl.eval(ht.vep_csq_header)}}
-            )
-
-            # NOTE: Correcting rsid here because this was discovered after release HT was created
-            logger.info("Reformatting rsid...")
-            # dbsnp might have multiple identifiers for one variant
-            # thus, rsid is a set annotation, starting with version b154 for dbsnp resource:
-            # https://github.com/broadinstitute/gnomad_methods/blob/master/gnomad/resources/grch38/reference_data.py#L136
-            # `export_vcf` expects this field to be a string, and vcf specs
-            # say this field may be delimited by a semi-colon:
-            # https://samtools.github.io/hts-specs/VCFv4.2.pdf
-            ht = ht.annotate(rsid=hl.str(";").join(ht.rsid))
-
-            logger.info(
-                "Selecting relevant fields for VCF export and checkpointing HT..."
-            )
-            ht = ht.select("info", "filters", "rsid", "qual")
-            ht.write(
-                release_vcf_ht_path(*tranche_data), overwrite=args.overwrite,
-            )
-
-            # Make filter dict and add field for MonoAllelic filter
-            filter_dict = make_vcf_filter_dict(
-                hl.eval(ht.rf_globals.rf_snv_cutoff.min_score),
-                hl.eval(ht.rf_globals.rf_indel_cutoff.min_score),
-                hl.eval(ht.rf_globals.inbreeding_cutoff),
-            )
-            filter_dict["MonoAllelic"] = {
-                "Description": "Samples are all homozygous reference or all homozygous alternate for the variant"
-            }
-            header_dict = {
-                "info": new_vcf_info_dict,
-                "filter": filter_dict,
-                "format": FORMAT_DICT,
-            }
-
-            logger.info("Saving header dict to pickle...")
-            with hl.hadoop_open(release_header_path(*tranche_data), "wb") as p:
-                pickle.dump(header_dict, p, protocol=pickle.HIGHEST_PROTOCOL)
-
-        if args.prepare_vcf_mt:
+        if args.densify:
             logger.info("Getting raw MT and dropping all unnecessary entries...")
             # NOTE: reading in raw MatrixTable to be able to return all samples/variants
             mt = get_ukbb_data(
@@ -741,33 +611,81 @@ def main(args):
                 n_partitions=args.raw_partitions,
                 meta_root="meta",
             ).select_entries(*SPARSE_ENTRIES)
-            mt = mt.transmute_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype)
 
-            logger.info("Removing chrM...")
-            mt = hl.filter_intervals(mt, [hl.parse_locus_interval("chrM")], keep=False)
+            logger.info("Loading frequency sites to fix...")
+            sites_ht = hl.read_table(args.sites)
 
-            if args.test:
-                logger.info("Filtering to chr20 and chrX (for tests only)...")
-                # Using filter intervals to keep all the work done by get_ukbb_data
-                # (removing sample with withdrawn consent/their ref blocks/variants,
-                # also keeping meta col annotations)
-                # Using chr20 to test a small autosome and chrX to test a sex chromosome
-                # Some annotations (like FAF) are 100% missing on autosomes
-                mt = hl.filter_intervals(
-                    mt,
-                    [hl.parse_locus_interval("chr20"), hl.parse_locus_interval("chrX")],
-                )
+            logger.info("Densifying to sites to fix only...")
+            from gnomad.utils.sparse_mt import densify_sites
+            from ukbb_qc.resources.basics import (
+                last_END_positions_ht_path,
+                get_release_path,
+            )
 
-            logger.info("Splitting raw MT...")
+            # NOTE: Set semi_join_rows to False here because sites HT is small
+            # NOTE: This densify required a highmem-32 master node
+            # https://github.com/broadinstitute/gnomad_methods/blob/master/gnomad/utils/sparse_mt.py#L88
+            mt = densify_sites(
+                mt,
+                sites_ht,
+                hl.read_table(last_END_positions_ht_path(freeze)),
+                semi_join_rows=False,
+            )
+            # Remove rows with only ref block information
+            mt = mt.filter_rows(hl.len(mt.alleles) > 1)
+            mt.write(
+                get_checkpoint_path(
+                    *tranche_data, name="freq_sites_fix_dense", mt=True
+                ),
+                overwrite=args.overwrite,
+            )
+
+        if args.recalculate_frequency:
+            logger.info("Reading in densified MT and sites HT...")
+            mt = hl.read_matrix_table(
+                get_checkpoint_path(*tranche_data, name="freq_sites_fix_dense", mt=True)
+            )
+            sites_ht = hl.read_matrix_table(args.sites).rows()
+
+            logger.info("Adding het_non_ref annotation...")
+            # Adding a Boolean for whether a sample had a heterozygous non-reference genotype
+            # Need to add this prior to splitting MT to make sure these genotypes
+            # are not adjusted by the homalt hotfix downstream
+            mt = mt.annotate_entries(het_non_ref=mt.LGT.is_het_non_ref())
+
+            logger.info("Splitting densified MT...")
             mt = hl.experimental.sparse_split_multi(mt)
+
+            # Add het_non_ref to ENTRIES (otherwise annotation gets accidentally dropped here)
+            ENTRIES.append("het_non_ref")
             mt = mt.select_entries(*ENTRIES)
+
+            # NOTE: densify_sites operates using only the locus (not the alleles)
+            logger.info(
+                "Filtering only to the impacted variants (filtering on alleles)..."
+            )
+            logger.info("Removing low QUAL variants and star alleles...")
+            info_ht = hl.read_table(info_ht_path(data_source, freeze))
+            mt = mt.filter_rows(
+                (~info_ht[mt.row_key].AS_lowqual)
+                & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
+                & (hl.is_defined(sites_ht[mt.row_key]))
+            )
+
+            # NOTE: Annotate with adj here (required for frequency calculations)
+            logger.info("Annotating with adj...")
+            from gnomad.utils.annotations import annotate_adj
+
+            mt = annotate_adj(mt)
+
+            logger.info("Adjusting sex ploidy...")
+            mt = mt.annotate_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype)
+            mt = adjust_sex_ploidy(mt, mt.sex_karyotype, male_str="XY", female_str="XX")
 
             # Temporary hotfix for depletion of homozygous alternate genotypes
             logger.info(
                 "Setting het genotypes at sites with >1% AF and > 0.9 AB to homalt..."
             )
-            # NOTE: Reading release HT here because frequency annotation was updated
-            # Only `join_freq` and release HT have updated frequency annotation
             freq_ht = (
                 hl.read_table(release_ht_path(*tranche_data))
                 .select_globals()
@@ -777,6 +695,8 @@ def main(args):
             mt = mt.annotate_entries(
                 GT=hl.if_else(
                     mt.GT.is_het()
+                    # Skip adjusting genotypes if sample originally had a het nonref genotype
+                    & ~mt.het_non_ref
                     & (freq_ht[mt.row_key].AF > 0.01)
                     & (mt.AD[1] / mt.DP > 0.9),
                     hl.call(1, 1),
@@ -785,20 +705,63 @@ def main(args):
             )
 
             logger.info("Annotating release MT with HT annotations...")
-            ht = hl.read_table(release_vcf_ht_path(*tranche_data))
+            logger.info("Dropping frequency globals...")
+            ht = hl.read_table(release_vcf_ht_path(*tranche_data)).drop("freq_meta")
             mt = mt.annotate_rows(**ht[mt.row_key])
             mt = mt.annotate_globals(**ht.index_globals())
-            mt.write(release_mt_path(*tranche_data), args.overwrite)
 
-        if args.sanity_check:
-            mt = hl.read_matrix_table(release_mt_path(*tranche_data))
-
-            # NOTE: removing lowqual and star alleles here to avoid having additional failed missingness checks
-            info_ht = hl.read_table(info_ht_path(data_source, freeze))
-            mt = mt.filter_rows(
-                (~info_ht[mt.row_key].AS_lowqual)
-                & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
+            logger.info("Re-calculating frequency...")
+            from gnomad.utils.annotations import (
+                annotate_freq,
+                faf_expr,
+                pop_max_expr,
             )
+
+            logger.info("Filtering related samples and their variants...")
+            mt_filt = mt.select_rows().select_globals()
+            mt_filt = mt_filt.filter_cols(mt_filt.meta.sample_filters.high_quality)
+            mt_filt = mt_filt.filter_cols(~mt_filt.meta.sample_filters.related)
+            mt_filt = mt_filt.filter_rows(hl.agg.any(mt_filt.GT.is_non_ref()))
+            mt_filt = annotate_freq(
+                mt_filt,
+                sex_expr=mt_filt.meta.sex_imputation.sex_karyotype,
+                pop_expr=mt_filt.meta.pan_ancestry_meta.pop,
+                additional_strata_expr=None,
+            )
+            faf, faf_meta = faf_expr(mt_filt.freq, mt_filt.freq_meta, mt_filt.locus)
+            popmax = pop_max_expr(mt_filt.freq, mt_filt.freq_meta)
+            logger.info("Calculating faf and popmax...")
+            freq_ht = mt_filt.annotate_rows(faf=faf, popmax=popmax).rows()
+            # TODO: Will need to update release HT frequencies at these sites
+            freq_ht = freq_ht.checkpoint(
+                get_checkpoint_path(
+                    *tranche_data, name="ukb_freq_het_non_ref_300k_fix"
+                ),
+                overwrite=args.overwrite,
+            )
+
+            logger.info("Annotating new frequency struct and globals onto MT...")
+            mt = mt.annotate_rows(**freq_ht[mt.row_key])
+            mt = mt.annotate_globals(**freq_ht.index_globals())
+
+            logger.info(
+                "Unfurling new UKBB frequency annotations and adding to INFO field..."
+            )
+            mt = mt.annotate_rows(
+                info=mt.info.annotate(
+                    **unfurl_nested_annotations(
+                        mt, gnomad=False, genome=False, pops=UKBB_POPS,
+                    )
+                )
+            )
+
+            logger.info("Dropping column annotations...")
+            mt = mt.select_cols()
+
+            # NOTE: `qual` annotation is actually `QUALapprox` annotation in 455k tranche
+            # Need to convert this field to a float because `export_vcf` won't export this field
+            # if the type isn't float64
+            mt = mt.annotate_rows(qual=hl.float(mt.qual))
 
             # NOTE: Fixing chrY metrics here for 455k tranche
             # because fix to `set_female_y_metrics_to_na` was pushed
@@ -807,7 +770,25 @@ def main(args):
             mt = mt.annotate_rows(
                 info=mt.info.annotate(**set_female_y_metrics_to_na(mt))
             )
+            # NOTE: Checkpointed here to avoid long sanity checks run
+            mt.write(
+                get_checkpoint_path(
+                    *tranche_data, name="freq_sites_dense_annot", mt=True
+                ),
+                overwrite=args.overwrite,
+            )
+            # NOTE: Stop at this step to fix hyphens in gnomAD genomes frequencies
+            # This step is necessary because this code uses the VCF HT,
+            # which was generated prior to fixing the hyphens and gnomAD genomes unfurling
 
+        if args.sanity_check:
+            logger.info("Sanity checking release MT...")
+            # NOTE: Fix hyphens in gnomAD genomes frequency in this notebook:
+            # gs://broad-ukbb/broad.freeze_7/notebooks/rename_gnomad_pops.ipynb
+            # and checkpoint MT to this path below
+            mt = hl.read_matrix_table(
+                "gs://broad-ukbb/broad.freeze_7/temp/freq_sites_dense_annot_no_hyphen.mt"
+            )
             sanity_check_release_mt(
                 mt,
                 SUBSET_LIST,
@@ -818,51 +799,15 @@ def main(args):
                 verbose=args.verbose,
             )
 
-        if args.prepare_release_vcf:
-
-            logger.warning(
-                "VCF export will densify! Make sure you have an autoscaling cluster."
-            )
-            if not args.per_chromosome and not args.parallelize:
-                logger.error("Need to choose how to export the release VCF. Exiting...")
-                sys.exit(1)
-
+        if args.export_vcf:
             mt = hl.read_matrix_table(
-                release_mt_path(*tranche_data), _n_partitions=args.n_shards
+                "gs://broad-ukbb/broad.freeze_7/temp/freq_sites_dense_annot_no_hyphen.mt"
             )
-
-            # NOTE: Fixing chrY metrics here for 455k tranche
-            # because fix to `set_female_y_metrics_to_na` was pushed
-            # after VCF MT generated
-            # https://github.com/broadinstitute/gnomad_methods/pull/347
-            mt = mt.annotate_rows(
-                info=mt.info.annotate(**set_female_y_metrics_to_na(mt))
-            )
-
-            # NOTE: `qual` annotation is actually `QUALapprox` annotation in 455k tranche
-            # Need to convert this field to a float because `export_vcf` won't export this field
-            # if the type isn't float64
-            mt = mt.annotate_rows(qual=hl.float(mt.qual))
-
-            if args.test:
-                logger.info("Filtering to chr20 and chrX (for tests only)...")
-                # Using filter intervals to keep all the work done by get_ukbb_data
-                # (removing sample with withdrawn consent/their ref blocks/variants,
-                # also keeping meta col annotations)
-                # Using chr20 to test a small autosome and chrX to test a sex chromosome
-                # Some annotations (like FAF) are 100% missing on autosomes
-                mt = hl.filter_intervals(
-                    mt,
-                    [hl.parse_locus_interval("chr20"), hl.parse_locus_interval("chrX")],
-                )
-
-            logger.info("Reading header dict from pickle...")
-            with hl.hadoop_open(release_header_path(*tranche_data), "rb") as p:
-                header_dict = pickle.load(p)
 
             # Reformat names to remove "adj" pre-export
             # e.g, renaming "AC_adj" to "AC"
             # All unlabeled frequency information is assumed to be adj
+            mt = mt.drop("het_non_ref", "adj")
             row_annots = list(mt.row.info)
             new_row_annots = []
             for x in row_annots:
@@ -891,83 +836,22 @@ def main(args):
                 )
             )
 
-            # Export VCFs by chromosome
-            if args.per_chromosome:
-                ht = mt.rows().checkpoint(
-                    get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False),
-                    overwrite=args.overwrite,
-                )
+            logger.info("Exporting VCF...")
+            from ukbb_qc.resources.basics import get_release_path
 
-                rg = get_reference_genome(mt.locus)
-                contigs = rg.contigs[:24]  # autosomes + X/Y
-                logger.info(f"Contigs: {contigs}")
+            hl.export_vcf(
+                dataset=mt,
+                output=f"{get_release_path(*tranche_data)}/vcf/sharded_vcf/broad.freeze_7.frequency.patch.vcf.bgz",
+                parallel=None,
+                metadata=header_dict,
+                # NOTE: I also moved this file out of temp when we were deleting temporary files
+                append_to_header="gs://broad-ukbb/broad.freeze_7/release/vcf/append_to_vcf_header.tsv",
+                tabix=True,
+            )
 
-                for contig in contigs:
-                    # Checked with Hail team about the fastest way to filter to a contig
-                    # This method shouldn't be any faster than `filter_intervals`: the same amount of data is read in both cases
-                    # `_calculate_new_partitions` might give us more parallelism downstream
-                    # Decided to stick with `_calculate_new_partitions` method because it felt much faster on the 300K tranche
-                    mt = hl.read_matrix_table(release_mt_path(*tranche_data))
-                    mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
-                    intervals = mt._calculate_new_partitions(10000)
-                    mt = hl.read_matrix_table(
-                        release_mt_path(*tranche_data), _intervals=intervals
-                    )
-                    mt = mt.annotate_rows(**ht[mt.row_key])
-
-                    logger.info("Densifying and exporting VCF...")
-                    mt = hl.experimental.densify(mt)
-
-                    logger.info("Removing low QUAL variants and * alleles...")
-                    info_ht = hl.read_table(info_ht_path(data_source, freeze))
-                    mt = mt.filter_rows(
-                        (~info_ht[mt.row_key].AS_lowqual)
-                        & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
-                    )
-
-                    logger.info("Adjusting sex ploidy...")
-                    mt = adjust_sex_ploidy(
-                        mt, mt.sex_karyotype, male_str="XY", female_str="XX"
-                    )
-
-                    hl.export_vcf(
-                        mt.select_cols(),
-                        release_vcf_path(*tranche_data, contig=contig),
-                        metadata=header_dict,
-                        append_to_header=append_to_vcf_header_path(*tranche_data),
-                        tabix=True,
-                    )
-
-            # Export sharded VCF
-            if args.parallelize:
-
-                logger.info("Densifying...")
-                mt = hl.experimental.densify(mt)
-
-                logger.info("Removing low QUAL variants and * alleles...")
-                info_ht = hl.read_table(info_ht_path(data_source, freeze))
-                mt = mt.filter_rows(
-                    (~info_ht[mt.row_key].AS_lowqual)
-                    & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
-                )
-
-                logger.info("Adjusting sex ploidy...")
-                mt = adjust_sex_ploidy(
-                    mt, mt.sex_karyotype, male_str="XY", female_str="XX"
-                )
-                mt = mt.select_cols()
-
-                hl.export_vcf(
-                    mt,
-                    release_vcf_path(*tranche_data),
-                    parallel="header_per_shard",
-                    metadata=header_dict,
-                    append_to_header=append_to_vcf_header_path(*tranche_data),
-                    tabix=True,
-                )
     finally:
         logger.info("Copying hail log to logging bucket...")
-        hl.copy_log(logging_path(*tranche_data))
+        hl.copy_log(f"gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/")
 
 
 if __name__ == "__main__":
@@ -994,45 +878,26 @@ if __name__ == "__main__":
         type=int,
     )
     parser.add_argument(
-        "--test",
-        help="Create release files using only chr20 and chrX for testing purposes",
+        "--sites", help="Path to HT with sites to be fixed (incorrect frequencies)",
+    )
+    parser.add_argument(
+        "--densify", help="Whether to densify", action="store_true",
+    )
+    parser.add_argument(
+        "--recalculate_frequency",
+        help="Whether to recalculate frequency",
         action="store_true",
     )
     parser.add_argument(
-        "--prepare_vcf_annotations",
-        help="Use release HT to reformat VCF annotations",
-        action="store_true",
+        "--sanity_check", help="Whether to run sanity checks", action="store_true",
     )
     parser.add_argument(
-        "--prepare_vcf_mt", help="Use release MT to create VCF MT", action="store_true"
-    )
-    parser.add_argument(
-        "--sanity_check", help="Run sanity checks function", action="store_true"
+        "--export_vcf", help="Whether to export VCF", action="store_true",
     )
     parser.add_argument(
         "--verbose",
         help="Run sanity checks function with verbose output",
         action="store_true",
-    )
-    parser.add_argument(
-        "--prepare_release_vcf", help="Prepare release VCF", action="store_true"
-    )
-    export_opts = parser.add_mutually_exclusive_group()
-    export_opts.add_argument(
-        "--per_chromosome",
-        help="Prepare release VCFs per chromosome",
-        action="store_true",
-    )
-    export_opts.add_argument(
-        "--parallelize",
-        help="Parallelize VCF export by exporting sharded VCF",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--n_shards",
-        help="Desired number of shards for output VCF (if --parallelize is set). Will be used to repartition raw MT on read",
-        type=int,
-        default=25000,
     )
     parser.add_argument(
         "--slack_channel", help="Slack channel to post results and notifications to."
