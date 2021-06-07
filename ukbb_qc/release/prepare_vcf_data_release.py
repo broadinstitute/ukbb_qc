@@ -721,6 +721,7 @@ def main(args):
             mt_filt = mt.select_rows().select_globals()
             mt_filt = mt_filt.filter_cols(mt_filt.meta.sample_filters.high_quality)
             mt_filt = mt_filt.filter_cols(~mt_filt.meta.sample_filters.related)
+            mt = mt.filter_cols(hl.is_defined(mt.meta.ukbb_meta.batch))
             mt_filt = mt_filt.filter_rows(hl.agg.any(mt_filt.GT.is_non_ref()))
             mt_filt = annotate_freq(
                 mt_filt,
