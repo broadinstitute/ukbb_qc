@@ -721,6 +721,7 @@ def main(args):
             mt_filt = mt.select_rows().select_globals()
             mt_filt = mt_filt.filter_cols(mt_filt.meta.sample_filters.high_quality)
             mt_filt = mt_filt.filter_cols(~mt_filt.meta.sample_filters.related)
+            mt_filt = mt_filt.filter_cols(hl.is_defined(mt_filt.meta.ukbb_meta.batch))
             mt_filt = mt_filt.filter_rows(hl.agg.any(mt_filt.GT.is_non_ref()))
             mt_filt = annotate_freq(
                 mt_filt,
@@ -835,6 +836,7 @@ def main(args):
 
             logger.info("Exporting VCF...")
             from ukbb_qc.resources.basics import get_release_path
+
             hl.export_vcf(
                 dataset=mt,
                 output=f"{get_release_path(*tranche_data)}/vcf/sharded_vcf/broad.freeze_7.patch.vcf.bgz",
