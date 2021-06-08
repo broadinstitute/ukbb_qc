@@ -612,8 +612,8 @@ def main(args):
                 meta_root="meta",
             ).select_entries(*SPARSE_ENTRIES)
 
-            logger.info("Loading het non ref sites to fix...")
-            sites_ht = hl.read_matrix_table(args.het_non_ref).rows()
+            logger.info("Loading sites to fix...")
+            sites_ht = hl.read_matrix_table(args.sites).rows()
 
             logger.info("Densifying to het non ref sites only...")
             from gnomad.utils.sparse_mt import densify_sites
@@ -634,16 +634,16 @@ def main(args):
             # Remove rows with only ref block information
             mt = mt.filter_rows(hl.len(mt.alleles) > 1)
             mt.write(
-                get_checkpoint_path(*tranche_data, name="het_non_ref_dense", mt=True),
+                get_checkpoint_path(*tranche_data, name="release_patch_sites_dense", mt=True),
                 overwrite=args.overwrite,
             )
 
         if args.recalculate_frequency:
             logger.info("Reading in densified MT and sites HT...")
             mt = hl.read_matrix_table(
-                get_checkpoint_path(*tranche_data, name="het_non_ref_dense", mt=True)
+                get_checkpoint_path(*tranche_data, name="release_patch_sites_dense", mt=True)
             )
-            sites_ht = hl.read_matrix_table(args.het_non_ref).rows()
+            sites_ht = hl.read_matrix_table(args.sites).rows()
 
             logger.info("Adding het_non_ref annotation...")
             # Adding a Boolean for whether a sample had a heterozygous non-reference genotype
@@ -735,7 +735,7 @@ def main(args):
             freq_ht = mt_filt.annotate_rows(faf=faf, popmax=popmax).rows()
             # TODO: Will need to update release HT frequencies at these het nonref sites
             freq_ht = freq_ht.checkpoint(
-                get_checkpoint_path(*tranche_data, name="ukb_freq_het_non_ref"),
+                get_checkpoint_path(*tranche_data, name="ukb_freq_release_patch"),
                 overwrite=args.overwrite,
             )
 
@@ -772,7 +772,7 @@ def main(args):
             # NOTE: Checkpointed here to avoid long sanity checks run
             mt.write(
                 get_checkpoint_path(
-                    *tranche_data, name="het_non_ref_dense_annot", mt=True
+                    *tranche_data, name="release_patch_sites_dense_annot", mt=True
                 ),
                 overwrite=args.overwrite,
             )
@@ -785,7 +785,7 @@ def main(args):
             # This was necessary because I added annotations using the VCF HT,
             # which was generated prior to fixing the hyphens and gnomad genomes unfurling
             mt = hl.read_matrix_table(
-                "gs://broad-ukbb/broad.freeze_7/temp/het_non_ref_dense_annot_no_hyphen.mt"
+                "gs://broad-ukbb/broad.freeze_7/temp/release_patch_sites_dense_annot_no_hyphen.mt"
             )
             sanity_check_release_mt(
                 mt,
@@ -799,7 +799,7 @@ def main(args):
 
         if args.export_vcf:
             mt = hl.read_matrix_table(
-                "gs://broad-ukbb/broad.freeze_7/temp/het_non_ref_dense_annot_no_hyphen.mt"
+                "gs://broad-ukbb/broad.freeze_7/temp/release_patch_sites_dense_annot_no_hyphen.mt"
             )
 
             # Reformat names to remove "adj" pre-export
@@ -876,16 +876,16 @@ if __name__ == "__main__":
         type=int,
     )
     parser.add_argument(
-        "--het_non_ref", help="Path to MT with het non ref sites to be fixed",
+        "--sites", help="Path to MT with sites to be fixed in release patch",
     )
     parser.add_argument(
         "--densify",
-        help="Whether to densify to het non ref sites",
+        help="Whether to densify to sites to fix",
         action="store_true",
     )
     parser.add_argument(
         "--recalculate_frequency",
-        help="Whether to recalculate frequency at het non ref sites",
+        help="Whether to recalculate frequency at release patch sites",
         action="store_true",
     )
     parser.add_argument(
