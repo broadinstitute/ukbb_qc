@@ -634,14 +634,18 @@ def main(args):
             # Remove rows with only ref block information
             mt = mt.filter_rows(hl.len(mt.alleles) > 1)
             mt.write(
-                get_checkpoint_path(*tranche_data, name="release_patch_sites_dense", mt=True),
+                get_checkpoint_path(
+                    *tranche_data, name="release_patch_sites_dense", mt=True
+                ),
                 overwrite=args.overwrite,
             )
 
         if args.recalculate_frequency:
             logger.info("Reading in densified MT and sites HT...")
             mt = hl.read_matrix_table(
-                get_checkpoint_path(*tranche_data, name="release_patch_sites_dense", mt=True)
+                get_checkpoint_path(
+                    *tranche_data, name="release_patch_sites_dense", mt=True
+                )
             )
             sites_ht = hl.read_matrix_table(args.sites).rows()
 
@@ -682,12 +686,12 @@ def main(args):
 
             # Temporary hotfix for depletion of homozygous alternate genotypes
             logger.info(
-                "Setting het genotypes at sites with >1% AF and > 0.9 AB to homalt..."
+                "Setting het genotypes at sites with >1% AF and > 0.9 AB to homalt using 300K frequencies..."
             )
             # NOTE: Reading release HT here because frequency annotation was updated
             # Only `join_freq` and release HT have updated frequency annotation
             freq_ht = (
-                hl.read_table(release_ht_path(*tranche_data))
+                hl.read_table(release_ht_path(data_source, freeze=6))
                 .select_globals()
                 .select("freq")
             )
@@ -879,9 +883,7 @@ if __name__ == "__main__":
         "--sites", help="Path to MT with sites to be fixed in release patch",
     )
     parser.add_argument(
-        "--densify",
-        help="Whether to densify to sites to fix",
-        action="store_true",
+        "--densify", help="Whether to densify to sites to fix", action="store_true",
     )
     parser.add_argument(
         "--recalculate_frequency",
