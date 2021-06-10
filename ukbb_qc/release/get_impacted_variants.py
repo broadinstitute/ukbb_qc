@@ -33,6 +33,9 @@ def get_het_non_ref_impacted_var(
     :param hl.Table freq_ht: Hail Table containing 455K frequency information.
     :return: None 
     """
+    # NOTE: This step is redundant: we remove low qual variants from the release sites HT,
+    # and this code is pulling frequencies from the release sites HT
+    # Kept in the code just to show how it was run
     logger.info("Removing low qual variants and star alleles...")
     mt = mt.filter_rows(
         (~info_ht[mt.row_key].AS_lowqual)
