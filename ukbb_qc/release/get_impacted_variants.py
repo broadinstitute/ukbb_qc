@@ -69,7 +69,7 @@ def get_het_non_ref_impacted_var(
         ),
     )
     logger.info("Checking homozygote counts using the different genotypes...")
-    # Taking first index of gt_stats because it contains an entry for the reference allele at index 0
+    # Taking index 1 of gt_stats because it contains an entry for the reference allele at index 0
     # homozygote_count (tarray of tint32) -
     # Homozygote genotype counts for each allele, including the reference. Only diploid genotype calls are counted.
     # (from hail docs, https://hail.is/docs/0.2/aggregators.html#hail.expr.aggregators.call_stats)
@@ -173,7 +173,7 @@ def main(args):
         freq_ht_300k = hl.read_table(release_ht_path(data_source, 6))
 
         logger.info(
-            "Checking for variants that are common in only the 300K or the 455K but not both datasets..."
+            "Checking for variants that are common (AF > 0.01) in only the 300K or the 455K but not both datasets..."
         )
         get_freq_impacted_var(mt, freq_ht, freq_ht_300k)
 
