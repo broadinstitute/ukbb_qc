@@ -91,31 +91,31 @@ def get_het_non_ref_impacted_var(
     mt.write("gs://broad-ukbb/broad.freeze_7/temp/het_nonref_sites.mt", overwrite=True)
 
 
-def get_freq_impacted_var(mt: hl.MatrixTable, ht: hl.Table, ht_6: hl.Table) -> None:
+def get_freq_impacted_var(mt: hl.MatrixTable, ht: hl.Table, ht_300K: hl.Table) -> None:
     """
     Filter to variants that have an AF > 0.01 only in the 300K tranche or only in the 455K tranche.
 
     :param hl.MatrixTable mt: Raw split MatrixTable.
     :param hl.Table ht: 455K release HT.
-    :param hl.Table ht_6: 300K release HT.
+    :param hl.Table ht_300K: 300K release HT.
     :return: None
     """
     logger.info("Filtering both frequency HTs to AF > 0.01...")
-    ht_6 = ht_6.filter(ht_6.freq[0].AF > 0.01)
+    ht_300K = ht_300K.filter(ht_300K.freq[0].AF > 0.01)
     ht = ht.filter(ht.freq[0].AF > 0.01)
 
     logger.info("Getting variants that are only common in the 455K...")
-    not_in_300k = ht.anti_join(ht_6)
+    not_in_300k = ht.anti_join(ht_300K)
 
     logger.info("Getting variants that are only common in the 300K...")
-    not_in_455k = ht_6.anti_join(ht)
+    not_in_455k = ht_300K.anti_join(ht)
 
     mt = mt.annotate_rows(
         freq_455k=not_in_300k[mt.row_key].freq, freq_300k=not_in_455k[mt.row_key].freq
     )
     mt = mt.filter_rows(hl.is_defined(mt.freq_455k) | hl.is_defined(mt.freq_300k))
     # NOTE: Wrote this MT on 6/8/21 in gs://broad-ukbb/broad.freeze_7/notebooks/homalt_hotfix_counts.ipynb
-    # but did NOT remove lowqual variants (should I remove?)
+    # MT written on 6/8/21 had 16529 rows and 454774 columns
     # I also need to overwrite this MT because I did not filter any samples (so this contains withdrawn samples and known dups)
     mt.write(
         "gs://broad-ukbb/broad.freeze_7/temp/homalt_hotfix_variants.mt", overwrite=True
@@ -167,6 +167,8 @@ def main(args):
         get_het_non_ref_impacted_var(mt, info_ht, freq_ht)
 
     if args.get_freq_impacted_var:
+        # NOTE: We used the 300K frequencies to apply the homalt hotfix to the 455K tranche prior to calculating
+        # frequencies on the 455K tranche to avoid an extra densify step
         logger.info("Reading in 300K release HT (to get 300K frequency information)...")
         freq_ht_300k = hl.read_table(release_ht_path(data_source, 6))
 
@@ -180,7 +182,7 @@ def main(args):
         logger.info("Reading in het non ref impacted variants MT into HT...")
         het_nonref_var_ht = (
             hl.read_matrix_table(
-                "gs://broad-ukbb/broad.freeze_7/temp/homalt_hotfix_variants.mt",
+                "gs://broad-ukbb/broad.freeze_7/temp/het_nonref_sites.mt",
                 _n_partitions=args.n_partitions,
             )
             .rows()
@@ -240,7 +242,6 @@ if __name__ == "__main__":
         default=1000,
         type=int,
     )
-    parser.add_argument("--overwrite", help="Overwrite data", action="store_true")
     args = parser.parse_args()
 
     if args.slack_channel:
