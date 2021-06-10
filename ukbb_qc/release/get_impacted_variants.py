@@ -171,7 +171,7 @@ def main(args):
         freq_ht_300k = hl.read_table(release_ht_path(data_source, 6))
 
         logger.info(
-            "Checking for variants that are common in only the 300K or the 455K but not both datasets..."
+            "Checking for variants that are common (AF > 0.01) in only the 300K or the 455K but not both datasets..."
         )
         get_freq_impacted_var(mt, freq_ht, freq_ht_300k)
 
