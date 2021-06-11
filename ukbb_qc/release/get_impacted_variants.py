@@ -117,12 +117,28 @@ def get_freq_impacted_var(mt: hl.MatrixTable, ht: hl.Table, ht_300K: hl.Table) -
         freq_455k=not_in_300k[mt.row_key].freq, freq_300k=not_in_455k[mt.row_key].freq
     )
     mt = mt.filter_rows(hl.is_defined(mt.freq_455k) | hl.is_defined(mt.freq_300k))
+
     # NOTE: Wrote this MT on 6/8/21 in gs://broad-ukbb/broad.freeze_7/notebooks/homalt_hotfix_counts.ipynb
     # MT written on 6/8/21 had 16529 rows and 454774 columns
     # TODO: need to overwrite this MT because I did not filter any samples (so this contains withdrawn samples and known dups)
     # NOTE: Overwrote this MT on 6/11/21. New MT has 16529 rows and 454699 columns
+    # mt.write(
+    #    "gs://broad-ukbb/broad.freeze_7/temp/homalt_hotfix_variants.mt", overwrite=True
+    # )
+
+    logger.info("Filtering MT to include only variants impacted by homalt hotfix...")
+    mt = hl.read_matrix_table(
+        "gs://broad-ukbb/broad.freeze_7/temp/homalt_hotfix_variants.mt",
+    )
+
+    # Annotate MT with het annotation
+    mt = mt.annotate_entries(het=mt.GT.is_het())
+
+    # Filter to rows with at least one het call and high AB
+    mt = mt.filter_rows(hl.agg.any(mt.het & ((mt.AD[1] / mt.DP) > 0.9)))
     mt.write(
-        "gs://broad-ukbb/broad.freeze_7/temp/homalt_hotfix_variants.mt", overwrite=True
+        "gs://broad-ukbb/broad.freeze_7/temp/homalt_hotfix_variants_only.mt",
+        overwrite=True,
     )
 
 
@@ -200,7 +216,7 @@ def main(args):
         )
         freq_var_ht = (
             hl.read_matrix_table(
-                "gs://broad-ukbb/broad.freeze_7/temp/homalt_hotfix_variants.mt",
+                "gs://broad-ukbb/broad.freeze_7/temp/homalt_hotfix_variants_only.mt",
                 _n_partitions=args.n_partitions,
             )
             .rows()
