@@ -616,7 +616,7 @@ def main(args):
             logger.info("Loading sites to fix...")
             sites_ht = hl.read_matrix_table(args.sites).rows()
 
-            logger.info("Densifying to het non ref sites only...")
+            logger.info("Densifying to impacted sites only...")
             from gnomad.utils.sparse_mt import densify_sites
             from ukbb_qc.resources.basics import (
                 last_END_positions_ht_path,
@@ -624,6 +624,8 @@ def main(args):
             )
 
             # NOTE: Set semi_join_rows to False here because sites HT is small
+            # Went back and forth on setting semi_join_rows to True or False, but
+            # False worked better for the initial release patch released in May 2021
             # NOTE: This densify required a highmem-32 master node
             # https://github.com/broadinstitute/gnomad_methods/blob/master/gnomad/utils/sparse_mt.py#L88
             mt = densify_sites(
