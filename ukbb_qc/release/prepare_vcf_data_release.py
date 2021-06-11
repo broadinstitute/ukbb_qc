@@ -30,6 +30,7 @@ from gnomad.utils.vcf import (
 )
 from gnomad.utils.vcf import SEXES as SEXES_STR
 from ukbb_qc.assessment.sanity_checks import (
+    sanity_check_release_patch,
     sanity_check_release_mt,
     vcf_field_check,
 )
@@ -40,6 +41,7 @@ from ukbb_qc.resources.basics import (
     release_vcf_ht_path,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
+from ukbb_qc.resources.sample_qc import meta_ht_path
 from ukbb_qc.resources.variant_qc import info_ht_path
 from ukbb_qc.slack_creds import slack_token
 from ukbb_qc.utils.constants import UKBB_POPS
@@ -567,7 +569,7 @@ def unfurl_nested_annotations(
     # Unfurl UKBB ages
     # We previously dropped:
     # age_hist_hom_bin_edges, age_hist_het_bin_edges
-    """if not gnomad:
+    if not gnomad:
         age_hist_dict = {
             "age_hist_het_bin_freq": hl.delimit(t.age_hist_het.bin_freq, delimiter="|"),
             "age_hist_het_n_smaller": t.age_hist_het.n_smaller,
@@ -576,8 +578,7 @@ def unfurl_nested_annotations(
             "age_hist_hom_n_smaller": t.age_hist_hom.n_smaller,
             "age_hist_hom_n_larger": t.age_hist_hom.n_larger,
         }
-        expr_dict.update(age_hist_dict
-    """
+        expr_dict.update(age_hist_dict)
 
     return expr_dict
 
@@ -782,6 +783,10 @@ def main(args):
             )
 
         if args.sanity_check:
+            logger.info("Running sanity checks unique to release patch...")
+            meta_ht = hl.read_table(meta_ht_path(*tranche_data))
+            sanity_check_release_patch(mt=mt, meta_ht=meta_ht, verbose=args.verbose)
+
             logger.info("Sanity checking release MT...")
             # NOTE: Fixed hyphens in gnomAD genomes frequency in this notebook:
             # gs://broad-ukbb/broad.freeze_7/notebooks/rename_gnomad_pops.ipynb
