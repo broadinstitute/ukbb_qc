@@ -9,6 +9,7 @@ from gnomad.assessment.sanity_checks import (
     sample_sum_check,
 )
 from gnomad.resources.grch38.gnomad import SEXES
+from gnomad.utils.filtering import filter_to_adj
 from gnomad.utils.vcf import HISTS
 from gnomad.utils.vcf import SEXES as SEXES_STR
 
@@ -738,6 +739,87 @@ def sanity_check_release_mt(
     missingness_sanity_checks(
         ht, info_metrics, non_info_metrics, n_sites, missingness_threshold
     )
+
+
+def sanity_check_release_patch(
+    mt: hl.MatrixTable, meta_ht: hl.Table, verbose: bool = False,
+) -> None:
+    """
+    Perform sanity checks on release patch MatrixTable.
+
+    Includes:
+    - Total sample and variant count (should be 454699 samples, _ rows)
+    - Homozygote count in MT comparison to homozygote count produced when applying homalt hotfix
+    - Frequency recalculation and comparison to MT frequencies
+
+    :param hl.MatrixTable mt: Release patch MatrixTable.
+    :param hl.Table meta_ht: Table with sample metadata information.
+    :param bool verbose: If True, display top values of relevant annotations being checked, regardless of whether check
+        conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
+    :return: None (terminal display of sanity checks results).
+    :rtype: None
+    """
+    logger.info("CHECKING TOTAL COUNTS:")
+    mt.count()
+
+    logger.info("RE-APPLYING HOMALT HOTFIX AND COMPARING HOMOZYGOTE COUNTS...")
+    # Add homalt hotfix
+    mt = mt.annotate_entries(
+        GT_adj=hl.if_else(
+            mt.GT.is_het() & (mt.info.AF[0] > 0.01) & (mt.AD[1] / mt.DP > 0.9),
+            hl.call(1, 1),
+            mt.GT,
+        )
+    )
+    mt = mt.annotate_rows(homalt_stats=hl.agg.call_stats(mt.GT_adj, mt.alleles))
+    # Check where homozygote count after applying hotfix is the same as the raw homozygote count
+    # This should never be true (there should be 0 rows matching this condition)
+    ht = mt.rows()
+    ht = ht.annotate(
+        # Check the raw homozygote counts because these are the genotypes that will exist in the release VCF
+        # (release VCF has no sample/variant filters and is not filtered to adj)
+        het_nonref_hotfix_nhomalt=ht.info.nhomalt_raw,
+        hotfix_nhomalt=ht.homalt_stats[1],
+    )
+    generic_field_check(
+        ht=ht,
+        cond_expr=(ht.het_nonref_hotfix_nhomalt == ht.hotfix_nhomalt),
+        check_description="homozygote_counts_homalt_hotfix != homozygote_counts_hetnonref_homalt_hotfix",
+        display_fields=["het_nonref_hotfix_nhomalt", "hotfix_nhomalt"],
+        verbose=verbose,
+    )
+
+    logger.info("RECALCULATING FREQUENCY AND COMPARING WITH FREQUENCIES IN MT...")
+    mt.drop("GT_adj")
+    mt = mt.annotate_cols(**meta_ht[mt.col_key])
+    # Filter to unrelated, high quality samples WITH UKBB batch number defined ONLY
+    mt = mt.filter_cols(
+        (mt.sample_filters.high_quality)
+        & hl.is_defined(mt.ukbb_meta.batch)
+        & ~mt.sample_filters.related
+    )
+    # Filter to adj
+    mt = filter_to_adj(mt)
+    # Recalculate frequencies using `call_stats`
+    mt = mt.annotate_rows(freq=hl.agg.call_stats(mt.GT, mt.alleles))
+    ht = mt.rows()
+    ht = ht.annotate(
+        # Take 1st index of frequencies calculated using call_stats because 0th index is for ref allele
+        recalc_AC=ht.freq.AC[1],
+        recalc_AF=ht.freq.AF[1],
+        recalc_nhomalt=ht.freq.homozygote_count[1],
+        adj_AC=ht.info.AC,
+        adj_af=ht.info.AF,
+        adj_nhomalt=ht.info.nhomalt,
+    )
+    for freq in ["AC", "AN", "nhomalt"]:
+        generic_field_check(
+            ht,
+            cond_expr=(ht[f"recalc_{freq}"] != ht[f"adj_{freq}"]),
+            check_description=f"recalculated_{freq} == adj_{freq}",
+            display_fields=[f"recalc_{freq}", f"adj_{freq}",],
+            verbose=verbose,
+        )
 
 
 def vcf_field_check(
