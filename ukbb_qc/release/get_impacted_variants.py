@@ -138,7 +138,9 @@ def main(args):
     hl.init(log="/get_impacted_variants.log", default_reference="GRCh38")
 
     logger.info("Reading in raw MT...")
-    mt = get_ukbb_data(*tranche_data, raw=True).select_entries(*SPARSE_ENTRIES)
+    mt = get_ukbb_data(*tranche_data, split=False, raw=True).select_entries(
+        *SPARSE_ENTRIES
+    )
 
     logger.info(
         "Adding annotation for whether original genotype (pre-splitting multiallelics) is het nonref..."
