@@ -120,6 +120,7 @@ def get_freq_impacted_var(mt: hl.MatrixTable, ht: hl.Table, ht_300K: hl.Table) -
     # NOTE: Wrote this MT on 6/8/21 in gs://broad-ukbb/broad.freeze_7/notebooks/homalt_hotfix_counts.ipynb
     # MT written on 6/8/21 had 16529 rows and 454774 columns
     # TODO: need to overwrite this MT because I did not filter any samples (so this contains withdrawn samples and known dups)
+    # NOTE: Overwrote this MT on 6/11/21. New MT has 16529 rows and 454699 columns
     mt.write(
         "gs://broad-ukbb/broad.freeze_7/temp/homalt_hotfix_variants.mt", overwrite=True
     )
