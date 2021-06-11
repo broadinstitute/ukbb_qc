@@ -748,9 +748,11 @@ def sanity_check_release_patch(
     Perform sanity checks on release patch MatrixTable.
 
     Includes:
-    - Total sample and variant count (should be 454699 samples, _ rows)
-    - Homozygote count in MT comparison to homozygote count produced when applying homalt hotfix
-    - Frequency recalculation and comparison to MT frequencies
+    - Total sample and variant count (should be 454699 samples, 72220 rows)
+    - Homozygote count in VCF MT (created using raw MT) comparison to homozygote count produced when applying homalt hotfix
+    - Frequency recalculation and comparison to VCF MT frequencies
+    - Comparison of VCF MT frequencies and previously calculated, incorrectly adjusted 455K frequencies 
+    (to confirm the frequencies have been updated)
 
     :param hl.MatrixTable mt: Release patch MatrixTable.
     :param hl.Table meta_ht: Table with sample metadata information.
@@ -762,7 +764,9 @@ def sanity_check_release_patch(
     logger.info("CHECKING TOTAL COUNTS:")
     mt.count()
 
-    logger.info("RE-APPLYING HOMALT HOTFIX AND COMPARING HOMOZYGOTE COUNTS...")
+    logger.info(
+        "RE-APPLYING HOMALT HOTFIX (WITHOUT HETNONREF PATCH) AND COMPARING HOMOZYGOTE COUNTS..."
+    )
     # Add homalt hotfix
     mt = mt.annotate_entries(
         GT_adj=hl.if_else(
@@ -807,17 +811,46 @@ def sanity_check_release_patch(
         # Take 1st index of frequencies calculated using call_stats because 0th index is for ref allele
         recalc_AC=ht.freq.AC[1],
         recalc_AF=ht.freq.AF[1],
+        recalc_AN=ht.freq.AN[1],
         recalc_nhomalt=ht.freq.homozygote_count[1],
         adj_AC=ht.info.AC,
-        adj_af=ht.info.AF,
+        adj_AF=ht.info.AF,
+        adj_AN=ht.info.AN,
         adj_nhomalt=ht.info.nhomalt,
     )
-    for freq in ["AC", "AN", "nhomalt"]:
+    for freq in ["AC", "AF", "AN", "nhomalt"]:
         generic_field_check(
             ht,
             cond_expr=(ht[f"recalc_{freq}"] != ht[f"adj_{freq}"]),
             check_description=f"recalculated_{freq} == adj_{freq}",
             display_fields=[f"recalc_{freq}", f"adj_{freq}",],
+            verbose=verbose,
+        )
+
+    logger.info(
+        "COMPARING VCF MT FREQUENCIES WITH PREVIOUSLY CALCULATED (INCORRECTLY ADJUSTED) FREQUENCIES..."
+    )
+    # Overwrote HT at release HT path with frequencies recalculated from first patch release,
+    # which is why this HT is in temp
+    release_ht = (
+        hl.read_table(
+            "gs://broad-ukbb/broad.freeze_7/temp/broad.freeze_7.release.sites.ht"
+        )
+        .select_globals()
+        .select("freq")
+    )
+    ht = ht.annotate(
+        prev_AC=ht[release_ht.key].freq.AC[1],
+        prev_AF=ht[release_ht.key].freq.AF[1],
+        prev_AN=ht[release_ht.key].freq.AN[1],
+        prev_nhomalt=ht[release_ht.key].freq.homozygote_count[1],
+    )
+    for freq in ["AC", "AF", "AN", "nhomalt"]:
+        generic_field_check(
+            ht,
+            cond_expr=(ht[f"recalc_{freq}"] == ht[f"prev_{freq}"]),
+            check_description=f"recalculated_{freq} != prev_{freq}",
+            display_fields=[f"recalc_{freq}", f"prev_{freq}",],
             verbose=verbose,
         )
 

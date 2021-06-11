@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Union
 import hail as hl
 
 from gnomad.resources.grch38.gnomad import SEXES
+from gnomad.resources.resource_utils import DataException
 from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.sample_qc.sex import adjust_sex_ploidy
 
@@ -784,19 +785,93 @@ def main(args):
                 overwrite=args.overwrite,
             )
 
+        if args.fix_hyphens:
+            logger.info("Reading in VCF MT and release HT...")
+            mt = hl.read_matrix_table(
+                get_checkpoint_path(
+                    *tranche_data, name="release_patch_sites_dense_annot", mt=True
+                )
+            )
+            # Overwrote HT at release HT path with frequencies recalculated from first patch release,
+            # which is why this HT is in temp
+            release_ht = (
+                hl.read_table(
+                    "gs://broad-ukbb/broad.freeze_7/temp/broad.freeze_7.release.sites.ht"
+                )
+                .select_globals("gnomad_genomes_freq_meta")
+                .select("gnomad_genomes_freq")
+            )
+
+            # Re-unfurl gnomAD genomes freqs
+            # This is necessary because VCF HT was generated prior to fixing this frequency unfurling
+            # and VCF HT was used to add VCF annotations to raw MT above
+            # Without this step, sanity checks will throw this error:
+            # KeyError: "StructExpression instance has no field 'gnomad_genomes_AC_XX_adj'\n
+            # Did you mean:\n        'gnomad_genomes_AC_adj'\n        'gnomad_genomes_AC_sas_adj'\n        'gnomad_genomes_AC_oth_adj'\n
+            #  'gnomad_genomes_AC_nfe_adj'\n        'gnomad_genomes_AC_mid_adj'\n    Hint: use 'describe()' to show the names of all data fields."
+            logger.info(
+                "Unfurling gnomAD genomes freqs again (VCF annotations are missing sex-stratified freqs)..."
+            )
+            expr_dict = unfurl_nested_annotations(
+                release_ht, gnomad=True, genome=True, pops=GNOMAD_GENOMES_POPS
+            )
+            # Double check sex stratified freqs are present
+            if "gnomad_genomes_AC_XX_adj" not in expr_dict:
+                raise DataException(
+                    "gnomAD genomes sex-stratified freqs still aren't being unfurled correctly! Double check code."
+                )
+
+            logger.info("Re-annotating gnomad genomes freqs onto VCF MT...")
+            release_ht = release_ht.drop("gnomad_genomes_freq")
+            mt = mt.annotate_rows(info=mt.info.annotate(**release_ht[mt.row_key]))
+
+            # Fix hyphen names in HT
+            # This applies ONLY to the gnomAD genomes faf fields
+            # There are 34 faf fields
+            # This is also necessary because the code uses the VCF HT to add VCF annotations
+            # Again, VCF HT was generated before fixing the hyphens in the gnomad genomes annotations
+            # Check number of fields with hyphen
+            logger.info("Renaming hyphens to underscores in VCF MT...")
+            count = 0
+            for item in mt.info:
+                if "-" in item:
+                    count += 1
+            if count != 34:
+                raise DataException(
+                    "Expected to find 34 fields with hyphens! Double check VCF MT annotations."
+                )
+
+            # Rename hyphens
+            row_annots = list(mt.info)
+            new_row_annots = []
+            for x in row_annots:
+                x = x.replace("-", "_")
+                new_row_annots.append(x)
+            info_annot_mapping = dict(
+                zip(new_row_annots, [mt.info[f"{x}"] for x in row_annots])
+            )
+            mt = mt.transmute_rows(info=hl.struct(**info_annot_mapping))
+            mt.write(
+                get_checkpoint_path(
+                    *tranche_data,
+                    name="release_patch_sites_dense_annot_no_hyphen.mt",
+                    mt=True,
+                ),
+                overwrite=args.overwrite,
+            )
+
         if args.sanity_check:
             logger.info("Running sanity checks unique to release patch...")
             meta_ht = hl.read_table(meta_ht_path(*tranche_data))
             sanity_check_release_patch(mt=mt, meta_ht=meta_ht, verbose=args.verbose)
 
             logger.info("Sanity checking release MT...")
-            # NOTE: Fixed hyphens in gnomAD genomes frequency in this notebook:
-            # gs://broad-ukbb/broad.freeze_7/notebooks/rename_gnomad_pops.ipynb
-            # and checkpointed MT to this path below
-            # This was necessary because I added annotations using the VCF HT,
-            # which was generated prior to fixing the hyphens and gnomad genomes unfurling
             mt = hl.read_matrix_table(
-                "gs://broad-ukbb/broad.freeze_7/temp/release_patch_sites_dense_annot_no_hyphen.mt"
+                get_checkpoint_path(
+                    *tranche_data,
+                    name="release_patch_sites_dense_annot_no_hyphen.mt",
+                    mt=True,
+                ),
             )
             sanity_check_release_mt(
                 mt,
@@ -887,7 +962,9 @@ if __name__ == "__main__":
         type=int,
     )
     parser.add_argument(
-        "--sites", help="Path to MT with sites to be fixed in release patch",
+        "--sites",
+        help="Path to MT with sites to be fixed in release patch",
+        default="gs://broad-ukbb/broad.freeze_7/temp/all_patch_release_variants.ht",
     )
     parser.add_argument(
         "--densify", help="Whether to densify to sites to fix", action="store_true",
@@ -895,6 +972,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--recalculate_frequency",
         help="Whether to recalculate frequency at release patch sites",
+        action="store_true",
+    )
+    parser.add_argument(
+        # NOTE: This is necessary because I pulled the annotations from the pre-existing VCF HT
+        # which was generated prior to fixing the hyphens and gnomad genomes unfurling
+        "--fix_hyphens",
+        help="Fix gnomAD genomes pops unfurling and change hyphens to underscores",
         action="store_true",
     )
     parser.add_argument(
