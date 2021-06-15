@@ -615,7 +615,7 @@ def main(args):
             ).select_entries(*SPARSE_ENTRIES)
 
             logger.info("Loading sites to fix...")
-            sites_ht = hl.read_matrix_table(args.sites).rows()
+            sites_ht = hl.read_table(args.sites)
 
             logger.info("Densifying to impacted sites only...")
             from gnomad.utils.sparse_mt import densify_sites
@@ -651,7 +651,7 @@ def main(args):
                     *tranche_data, name="release_patch_sites_dense", mt=True
                 )
             )
-            sites_ht = hl.read_matrix_table(args.sites).rows()
+            sites_ht = hl.read_table(args.sites)
 
             logger.info("Adding het_non_ref annotation...")
             # Adding a Boolean for whether a sample had a heterozygous non-reference genotype
