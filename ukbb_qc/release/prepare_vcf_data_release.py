@@ -570,16 +570,16 @@ def unfurl_nested_annotations(
     # Unfurl UKBB ages
     # We previously dropped:
     # age_hist_hom_bin_edges, age_hist_het_bin_edges
-    if not gnomad:
-        age_hist_dict = {
-            "age_hist_het_bin_freq": hl.delimit(t.age_hist_het.bin_freq, delimiter="|"),
-            "age_hist_het_n_smaller": t.age_hist_het.n_smaller,
-            "age_hist_het_n_larger": t.age_hist_het.n_larger,
-            "age_hist_hom_bin_freq": hl.delimit(t.age_hist_hom.bin_freq, delimiter="|"),
-            "age_hist_hom_n_smaller": t.age_hist_hom.n_smaller,
-            "age_hist_hom_n_larger": t.age_hist_hom.n_larger,
-        }
-        expr_dict.update(age_hist_dict)
+    # if not gnomad:
+    #    age_hist_dict = {
+    #        "age_hist_het_bin_freq": hl.delimit(t.age_hist_het.bin_freq, delimiter="|"),
+    #        "age_hist_het_n_smaller": t.age_hist_het.n_smaller,
+    #        "age_hist_het_n_larger": t.age_hist_het.n_larger,
+    #        "age_hist_hom_bin_freq": hl.delimit(t.age_hist_hom.bin_freq, delimiter="|"),
+    #        "age_hist_hom_n_smaller": t.age_hist_hom.n_smaller,
+    #        "age_hist_hom_n_larger": t.age_hist_hom.n_larger,
+    #    }
+    #    expr_dict.update(age_hist_dict)
 
     return expr_dict
 
