@@ -870,8 +870,12 @@ def main(args):
                 overwrite=args.overwrite,
             )
 
-        if args.sanity_check:
-            logger.info("Running sanity checks unique to release patch...")
+        if args.get_extra_sites:
+            # NOTE: Sites to keep in release patch were determined using `get_impacted_variants.py`
+            # However, when filtering to frequency-impacted variants (variants common in only the 300K
+            # or 455K tranche), the code did not take adjusted sex ploidies into account
+            # Therefore, there are a few sites that do not need to be fixed and released
+            logger.info("Extracting extra variants (that do not need to be fixed)...")
             mt = hl.read_matrix_table(
                 get_checkpoint_path(
                     *tranche_data,
@@ -879,6 +883,42 @@ def main(args):
                     mt=True,
                 ),
             )
+
+            logger.info("Re-applying homalt hotfix (without het nonref patch)...")
+            mt = mt.annotate_entries(
+                GT_adj=hl.if_else(
+                    mt.GT.is_het() & (mt.info.AF_adj > 0.01) & (mt.AD[1] / mt.DP > 0.9),
+                    hl.call(1, 1),
+                    mt.GT,
+                )
+            )
+            mt = mt.annotate_rows(homalt_stats=hl.agg.call_stats(mt.GT_adj, mt.alleles))
+            ht = mt.rows()
+            ht = ht.filter(
+                (ht.homalt_stats.homozygote_count[1] == 0)
+                & (ht.locus.in_x_nonpar() | ht.locus.in_y_nonpar())
+            )
+            ht.write(
+                get_checkpoint_path(*tranche_data, name="sites_to_remove"),
+                overwrite=args.overwrite,
+            )
+
+        if args.sanity_check:
+            logger.info("Reading in VCF MT...")
+            logger.info("Removing extra sites...")
+            sites_to_remove_ht = hl.read_table(
+                get_checkpoint_path(*tranche_data, name="sites_to_remove")
+            )
+            mt = hl.read_matrix_table(
+                get_checkpoint_path(
+                    *tranche_data,
+                    name="release_patch_sites_dense_annot_no_hyphen.mt",
+                    mt=True,
+                ),
+            )
+            mt = mt.filter_rows(hl.is_missing(sites_to_remove_ht[mt.row_key]))
+
+            logger.info("Running sanity checks unique to release patch...")
             meta_ht = hl.read_table(meta_ht_path(*tranche_data))
             sanity_check_release_patch(mt=mt, meta_ht=meta_ht, verbose=args.verbose)
 
@@ -894,9 +934,18 @@ def main(args):
             )
 
         if args.export_vcf:
-            mt = hl.read_matrix_table(
-                "gs://broad-ukbb/broad.freeze_7/temp/release_patch_sites_dense_annot_no_hyphen.mt"
+            logger.info("Removing extra sites...")
+            sites_to_remove_ht = hl.read_table(
+                get_checkpoint_path(*tranche_data, name="sites_to_remove")
             )
+            mt = hl.read_matrix_table(
+                get_checkpoint_path(
+                    *tranche_data,
+                    name="release_patch_sites_dense_annot_no_hyphen.mt",
+                    mt=True,
+                ),
+            )
+            mt = mt.filter_rows(hl.is_missing(sites_to_remove_ht[mt.row_key]))
 
             # Reformat names to remove "adj" pre-export
             # e.g, renaming "AC_adj" to "AC"
@@ -989,6 +1038,11 @@ if __name__ == "__main__":
         # which was generated prior to fixing the hyphens and gnomad genomes unfurling
         "--fix_hyphens",
         help="Fix gnomAD genomes pops unfurling and change hyphens to underscores",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--get_extra_sites",
+        help="Extract sites that don't need to be present in release patch",
         action="store_true",
     )
     parser.add_argument(
