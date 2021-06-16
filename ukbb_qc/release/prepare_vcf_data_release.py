@@ -798,8 +798,14 @@ def main(args):
                 hl.read_table(
                     "gs://broad-ukbb/broad.freeze_7/temp/broad.freeze_7.release.sites.ht"
                 )
-                .select_globals("gnomad_genomes_freq_meta")
-                .select("gnomad_genomes_freq")
+                .select_globals(
+                    "gnomad_genomes_freq_meta",
+                    "gnomad_genomes_faf_index_dict",
+                    "gnomad_genomes_faf_meta",
+                )
+                .select(
+                    "gnomad_genomes_freq", "gnomad_genomes_faf", "gnomad_genomes_popmax"
+                )
             )
 
             # Re-unfurl gnomAD genomes freqs
@@ -812,17 +818,21 @@ def main(args):
             logger.info(
                 "Unfurling gnomAD genomes freqs again (VCF annotations are missing sex-stratified freqs)..."
             )
-            expr_dict = unfurl_nested_annotations(
-                release_ht, gnomad=True, genome=True, pops=GNOMAD_GENOMES_POPS
+            release_ht = release_ht.annotate(
+                **unfurl_nested_annotations(
+                    release_ht, gnomad=True, genome=True, pops=GNOMAD_GENOMES_POPS
+                )
             )
             # Double check sex stratified freqs are present
-            if "gnomad_genomes_AC_XX_adj" not in expr_dict:
+            if "gnomad_genomes_AC_XX_adj" not in release_ht.row:
                 raise DataException(
                     "gnomAD genomes sex-stratified freqs still aren't being unfurled correctly! Double check code."
                 )
 
             logger.info("Re-annotating gnomad genomes freqs onto VCF MT...")
-            release_ht = release_ht.drop("gnomad_genomes_freq")
+            release_ht = release_ht.drop(
+                "gnomad_genomes_freq", "gnomad_genomes_faf", "gnomad_genomes_popmax"
+            )
             mt = mt.annotate_rows(info=mt.info.annotate(**release_ht[mt.row_key]))
 
             # Fix hyphen names in HT
@@ -862,10 +872,6 @@ def main(args):
 
         if args.sanity_check:
             logger.info("Running sanity checks unique to release patch...")
-            meta_ht = hl.read_table(meta_ht_path(*tranche_data))
-            sanity_check_release_patch(mt=mt, meta_ht=meta_ht, verbose=args.verbose)
-
-            logger.info("Sanity checking release MT...")
             mt = hl.read_matrix_table(
                 get_checkpoint_path(
                     *tranche_data,
@@ -873,6 +879,10 @@ def main(args):
                     mt=True,
                 ),
             )
+            meta_ht = hl.read_table(meta_ht_path(*tranche_data))
+            sanity_check_release_patch(mt=mt, meta_ht=meta_ht, verbose=args.verbose)
+
+            logger.info("Sanity checking release MT...")
             sanity_check_release_mt(
                 mt,
                 SUBSET_LIST,
