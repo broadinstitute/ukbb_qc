@@ -776,8 +776,12 @@ def sanity_check_release_patch(
         )
     )
     mt = mt.annotate_rows(homalt_stats=hl.agg.call_stats(mt.GT_adj, mt.alleles))
+
+    logger.info("NOTE that this check should fail for a small number of rows (~80)...")
     # Check where homozygote count after applying hotfix is the same as the raw homozygote count
-    # This should never be true (there should be 0 rows matching this condition)
+    # This check will fail for sites that had sample genotypes adjusted in ONLY the frequency code
+    # or ONLY the previous release code
+    # These sites needed either frequencies or genotypes adjusted and are unrelated to the het nonref issue
     ht = mt.rows()
     ht = ht.annotate(
         # Check the raw homozygote counts because these are the genotypes that will exist in the release VCF
