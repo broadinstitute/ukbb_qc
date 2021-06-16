@@ -770,7 +770,7 @@ def sanity_check_release_patch(
     # Add homalt hotfix
     mt = mt.annotate_entries(
         GT_adj=hl.if_else(
-            mt.GT.is_het() & (mt.info.AF[0] > 0.01) & (mt.AD[1] / mt.DP > 0.9),
+            mt.GT.is_het() & (mt.info.AF_adj > 0.01) & (mt.AD[1] / mt.DP > 0.9),
             hl.call(1, 1),
             mt.GT,
         )
@@ -783,7 +783,7 @@ def sanity_check_release_patch(
         # Check the raw homozygote counts because these are the genotypes that will exist in the release VCF
         # (release VCF has no sample/variant filters and is not filtered to adj)
         het_nonref_hotfix_nhomalt=ht.info.nhomalt_raw,
-        hotfix_nhomalt=ht.homalt_stats[1],
+        hotfix_nhomalt=ht.homalt_stats.homozygote_count[1],
     )
     generic_field_check(
         ht=ht,
@@ -811,12 +811,12 @@ def sanity_check_release_patch(
         # Take 1st index of frequencies calculated using call_stats because 0th index is for ref allele
         recalc_AC=ht.freq.AC[1],
         recalc_AF=ht.freq.AF[1],
-        recalc_AN=ht.freq.AN[1],
+        recalc_AN=ht.freq.AN,
         recalc_nhomalt=ht.freq.homozygote_count[1],
-        adj_AC=ht.info.AC,
-        adj_AF=ht.info.AF,
-        adj_AN=ht.info.AN,
-        adj_nhomalt=ht.info.nhomalt,
+        adj_AC=ht.info.AC_adj,
+        adj_AF=ht.info.AF_adj,
+        adj_AN=ht.info.AN_adj,
+        adj_nhomalt=ht.info.nhomalt_adj,
     )
     for freq in ["AC", "AF", "AN", "nhomalt"]:
         generic_field_check(
