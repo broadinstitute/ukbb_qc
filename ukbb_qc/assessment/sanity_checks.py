@@ -762,7 +762,7 @@ def sanity_check_release_patch(
     :rtype: None
     """
     logger.info("CHECKING TOTAL COUNTS:")
-    mt.count()
+    logger.info(mt.count())
 
     logger.info(
         "RE-APPLYING HOMALT HOTFIX (WITHOUT HETNONREF PATCH) AND COMPARING HOMOZYGOTE COUNTS..."
