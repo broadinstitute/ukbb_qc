@@ -5,6 +5,7 @@ from typing import List
 import hailtop.batch as hb
 import hail as hl
 
+from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
 from ukbb_qc.resources.basics import (
@@ -68,6 +69,9 @@ def main(args):
     logger.info("Preparing to start batch job...")
     for sample in sample_ids:
         logger.info("Working on %s", sample)
+        if file_exists(f"{readviz_per_sample_tsv_path()}/{sample}.tsv"):
+            logger.info("Output TSV already exists, skipping %s...", sample)
+            continue
         j = b.new_python_job(name=sample)
         j.call(
             export_tsv,
