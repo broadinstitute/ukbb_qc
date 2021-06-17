@@ -38,19 +38,25 @@ def get_sample_ids(ids_file: str, header: bool = False) -> List[str]:
     return sample_ids
 
 
-def export_tsv(ht_path: str, sample_id: str, tsv_path: str) -> None:
+def export_tsv(ht_path: str, sample_id: str, tsv_path: str, success_path: str) -> None:
     """
     Read in hail Table, filter to specified sample ID, and export TSV.
+
+    Also write an empty success file to ensure no Batch jobs finish with only partially exported TSV.
 
     :param str ht_path: Path to input hail Table.
     :param str sample_id: Sample for which to export a TSV.
     :param str tsv_path: Path to output TSV.
+    :param str success_path: Path to output success file.
     :return: None
     """
     ht = hl.read_table(ht_path)
     ht = ht.filter(ht.S == sample_id)
     ht = ht.naive_coalesce(1)
     ht.export(tsv_path)
+
+    with hl.hadoop_open(success_path, "w") as o:
+        o.write("")
 
 
 def main(args):
@@ -78,6 +84,7 @@ def main(args):
             readviz_ht_exploded_path(),
             sample,
             f"{readviz_per_sample_tsv_path()}/{sample}.tsv",
+            f"{readviz_per_sample_tsv_path()}/{sample}_success.txt",
         )
 
     b.run(wait=False)
