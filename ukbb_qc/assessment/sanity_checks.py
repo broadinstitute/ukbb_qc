@@ -844,10 +844,10 @@ def sanity_check_release_patch(
         .select("freq")
     )
     ht = ht.annotate(
-        prev_AC=ht[release_ht.key].freq.AC[1],
-        prev_AF=ht[release_ht.key].freq.AF[1],
-        prev_AN=ht[release_ht.key].freq.AN[1],
-        prev_nhomalt=ht[release_ht.key].freq.homozygote_count[1],
+        prev_AC=ht[release_ht.key].freq[1].AC,
+        prev_AF=ht[release_ht.key].freq[1].AF,
+        prev_AN=ht[release_ht.key].freq[1].AN,
+        prev_nhomalt=ht[release_ht.key].freq[1].homozygote_count,
     )
     for freq in ["AC", "AF", "AN", "nhomalt"]:
         generic_field_check(
