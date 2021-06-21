@@ -894,6 +894,9 @@ def main(args):
             logger.info("Filtering to non-PAR regions only...")
             mt = mt.filter_rows(mt.locus.in_x_nonpar() | mt.locus.in_y_nonpar())
 
+            # Annotate MT with het annotation
+            mt = mt.annotate_entries(het=mt.GT.is_het())
+
             # Filter to rows WITHOUT at least one het call and high AB
             # This is to filter to rows that aren't impacted by homalt hotfix
             logger.info(
