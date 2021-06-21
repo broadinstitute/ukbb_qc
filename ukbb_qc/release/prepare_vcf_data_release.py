@@ -884,20 +884,27 @@ def main(args):
                 ),
             )
 
-            logger.info("Re-applying homalt hotfix (without het nonref patch)...")
-            mt = mt.annotate_entries(
-                GT_adj=hl.if_else(
-                    mt.GT.is_het() & (mt.info.AF_adj > 0.01) & (mt.AD[1] / mt.DP > 0.9),
-                    hl.call(1, 1),
-                    mt.GT,
-                )
+            logger.info("Adjusting sex ploidy...")
+            meta_ht = hl.read_table(meta_ht_path(*tranche_data))
+            mt = mt.annotate_cols(
+                sex_karyotype=meta_ht[mt.s].sex_imputation.sex_karyotype
             )
-            mt = mt.annotate_rows(homalt_stats=hl.agg.call_stats(mt.GT_adj, mt.alleles))
+            mt = adjust_sex_ploidy(mt, mt.sex_karyotype, male_str="XY", female_str="XX")
+
+            logger.info("Filtering to non-PAR regions only...")
+            mt = mt.filter_rows(mt.locus.in_x_nonpar() | mt.locus.in_y_nonpar())
+
+            # Filter to rows WITHOUT at least one het call and high AB
+            # This is to filter to rows that aren't impacted by homalt hotfix
+            logger.info(
+                "Removing any rows impacted by homalt hotfix (at least one het call and high AB)..."
+            )
+            mt = mt.filter_rows(
+                hl.agg.any(mt.het & ((mt.AD[1] / mt.DP) > 0.9)), keep=False
+            )
+
+            logger.info("Writing sites to output HT...")
             ht = mt.rows()
-            ht = ht.filter(
-                (ht.homalt_stats.homozygote_count[1] == 0)
-                & (ht.locus.in_x_nonpar() | ht.locus.in_y_nonpar())
-            )
             ht = ht.checkpoint(
                 get_checkpoint_path(*tranche_data, name="sites_to_remove"),
                 overwrite=args.overwrite,
