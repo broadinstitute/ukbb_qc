@@ -898,9 +898,13 @@ def main(args):
                 (ht.homalt_stats.homozygote_count[1] == 0)
                 & (ht.locus.in_x_nonpar() | ht.locus.in_y_nonpar())
             )
-            ht.write(
+            ht = ht.checkpoint(
                 get_checkpoint_path(*tranche_data, name="sites_to_remove"),
                 overwrite=args.overwrite,
+            )
+            logger.info(
+                "Number of sites that aren't adjusted due to adjust_sex_ploidy: %s",
+                ht.count(),
             )
 
         if args.sanity_check:
