@@ -1,12 +1,16 @@
+import asyncio
 import argparse
 import logging
 import os
-from typing import List
+from typing import Dict, List
+from concurrent.futures import ThreadPoolExecutor
 
 import hailtop.batch as hb
+from hailtop.aiotools import LocalAsyncFS, RouterAsyncFS, AsyncFS
+from hailtop.aiogoogle import GoogleStorageAsyncFS
+from hailtop.utils import bounded_gather, tqdm
 import hail as hl
 
-from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
 from ukbb_qc.resources.basics import (
@@ -19,6 +23,53 @@ from ukbb_qc.slack_creds import slack_token
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("run_per_sample_tsv_export")
 logger.setLevel(logging.INFO)
+
+
+async def parallel_file_exists(fnames: List[str]) -> Dict[str, bool]:
+    """
+    Check if file exists.
+
+    Code is from Dan King to speed up check for files 
+    (`file_exists` in gnomAD repo was too slow for large number of Batch jobs).
+    """
+
+    async def low_level_async_file_exists(fs: AsyncFS, url: str):
+        try:
+            await fs.statfile(url)
+        except FileNotFoundError:
+            return False
+        else:
+            return True
+
+    async def async_file_exists(fs: AsyncFS, fname: str):
+        fext = os.path.splitext(fname)[1]
+        if fext in [".ht", ".mt"]:
+            fname += "/_SUCCESS"
+        return await low_level_async_file_exists(fs, fname)
+
+    with tqdm(
+        total=len(fnames), desc="check files for existence", disable=False
+    ) as pbar:
+        with ThreadPoolExecutor() as thread_pool:
+            async with RouterAsyncFS(
+                "file", [LocalAsyncFS(thread_pool), GoogleStorageAsyncFS()]
+            ) as fs:
+
+                def create_unapplied_function(fname):
+                    async def unapplied_function():
+                        x = await async_file_exists(fs, fname)
+                        pbar.update(1)
+                        return x
+
+                    return unapplied_function
+
+                file_existence_checks = [
+                    create_unapplied_function(fname) for fname in fnames
+                ]
+                file_existence = await bounded_gather(
+                    *file_existence_checks, parallelism=750
+                )
+    return {fname: exists for fname, exists in zip(fnames, file_existence)}
 
 
 def get_sample_ids(ids_file: str, header: bool = False) -> List[str]:
@@ -74,9 +125,14 @@ def main(args):
     sample_ids = get_sample_ids(args.ids_file, args.header)
 
     logger.info("Preparing to start batch job...")
+    files = [f"{readviz_per_sample_tsv_path()}/{sample}.tsv" for sample in sample_ids]
+    file_exists = asyncio.get_event_loop().run_until_complete(
+        parallel_file_exists(files)
+    )
+
     for sample in sample_ids:
         logger.info("Working on %s", sample)
-        if file_exists(f"{readviz_per_sample_tsv_path()}/{sample}.tsv"):
+        if file_exists[f"{readviz_per_sample_tsv_path()}/{sample}.tsv"]:
             logger.info("Output TSV already exists, skipping %s...", sample)
             continue
         j = b.new_python_job(name=sample)
