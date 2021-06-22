@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 from typing import List
 
 import hailtop.batch as hb
@@ -79,6 +80,15 @@ def main(args):
             logger.info("Output TSV already exists, skipping %s...", sample)
             continue
         j = b.new_python_job(name=sample)
+
+        # Install GCS Connector
+        def _install_gcs():
+            os.system(
+                "gcloud -q auth activate-service-account --key-file=/gsa-key/key.json"
+            )
+            os.system("curl -sSL https://broad.io/install-gcs-connector | python3")
+
+        j.call(_install_gcs)
         j.call(
             export_tsv,
             readviz_ht_exploded_path(),
