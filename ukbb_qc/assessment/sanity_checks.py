@@ -851,7 +851,9 @@ def sanity_check_release_patch(
     )
     # NOTE: Expect most of these sites to pass
     # Not all variants included in the patch release required frequency adjustment
-    # E.g., ~18K of the ~61K variants should fail the recalc_AC != prev_AC check
+    # E.g., only ~18K of the ~61K variants should fail the recalc_AC != prev_AC check
+    # Most of these 18K are het nonref impacted variants
+    # A small subset (~10) of the 18K are variants common only in the 300K
     for freq in ["AC", "AF", "AN", "nhomalt"]:
         generic_field_check(
             ht,
