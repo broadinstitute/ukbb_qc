@@ -117,7 +117,7 @@ def main(args):
     b = hb.Batch(
         backend=backend,
         default_cpu=1,
-        default_python_image="gcr.io/broad-mpg-gnomad/tgg-methods-vm@sha256:fe12ab1dd82ff6d61f28f65310eda26f5112cc42c1d56ad3b47d82b5a6dbf62b",
+        default_python_image="gcr.io/broad-mpg-gnomad/tgg-methods-vm:20210623",
         project="broad-mpg-gnomad",
     )
 
@@ -133,18 +133,11 @@ def main(args):
     for sample in sample_ids:
         logger.info("Working on %s", sample)
         if file_exists[f"{readviz_per_sample_tsv_path()}/{sample}_success.txt"]:
-            logger.info("Output success txt file already exists, skipping %s...", sample)
+            logger.info(
+                "Output success txt file already exists, skipping %s...", sample
+            )
             continue
         j = b.new_python_job(name=sample)
-
-        # Install GCS Connector
-        def _install_gcs():
-            os.system(
-                "gcloud -q auth activate-service-account --key-file=/gsa-key/key.json"
-            )
-            os.system("curl -sSL https://broad.io/install-gcs-connector | python3")
-
-        j.call(_install_gcs)
         j.call(
             export_tsv,
             readviz_ht_exploded_path(),
