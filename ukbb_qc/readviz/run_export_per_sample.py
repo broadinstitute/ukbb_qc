@@ -125,7 +125,9 @@ def main(args):
     sample_ids = get_sample_ids(args.ids_file, args.header)
 
     logger.info("Preparing to start batch job...")
-    files = [f"{readviz_per_sample_tsv_path()}/{sample}.tsv" for sample in sample_ids]
+    files = [
+        f"{readviz_per_sample_tsv_path()}/{sample}_success.txt" for sample in sample_ids
+    ]
     file_exists = asyncio.get_event_loop().run_until_complete(
         parallel_file_exists(files)
     )
