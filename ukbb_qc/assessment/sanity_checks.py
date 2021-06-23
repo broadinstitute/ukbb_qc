@@ -832,7 +832,7 @@ def sanity_check_release_patch(
         )
 
     logger.info(
-        "COMPARING VCF MT FREQUENCIES WITH PREVIOUSLY CALCULATED FREQUENCIES..."
+        "COMPARING VCF MT FREQUENCIES WITH PREVIOUSLY CALCULATED FREQUENCIES  (INCORRECT HOM ALT DEPLETION ADJUSTMENT ON HET NON REF VARAINTS)..."
     )
     # Overwrote HT at release HT path with frequencies recalculated from first patch release,
     # which is why this HT is in temp
@@ -844,10 +844,14 @@ def sanity_check_release_patch(
         .select("freq")
     )
     ht = ht.annotate(
-        prev_AC=release_ht[ht.key].freq[0].AC,
-        prev_AF=release_ht[ht.key].freq[0].AF,
-        prev_AN=release_ht[ht.key].freq[0].AN,
-        prev_nhomalt=release_ht[ht.key].freq[0].homozygote_count,
+        prev_AC=release_ht[ht.key].freq[1].AC,
+        prev_AF=release_ht[ht.key].freq[1].AF,
+        prev_AN=release_ht[ht.key].freq[1].AN,
+        prev_nhomalt=release_ht[ht.key].freq[1].homozygote_count,
+        raw_AC=ht.info.AC_raw,
+        raw_AF=ht.info.AF_raw,
+        raw_AN=ht.info.AN_raw,
+        raw_nhomalt=ht.info.nhomalt_raw,
     )
     # NOTE: Expect most of these sites to pass
     # Not all variants included in the patch release required frequency adjustment
@@ -857,9 +861,9 @@ def sanity_check_release_patch(
     for freq in ["AC", "AF", "AN", "nhomalt"]:
         generic_field_check(
             ht,
-            cond_expr=(ht[f"recalc_{freq}"] != ht[f"prev_{freq}"]),
-            check_description=f"recalculated_{freq} == prev_{freq}",
-            display_fields=[f"recalc_{freq}", f"prev_{freq}"],
+            cond_expr=(ht[f"raw_{freq}"] != ht[f"prev_{freq}"]),
+            check_description=f"recalculated_raw_{freq} == prev_raw_{freq}",
+            display_fields=[f"raw_{freq}", f"prev_{freq}"],
             verbose=verbose,
         )
 
