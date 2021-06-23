@@ -144,7 +144,7 @@ def main(args):
             export_tsv,
             readviz_ht_exploded_path(),
             sample,
-            f"{readviz_per_sample_tsv_path()}/{sample}.tsv",
+            f"{readviz_per_sample_tsv_path()}/{sample}.tsv.bgz",
             f"{readviz_per_sample_tsv_path()}/{sample}_success.txt",
         )
 
