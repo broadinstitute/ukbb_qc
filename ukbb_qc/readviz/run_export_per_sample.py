@@ -132,8 +132,8 @@ def main(args):
 
     for sample in sample_ids:
         logger.info("Working on %s", sample)
-        if file_exists[f"{readviz_per_sample_tsv_path()}/{sample}.tsv"]:
-            logger.info("Output TSV already exists, skipping %s...", sample)
+        if file_exists[f"{readviz_per_sample_tsv_path()}/{sample}_success.txt"]:
+            logger.info("Output success txt file already exists, skipping %s...", sample)
             continue
         j = b.new_python_job(name=sample)
 
