@@ -832,7 +832,7 @@ def sanity_check_release_patch(
         )
 
     logger.info(
-        "COMPARING VCF MT FREQUENCIES WITH PREVIOUSLY CALCULATED FREQUENCIES  (INCORRECT HOM ALT DEPLETION ADJUSTMENT ON HET NON REF VARAINTS)..."
+        "COMPARING VCF MT FREQUENCIES WITH PREVIOUSLY CALCULATED FREQUENCIES (INCORRECT HOM ALT DEPLETION ADJUSTMENT ON HET NON REF VARIANTS)..."
     )
     # Overwrote HT at release HT path with frequencies recalculated from first patch release,
     # which is why this HT is in temp
