@@ -856,6 +856,16 @@ def readviz_per_sample_tsv_path() -> str:
     return "gs://gnomad-readviz/ukbb/per_sample_tsv"
 
 
+def readviz_haplotype_caller_path() -> str:
+    """
+    Return path to bucket containing HaplotypeCaller inputs and outputs.
+
+    :return: Path to HaplotypeCaller inputs/outputs bucket.
+    :rtype: str   
+    """
+    return "gs://gnomad-readviz/ukbb/haplotypecaller"
+
+
 # logging path
 def logging_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     """
