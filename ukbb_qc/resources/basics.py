@@ -796,11 +796,10 @@ def get_pair_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
 
 
 # Readviz resources
-def cram_map_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+def cram_map_path(freeze: int = CURRENT_FREEZE) -> str:
     """
     Return path to TSV containing UKBB samples and their cram paths.
 
-    :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: Data freeze. Must be 7.
     :return: Path to TSV containing UKBB samples and their cram paths
     :rtype: str  
@@ -810,11 +809,24 @@ def cram_map_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
     return "gs://gnomad-readviz/ukbb/sample_cram_map.tsv"
 
 
-def non_gnomad_var_ht_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
+def readviz_ids_tsv_path(freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Return path to TSV containing UKBB samples with variants to be extracted for readviz.
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: Data freeze. Must be 7.
+    :return: Path to TSV containing UKBB sample IDs
+    :rtype: str  
+    """
+    if freeze != 7:
+        raise DataException("Readviz IDs TSV only exists for freeze 7/450K!")
+    return "gs://gnomad-readviz/ukbb/readviz_sample_ids.tsv"
+
+
+def non_gnomad_var_ht_path(freeze: int = CURRENT_FREEZE) -> str:
     """
     Return path to HT containing variants unique to the UKBB (not present in gnomAD v2.1.1 or v3.1).
 
-    :param str data_source: One of 'regeneron' or 'broad'
     :param int freeze: Data freeze. Must be 7.
     :return: Path to UKBB unique variants HT
     :rtype: str   
