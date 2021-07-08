@@ -17,6 +17,7 @@ from ukbb_qc.resources.basics import (
     readviz_ht_exploded_path,
     readviz_per_sample_tsv_path,
 )
+from ukbb_qc.utils.utils import get_sample_ids
 from ukbb_qc.slack_creds import slack_token
 
 
@@ -70,24 +71,6 @@ async def parallel_file_exists(fnames: List[str]) -> Dict[str, bool]:
                     *file_existence_checks, parallelism=750
                 )
     return {fname: exists for fname, exists in zip(fnames, file_existence)}
-
-
-def get_sample_ids(ids_file: str, header: bool = False) -> List[str]:
-    """
-    Open file with all sample IDs and stores IDs in a list.
-
-    :param str ids_file: Path to file containing sample IDs with variants to extract for readviz.
-    :param bool header: Whether IDs file has a header line. Default is False.
-    :return: List of sample IDs
-    :rtype: List[str]
-    """
-    sample_ids = []
-    with open(ids_file) as i:
-        if header:
-            header = i.readline()
-        for line in i:
-            sample_ids.append(line.strip())
-    return sample_ids
 
 
 def export_tsv(ht_path: str, sample_id: str, tsv_path: str, success_path: str) -> None:
