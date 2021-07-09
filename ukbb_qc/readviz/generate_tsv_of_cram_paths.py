@@ -8,7 +8,7 @@ from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
 
-from ukbb_qc.resources.utils.utils import get_sample_ids
+from ukbb_qc.utils.utils import get_sample_ids
 from ukbb_qc.resources.basics import (
     cram_map_path,
     readviz_haplotype_caller_path,
