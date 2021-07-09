@@ -37,6 +37,7 @@ def main(args):
         for line in c:
             sample, cram = line.strip().split("\t")
             if sample in sample_ids:
+                logger.info("Working on %s", sample)
                 tsv = f"{readviz_per_sample_tsv_path()}/{sample}.tsv.bgz"
                 if not file_exists(cram):
                     raise DataException(
