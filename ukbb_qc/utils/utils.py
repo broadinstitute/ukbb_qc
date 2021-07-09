@@ -109,7 +109,7 @@ def get_sample_ids(ids_file: str, header: bool = False) -> List[str]:
     :rtype: List[str]
     """
     sample_ids = []
-    with open(ids_file) as i:
+    with hl.hadoop_open(ids_file) as i:
         if header:
             header = i.readline()
         for line in i:
