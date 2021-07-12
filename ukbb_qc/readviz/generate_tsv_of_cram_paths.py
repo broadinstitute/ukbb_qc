@@ -26,12 +26,16 @@ logger.setLevel(logging.INFO)
 
 
 def main(args):
+    """
+    Generate single TSV with sample IDs, cram paths, and variant TSV file paths.
+
+    NOTE: Run locally (parallel_file_exists only works locally).
+    """
     freeze = args.freeze
 
     logger.info("Getting sample IDs...")
     sample_ids = get_sample_ids(readviz_ids_tsv_path(freeze))
 
-    logger.info("Starting TSV file existence checks...")
     tsvs = [
         f"{readviz_per_sample_tsv_path()}/{sample}.tsv.bgz" for sample in sample_ids
     ]
