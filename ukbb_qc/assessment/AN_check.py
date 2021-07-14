@@ -100,14 +100,16 @@ def main(args):
             .select("freq")
         )
         ht = ht.select(new_AN=ht.new_freq.AN, prev_AN=release_ht[ht.key].freq[1].AN)
-        ht.aggregate(
-            hl.struct(
-                new_AN_neq_prev_AN=hl.agg.count_where(ht.new_AN != ht.prev_AN),
-                new_AN_def=hl.agg.count_where(hl.is_defined(ht.new_AN)),
-                prev_AN_def=hl.agg.count_where(hl.is_defined(ht.prev_AN)),
-                prev_AN_def_and_neq_new_AN=hl.agg.count_where(
-                    (hl.is_defined(ht.prev_AN)) & (ht.new_AN != ht.prev_AN)
-                ),
+        logger.info(
+            ht.aggregate(
+                hl.struct(
+                    new_AN_neq_prev_AN=hl.agg.count_where(ht.new_AN != ht.prev_AN),
+                    new_AN_def=hl.agg.count_where(hl.is_defined(ht.new_AN)),
+                    prev_AN_def=hl.agg.count_where(hl.is_defined(ht.prev_AN)),
+                    prev_AN_def_and_neq_new_AN=hl.agg.count_where(
+                        (hl.is_defined(ht.prev_AN)) & (ht.new_AN != ht.prev_AN)
+                    ),
+                )
             )
         )
 
