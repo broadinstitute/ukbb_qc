@@ -8,6 +8,7 @@ from gnomad.utils.vcf import SPARSE_ENTRIES
 
 from ukbb_qc.resources.basics import get_ukbb_data, logging_path, release_ht_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
+from ukbb_qc.resources.variant_qc import info_ht_path
 from ukbb_qc.slack_creds import slack_token
 
 
@@ -71,6 +72,13 @@ def main(args):
                 hl.call(1, 1),
                 mt.GT,
             )
+        )
+
+        logger.info("Removing low QUAL variants and star alleles...")
+        info_ht = hl.read_table(info_ht_path(data_source, freeze))
+        mt = mt.filter_rows(
+            (~info_ht[mt.row_key].AS_lowqual)
+            & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
         )
 
         logger.info("Filtering to unrelated high quality samples with defined batch...")
