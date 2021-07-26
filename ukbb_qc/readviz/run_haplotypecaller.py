@@ -92,7 +92,9 @@ def main():
     """
     p, args = parse_args()
 
-    df = pd.read_table(args.cram_and_tsv_paths_table)
+    hl.init(log="/dev/null", quiet=True)
+    ht = hl.import_table(args.cram_and_tsv_paths_table, impute=True)
+    df = ht.to_pandas()
     if {"sample_id", "cram_path", "crai_path", "variants_tsv_bgz"} - set(df.columns):
         p.error(f"{args.tsv_path} must contain 'sample_id', 'cram_path' columns")
 
@@ -100,9 +102,6 @@ def main():
     set_gcloud_project(GCLOUD_PROJECT)
     if args.cluster:
         check_storage_bucket_region(df.cram_path)
-
-    if not args.force:
-        hl.init(log="/dev/null", quiet=True)
 
     # Process samples
     with run_batch(args, batch_name=f"HaplotypeCaller -bamout") as batch:
