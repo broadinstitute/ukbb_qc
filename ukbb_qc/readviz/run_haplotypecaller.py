@@ -55,13 +55,7 @@ Amount of padding to add around each variant when running HaplotypeCaller.
 def parse_args():
     """Parse command line args."""
 
-    p = init_arg_parser(
-        default_cpu=1,
-        default_billing_project="gnomad-production",
-        gsa_key_file=os.path.expanduser(
-            "~/.config/gcloud/misc-270914-cb9992ec9b25.json"
-        ),
-    )
+    p = init_arg_parser(default_cpu=1, default_billing_project="gnomad-production")
     p.add_argument(
         "-p",
         "--output-dir",
@@ -149,6 +143,9 @@ def main():
                 DOCKER_IMAGE if not args.raw else None,
                 args.cpu,
                 args.memory,
+            )
+            j.command(
+                f"""gcloud -q auth activate-service-account --key-file=/gsa-key/key.json"""
             )
             local_exclude_intervals = localize_file(j, EXCLUDE_INTERVALS)
             local_fasta = localize_file(j, HG38_REF_PATHS.fasta, use_gcsfuse=True)
