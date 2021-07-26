@@ -1,9 +1,13 @@
+import asyncio
 import logging
 import os
 import pandas as pd
 import tqdm
 
 import hail as hl
+
+from gnomad.resources.resource_utils import DataException
+from gnomad.utils.file_utils import parallel_file_exists
 
 from tgg.batch.batch_utils import (
     check_storage_bucket_region,
@@ -25,11 +29,6 @@ logging.basicConfig(
 logger = logging.getLogger("run_haplotypecaller")
 logger.setLevel(logging.INFO)
 
-
-GCLOUD_PROJECT = "broad-mpg-gnomad"
-"""
-Google cloud project.
-"""
 
 # Dockerfile for this image is in gnomad-readviz repo
 DOCKER_IMAGE = "gcr.io/broad-mpg-gnomad/gnomad-readviz:ukbb"
@@ -57,6 +56,11 @@ def parse_args():
 
     p = init_arg_parser(default_cpu=1, default_billing_project="gnomad-production")
     p.add_argument(
+        "--gcloud-project",
+        help="Google cloud project. Default is 'broad-mpg-gnomad'.",
+        default="broad-mpg-gnomad",
+    )
+    p.add_argument(
         "-p",
         "--output-dir",
         help="Where to write haplotype caller output.",
@@ -75,7 +79,7 @@ def parse_args():
         nargs="+",
     )
     p.add_argument(
-        "cram_and_tsv_paths_table",
+        "--cram-and-tsv_paths-table",
         help="A text file containing at least these columns: sample_id, cram_path",
         default=f"{readviz_haplotype_caller_path()}/inputs/step4_output_cram_and_tsv_paths_table.tsv",
     )
@@ -90,18 +94,48 @@ def main():
 
     Step 5 of readviz pipeline.
     """
-    p, args = parse_args()
-
+    _, args = parse_args()
     hl.init(log="/dev/null", quiet=True)
+    project = args.gcloud_project
+    set_gcloud_project(project)
+
+    logger.info("Making sure input cram_and_tsv_paths_table arg is valid...")
+    bams = {}
+    with hl.hadoop_open(args.cram_and_tsv_paths_table) as c:
+        # Confirm header has all required columns
+        header = c.readline().strip().split("\t")
+        if {"sample_id", "cram_path", "crai_path", "variants_tsv_bgz"} - set(header):
+            raise DataException(
+                "%s must contain 'sample_id', 'cram_path', 'crai_path', variants_tsv_bgz' columns!"
+            )
+
+        for line in c:
+            # Line is in format:
+            # sample, cram, crai, variants_tsv_bgz
+            # Only sample and cram need to be checked here
+            sample, cram, _, _ = line.strip().split("\t")
+
+            # Store output BAM path
+            bam = f"{args.output_prefix}/{sample}.bamout.bam"
+            bams[sample] = bam
+
+            logger.info(
+                "Checking that all input crams are 'US-CENTRAL1' or multi-regional buckets..."
+            )
+            # Check that all buckets are in "US-CENTRAL1" or are multi-regional to avoid egress charges to the Batch cluster
+            check_storage_bucket_region(cram)
+
+    logger.info("Checking if any output bams already exist...")
+    bam_exists = asyncio.get_event_loop().run_until_complete(
+        parallel_file_exists(list(bams.values()))
+    )
+    samples_without_bams = []
+    for sample in bams:
+        if not bam_exists[bams[sample]]:
+            samples_without_bams.append(sample)
+
     ht = hl.import_table(args.cram_and_tsv_paths_table, impute=True)
     df = ht.to_pandas()
-    if {"sample_id", "cram_path", "crai_path", "variants_tsv_bgz"} - set(df.columns):
-        p.error(f"{args.tsv_path} must contain 'sample_id', 'cram_path' columns")
-
-    # Check that all buckets are in "US-CENTRAL1" or are multi-regional to avoid egress charges to the Batch cluster
-    set_gcloud_project(GCLOUD_PROJECT)
-    if args.cluster:
-        check_storage_bucket_region(df.cram_path)
 
     # Process samples
     with run_batch(args, batch_name=f"HaplotypeCaller -bamout") as batch:
@@ -171,7 +205,7 @@ gunzip -c "{local_tsv_bgz}" | awk '{{ OFS="\t" }} {{ print( "chr"$1, $2, $2 ) }}
 # The sort is done by first retrieving the input_cram header and passing it to GATK BedToIntervalList.
 
 java -Xms2g -jar /gatk/gatk.jar PrintReadsHeader \
-    --gcs-project-for-requester-pays {GCLOUD_PROJECT} \
+    --gcs-project-for-requester-pays {project} \
     -R {local_fasta} \
     -I "{local_cram_path}" \
     -O header.bam
