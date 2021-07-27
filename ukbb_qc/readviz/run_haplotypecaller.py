@@ -136,9 +136,7 @@ def main():
 
     # Process samples
     with run_batch(args, batch_name=f"HaplotypeCaller -bamout") as batch:
-        with tqdm(
-            range(len(samples)), desc="submit HC batch job for samples",
-        ) as pbar:
+        for _ in tqdm(range(len(samples)), desc="submit HC batch job for samples",):
             for sample in samples:
                 cram, crai, variants_tsv_bgz, bam, bai = samples[sample]
 
