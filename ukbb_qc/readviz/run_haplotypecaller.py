@@ -1,8 +1,6 @@
 import asyncio
 import logging
-import os
-import pandas as pd
-import tqdm
+from tqdm import tqdm
 
 import hail as hl
 
@@ -101,6 +99,7 @@ def main():
 
     logger.info("Making sure input cram_and_tsv_paths_table arg is valid...")
     bams = {}
+    samples = {}
     with hl.hadoop_open(args.cram_and_tsv_paths_table) as c:
         # Confirm header has all required columns
         header = c.readline().strip().split("\t")
@@ -110,14 +109,15 @@ def main():
             )
 
         for line in c:
-            # Line is in format:
-            # sample, cram, crai, variants_tsv_bgz
-            # Only sample and cram need to be checked here
-            sample, cram, _, _ = line.strip().split("\t")
+            sample, cram, crai, variants_tsv_bgz = line.strip().split("\t")
 
             # Store output BAM path
             bam = f"{args.output_prefix}/{sample}.bamout.bam"
+            bai = f"{args.output_prefix}/{sample}.bamout.bai"
             bams[sample] = bam
+
+            # Store sample information
+            samples[sample] = [cram, crai, variants_tsv_bgz, bam, bai]
 
             logger.info(
                 "Checking that all input crams are 'US-CENTRAL1' or multi-regional buckets..."
@@ -134,62 +134,33 @@ def main():
         if not bam_exists[bams[sample]]:
             samples_without_bams.append(sample)
 
-    ht = hl.import_table(args.cram_and_tsv_paths_table, impute=True)
-    df = ht.to_pandas()
-
     # Process samples
     with run_batch(args, batch_name=f"HaplotypeCaller -bamout") as batch:
-        counter = 0
-        for _, row in tqdm.tqdm(df.iterrows(), unit=" rows", total=len(df)):
-            if args.sample_to_process and row.sample_id not in set(
-                args.sample_to_process
-            ):
-                continue
+        with tqdm(
+            range(len(samples)), desc="submit HC batch job for samples",
+        ) as pbar:
+            for sample in samples:
+                cram, crai, variants_tsv_bgz, bam, bai = samples[sample]
 
-            input_filename = os.path.basename(row.cram_path)
-            output_prefix = input_filename.replace(".bam", "").replace(".cram", "")
-
-            output_bam_path = os.path.join(
-                args.output_dir, f"{output_prefix}.bamout.bam"
-            )
-            output_bai_path = os.path.join(
-                args.output_dir, f"{output_prefix}.bamout.bai"
-            )
-
-            if (
-                not args.force
-                and hl.hadoop_is_file(output_bam_path)
-                and hl.hadoop_is_file(output_bai_path)
-            ):
-                logger.info(
-                    f"Output files exist (eg. {output_bam_path}). Skipping {input_filename}..."
+                j = init_job(
+                    batch,
+                    f"readviz: {sample}",
+                    DOCKER_IMAGE if not args.raw else None,
+                    args.cpu,
+                    args.memory,
                 )
-                continue
+                j.command(
+                    f"""gcloud -q auth activate-service-account --key-file=/gsa-key/key.json"""
+                )
+                local_exclude_intervals = localize_file(j, EXCLUDE_INTERVALS)
+                local_fasta = localize_file(j, HG38_REF_PATHS.fasta, use_gcsfuse=True)
+                local_fasta_fai = localize_file(j, HG38_REF_PATHS.fai, use_gcsfuse=True)
+                localize_file(j, HG38_REF_PATHS.dict, use_gcsfuse=True)
+                local_tsv_bgz = localize_file(j, variants_tsv_bgz)
+                local_cram_path = localize_file(j, cram)
 
-            counter += 1
-            if args.num_samples_to_process and counter > args.num_samples_to_process:
-                break
-
-            j = init_job(
-                batch,
-                f"readviz: {row.sample_id}",
-                DOCKER_IMAGE if not args.raw else None,
-                args.cpu,
-                args.memory,
-            )
-            j.command(
-                f"""gcloud -q auth activate-service-account --key-file=/gsa-key/key.json"""
-            )
-            local_exclude_intervals = localize_file(j, EXCLUDE_INTERVALS)
-            local_fasta = localize_file(j, HG38_REF_PATHS.fasta, use_gcsfuse=True)
-            local_fasta_fai = localize_file(j, HG38_REF_PATHS.fai, use_gcsfuse=True)
-            localize_file(j, HG38_REF_PATHS.dict, use_gcsfuse=True)
-            local_tsv_bgz = localize_file(j, row.variants_tsv_bgz)
-            local_cram_path = localize_file(j, row.cram_path)
-            local_crai_path = localize_file(j, row.crai_path)
-
-            j.command(
-                f"""echo --------------
+                j.command(
+                    f"""echo --------------
 
 echo "Start - time: $(date)"
 df -kh
@@ -231,22 +202,22 @@ time java -XX:GCTimeLimit=50 -XX:GCHeapFreeLimit=10 -XX:+DisableAttachMechanism 
     -variant_index_parameter 128000 \
     -variant_index_type LINEAR \
     --read_filter OverclippedRead \
-    -bamout "{output_prefix}.bamout.bam" \
-    -o "{output_prefix}.gvcf"  |& grep -v "^DEBUG"
+    -bamout "{sample}.bamout.bam" \
+    -o "{sample}.gvcf"  |& grep -v "^DEBUG"
 
-bgzip "{output_prefix}.gvcf"
-tabix "{output_prefix}.gvcf.gz"
+bgzip "{sample}.gvcf"
+tabix "{sample}.gvcf.gz"
 
-gsutil -m cp "{output_prefix}.bamout.bam" {args.output_dir}
-gsutil -m cp "{output_prefix}.bamout.bai" {args.output_dir}
-gsutil -m cp "{output_prefix}.gvcf.gz" {args.output_dir}
-gsutil -m cp "{output_prefix}.gvcf.gz.tbi" {args.output_dir}
+gsutil -m cp "{sample}.bamout.bam" {args.output_dir}
+gsutil -m cp "{sample}.bamout.bai" {args.output_dir}
+gsutil -m cp "{sample}.gvcf.gz" {args.output_dir}
+gsutil -m cp "{sample}.gvcf.gz.tbi" {args.output_dir}
 
 ls -lh
 echo --------------; free -h; df -kh; uptime; set +xe; echo "Done - time: $(date)"; echo --------------
 
 """
-            )
+                )
 
 
 if __name__ == "__main__":
