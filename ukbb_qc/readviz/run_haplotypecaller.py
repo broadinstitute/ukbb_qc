@@ -136,29 +136,28 @@ def main():
 
     # Process samples
     with run_batch(args, batch_name=f"HaplotypeCaller -bamout") as batch:
-        for _ in tqdm(range(len(samples)), desc="submit HC batch job for samples",):
-            for sample in samples:
-                cram, crai, variants_tsv_bgz, bam, bai = samples[sample]
+        for sample in tqdm(samples_without_bams, unit="samples"):
+            cram, crai, variants_tsv_bgz, bam, bai = samples[sample]
 
-                j = init_job(
-                    batch,
-                    f"readviz: {sample}",
-                    DOCKER_IMAGE if not args.raw else None,
-                    args.cpu,
-                    args.memory,
-                )
-                j.command(
-                    f"""gcloud -q auth activate-service-account --key-file=/gsa-key/key.json"""
-                )
-                local_exclude_intervals = localize_file(j, EXCLUDE_INTERVALS)
-                local_fasta = localize_file(j, HG38_REF_PATHS.fasta, use_gcsfuse=True)
-                local_fasta_fai = localize_file(j, HG38_REF_PATHS.fai, use_gcsfuse=True)
-                localize_file(j, HG38_REF_PATHS.dict, use_gcsfuse=True)
-                local_tsv_bgz = localize_file(j, variants_tsv_bgz)
-                local_cram_path = localize_file(j, cram)
+            j = init_job(
+                batch,
+                f"readviz: {sample}",
+                DOCKER_IMAGE if not args.raw else None,
+                args.cpu,
+                args.memory,
+            )
+            j.command(
+                f"""gcloud -q auth activate-service-account --key-file=/gsa-key/key.json"""
+            )
+            local_exclude_intervals = localize_file(j, EXCLUDE_INTERVALS)
+            local_fasta = localize_file(j, HG38_REF_PATHS.fasta, use_gcsfuse=True)
+            local_fasta_fai = localize_file(j, HG38_REF_PATHS.fai, use_gcsfuse=True)
+            localize_file(j, HG38_REF_PATHS.dict, use_gcsfuse=True)
+            local_tsv_bgz = localize_file(j, variants_tsv_bgz)
+            local_cram_path = localize_file(j, cram)
 
-                j.command(
-                    f"""echo --------------
+            j.command(
+                f"""echo --------------
 
 echo "Start - time: $(date)"
 df -kh
@@ -188,7 +187,7 @@ java -Xms2g -jar /gatk/gatk.jar BedToIntervalList \
 # 2) Get reads from the input_cram for the intervals in variant_windows.interval_list
 
 time java -XX:GCTimeLimit=50 -XX:GCHeapFreeLimit=10 -XX:+DisableAttachMechanism -XX:MaxHeapSize=2000m -Xmx30000m \
-    -jar /gatk/GATK35.jar \
+    -jar /gatk/gatk.jar \
     -T HaplotypeCaller \
     -R {local_fasta} \
     -I "{local_cram_path}" \
@@ -196,10 +195,110 @@ time java -XX:GCTimeLimit=50 -XX:GCHeapFreeLimit=10 -XX:+DisableAttachMechanism 
     -XL {local_exclude_intervals} \
     --disable_auto_index_creation_and_locking_when_reading_rods \
     -ERC GVCF \
-    --max_alternate_alleles 3 \
-    -variant_index_parameter 128000 \
-    -variant_index_type LINEAR \
-    --read_filter OverclippedRead \
+    --gvcf-gq-bands 10 \
+    --gvcf-gq-bands 20 \
+    --gvcf-gq-bands 30 \
+    --gvcf-gq-bands 40 \ 
+    --gvcf-gq-bands 50 \
+    --gvcf-gq-bands 60 \
+    --gvcf-gq-bands 70 \
+    --gvcf-gq-bands 80 \
+    --gvcf-gq-bands 90 \
+    --use-new-qual-calculator true \
+    --contamination-fraction-to-filter 0.0069722000000000004 \
+    --annotation-group StandardAnnotation \
+    --annotation-group StandardHCAnnotation \
+    --annotation-group AS_StandardAnnotation \
+    --indel-size-to-eliminate-in-ref-model 10 \
+    --use-alleles-trigger false \
+    --disable-optimizations false \
+    --just-determine-active-regions false \
+    --dont-genotype false \
+    --max-mnp-distance 0 \
+    --max-disc-ar-extension 25 \
+    --max-gga-ar-extension 300 \
+    --kmer-size 10 \
+    --kmer-size 25 \
+    --dont-increase-kmer-sizes-for-cycles false \
+    --allow-non-unique-kmers-in-ref false \
+    --num-pruning-samples 1 \
+    --recover-dangling-heads false \
+    --do-not-recover-dangling-branches false \
+    --min-dangling-branch-length 4 \
+    --consensus false --max-num-haplotypes-in-population 128 \
+    --error-correct-kmers false \
+    --min-pruning 2 \
+    --debug-graph-transformations false \
+    --kmer-length-for-read-error-correction 25 \
+    --min-observations-for-kmer-to-be-solid 20 \
+    --likelihood-calculation-engine PairHMM \
+    --base-quality-score-threshold 18 \
+    --pair-hmm-gap-continuation-penalty 10 \
+    --pair-hmm-implementation FASTEST_AVAILABLE \
+    --pcr-indel-model CONSERVATIVE \
+    --phred-scaled-global-read-mismapping-rate 45 \
+    --native-pair-hmm-threads 4 \
+    --native-pair-hmm-use-double-precision false \
+    --debug false \
+    --use-filtered-reads-for-annotations false \
+    --bam-writer-type CALLED_HAPLOTYPES \
+    --dont-use-soft-clipped-bases false \
+    --capture-assembly-failure-bam false \
+    --error-correct-reads false \
+    --do-not-run-physical-phasing false \
+    --min-base-quality-score 10 \
+    --smith-waterman JAVA \
+    --annotate-with-num-discovered-alleles false \
+    --heterozygosity 0.001 \
+    --indel-heterozygosity 1.25E-4 \
+    --heterozygosity-stdev 0.01 \
+    --standard-min-confidence-threshold-for-calling 10.0 \
+    --max-alternate-alleles 6 \
+    --max-genotype-count 1024 \
+    --sample-ploidy 2 \
+    --num-reference-samples-if-no-call 0 \
+    --genotyping-mode DISCOVERY \
+    --genotype-filtered-alleles false \
+    --output-mode EMIT_VARIANTS_ONLY \
+    --all-site-pls false \
+    --min-assembly-region-size 50 \
+    --max-assembly-region-size 300 \
+    --assembly-region-padding 100 \
+    --max-reads-per-alignment-start 50 \
+    --active-probability-threshold 0.002 \
+    --max-prob-propagation-distance 50 \
+    --interval-set-rule UNION \
+    --interval-padding 0 \
+    --interval-exclusion-padding 0 \
+    --interval-merging-rule ALL \
+    --read-validation-stringency SILENT \
+    --seconds-between-progress-updates 10.0 \
+    --disable-sequence-dictionary-validation false \
+    --create-output-bam-index true \
+    --create-output-bam-md5 false \
+    --create-output-variant-index true \
+    --create-output-variant-md5 false \
+    --lenient false \
+    --add-output-sam-program-record true \
+    --add-output-vcf-command-line true \
+    --cloud-prefetch-buffer 40 \
+    --cloud-index-prefetch-buffer -1 \
+    --disable-bam-index-caching false \
+    --sites-only-vcf-output false \
+    --help false \
+    --version false \
+    --showHidden false \
+    --verbosity INFO \
+    --QUIET false \
+    --use-jdk-deflater false \
+    --use-jdk-inflater false\
+    --gcs-max-retries 20 \
+    --gcs-project-for-requester-pays  \
+    --disable-tool-default-read-filters false \
+    --minimum-mapping-quality 20 \
+    --disable-tool-default-annotations false \
+    --enable-all-annotations false
+    --dont-trim-active-regions false \
     -bamout "{sample}.bamout.bam" \
     -o "{sample}.gvcf"  |& grep -v "^DEBUG"
 
@@ -215,7 +314,7 @@ ls -lh
 echo --------------; free -h; df -kh; uptime; set +xe; echo "Done - time: $(date)"; echo --------------
 
 """
-                )
+            )
 
 
 if __name__ == "__main__":
