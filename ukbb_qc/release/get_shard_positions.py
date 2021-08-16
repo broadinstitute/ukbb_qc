@@ -44,7 +44,6 @@ def parse_args():
         default="gs://broad-ukbb/broad.freeze_6/temp",
     )
 
-    parser.add_argument("--slack-channel", help="Send message to Slack channel/user")
     args = parser.parse_args()
     return args
 
