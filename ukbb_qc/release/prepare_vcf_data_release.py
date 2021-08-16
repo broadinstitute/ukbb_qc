@@ -8,6 +8,7 @@ from typing import Dict, List, Union
 import hail as hl
 
 from gnomad.resources.grch37.gnomad import SUBPOPS
+from gnomad.resources.resource_utils import DataException
 from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.sample_qc.sex import adjust_sex_ploidy
 from gnomad.utils.reference_genome import get_reference_genome
@@ -40,6 +41,7 @@ from ukbb_qc.assessment.sanity_checks import (
     vcf_field_check,
 )
 from ukbb_qc.resources.basics import (
+    array_sample_map_ht_path,
     get_checkpoint_path,
     get_ukbb_data,
     logging_path,
@@ -736,6 +738,44 @@ def main(args):
                 meta_root="meta",
             ).select_entries(*SPARSE_ENTRIES)
             mt = mt.transmute_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype)
+
+            logger.info("Removing samples with withdrawn consent...")
+            # File downloaded on 8/16/21
+            withdrawn_ht = hl.import_table(
+                "gs://broad-ukbb/resources/withdrawn_consents/w26041_20210809.csv",
+                no_header=True,
+            ).key_by("f0")
+            sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze))
+            sample_map_ht = sample_map_ht.annotate(
+                withdrawn_consent=withdrawn_ht.contains(sample_map_ht.ukbb_app_26041_id)
+            )
+            withdrawn_ids = sample_map_ht.aggregate(
+                hl.agg.count_where(sample_map_ht.withdrawn_consent)
+            )
+            logger.info(
+                "Total number of IDs with withdrawn consents in sample map ht: %i",
+                withdrawn_ids,
+            )
+
+            all_sample_count = mt.count_cols()
+            logger.info(
+                "MT sample count before removing withdrawn samples: %i",
+                all_sample_count,
+            )
+            mt = mt.filter_cols(
+                (~sample_map_ht[mt.col_key].withdrawn_consent)
+                | (hl.is_missing(sample_map_ht[mt.col_key].withdrawn_consent))
+            )
+            final_sample_count = mt.count_cols()
+            logger.info(
+                "MT sample count after removing withdrawn samples: %i",
+                final_sample_count,
+            )
+
+            if (final_sample_count - all_sample_count) < withdrawn_ids:
+                raise DataException(
+                    "Number of removed samples is less than total number of samples with withdrawn consents in sample map HT. Please double check and rerun!"
+                )
 
             logger.info("Removing chrM...")
             mt = hl.filter_intervals(mt, [hl.parse_locus_interval("chrM")], keep=False)
