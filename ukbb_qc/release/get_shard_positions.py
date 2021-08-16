@@ -38,6 +38,11 @@ def parse_args():
         default=0.25,
         type=float,
     )
+    parser.add_argument(
+        "--output-dir",
+        help="Where to write output files.",
+        default="gs://broad-ukbb/broad.freeze_6/temp",
+    )
 
     parser.add_argument("--slack-channel", help="Send message to Slack channel/user")
     args = parser.parse_args()
@@ -77,6 +82,7 @@ def main():
             j.command(f"""echo {shard_name} >> {shard_name}.txt""")
             j.command(f"""head -1 temp.txt >> {shard_name}.txt""")
             j.command(f"""tail -1 temp.txt >> {shard_name}.txt""")
+            j.command(f"""gsutil -m cp {shard_name}.txt {args.output_dir}""")
 
 
 if __name__ == "__main__":
