@@ -43,7 +43,6 @@ def parse_args():
         help="Where to write output files.",
         default="gs://broad-ukbb/broad.freeze_6/temp",
     )
-
     args = parser.parse_args()
     return args
 
