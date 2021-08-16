@@ -47,6 +47,7 @@ from ukbb_qc.resources.basics import (
     release_ht_path,
     release_mt_path,
     release_vcf_path,
+    release_vcf_ht_path,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import info_ht_path
@@ -311,6 +312,8 @@ def populate_info_dict(
                 )
             )
 
+    # NOTE: This section below was used for the original 300K export but is no longer necessary
+    """
     logger.info(
         "Adding UKBB subpops (hybrid pops) to UKBB population description dict..."
     )
@@ -327,6 +330,7 @@ def populate_info_dict(
                 label_groups=dict(group=["adj"], pop=[pop], subpop=subpops[pop]),
             )
         )
+    """
 
     # Add variant quality histograms to info dict
     vcf_info_dict.update(make_hist_dict(bin_edges, adj=True))
@@ -559,16 +563,167 @@ def main(args):
     tranche_data = (data_source, freeze)
 
     try:
+        hybrid_pop_map = args.hybrid_pop_map
+        hybrid_pops = [
+            pop for sublist in list(hybrid_pop_map.values()) for pop in sublist
+        ]
+
+        if args.prepare_vcf_annotations:
+            logger.info("Reading in release HT...")
+            ht = hl.read_table(release_ht_path(*tranche_data))
+
+            logger.info(
+                "Dropping cohort frequencies (necessary only for internal use; at last four indices of freq struct)..."
+            )
+            # Cohort freq has 4 entries in freq and freq meta:
+            # cohort (adj), cohort (raw), cohort (XX), and cohort (XY)
+            ht = ht.annotate_rows(freq=ht.freq[:-4])
+            ht = ht.annotate_globals(freq_meta=ht.freq_meta[:-4])
+
+            logger.info("Making histogram bin edges...")
+            # NOTE: using release HT here because age histograms aren't necessarily defined
+            # in the first row of the raw MT (we may have filtered that row because it was low qual)
+            bin_edges = make_hist_bin_edges_expr(ht, prefix="")
+
+            logger.info("Getting age hist data...")
+            age_hist_data = hl.eval(ht.age_distribution)
+
+            # This was removed from the 455K but is necessary for the 300K
+            from ukbb_qc.resources.basics import vqsr_sites_path
+            from gnomad.utils.sparse_mt import split_info_annotation
+
+            logger.info("Pulling AS_VarDP from VQSR sites HT (300K fix)...")
+            vqsr_sites_ht = hl.read_table(vqsr_sites_path(*tranche_data))
+            vqsr_sites_ht = hl.split_multi(vqsr_sites_ht)
+            vqsr_sites_ht = vqsr_sites_ht.annotate(
+                info=vqsr_sites_ht.info.annotate(
+                    **split_info_annotation(vqsr_sites_ht.info, vqsr_sites_ht.a_index),
+                ),
+            )
+            vqsr_sites_ht = vqsr_sites_ht.transmute(
+                AS_VarDP=vqsr_sites_ht.info.AS_VarDP
+            )
+            ht = ht.annotate(
+                info=ht.info.annotate(AS_VarDP=vqsr_sites_ht[ht.key].AS_VarDP)
+            )
+
+            logger.info("Making INFO dict for VCF...")
+            vcf_info_dict = populate_info_dict(
+                subpops=hybrid_pop_map,
+                bin_edges=bin_edges,
+                age_hist_data=age_hist_data,
+            )
+
+            # Add interval QC parameters to INFO dict
+            pct_samples = hl.eval(ht.rf_globals.interval_qc_cutoffs.pct_samples) * 100
+            autosome_cov = hl.eval(ht.rf_globals.interval_qc_cutoffs.autosome_cov)
+            allosome_cov = hl.eval(ht.rf_globals.interval_qc_cutoffs.xy_cov)
+            vcf_info_dict["fail_interval_qc"] = {
+                "Description": f"Variant falls within a region where less than {pct_samples}% of samples had a mean coverage of {autosome_cov}X on autosomes and {allosome_cov}X on sex chromosomes"
+            }
+
+            # Adjust keys to remove adj tags before exporting to VCF
+            new_vcf_info_dict = {
+                i.replace("_adj", ""): j for i, j in vcf_info_dict.items()
+            }
+
+            # Add non-PAR annotation
+            ht = ht.annotate_rows(
+                region_flag=ht.region_flag.annotate(
+                    nonpar=(ht.locus.in_x_nonpar() | ht.locus.in_y_nonpar())
+                )
+            )
+
+            # This was removed in the 455K tranche because the variant QC code was updated to have the correct names
+            ht = ht.transmute(
+                rf=ht.rf.annotate(
+                    rf_positive_label=ht.rf.tp,
+                    rf_negative_label=ht.rf.fail_hard_filters,
+                )
+            )
+            ht = ht.annotate_rows(info=hl.struct(**make_info_expr(ht)))
+
+            logger.info("Constructing INFO field")
+            # Add variant annotations to INFO field
+            # This adds annotations from:
+            #   RF struct, VQSR struct, allele_info struct,
+            #   info struct (site and allele-specific annotations),
+            #   region_flag struct, and
+            #   raw_qual_hists/qual_hists structs.
+
+            # Unfurl nested UKBB frequency annotations and add to INFO field
+            ht = ht.annotate(
+                info=ht.info.annotate(
+                    **unfurl_nested_annotations(
+                        ht,
+                        gnomad=False,
+                        genome=False,
+                        pops=UKBB_POPS,
+                        subpops=hybrid_pops,
+                    )
+                )
+            )
+            # Unfurl nested gnomAD genome frequency annotations and add to info field
+            ht = ht.annotate(
+                info=ht.info.annotate(
+                    **unfurl_nested_annotations(
+                        ht,
+                        gnomad=True,
+                        genome=True,
+                        pops=GNOMAD_GENOMES_POPS,
+                        subpops=hybrid_pops,
+                    )
+                )
+            )
+            # Unfurl nested gnomAD exome frequency annotations and add to info field
+            ht = ht.annotate(
+                info=ht.info.annotate(
+                    **unfurl_nested_annotations(
+                        ht,
+                        gnomad=True,
+                        genome=False,
+                        pops=GNOMAD_EXOMES_POPS,
+                        subpops=hybrid_pops,
+                    )
+                )
+            )
+            ht = ht.annotate(**set_female_y_metrics_to_na(ht))
+
+            # Reformat vep annotation
+            ht = ht.annotate(vep=vep_struct_to_csq(ht.vep))
+            ht = ht.annotate(info=ht.info.annotate(vep=ht.vep))
+
+            logger.info("Selecting fields and writing VCF HT...")
+            ht = ht.select("info", "filters", "rsid", "qual")
+            ht.write(release_vcf_ht_path(*tranche_data), args.overwrite)
+            new_vcf_info_dict.update(
+                {"vep": {"Description": hl.eval(mt.vep_csq_header)}}
+            )
+
+            # Make filter dict and add field for MonoAllelic filter
+            filter_dict = make_vcf_filter_dict(
+                hl.eval(mt.rf_globals.rf_snv_cutoff.min_score),
+                hl.eval(mt.rf_globals.rf_indel_cutoff.min_score),
+                hl.eval(mt.rf_globals.inbreeding_cutoff),
+            )
+            filter_dict["MonoAllelic"] = {
+                "Description": "Samples are all homozygous reference or all homozygous alternate for the variant"
+            }
+            header_dict = {
+                "info": new_vcf_info_dict,
+                "filter": filter_dict,
+                "format": FORMAT_DICT,
+            }
+
+            logger.info("Saving header dict to pickle...")
+            with hl.hadoop_open(release_header_path(*tranche_data), "wb") as p:
+                pickle.dump(header_dict, p, protocol=pickle.HIGHEST_PROTOCOL)
 
         if args.prepare_vcf_mt:
-            hybrid_pop_map = args.hybrid_pop_map
-            hybrid_pops = [
-                pop for sublist in list(hybrid_pop_map.values()) for pop in sublist
-            ]
-
-            logger.info("Starting VCF process...")
+            logger.info("Preparing VCF MT...")
             logger.info("Getting raw MT and dropping all unnecessary entries...")
 
+            # TODO: Remove all samples with newly withdrawn consent
             # NOTE: reading in raw MatrixTable to be able to return all samples/variants
             mt = get_ukbb_data(
                 data_source,
@@ -601,158 +756,10 @@ def main(args):
             mt = hl.experimental.sparse_split_multi(mt)
             mt = mt.select_entries(*ENTRIES)
 
-            logger.info("Reading in release HT and annotating onto raw MT...")
-            ht = hl.read_table(release_ht_path(*tranche_data))
+            logger.info("Reading in VCF HT and annotating onto raw MT...")
+            ht = hl.read_table(release_vcf_ht_path(*tranche_data))
             mt = mt.annotate_rows(**ht[mt.row_key])
             mt = mt.annotate_globals(**ht.index_globals())
-
-            logger.info(
-                "Dropping cohort frequencies (necessary only for internal use; at last four indices of freq struct)..."
-            )
-            # Cohort freq has 4 entries in freq and freq meta:
-            # cohort (adj), cohort (raw), cohort (XX), and cohort (XY)
-            mt = mt.annotate_rows(freq=mt.freq[:-4])
-            mt = mt.annotate_globals(freq_meta=mt.freq_meta[:-4])
-
-            # TODO: remove from code for 500K
-            # TODO: check with DSP why annotations are missing
-            from ukbb_qc.resources.basics import vqsr_sites_path
-            from gnomad.utils.sparse_mt import split_info_annotation
-
-            logger.info("Pulling AS_VarDP from VQSR sites HT (300K fix)...")
-            vqsr_sites_ht = hl.read_table(vqsr_sites_path(*tranche_data))
-
-            vqsr_sites_ht = hl.split_multi(vqsr_sites_ht)
-            vqsr_sites_ht = vqsr_sites_ht.annotate(
-                info=vqsr_sites_ht.info.annotate(
-                    **split_info_annotation(vqsr_sites_ht.info, vqsr_sites_ht.a_index),
-                ),
-            )
-            vqsr_sites_ht = vqsr_sites_ht.transmute(
-                AS_VarDP=vqsr_sites_ht.info.AS_VarDP
-            )
-            mt = mt.annotate_rows(
-                info=mt.info.annotate(AS_VarDP=vqsr_sites_ht[mt.row_key].AS_VarDP)
-            )
-
-            logger.info("Making histogram bin edges...")
-            # NOTE: using release HT here because age histograms aren't necessarily defined
-            # in the first row of the raw MT (we may have filtered that row because it was low qual)
-            bin_edges = make_hist_bin_edges_expr(ht, prefix="")
-
-            logger.info("Getting age hist data...")
-            age_hist_data = hl.eval(mt.age_distribution)
-
-            logger.info("Making INFO dict for VCF...")
-            vcf_info_dict = populate_info_dict(
-                subpops=hybrid_pop_map,
-                bin_edges=bin_edges,
-                age_hist_data=age_hist_data,
-            )
-
-            # Add interval QC parameters to INFO dict
-            pct_samples = hl.eval(mt.rf_globals.interval_qc_cutoffs.pct_samples) * 100
-            autosome_cov = hl.eval(mt.rf_globals.interval_qc_cutoffs.autosome_cov)
-            allosome_cov = hl.eval(mt.rf_globals.interval_qc_cutoffs.xy_cov)
-            vcf_info_dict["fail_interval_qc"] = {
-                "Description": f"Variant falls within a region where less than {pct_samples}% of samples had a mean coverage of {autosome_cov}X on autosomes and {allosome_cov}X on sex chromosomes"
-            }
-
-            # Adjust keys to remove adj tags before exporting to VCF
-            new_vcf_info_dict = {
-                i.replace("_adj", ""): j for i, j in vcf_info_dict.items()
-            }
-
-            # Add non-PAR annotation
-            mt = mt.annotate_rows(
-                region_flag=mt.region_flag.annotate(
-                    nonpar=(mt.locus.in_x_nonpar() | mt.locus.in_y_nonpar())
-                )
-            )
-
-            logger.info("Constructing INFO field")
-            # Add variant annotations to INFO field
-            # This adds annotations from:
-            #   RF struct, VQSR struct, allele_info struct,
-            #   info struct (site and allele-specific annotations),
-            #   region_flag struct, and
-            #   raw_qual_hists/qual_hists structs.
-
-            # TODO: Remove this in the 500K, I modified the variant QC code to create the correct names
-            mt = mt.transmute_rows(
-                rf=mt.rf.annotate(
-                    rf_positive_label=mt.rf.tp,
-                    rf_negative_label=mt.rf.fail_hard_filters,
-                )
-            )
-            mt = mt.annotate_rows(info=hl.struct(**make_info_expr(mt)))
-
-            # Unfurl nested UKBB frequency annotations and add to INFO field
-            mt = mt.annotate_rows(
-                info=mt.info.annotate(
-                    **unfurl_nested_annotations(
-                        mt,
-                        gnomad=False,
-                        genome=False,
-                        pops=UKBB_POPS,
-                        subpops=hybrid_pops,
-                    )
-                )
-            )
-            # Unfurl nested gnomAD genome frequency annotations and add to info field
-            mt = mt.annotate_rows(
-                info=mt.info.annotate(
-                    **unfurl_nested_annotations(
-                        mt,
-                        gnomad=True,
-                        genome=True,
-                        pops=GNOMAD_GENOMES_POPS,
-                        subpops=hybrid_pops,
-                    )
-                )
-            )
-            # Unfurl nested gnomAD exome frequency annotations and add to info field
-            mt = mt.annotate_rows(
-                info=mt.info.annotate(
-                    **unfurl_nested_annotations(
-                        mt,
-                        gnomad=True,
-                        genome=False,
-                        pops=GNOMAD_EXOMES_POPS,
-                        subpops=hybrid_pops,
-                    )
-                )
-            )
-            mt = mt.annotate_rows(**set_female_y_metrics_to_na(mt))
-
-            # Reformat vep annotation
-            mt = mt.annotate_rows(vep=vep_struct_to_csq(mt.vep))
-            mt = mt.annotate_rows(info=mt.info.annotate(vep=mt.vep))
-
-            # Select relevant fields for VCF export
-            mt = mt.select_rows("info", "filters", "rsid", "qual")
-            new_vcf_info_dict.update(
-                {"vep": {"Description": hl.eval(mt.vep_csq_header)}}
-            )
-
-            # Make filter dict and add field for MonoAllelic filter
-            filter_dict = make_vcf_filter_dict(
-                hl.eval(mt.rf_globals.rf_snv_cutoff.min_score),
-                hl.eval(mt.rf_globals.rf_indel_cutoff.min_score),
-                hl.eval(mt.rf_globals.inbreeding_cutoff),
-            )
-            filter_dict["MonoAllelic"] = {
-                "Description": "Samples are all homozygous reference or all homozygous alternate for the variant"
-            }
-            header_dict = {
-                "info": new_vcf_info_dict,
-                "filter": filter_dict,
-                "format": FORMAT_DICT,
-            }
-
-            logger.info("Saving header dict to pickle...")
-            with hl.hadoop_open(release_header_path(*tranche_data), "wb") as p:
-                pickle.dump(header_dict, p, protocol=pickle.HIGHEST_PROTOCOL)
             mt.write(release_mt_path(*tranche_data), args.overwrite)
 
         if args.sanity_check:
@@ -931,6 +938,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--test",
         help="Create release files using only chr20 and chrX for testing purposes",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--prepare_vcf_annotations",
+        help="Use release HT to reformat VCF annotations",
         action="store_true",
     )
     parser.add_argument(
