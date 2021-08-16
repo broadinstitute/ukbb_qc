@@ -23,20 +23,12 @@ def parse_args():
     """Parse command line args."""
     parser = init_arg_parser(default_billing_project="gnomad-production")
     parser.add_argument(
-        "-f", "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
+        "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
     )
     parser.add_argument(
-        "-d",
-        "--docker",
+        "--image",
         help="Docker image to use",
         default="gcr.io/broad-mpg-gnomad/tgg-methods-vm:20210623",
-    )
-    parser.add_argument(
-        "-c",
-        "--cpu",
-        help="Number of CPUs to use for batch job. Default is 0.25.",
-        default=0.25,
-        type=float,
     )
     parser.add_argument(
         "--output-dir",
@@ -60,6 +52,7 @@ def main():
     freeze = args.freeze
     tranche_data = (data_source, freeze)
     shards = hl.hadoop_ls(f"{release_vcf_path(*tranche_data)}/*.bgz")
+    # shards = ["gs://broad-ukbb/broad.freeze_6/release/vcf/sharded_vcf/broad.freeze_6.bgz/part-00041.bgz"]
 
     logger.info("Preparing to start batch job...")
     with run_batch(args, batch_name="UKBB vcf start stops") as batch:
@@ -68,6 +61,7 @@ def main():
             # {'path': 'gs://broad-ukbb/broad.freeze_6/release/vcf/sharded_vcf/broad.freeze_6.bgz/part-09999.bgz', 'size_bytes': 1666945357,
             # 'size': '1.6G', 'is_dir': False, 'modification_time': 'Mon Aug 17 22:24:28 EDT 2020', 'owner': 'kchao'}
             shard = s["path"]
+            # shard = s
             j = init_job(batch=batch, name=s, image=args.image, cpu=args.cpu)
             j.command(
                 f"""gcloud -q auth activate-service-account --key-file=/gsa-key/key.json"""
