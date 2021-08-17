@@ -770,6 +770,11 @@ def main(args):
             ht = hl.read_table(release_vcf_ht_path(*tranche_data))
             mt = mt.annotate_rows(**ht[mt.row_key])
             mt = mt.annotate_globals(**ht.index_globals())
+
+            logger.info(
+                "Coalescing MT to number of shards desired for output (necessary to get start/end positions for each shard correctly)..."
+            )
+            mt = mt.naive_coalesce(args.n_shards)
             mt.write(release_mt_path(*tranche_data), args.overwrite)
 
         if args.sanity_check:
@@ -908,9 +913,7 @@ def main(args):
                 )
                 mt = mt.select_cols()
 
-                if args.n_shards:
-                    mt = mt.naive_coalesce(args.n_shards)
-
+                logger.info("Exporting VCF...")
                 hl.export_vcf(
                     mt,
                     release_vcf_path(*tranche_data),
