@@ -43,8 +43,8 @@ from ukbb_qc.assessment.sanity_checks import (
 from ukbb_qc.resources.basics import (
     array_sample_map_ht_path,
     get_checkpoint_path,
-    get_ukbb_data,
     logging_path,
+    raw_mt_path,
     release_header_path,
     release_ht_path,
     release_mt_path,
@@ -52,6 +52,7 @@ from ukbb_qc.resources.basics import (
     release_vcf_ht_path,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
+from ukbb_qc.resources.sample_qc import meta_ht_path
 from ukbb_qc.resources.variant_qc import info_ht_path
 from ukbb_qc.slack_creds import slack_token
 from ukbb_qc.utils.constants import SEXES_UKBB
@@ -694,18 +695,39 @@ def main(args):
             logger.info("Preparing VCF MT...")
             logger.info("Getting raw MT and dropping all unnecessary entries...")
 
-            # NOTE: reading in raw MatrixTable to be able to return all samples/variants
-            mt = get_ukbb_data(
-                data_source,
-                freeze,
-                key_by_locus_and_alleles=args.key_by_locus_and_alleles,
-                split=False,
-                raw=True,
-                repartition=args.repartition,
-                n_partitions=args.raw_partitions,
-                meta_root="meta",
-            ).select_entries(*SPARSE_ENTRIES)
+            # NOTE: Reading in raw MT from raw_mt_path to do custom sample filtering
+            mt = hl.read_matrix_table(raw_mt_path(*tranche_data)).select_entries(
+                *SPARSE_ENTRIES
+            )
+            # Add column index (to remove duplicate sample IDs)
+            mt = mt.add_col_index()
+            # Key MT by locus and alleles
+            mt = hl.MatrixTable(
+                hl.ir.MatrixKeyRowsBy(mt._mir, ["locus", "alleles"], is_sorted=True)
+            )
+            # Annotate meta HT information onto MT cols
+            meta_ht = hl.read_table(meta_ht_path(*tranche_data))
+            mt = mt.annotate_cols(**{"meta": meta_ht[mt.s]})
             mt = mt.transmute_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype)
+
+            logger.info("Removing duplicate sample IDs...")
+            # UKB_4048554_0301608642 and UKB_1223807_0330880742 are both present in the 300K MT twice
+            # Both versions of UKB_1223807_0330880742 (indices 202837 and 205124) are the same, so
+            # code removes the version of the sample with a higher column index (205124)
+            # UKB_4048554_0301608642 has column indices 81090 and 262414
+            # The version of the sample with the higher index corresponds to the more recent version of the sample,
+            # so code revmoes the sample with the lower column index
+            original_sample_count = mt.count_cols()
+            mt = mt.annotate_cols(new_s=hl.format("%s_%s", mt.s, mt.col_idx))
+            remove_ids = hl.literal(
+                ["UKB_1223807_0330880742_205124", "UKB_4048554_0301608642_81090"]
+            )
+            mt = mt.filter_cols(~remove_ids.contains(mt.new_s)).drop("new_s", "col_idx")
+            filtered_sample_count = mt.count_cols()
+            if filtered_sample_count != original_sample_count - 2:
+                raise DataException(
+                    "Expected to remove two duplicate sample IDs. Please double check and rerun!"
+                )
 
             logger.info("Removing samples with withdrawn consent...")
             # File downloaded on 8/16/21
