@@ -52,7 +52,6 @@ def main():
     freeze = args.freeze
     tranche_data = (data_source, freeze)
     shards = hl.hadoop_ls(f"{release_vcf_path(*tranche_data)}/*.bgz")
-    # shards = ["gs://broad-ukbb/broad.freeze_6/release/vcf/sharded_vcf/broad.freeze_6.bgz/part-00041.bgz"]
 
     logger.info("Preparing to start batch job...")
     with run_batch(args, batch_name="UKBB vcf start stops") as batch:
@@ -61,7 +60,6 @@ def main():
             # {'path': 'gs://broad-ukbb/broad.freeze_6/release/vcf/sharded_vcf/broad.freeze_6.bgz/part-09999.bgz', 'size_bytes': 1666945357,
             # 'size': '1.6G', 'is_dir': False, 'modification_time': 'Mon Aug 17 22:24:28 EDT 2020', 'owner': 'kchao'}
             shard = s["path"]
-            # shard = s
             j = init_job(batch=batch, name=s, image=args.image, cpu=args.cpu)
             j.command(
                 f"""gcloud -q auth activate-service-account --key-file=/gsa-key/key.json"""
