@@ -1,5 +1,4 @@
 import argparse
-import json
 import logging
 import pickle
 import sys
@@ -398,9 +397,9 @@ def unfurl_nested_annotations(
     else:
         faf = "faf"
         freq = "freq"
-        faf_idx = make_index_dict(t=t, freq_meta_str="faf_meta", pops=pops,)
+        faf_idx = make_index_dict(t=t, freq_meta_str="faf_meta", pops=pops)
         popmax = "popmax"
-        freq_idx = make_index_dict(t=t, freq_meta_str="freq_meta", pops=pops,)
+        freq_idx = make_index_dict(t=t, freq_meta_str="freq_meta", pops=pops)
 
     # Unfurl freq index dict
     # Cycles through each key and index (e.g., k=adj_afr, i=31)
@@ -545,6 +544,17 @@ def main(args):
             ht = ht.annotate_rows(freq=ht.freq[:-4])
             ht = ht.annotate_globals(freq_meta=ht.freq_meta[:-4])
 
+            logger.info(
+                "Dropping frequencies stratified with subpops (using UKBB hybrid pops as the subpop)..."
+            )
+            # Keep:
+            # Indices 0 and 1: adj, raw freqs
+            # Indices 2-9: freq stratified by gnomAD pop label
+            # Indices 10-11: freq stratified by sex
+            # Indices 12-27: freq stratified by pop and sex
+            ht = ht.annotate_rows(freq=ht.freq[:28])
+            ht = ht.annotate_globals(freq_meta=ht.freq_meta[:28])
+
             logger.info("Making histogram bin edges...")
             # NOTE: using release HT here because age histograms aren't necessarily defined
             # in the first row of the raw MT (we may have filtered that row because it was low qual)
@@ -674,7 +684,6 @@ def main(args):
             logger.info("Preparing VCF MT...")
             logger.info("Getting raw MT and dropping all unnecessary entries...")
 
-            # TODO: Remove all samples with newly withdrawn consent
             # NOTE: reading in raw MatrixTable to be able to return all samples/variants
             mt = get_ukbb_data(
                 data_source,
