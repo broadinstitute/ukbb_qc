@@ -718,12 +718,17 @@ def main(args):
             # The version of the sample with the higher index corresponds to the more recent version of the sample,
             # so code revmoes the sample with the lower column index
             original_sample_count = mt.count_cols()
+            logger.info("Original sample count: %i", original_sample_count)
             mt = mt.annotate_cols(new_s=hl.format("%s_%s", mt.s, mt.col_idx))
             remove_ids = hl.literal(
                 ["UKB_1223807_0330880742_205124", "UKB_4048554_0301608642_81090"]
             )
             mt = mt.filter_cols(~remove_ids.contains(mt.new_s)).drop("new_s", "col_idx")
             filtered_sample_count = mt.count_cols()
+            logger.info(
+                "Sample count after removing duplicate sample IDs: %i",
+                filtered_sample_count,
+            )
             if filtered_sample_count != original_sample_count - 2:
                 raise DataException(
                     "Expected to remove two duplicate sample IDs. Please double check and rerun!"
