@@ -119,7 +119,6 @@ GNOMAD_GENOMES_POPS["ami"] = "Amish"
 
 
 def populate_info_dict(
-    subpops: Dict[str, List[str]],
     bin_edges: Dict[str, str],
     age_hist_data: str,
     info_dict: Dict[str, Dict[str, str]] = VCF_INFO_DICT,
@@ -146,8 +145,6 @@ def populate_info_dict(
         - INFO fields for filtering allele frequency (faf) annotations 
         - INFO fields for variant histograms (hist_bin_freq, hist_n_smaller, hist_n_larger for each histogram)
 
-    :param Dict[str, List[str]] subpops: Dictionary of global population names (keys)
-        and all hybrid population cluster names associated with that global pop (values). 
     :param Dict[str, str] bin_edges: Dictionary of variant annotation histograms and their associated bin edges.
     :param str age_hist_data: Pipe-delimited string of age histograms, from `get_age_distributions`.
     :param Dict[str, Dict[str, str]] info_dict: INFO dict to be populated.
@@ -314,26 +311,6 @@ def populate_info_dict(
                 )
             )
 
-    # NOTE: This section below was used for the original 300K export but is no longer necessary
-    """
-    logger.info(
-        "Adding UKBB subpops (hybrid pops) to UKBB population description dict..."
-    )
-    for pop in subpops:
-        for cluster in subpops[pop]:
-            ukbb_pops[
-                f"{cluster}"
-            ] = f"{ukbb_pops[pop]} and hybrid population cluster {cluster}"
-    for pop in subpops:
-        vcf_info_dict.update(
-            make_info_dict(
-                prefix="",
-                pop_names=ukbb_pops,
-                label_groups=dict(group=["adj"], pop=[pop], subpop=subpops[pop]),
-            )
-        )
-    """
-
     # Add variant quality histograms to info dict
     vcf_info_dict.update(make_hist_dict(bin_edges, adj=True))
     vcf_info_dict.update(make_hist_dict(bin_edges, adj=False))
@@ -388,11 +365,7 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
 
 
 def unfurl_nested_annotations(
-    t: Union[hl.MatrixTable, hl.Table],
-    gnomad: bool,
-    genome: bool,
-    pops: List[str],
-    subpops: List[str],
+    t: Union[hl.MatrixTable, hl.Table], gnomad: bool, genome: bool, pops: List[str],
 ) -> Dict[str, hl.expr.Expression]:
     """
     Create dictionary keyed by the variant annotation labels to be extracted from variant annotation arrays, where the values
@@ -402,7 +375,6 @@ def unfurl_nested_annotations(
     :param bool gnomad: Whether the annotations are from gnomAD.
     :param bool genome: Whether the annotations are from genome data (relevant only to gnomAD data).
     :param List[str] pops: List of global populations in frequency array. 
-    :param List[str] subpops: List of all UKBB subpops (possible hybrid population cluster names). 
     :return: Dictionary containing variant annotations and their corresponding values.
     :rtype: Dict[str, hl.expr.Expression]
     """
@@ -426,13 +398,9 @@ def unfurl_nested_annotations(
     else:
         faf = "faf"
         freq = "freq"
-        faf_idx = make_index_dict(
-            t=t, freq_meta_str="faf_meta", pops=pops, subpops=subpops
-        )
+        faf_idx = make_index_dict(t=t, freq_meta_str="faf_meta", pops=pops,)
         popmax = "popmax"
-        freq_idx = make_index_dict(
-            t=t, freq_meta_str="freq_meta", pops=pops, subpops=subpops
-        )
+        freq_idx = make_index_dict(t=t, freq_meta_str="freq_meta", pops=pops,)
 
     # Unfurl freq index dict
     # Cycles through each key and index (e.g., k=adj_afr, i=31)
@@ -565,11 +533,6 @@ def main(args):
     tranche_data = (data_source, freeze)
 
     try:
-        hybrid_pop_map = args.hybrid_pop_map
-        hybrid_pops = [
-            pop for sublist in list(hybrid_pop_map.values()) for pop in sublist
-        ]
-
         if args.prepare_vcf_annotations:
             logger.info("Reading in release HT...")
             ht = hl.read_table(release_ht_path(*tranche_data))
@@ -611,9 +574,7 @@ def main(args):
 
             logger.info("Making INFO dict for VCF...")
             vcf_info_dict = populate_info_dict(
-                subpops=hybrid_pop_map,
-                bin_edges=bin_edges,
-                age_hist_data=age_hist_data,
+                bin_edges=bin_edges, age_hist_data=age_hist_data,
             )
 
             # Add interval QC parameters to INFO dict
@@ -657,11 +618,7 @@ def main(args):
             ht = ht.annotate(
                 info=ht.info.annotate(
                     **unfurl_nested_annotations(
-                        ht,
-                        gnomad=False,
-                        genome=False,
-                        pops=UKBB_POPS,
-                        subpops=hybrid_pops,
+                        ht, gnomad=False, genome=False, pops=UKBB_POPS,
                     )
                 )
             )
@@ -669,11 +626,7 @@ def main(args):
             ht = ht.annotate(
                 info=ht.info.annotate(
                     **unfurl_nested_annotations(
-                        ht,
-                        gnomad=True,
-                        genome=True,
-                        pops=GNOMAD_GENOMES_POPS,
-                        subpops=hybrid_pops,
+                        ht, gnomad=True, genome=True, pops=GNOMAD_GENOMES_POPS,
                     )
                 )
             )
@@ -681,11 +634,7 @@ def main(args):
             ht = ht.annotate(
                 info=ht.info.annotate(
                     **unfurl_nested_annotations(
-                        ht,
-                        gnomad=True,
-                        genome=False,
-                        pops=GNOMAD_EXOMES_POPS,
-                        subpops=hybrid_pops,
+                        ht, gnomad=True, genome=False, pops=GNOMAD_EXOMES_POPS,
                     )
                 )
             )
@@ -987,13 +936,6 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--prepare_vcf_mt", help="Use release mt to create vcf mt", action="store_true"
-    )
-    parser.add_argument(
-        "--hybrid_pop_map",
-        help='Dictionary mapping global populations (keys) to \
-        list of all hybrid populations associated with that global population name (values).\n\
-        e.g., \'{"nfe": [1,2,3], "afr": [4]}\'',
-        type=json.loads,
     )
     parser.add_argument(
         "--sanity_check", help="Run sanity checks function", action="store_true"
