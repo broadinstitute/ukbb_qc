@@ -715,7 +715,9 @@ def main(args):
             ).key_by("f0")
             sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze))
             sample_map_ht = sample_map_ht.annotate(
-                withdrawn_consent=withdrawn_ht.contains(sample_map_ht.ukbb_app_26041_id)
+                withdrawn_consent=hl.is_defined(
+                    withdrawn_ht[sample_map_ht.ukbb_app_26041_id]
+                )
             )
             withdrawn_ids = sample_map_ht.aggregate(
                 hl.agg.count_where(sample_map_ht.withdrawn_consent)
