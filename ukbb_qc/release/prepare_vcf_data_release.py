@@ -389,10 +389,7 @@ def unfurl_nested_annotations(
         freq = f"{gnomad_prefix}_freq"
         faf_idx = hl.eval(t.globals[f"{gnomad_prefix}_faf_index_dict"])
         freq_idx = make_index_dict(
-            t=t,
-            freq_meta_str=f"{gnomad_prefix}_freq_meta",
-            pops=pops,
-            subpops=[GNOMAD_NFE_SUBPOPS + GNOMAD_EAS_SUBPOPS],
+            t=t, freq_meta_str=f"{gnomad_prefix}_freq_meta", pops=pops,
         )
 
     else:
@@ -535,7 +532,9 @@ def main(args):
     try:
         if args.prepare_vcf_annotations:
             logger.info("Reading in release HT...")
-            ht = hl.read_table(release_ht_path(*tranche_data))
+            # NOTE: new_freq is an annotation created when fixing the missing 300K frequencies
+            # it is a temp annotation and should have been dropped before writing HT
+            ht = hl.read_table(release_ht_path(*tranche_data)).drop("new_freq")
 
             logger.info(
                 "Dropping cohort frequencies (necessary only for internal use; at last four indices of freq struct)..."
@@ -621,6 +620,11 @@ def main(args):
                 )
             )
             ht = ht.annotate_rows(info=hl.struct(**make_info_expr(ht)))
+
+            logger.info("Reformatting rsid...")
+            # Update rsid annotation to be a set and not a string
+            dbsnp_ht = dbsnp.ht().select("rsid")
+            ht = ht.annotate(rsid=hl.str(";").join(dbsnp_ht[ht.key].rsid))
 
             logger.info("Constructing INFO field")
             # Add variant annotations to INFO field
