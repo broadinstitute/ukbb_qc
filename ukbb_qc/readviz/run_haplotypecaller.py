@@ -77,7 +77,7 @@ def parse_args():
     )
     p.add_argument(
         "--cram-and-tsv-paths-table",
-        help="A text file containing at least these columns: sample_id, cram_path, crai_path, variants_tsv_bgz",
+        help="A text file containing at least these columns: sample_id, cram_path, variants_tsv_bgz",
         default=f"{readviz_haplotype_caller_path()}/inputs/step4_output_cram_and_tsv_paths_table.tsv",
     )
     args = p.parse_args()
@@ -102,27 +102,32 @@ def main():
     with hl.hadoop_open(args.cram_and_tsv_paths_table) as c:
         # Confirm header has all required columns
         header = c.readline().strip().split("\t")
-        if {"sample_id", "cram_path", "crai_path", "variants_tsv_bgz"} - set(header):
+        if {"sample_id", "cram_path", "variants_tsv_bgz"} - set(header):
             raise DataException(
-                "%s must contain 'sample_id', 'cram_path', 'crai_path', variants_tsv_bgz' columns!"
+                "%s must contain 'sample_id', 'cram_path', variants_tsv_bgz' columns!"
             )
 
         for line in c:
-            sample, cram, crai, variants_tsv_bgz = line.strip().split("\t")
+            values = dict(zip(header, line.strip().split("\t")))
 
             # Store output BAM path
-            bam = f"{args.output_prefix}/{sample}.bamout.bam"
-            bai = f"{args.output_prefix}/{sample}.bamout.bai"
+            bam = f"{args.output_prefix}/{values['sample']}.bamout.bam"
+            bai = f"{args.output_prefix}/{values['sample']}.bamout.bai"
             bams[sample] = bam
 
             # Store sample information
-            samples[sample] = [cram, crai, variants_tsv_bgz, bam, bai]
+            samples[sample] = [
+                values["cram"],
+                values["variants_tsv_bgz"],
+                bam,
+                bai,
+            ]
 
             logger.info(
                 "Checking that all input crams are 'US-CENTRAL1' or multi-regional buckets..."
             )
             # Check that all buckets are in "US-CENTRAL1" or are multi-regional to avoid egress charges to the Batch cluster
-            check_storage_bucket_region(cram)
+            check_storage_bucket_region(values["cram"])
 
     logger.info("Checking if any output bams already exist...")
     bam_exists = parallel_file_exists(list(bams.values()))
@@ -132,9 +137,9 @@ def main():
             samples_without_bamouts.append(sample)
 
     # Process samples
-    with run_batch(args, batch_name=f"HaplotypeCaller -bamout") as batch:
+    with run_batch(args, batch_name="HaplotypeCaller -bamout") as batch:
         for sample in tqdm(samples_without_bamouts, unit="samples"):
-            cram, crai, variants_tsv_bgz, bam, bai = samples[sample]
+            cram, variants_tsv_bgz, bam, bai = samples[sample]
 
             j = init_job(
                 batch,
