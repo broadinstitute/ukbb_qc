@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from tqdm import tqdm
 
@@ -77,8 +76,8 @@ def parse_args():
         nargs="+",
     )
     p.add_argument(
-        "--cram-and-tsv_paths-table",
-        help="A text file containing at least these columns: sample_id, cram_path",
+        "--cram-and-tsv-paths-table",
+        help="A text file containing at least these columns: sample_id, cram_path, crai_path, variants_tsv_bgz",
         default=f"{readviz_haplotype_caller_path()}/inputs/step4_output_cram_and_tsv_paths_table.tsv",
     )
     args = p.parse_args()
@@ -126,17 +125,15 @@ def main():
             check_storage_bucket_region(cram)
 
     logger.info("Checking if any output bams already exist...")
-    bam_exists = asyncio.get_event_loop().run_until_complete(
-        parallel_file_exists(list(bams.values()))
-    )
-    samples_without_bams = []
+    bam_exists = parallel_file_exists(list(bams.values()))
+    samples_without_bamouts = []
     for sample in bams:
         if not bam_exists[bams[sample]]:
-            samples_without_bams.append(sample)
+            samples_without_bamouts.append(sample)
 
     # Process samples
     with run_batch(args, batch_name=f"HaplotypeCaller -bamout") as batch:
-        for sample in tqdm(samples_without_bams, unit="samples"):
+        for sample in tqdm(samples_without_bamouts, unit="samples"):
             cram, crai, variants_tsv_bgz, bam, bai = samples[sample]
 
             j = init_job(
