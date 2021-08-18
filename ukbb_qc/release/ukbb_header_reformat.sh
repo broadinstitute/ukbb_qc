@@ -22,7 +22,7 @@ outfile="${vcfgz_prefix.repackaged.vcf.gz}"
 lo=$(stat -c '%s' "$outfile")
 let lo++
 
-# Reprint sample ids eith 7 digits and bgzip with 0-compression
+# Reprint sample ids with 7 digits and bgzip with 0-compression
 bcftools view --no-version -h "$vcfgz_path" | tail -n 1 | awk '{for (i=10; i<=NF; i++) {printf "%07d%c", $i, (i==NF?"\n":"\t")}}' | bgzip -l 0 | head -c -28 >> "$outfile"
 
 # Mark the ending byte range
