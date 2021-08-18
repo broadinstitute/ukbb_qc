@@ -1,4 +1,3 @@
-import asyncio
 import argparse
 import logging
 
@@ -39,9 +38,7 @@ def main(args):
     tsvs = [
         f"{readviz_per_sample_tsv_path()}/{sample}.tsv.bgz" for sample in sample_ids
     ]
-    tsv_file_exists = asyncio.get_event_loop().run_until_complete(
-        parallel_file_exists(tsvs)
-    )
+    tsv_files_exist = parallel_file_exists(tsvs)
 
     logger.info("Starting cram existence checks...")
     cram_map = {}
@@ -49,9 +46,7 @@ def main(args):
         for line in c:
             sample, cram = line.strip().split("\t")
             cram_map[sample] = cram
-    crams_exist = asyncio.get_event_loop().run_until_complete(
-        parallel_file_exists(list(cram_map.values()))
-    )
+    cram_files_exist = parallel_file_exists(list(cram_map.values()))
 
     logger.info("Starting to write to output TSV...")
     with hl.hadoop_open(readviz_ids_tsv_path(freeze)) as s, hl.hadoop_open(
@@ -69,11 +64,11 @@ def main(args):
             else:
                 cram = cram_map[sample]
                 tsv = f"{readviz_per_sample_tsv_path()}/{sample}.tsv.bgz"
-                if not crams_exist[cram]:
+                if not cram_files_exist[cram]:
                     raise DataException(
                         f"{sample}'s cram does not exist. Please double check and restart!"
                     )
-            if not tsv_file_exists[tsv]:
+            if not tsv_files_exist[tsv]:
                 raise DataException(
                     f"{sample} is missing their variants TSV file. Please double check and restart!"
                 )
