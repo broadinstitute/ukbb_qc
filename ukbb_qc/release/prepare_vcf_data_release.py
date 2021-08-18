@@ -538,21 +538,19 @@ def main(args):
             ht = hl.read_table(release_ht_path(*tranche_data)).drop("new_freq")
 
             logger.info(
-                "Dropping cohort frequencies (necessary only for internal use; at last four indices of freq struct)..."
-            )
-            # Cohort freq has 4 entries in freq and freq meta:
-            # cohort (adj), cohort (raw), cohort (XX), and cohort (XY)
-            ht = ht.annotate_rows(freq=ht.freq[:-4])
-            ht = ht.annotate_globals(freq_meta=ht.freq_meta[:-4])
-
-            logger.info(
                 "Dropping frequencies stratified with subpops (using UKBB hybrid pops as the subpop)..."
+            )
+            logger.info(
+                "Also dropping cohort frequencies (necessary only for internal use; at last four indices of freq struct)..."
             )
             # Keep:
             # Indices 0 and 1: adj, raw freqs
             # Indices 2-9: freq stratified by gnomAD pop label
             # Indices 10-11: freq stratified by sex
             # Indices 12-27: freq stratified by pop and sex
+            # Cohort freq notes:
+            # Cohort freq has 4 entries in freq and freq meta:
+            # cohort (adj), cohort (raw), cohort (XX), and cohort (XY)
             ht = ht.annotate_rows(freq=ht.freq[:28])
             ht = ht.annotate_globals(freq_meta=ht.freq_meta[:28])
 
