@@ -10,3 +10,4 @@ Other fixes in this branch include:
 - Code to flag segdup regions (in `prepare_vcf_release.py`).
 - Code to update rsids to allow for multiple rsids per locus (in `prepare_vcf_release.py`).
 - Script to reformat VCF header to allow UKBB sample ID rebadging (`ukbb_header_reformat.sh`).
+- Script to get first and last positions in VCF shards (`get_shard_positions.py`).
