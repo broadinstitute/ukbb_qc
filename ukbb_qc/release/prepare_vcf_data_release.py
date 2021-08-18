@@ -88,8 +88,9 @@ REGION_FLAG_FIELDS = [
 ]
 REGION_FLAG_FIELDS.extend(INTERVAL_FIELDS)
 
-# Remove BaseQRankSum from site fields (doesn't exist in UKBB 300K)
+# Remove BaseQRankSum from site and AS fields (doesn't exist in UKBB 300K)
 SITE_FIELDS.remove("BaseQRankSum")
+AS_FIELDS.remove("AS_BaseQRankSum")
 
 # Add sibling singletons to AS_FIELDS
 AS_FIELDS.append("sibling_singleton")
