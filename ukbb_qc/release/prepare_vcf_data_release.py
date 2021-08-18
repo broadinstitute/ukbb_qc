@@ -945,6 +945,8 @@ def main(args):
                     release_vcf_path(*tranche_data),
                     parallel="header_per_shard",
                     metadata=header_dict,
+                    append_to_header="gs://broad-ukbb/broad.freeze_6/release/vcf/append_to_header.tsv",
+                    tabix=True,
                 )
     finally:
         logger.info("Copying hail log to logging bucket...")
