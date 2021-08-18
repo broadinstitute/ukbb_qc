@@ -158,6 +158,10 @@ def main():
             local_tsv_bgz = localize_file(j, variants_tsv_bgz)
             local_cram_path = localize_file(j, cram)
 
+            # NOTE: Currently, we don't store the gVCFs produced by this step because it isn't used
+            # TODO: Revisit if we should store gVCFs for downstream comparison --
+            # we should keep gVCFs if there is a cost-effective way to compare this gVCF call with
+            # variant call in full callset
             j.command(
                 f"""echo --------------
 
@@ -304,13 +308,8 @@ time java -XX:GCTimeLimit=50 -XX:GCHeapFreeLimit=10 -XX:+DisableAttachMechanism 
     -bamout "{sample}.bamout.bam" \
     -o "{sample}.gvcf"  |& grep -v "^DEBUG"
 
-bgzip "{sample}.gvcf"
-tabix "{sample}.gvcf.gz"
-
 gsutil -m cp "{sample}.bamout.bam" {args.output_dir}
 gsutil -m cp "{sample}.bamout.bai" {args.output_dir}
-gsutil -m cp "{sample}.gvcf.gz" {args.output_dir}
-gsutil -m cp "{sample}.gvcf.gz.tbi" {args.output_dir}
 
 ls -lh
 echo --------------; free -h; df -kh; uptime; set +xe; echo "Done - time: $(date)"; echo --------------
