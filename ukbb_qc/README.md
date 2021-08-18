@@ -11,3 +11,9 @@ Other fixes in this branch include:
 - Code to update rsids to allow for multiple rsids per locus (in `prepare_vcf_release.py`).
 - Script to reformat VCF header to allow UKBB sample ID rebadging (`ukbb_header_reformat.sh`).
 - Script to get first and last positions in VCF shards (`get_shard_positions.py`).
+
+This branch was created using this command:
+```
+git checkout -b freeze_6 9c1e0a57528dc80fd8427bd589d271dbe32011c6
+```
+and relies on this commit from gnomad_methods: `f7cc4c229a84821cec50e4c1290254afe2fb023e`. Note that the "or" (`|`) on line 738 of `vcf.py` needs to be changed to "and" (`&`) after checking out to this commit.
