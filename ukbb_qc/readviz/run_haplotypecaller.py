@@ -97,7 +97,7 @@ def main():
     set_gcloud_project(project)
 
     logger.info("Making sure input cram_and_tsv_paths_table arg is valid...")
-    bams = {}
+    bamouts = {}
     samples = {}
     with hl.hadoop_open(args.cram_and_tsv_paths_table) as c:
         # Confirm header has all required columns
@@ -111,16 +111,13 @@ def main():
             values = dict(zip(header, line.strip().split("\t")))
 
             # Store output BAM path
-            bam = f"{args.output_prefix}/{values['sample']}.bamout.bam"
-            bai = f"{args.output_prefix}/{values['sample']}.bamout.bai"
-            bams[sample] = bam
+            bamout = f"{args.output_dir}/{values['sample_id']}.bamout.bam"
+            bamouts[sample] = bamout
 
             # Store sample information
             samples[sample] = [
-                values["cram"],
+                values["cram_path"],
                 values["variants_tsv_bgz"],
-                bam,
-                bai,
             ]
 
             logger.info(
@@ -130,16 +127,16 @@ def main():
             check_storage_bucket_region(values["cram"])
 
     logger.info("Checking if any output bams already exist...")
-    bam_exists = parallel_file_exists(list(bams.values()))
+    bamout_exists = parallel_file_exists(list(bamouts.values()))
     samples_without_bamouts = []
-    for sample in bams:
-        if not bam_exists[bams[sample]]:
+    for sample in bamouts:
+        if not bamout_exists[bamouts[sample]]:
             samples_without_bamouts.append(sample)
 
     # Process samples
     with run_batch(args, batch_name="HaplotypeCaller -bamout") as batch:
         for sample in tqdm(samples_without_bamouts, unit="samples"):
-            cram, variants_tsv_bgz, bam, bai = samples[sample]
+            cram, variants_tsv_bgz = samples[sample]
 
             j = init_job(
                 batch,
