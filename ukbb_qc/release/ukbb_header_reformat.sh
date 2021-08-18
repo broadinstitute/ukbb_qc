@@ -36,3 +36,4 @@ tabix -p vcf "$outfile"
 
 # Output the byte range of the sample names: 
 echo $lo $hi
+
