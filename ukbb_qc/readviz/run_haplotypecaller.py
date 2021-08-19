@@ -13,7 +13,6 @@ from tgg.batch.batch_utils import (
     init_arg_parser,
     init_job,
     run_batch,
-    set_gcloud_project,
 )
 
 from ukbb_qc.resources.basics import readviz_haplotype_caller_path
@@ -54,26 +53,14 @@ def parse_args():
     p = init_arg_parser(default_cpu=1, default_billing_project="gnomad-production")
     p.add_argument(
         "--gcloud-project",
-        help="Google cloud project. Default is 'broad-mpg-gnomad'.",
-        default="broad-mpg-gnomad",
+        help="Google cloud project. Default is 'gnomad-production'.",
+        default="gnomad-production",
     )
     p.add_argument(
         "-p",
         "--output-dir",
         help="Where to write haplotype caller output.",
         default=f"{readviz_haplotype_caller_path}/outputs/",
-    )
-    p.add_argument(
-        "-n",
-        "--num-samples-to-process",
-        help="For testing, process only the first N samples.",
-        type=int,
-    )
-    p.add_argument(
-        "-s",
-        "--sample-to-process",
-        help="For testing, process only the given sample id(s).",
-        nargs="+",
     )
     p.add_argument(
         "--cram-and-tsv-paths-table",
@@ -94,7 +81,7 @@ def main():
     _, args = parse_args()
     hl.init(log="/dev/null", quiet=True)
     project = args.gcloud_project
-    set_gcloud_project(project)
+    output_dir = args.output_dir
 
     logger.info("Making sure input cram_and_tsv_paths_table arg is valid...")
     bamouts = {}
@@ -102,9 +89,9 @@ def main():
     with hl.hadoop_open(args.cram_and_tsv_paths_table) as c:
         # Confirm header has all required columns
         header = c.readline().strip().split("\t")
-        if {"sample_id", "cram_path", "variants_tsv_bgz"} - set(header):
+        if {"sample_id", "cram", "crai", "variants_tsv_bgz"} - set(header):
             raise DataException(
-                "%s must contain 'sample_id', 'cram_path', variants_tsv_bgz' columns!"
+                "%s must contain 'sample_id', 'cram', 'crai', 'variants_tsv_bgz' columns!"
             )
 
         for line in c:
@@ -112,11 +99,12 @@ def main():
 
             # Store output BAM path
             bamout = f"{args.output_dir}/{values['sample_id']}.bamout.bam"
-            bamouts[sample] = bamout
+            bamouts[values["sample_id"]] = bamout
 
             # Store sample information
-            samples[sample] = [
-                values["cram_path"],
+            samples[values["sample_id"]] = [
+                values["cram"],
+                values["crai"],
                 values["variants_tsv_bgz"],
             ]
 
@@ -136,7 +124,7 @@ def main():
     # Process samples
     with run_batch(args, batch_name="HaplotypeCaller -bamout") as batch:
         for sample in tqdm(samples_without_bamouts, unit="samples"):
-            cram, variants_tsv_bgz = samples[sample]
+            cram, crai, variants_tsv_bgz = samples[sample]
 
             j = init_job(
                 batch,
@@ -154,6 +142,7 @@ def main():
             localize_file(j, HG38_REF_PATHS.dict, use_gcsfuse=True)
             local_tsv_bgz = localize_file(j, variants_tsv_bgz)
             local_cram_path = localize_file(j, cram)
+            localize_file(j, crai)
 
             # NOTE: Currently, we don't store the gVCFs produced by this step because it isn't used
             # TODO: Revisit if we should store gVCFs for downstream comparison --
@@ -168,18 +157,14 @@ df -kh
 
 # 1) Convert variants_tsv_bgz to sorted interval list
 
-gunzip -c "{local_tsv_bgz}" | awk '{{ OFS="\t" }} {{ print( "chr"$1, $2, $2 ) }}' | bedtools slop -b {PADDING_AROUND_VARIANT} -g {local_fasta_fai} > variant_windows.bed
+gunzip -c "{local_tsv_bgz}" | grep -v chrom| awk '{{ OFS="\t" }} {{ print( "chr"$6, $7, $7 ) }}' | bedtools slop -b {PADDING_AROUND_VARIANT} -g {local_fasta_fai} > variant_windows.bed
 
 # Sort the .bed file so that chromosomes are in the same order as in the input_cram file.
 # Without this, if the input_cram has a different chromosome ordering (eg. chr1, chr10, .. vs. chr1, chr2, ..)
 # than the interval list passed to GATK tools' -L arg, then GATK may silently skip some of regions in the -L intervals.
 # The sort is done by first retrieving the input_cram header and passing it to GATK BedToIntervalList.
 
-java -Xms2g -jar /gatk/gatk.jar PrintReadsHeader \
-    --gcs-project-for-requester-pays {project} \
-    -R {local_fasta} \
-    -I "{local_cram_path}" \
-    -O header.bam
+samtools view -H {local_cram_path} -T {local_fasta} > header.bam
 
 java -Xms2g -jar /gatk/gatk.jar BedToIntervalList \
     --SORT true \
@@ -191,17 +176,16 @@ java -Xms2g -jar /gatk/gatk.jar BedToIntervalList \
 
 time java -XX:GCTimeLimit=50 -XX:GCHeapFreeLimit=10 -XX:+DisableAttachMechanism -XX:MaxHeapSize=2000m -Xmx30000m \
     -jar /gatk/gatk.jar \
-    -T HaplotypeCaller \
+    HaplotypeCaller \
     -R {local_fasta} \
     -I "{local_cram_path}" \
     -L variant_windows.interval_list \
     -XL {local_exclude_intervals} \
-    --disable_auto_index_creation_and_locking_when_reading_rods \
     -ERC GVCF \
     --gvcf-gq-bands 10 \
     --gvcf-gq-bands 20 \
     --gvcf-gq-bands 30 \
-    --gvcf-gq-bands 40 \ 
+    --gvcf-gq-bands 40 \
     --gvcf-gq-bands 50 \
     --gvcf-gq-bands 60 \
     --gvcf-gq-bands 70 \
@@ -228,7 +212,8 @@ time java -XX:GCTimeLimit=50 -XX:GCHeapFreeLimit=10 -XX:+DisableAttachMechanism 
     --recover-dangling-heads false \
     --do-not-recover-dangling-branches false \
     --min-dangling-branch-length 4 \
-    --consensus false --max-num-haplotypes-in-population 128 \
+    --consensus false \
+    --max-num-haplotypes-in-population 128 \
     --error-correct-kmers false \
     --min-pruning 2 \
     --debug-graph-transformations false \
@@ -296,17 +281,17 @@ time java -XX:GCTimeLimit=50 -XX:GCHeapFreeLimit=10 -XX:+DisableAttachMechanism 
     --use-jdk-deflater false \
     --use-jdk-inflater false\
     --gcs-max-retries 20 \
-    --gcs-project-for-requester-pays  \
+    --gcs-project-for-requester-pays {project} \
     --disable-tool-default-read-filters false \
     --minimum-mapping-quality 20 \
     --disable-tool-default-annotations false \
-    --enable-all-annotations false
+    --enable-all-annotations false \
     --dont-trim-active-regions false \
     -bamout "{sample}.bamout.bam" \
-    -o "{sample}.gvcf"  |& grep -v "^DEBUG"
+    -O "{sample}.gvcf"  |& grep -v "^DEBUG"
 
-gsutil -m cp "{sample}.bamout.bam" {args.output_dir}
-gsutil -m cp "{sample}.bamout.bai" {args.output_dir}
+gsutil -m cp "{sample}.bamout.bam" {output_dir}
+gsutil -m cp "{sample}.bamout.bai" {output_dir}
 
 ls -lh
 echo --------------; free -h; df -kh; uptime; set +xe; echo "Done - time: $(date)"; echo --------------
