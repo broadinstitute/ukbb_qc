@@ -83,7 +83,7 @@ def main():
     output_dir = args.output_dir
 
     logger.info("Making sure input cram_and_tsv_paths_table arg is valid...")
-    success_files = {}
+    baiout_files = {}
     samples = {}
     with hl.hadoop_open(args.cram_and_tsv_paths_table) as c:
         # Confirm header has all required columns
@@ -96,9 +96,9 @@ def main():
         for line in c:
             values = dict(zip(header, line.strip().split("\t")))
 
-            # Store output success file path
-            success_file = f"{output_dir}{values['sample_id']}.success.txt"
-            success_files[values["sample_id"]] = success_file
+            # Store output bamout index file path
+            success_file = f"{output_dir}{values['sample_id']}.bamout.bais"
+            baiout_files[values["sample_id"]] = success_file
 
             # Store sample information
             samples[values["sample_id"]] = [
@@ -121,25 +121,25 @@ def main():
             # check_storage_bucket_region(values["cram"])
 
     logger.info("Checking if any output success files already exist...")
-    success_files_exist = parallel_file_exists(list(success_files.values()))
-    samples_without_success_files = []
-    samples_with_success_files = []
-    for sample in success_files:
-        if not success_files_exist[success_files[sample]]:
-            samples_without_success_files.append(sample)
+    baiout_files_exist = parallel_file_exists(list(baiout_files.values()))
+    samples_without_baiout_files = []
+    samples_with_baiout_files = []
+    for sample in baiout_files:
+        if not baiout_files_exist[baiout_files[sample]]:
+            samples_without_baiout_files.append(sample)
         else:
-            samples_with_success_files.append(sample)
+            samples_with_baiout_files.append(sample)
 
     logger.info(
-        "Samples with output success files: %i", len(samples_with_success_files)
+        "Samples with output bam index files: %i", len(samples_with_baiout_files)
     )
     logger.info(
-        "Samples without output success files: %i", len(samples_without_success_files)
+        "Samples without output bam index files: %i", len(samples_without_baiout_files)
     )
 
     # Process samples
     with run_batch(args, batch_name="HaplotypeCaller -bamout") as batch:
-        for sample in tqdm(samples_without_success_files, unit="samples"):
+        for sample in tqdm(samples_without_baiout_files, unit="samples"):
             cram, crai, variants_tsv_bgz = samples[sample]
 
             j = init_job(
@@ -314,8 +314,6 @@ echo --------------; free -h; df -kh; uptime; set +xe; echo "Done - time: $(date
 
 """
             )
-        j.command(f"""touch {sample}.success.txt""")
-        j.command(f"""gsutil -m cp {sample}.success.txt {output_dir}""")
 
 
 if __name__ == "__main__":
