@@ -67,8 +67,7 @@ def main(args):
 
     # Process samples
     with run_batch(args, batch_name="HaplotypeCaller -bamout checks") as batch:
-        for sample in tqdm(bamouts, unit="samples"):
-            bamout = bamouts[sample]
+        for sample, bamout in tqdm(bamouts.items(), unit="samples"):
 
             j = init_job(
                 batch,
@@ -80,7 +79,7 @@ def main(args):
             j.command(
                 f"""gcloud -q auth activate-service-account --key-file=/gsa-key/key.json"""
             )
-            local_bamout_path = localize_file(j, bamout)
+            local_bamout_path = localize_file(j, bamout, use_gcsfuse=True)
             j.command(f"""samtools quickcheck {local_bamout_path}""")
 
 
