@@ -320,7 +320,7 @@ echo --------------; free -h; df -kh; uptime; set +xe; echo "Done - time: $(date
 """
             )
         j.command(f"""touch {sample}.success.txt""")
-        j.command(f"""gsutil -m cp {output_dir}""")
+        j.command(f"""gsutil -m cp {sample}.success.txt {output_dir}""")
 
 
 if __name__ == "__main__":
