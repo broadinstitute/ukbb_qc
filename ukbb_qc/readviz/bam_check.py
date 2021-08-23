@@ -29,6 +29,7 @@ DOCKER_IMAGE = "gcr.io/broad-mpg-gnomad/gnomad-readviz:ukbb"
 Docker image to be passed to hail batch. 
 
 Built with GATK version 4.0.10.1 (version used to process UKBB crams).
+Must contain samtools package.
 """
 
 
@@ -80,18 +81,7 @@ def main(args):
                 f"""gcloud -q auth activate-service-account --key-file=/gsa-key/key.json"""
             )
             local_bamout_path = localize_file(j, bamout)
-            j.command(
-                f"""echo --------------
-
-echo "Start - time: $(date)"
-df -kh
-
-samtools quickcheck {local_bamout_path} 
-
-echo --------------; free -h; df -kh; uptime; set +xe; echo "Done - time: $(date)"; echo --------------
-
-"""
-            )
+            j.command(f"""samtools quickcheck {local_bamout_path}""")
 
 
 if __name__ == "__main__":
