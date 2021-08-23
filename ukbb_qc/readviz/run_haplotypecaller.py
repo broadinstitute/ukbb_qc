@@ -97,7 +97,7 @@ def main():
             values = dict(zip(header, line.strip().split("\t")))
 
             # Store output bamout index file path
-            success_file = f"{output_dir}{values['sample_id']}.bamout.bais"
+            success_file = f"{output_dir}{values['sample_id']}.bamout.bai"
             baiout_files[values["sample_id"]] = success_file
 
             # Store sample information
