@@ -7,7 +7,6 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import parallel_file_exists
 
 from tgg.batch.batch_utils import (
-    check_storage_bucket_region,
     HG38_REF_PATHS,
     localize_file,
     init_arg_parser,
@@ -84,7 +83,7 @@ def main():
     output_dir = args.output_dir
 
     logger.info("Making sure input cram_and_tsv_paths_table arg is valid...")
-    bamouts = {}
+    baiout_files = {}
     samples = {}
     with hl.hadoop_open(args.cram_and_tsv_paths_table) as c:
         # Confirm header has all required columns
@@ -97,9 +96,9 @@ def main():
         for line in c:
             values = dict(zip(header, line.strip().split("\t")))
 
-            # Store output BAM path
-            bamout = f"{args.output_dir}/{values['sample_id']}.bamout.bam"
-            bamouts[values["sample_id"]] = bamout
+            # Store output bamout index file path
+            success_file = f"{output_dir}{values['sample_id']}.bamout.bais"
+            baiout_files[values["sample_id"]] = success_file
 
             # Store sample information
             samples[values["sample_id"]] = [
@@ -108,22 +107,39 @@ def main():
                 values["variants_tsv_bgz"],
             ]
 
-            logger.info(
-                "Checking that all input crams are 'US-CENTRAL1' or multi-regional buckets..."
-            )
+            # NOTE: Commenting out this check because it will crash the code
+            # Typically, we would want to perform this check, but the UKBB crams are only in two buckets:
+            # gs://broad-pharma5-ukbb-outputs and gs://broad-pharma5-ukbb-outputs.
+            # I have access to gs://broad-pharma5-ukbb-outputs and was able to confirm the region for this bucket is multiregional US
+            # I do not have access to gs://broad-pharma5-ukbb-outputs, but someone in DSP was able to confirm that this bucket is also
+            # US multiregional
+            # logger.info(
+            #    "Checking that all input crams are 'US-CENTRAL1' or multi-regional buckets..."
+            # )
             # Check that all buckets are in "US-CENTRAL1" or are multi-regional to avoid egress charges to the Batch cluster
-            check_storage_bucket_region(values["cram"])
+            # from tgg.batch.batch_utils import check_storage_bucket_region
+            # check_storage_bucket_region(values["cram"])
 
-    logger.info("Checking if any output bams already exist...")
-    bamout_exists = parallel_file_exists(list(bamouts.values()))
-    samples_without_bamouts = []
-    for sample in bamouts:
-        if not bamout_exists[bamouts[sample]]:
-            samples_without_bamouts.append(sample)
+    logger.info("Checking if any output success files already exist...")
+    baiout_files_exist = parallel_file_exists(list(baiout_files.values()))
+    samples_without_baiout_files = []
+    samples_with_baiout_files = []
+    for sample in baiout_files:
+        if not baiout_files_exist[baiout_files[sample]]:
+            samples_without_baiout_files.append(sample)
+        else:
+            samples_with_baiout_files.append(sample)
+
+    logger.info(
+        "Samples with output bam index files: %i", len(samples_with_baiout_files)
+    )
+    logger.info(
+        "Samples without output bam index files: %i", len(samples_without_baiout_files)
+    )
 
     # Process samples
     with run_batch(args, batch_name="HaplotypeCaller -bamout") as batch:
-        for sample in tqdm(samples_without_bamouts, unit="samples"):
+        for sample in tqdm(samples_without_baiout_files, unit="samples"):
             cram, crai, variants_tsv_bgz = samples[sample]
 
             j = init_job(
