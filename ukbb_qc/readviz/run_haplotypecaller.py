@@ -66,11 +66,6 @@ def parse_args():
         help="A text file containing at least these columns: sample_id, cram_path, variants_tsv_bgz",
         default=f"{readviz_haplotype_caller_path()}/inputs/step4_output_cram_and_tsv_paths_table.tsv",
     )
-    p.add_argument(
-        "--wait",
-        help="If True, wait for the batch to finish executing before returning.",
-        action="store_true",
-    )
     args = p.parse_args()
 
     return p, args
