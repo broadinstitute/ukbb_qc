@@ -53,7 +53,12 @@ from ukbb_qc.resources.basics import (
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import meta_ht_path
-from ukbb_qc.resources.variant_qc import info_ht_path, var_annotations_ht_path
+from ukbb_qc.resources.variant_qc import (
+    info_ht_path,
+    NA12878,
+    SYNDIP,
+    var_annotations_ht_path,
+)
 from ukbb_qc.slack_creds import slack_token
 from ukbb_qc.utils.constants import SEXES_UKBB
 from ukbb_qc.utils.utils import make_index_dict
@@ -739,7 +744,9 @@ def main(args):
                     "Expected to remove two duplicate sample IDs. Please double check and rerun!"
                 )
 
-            logger.info("Removing samples with withdrawn consent...")
+            logger.info(
+                "Removing samples with withdrawn consent, control samples, and samples with undefined UKBB batch numbers..."
+            )
             # File downloaded on 8/16/21
             withdrawn_ht = hl.import_table(
                 "gs://broad-ukbb/resources/withdrawn_consents/w26041_20210809.csv",
@@ -761,16 +768,18 @@ def main(args):
 
             all_sample_count = mt.count_cols()
             logger.info(
-                "MT sample count before removing withdrawn samples: %i",
+                "MT sample count before removing samples with withdrawn consent, control samples, and samples with defined UKBB batch: %i",
                 all_sample_count,
             )
+            controls = hl.literal([NA12878, SYNDIP])
             mt = mt.filter_cols(
-                (~sample_map_ht[mt.col_key].withdrawn_consent)
-                | (hl.is_missing(sample_map_ht[mt.col_key].withdrawn_consent))
+                hl.is_defined(sample_map_ht[mt.col_key].batch)
+                & ~sample_map_ht[mt.col_key].withdrawn_consent
+                & ~controls.contains(mt.col_key)
             )
             final_sample_count = mt.count_cols()
             logger.info(
-                "MT sample count after removing withdrawn samples: %i",
+                "MT sample count after removing withdrawn and control samples: %i",
                 final_sample_count,
             )
 
