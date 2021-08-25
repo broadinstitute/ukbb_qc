@@ -12,8 +12,7 @@ then
 fi
 
 vcfgz_path="$1"
-vcfgz_prefix="${vcfgz_path%.vcf.gz}"
-outfile="${vcfgz_prefix.repackaged.vcf.gz}"
+outfile="$2"
 
 # Get header up until the sample names, bgzip regularly
 ( bcftools view --no-version -h "$vcfgz_path" | head -n -1; bcftools view --no-version -h "$vcfgz_path" | tail -n 1 | awk '{for (i=1; i<=9; i++) {printf("%s\t", $i) }}' ) | bgzip | head -c -28 > "$outfile"

@@ -3,7 +3,7 @@ from typing import Optional
 
 import hail as hl
 
-from gnomad.utils.file_utils import file_exists, rep_on_read
+from gnomad.utils.file_utils import file_exists
 from gnomad.resources.resource_utils import DataException
 from .resource_utils import CURRENT_FREEZE, DATA_SOURCES, FREEZES
 from .sample_qc import meta_ht_path
@@ -70,8 +70,8 @@ def get_ukbb_data(
         raise DataException(f"Need to import array sample map ht for freeze {freeze}!")
 
     if raw and repartition:
-        mt = rep_on_read(
-            get_ukbb_data_path(data_source, freeze, hardcalls=not raw), n_partitions
+        mt = hl.read_matrix_table(
+            get_ukbb_data_path(data_source, freeze, hardcalls=not raw), _n_partitions=n_partitions
         )
     else:
         mt = hl.read_matrix_table(
