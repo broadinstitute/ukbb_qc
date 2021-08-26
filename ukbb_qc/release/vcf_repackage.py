@@ -76,11 +76,6 @@ def main(args):
 if __name__ == "__main__":
     p = init_arg_parser(default_cpu=1, default_billing_project="gnomad-production")
     p.add_argument(
-        "--gcloud-project",
-        help="Google cloud project. Default is 'gnomad-production'.",
-        default="gnomad-production",
-    )
-    p.add_argument(
         "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
     )
     p.add_argument(
