@@ -726,7 +726,7 @@ def main(args):
             # code removes the version of the sample with a higher column index (205124)
             # UKB_4048554_0301608642 has column indices 81090 and 262414
             # The version of the sample with the higher index corresponds to the more recent version of the sample,
-            # so code revmoes the sample with the lower column index
+            # so code removes the sample with the lower column index
             original_sample_count = mt.count_cols()
             logger.info("Original sample count: %i", original_sample_count)
             mt = mt.annotate_cols(new_s=hl.format("%s_%s", mt.s, mt.col_idx))
