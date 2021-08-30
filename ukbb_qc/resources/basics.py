@@ -71,7 +71,8 @@ def get_ukbb_data(
 
     if raw and repartition:
         mt = hl.read_matrix_table(
-            get_ukbb_data_path(data_source, freeze, hardcalls=not raw), _n_partitions=n_partitions
+            get_ukbb_data_path(data_source, freeze, hardcalls=not raw),
+            _n_partitions=n_partitions,
         )
     else:
         mt = hl.read_matrix_table(
@@ -422,6 +423,18 @@ def release_vcf_path(data_source: str, freeze: int, contig: str = None) -> str:
         # if contig is None, return path to sharded vcf bucket
         # NOTE: need to add .bgz or else hail will not bgzip shards
         return f"{get_release_path(data_source, freeze)}/vcf/sharded_vcf/{data_source}.freeze_{freeze}.bgz"
+
+
+def release_vcf_ht_path(data_source: str, freeze: int) -> str:
+    """
+    Fetch filepath for release Hail Table with annotations reformatted for VCF export
+
+    :param str data_source: One of 'regeneron' or 'broad'
+    :param int freeze: One of the data freezes. 
+    :return: Filepath for release VCF Table
+    :rtype: str
+    """
+    return f"{get_release_path(data_source, freeze)}/ht/{data_source}.freeze_{freeze}.release.sites.vcf.ht"
 
 
 def vqsr_sites_path(
