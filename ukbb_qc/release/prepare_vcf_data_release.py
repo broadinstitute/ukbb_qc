@@ -771,10 +771,17 @@ def main(args):
                 "MT sample count before removing samples with withdrawn consent, control samples, and samples with defined UKBB batch: %i",
                 all_sample_count,
             )
+
+            # Filter withdrawn samples and double check the number of samples is as expected
+            mt = mt.filter_cols(~sample_map_ht[mt.col_key].withdrawn_consent)
+            if mt.count_cols() - all_sample_count < withdrawn_ids:
+                raise DataException(
+                    "Number of removed samples is less than total number of samples with withdrawn consents in sample map HT. Please double check and rerun!"
+                )
+
             controls = hl.literal([NA12878, SYNDIP])
             mt = mt.filter_cols(
                 hl.is_defined(sample_map_ht[mt.col_key].batch)
-                & ~sample_map_ht[mt.col_key].withdrawn_consent
                 & ~controls.contains(mt.col_key)
             )
             final_sample_count = mt.count_cols()
@@ -782,11 +789,6 @@ def main(args):
                 "MT sample count after removing withdrawn and control samples: %i",
                 final_sample_count,
             )
-
-            if (final_sample_count - all_sample_count) < withdrawn_ids:
-                raise DataException(
-                    "Number of removed samples is less than total number of samples with withdrawn consents in sample map HT. Please double check and rerun!"
-                )
 
             logger.info("Removing chrM...")
             mt = hl.filter_intervals(mt, [hl.parse_locus_interval("chrM")], keep=False)
