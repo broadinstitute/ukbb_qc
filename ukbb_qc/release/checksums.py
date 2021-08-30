@@ -8,7 +8,6 @@ from gnomad.utils.file_utils import get_file_stats
 from ukbb_qc.resources.basics import release_vcf_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 
-
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
     datefmt="%m/%d/%Y %I:%M:%S %p",
