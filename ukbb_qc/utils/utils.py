@@ -548,7 +548,7 @@ def make_index_dict(
     freq_meta = hl.eval(t.globals[freq_meta_str])
     # check if indexing gnomAD data
     if "gnomad" in freq_meta_str:
-        index_dict = make_freq_meta_index_dict(freq_meta, gnomad=True, pops=pops,)
+        index_dict = make_freq_meta_index_dict(freq_meta, gnomad=True, pops=pops)
     else:
         index_dict = make_freq_meta_index_dict(freq_meta, gnomad=False, pops=pops)
     return index_dict
