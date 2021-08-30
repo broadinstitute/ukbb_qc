@@ -675,12 +675,13 @@ def main(args):
             vep_ht = vep_ht.annotate(vep=vep_struct_to_csq(vep_ht.vep))
             ht = ht.annotate(info=ht.info.annotate(vep=vep_ht[ht.key].vep))
 
-            logger.info("Selecting fields and writing VCF HT...")
-            ht = ht.select("info", "filters", "rsid", "qual")
-            ht.write(release_vcf_ht_path(*tranche_data), args.overwrite)
             new_vcf_info_dict.update(
                 {"vep": {"Description": hl.eval(mt.vep_csq_header)}}
             )
+            
+            logger.info("Selecting fields and writing VCF HT...")
+            ht = ht.select("info", "filters", "rsid", "qual")
+            ht.write(release_vcf_ht_path(*tranche_data), args.overwrite)
 
             # Make filter dict and add field for MonoAllelic filter
             filter_dict = make_vcf_filter_dict(
