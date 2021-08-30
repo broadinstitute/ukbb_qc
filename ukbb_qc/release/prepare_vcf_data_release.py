@@ -674,13 +674,13 @@ def main(args):
             # Reformat vep annotation
             vep_ht = vep_ht.annotate(vep=vep_struct_to_csq(vep_ht.vep))
             ht = ht.annotate(info=ht.info.annotate(vep=vep_ht[ht.key].vep))
-
-            logger.info("Selecting fields and writing VCF HT...")
-            ht = ht.select("info", "filters", "rsid", "qual")
-            ht.write(release_vcf_ht_path(*tranche_data), args.overwrite)
             new_vcf_info_dict.update(
                 {"vep": {"Description": hl.eval(mt.vep_csq_header)}}
             )
+            
+            logger.info("Selecting fields and writing VCF HT...")
+            ht = ht.select("info", "filters", "rsid", "qual")
+            ht.write(release_vcf_ht_path(*tranche_data), args.overwrite)
 
             # Make filter dict and add field for MonoAllelic filter
             filter_dict = make_vcf_filter_dict(
@@ -726,7 +726,7 @@ def main(args):
             # code removes the version of the sample with a higher column index (205124)
             # UKB_4048554_0301608642 has column indices 81090 and 262414
             # The version of the sample with the higher index corresponds to the more recent version of the sample,
-            # so code revmoes the sample with the lower column index
+            # so code removes the sample with the lower column index
             original_sample_count = mt.count_cols()
             logger.info("Original sample count: %i", original_sample_count)
             mt = mt.annotate_cols(new_s=hl.format("%s_%s", mt.s, mt.col_idx))
@@ -1004,7 +1004,7 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--prepare_vcf_mt", help="Use release mt to create vcf mt", action="store_true"
+        "--prepare_vcf_mt", help="Use release MT to create VCF MT", action="store_true"
     )
     parser.add_argument(
         "--sanity_check", help="Run sanity checks function", action="store_true"
