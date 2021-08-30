@@ -1,7 +1,7 @@
 # 300K Return of results branch
 This branch was created to re-export the 300K UKBB VCFs in order to return data to the UKBB.
 
-The VCF re-export was necessary to fix a bug with the 300K frequencies. In the original 300K frequency code, we accidentally appended missing "cohort" frequency structs (frequencies calculated on all NFE samples, including relateds) to our "release" frequency struct (frequencies calculated on high quality, unrelated samples only), which resulted in empty/missing frequency structs for impacted loci.
+The VCF re-export was necessary to fix a bug with the 300K frequencies. In the original 300K frequency code, we previously appended missing "cohort" frequency structs (frequencies calculated on all NFE samples, including relateds) to our "release" frequency struct (frequencies calculated on high quality, unrelated samples only), which resulted in empty/missing frequency structs for impacted loci.
 
 Other fixes in this branch include:
 - Code to remove samples that withdrew consent after we completed 300K QC (in `prepare_vcf_release.py`).
