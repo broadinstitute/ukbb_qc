@@ -1002,7 +1002,7 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--prepare_vcf_mt", help="Use release mt to create vcf mt", action="store_true"
+        "--prepare_vcf_mt", help="Use release MT to create VCF MT", action="store_true"
     )
     parser.add_argument(
         "--sanity_check", help="Run sanity checks function", action="store_true"
