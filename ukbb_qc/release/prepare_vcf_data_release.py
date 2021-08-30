@@ -674,7 +674,6 @@ def main(args):
             # Reformat vep annotation
             vep_ht = vep_ht.annotate(vep=vep_struct_to_csq(vep_ht.vep))
             ht = ht.annotate(info=ht.info.annotate(vep=vep_ht[ht.key].vep))
-
             new_vcf_info_dict.update(
                 {"vep": {"Description": hl.eval(mt.vep_csq_header)}}
             )
