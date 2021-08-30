@@ -6,7 +6,8 @@ if [[ "$1" == "" ]]
 then
   echo "Usage: $0 file.vcf.gz"
   echo ""
-  echo "Repackages the VCF so that the samples in the header are contained in a separate, 0-compressed bgzip block." echo "Requires bcftools, bgzip, tabix."
+  echo "Repackages the VCF so that the samples in the header are contained in a separate, 0-compressed bgzip block." 
+  echo "Requires bcftools, bgzip, tabix."
   echo "Outputs file.repackaged.vcf.gz+tbi (to disk), and header coordinates (lo,hi) to stdout."
   exit 1
 fi
