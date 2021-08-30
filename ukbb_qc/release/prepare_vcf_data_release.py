@@ -562,14 +562,6 @@ def main(args):
             ht = ht.annotate_rows(freq=ht.freq[:28])
             ht = ht.annotate_globals(freq_meta=ht.freq_meta[:28])
 
-            logger.info("Making histogram bin edges...")
-            # NOTE: using release HT here because age histograms aren't necessarily defined
-            # in the first row of the raw MT (we may have filtered that row because it was low qual)
-            bin_edges = make_hist_bin_edges_expr(ht, prefix="")
-
-            logger.info("Getting age hist data...")
-            age_hist_data = hl.eval(ht.age_distribution)
-
             # This was removed from the 455K but is necessary for the 300K
             from ukbb_qc.resources.basics import vqsr_sites_path
             from gnomad.utils.sparse_mt import split_info_annotation
@@ -588,6 +580,14 @@ def main(args):
             ht = ht.annotate(
                 info=ht.info.annotate(AS_VarDP=vqsr_sites_ht[ht.key].AS_VarDP)
             )
+
+            logger.info("Making histogram bin edges...")
+            # NOTE: using release HT here because age histograms aren't necessarily defined
+            # in the first row of the raw MT (we may have filtered that row because it was low qual)
+            bin_edges = make_hist_bin_edges_expr(ht, prefix="")
+
+            logger.info("Getting age hist data...")
+            age_hist_data = hl.eval(ht.age_distribution)
 
             logger.info("Making INFO dict for VCF...")
             vcf_info_dict = populate_info_dict(
