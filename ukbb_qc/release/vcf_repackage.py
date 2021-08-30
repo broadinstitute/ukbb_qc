@@ -35,6 +35,9 @@ def main(args):
     Repackage each VCF shard so that the samples in the header are contained in a separate, 0-compressed bgzip block.
 
     Required for return of results to UKBB.
+
+    .. note::
+        Run this script in the same directory as `ukbb_header_reformat.sh`.
     """
     data_source = "broad"
     freeze = args.freeze
@@ -63,12 +66,18 @@ def main(args):
                 f"""gcloud -q auth activate-service-account --key-file=/gsa-key/key.json"""
             )
             local_vcf_path = localize_file(j, shard, use_gcsfuse=True)
-            # NOTE: copied reheader script to this path because batch needs to use f-strings in the commands
-            # and the f-strings didn't like the backslashes
-            local_script_path = localize_file(
-                j, "gs://broad-ukbb/broad.freeze_6/temp/ukbb_header_reformat.sh"
+            ukbb_header_reformat_sh_contents = open("ukbb_header_reformat.sh").read()
+            ukbb_header_reformat_sh_contents = ukbb_header_reformat_sh_contents.replace(
+                "$", "\\$"
             )
-            j.command(f"""bash {local_script_path} {local_vcf_path} {output_name}""")
+            j.command(
+                f"""cat << EOF > ukbb_header_reformat.sh
+{ukbb_header_reformat_sh_contents} 
+EOF"""
+            )
+            j.command(
+                f"""bash ukbb_header_reformat.sh {local_vcf_path} {output_name}"""
+            )
             j.command(f"""gsutil -m cp {output_name} {output_dir}""")
             j.command(f"""gsutil -m cp {output_tabix} {output_dir}""")
 
