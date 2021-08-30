@@ -7,7 +7,7 @@ from typing import Dict, List, Union
 import hail as hl
 
 from gnomad.resources.grch37.gnomad import SUBPOPS
-from gnomad.resources.grch38.reference_data import dbsnp, seg_dup_intervals
+from gnomad.resources.grch38.reference_data import seg_dup_intervals
 from gnomad.resources.resource_utils import DataException
 from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.sample_qc.sex import adjust_sex_ploidy
@@ -630,7 +630,10 @@ def main(args):
 
             logger.info("Reformatting rsid...")
             # Update rsid annotation to be a set and not a string
-            dbsnp_ht = dbsnp.ht().select("rsid")
+            # NOTE: hardcoding this resource here because the version of gnomad methods required to run this script
+            # will only point to dbsnp version 151
+            # Path is from gnomad repo: https://github.com/broadinstitute/gnomad_methods/blob/master/gnomad/resources/grch38/reference_data.py#L156
+            dbsnp_ht = "gs://gnomad-public-requester-pays/resources/grch38/dbsnp/dbsnp_b154_grch38_all_20200514.ht"
             ht = ht.annotate(rsid=hl.str(";").join(dbsnp_ht[ht.key].rsid))
 
             logger.info("Constructing INFO field")
@@ -677,7 +680,7 @@ def main(args):
             new_vcf_info_dict.update(
                 {"vep": {"Description": hl.eval(mt.vep_csq_header)}}
             )
-            
+
             logger.info("Selecting fields and writing VCF HT...")
             ht = ht.select("info", "filters", "rsid", "qual")
             ht.write(release_vcf_ht_path(*tranche_data), args.overwrite)
