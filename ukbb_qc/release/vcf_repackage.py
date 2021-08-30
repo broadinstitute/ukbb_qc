@@ -67,11 +67,8 @@ def main(args):
             )
             local_vcf_path = localize_file(j, shard, use_gcsfuse=True)
             ukbb_header_reformat_sh_contents = open("ukbb_header_reformat.sh").read()
-            ukbb_header_reformat_sh_contents = ukbb_header_reformat_sh_contents.replace(
-                "$", "\\$"
-            )
             j.command(
-                f"""cat << EOF > ukbb_header_reformat.sh
+                f"""cat <<"EOF" > ukbb_header_reformat.sh
 {ukbb_header_reformat_sh_contents} 
 EOF"""
             )
