@@ -550,7 +550,7 @@ def main(args):
 
             # TODO: update this section based on discussion with UKBB PMs
             logger.info(
-                "Removing samples with withdrawn consent, control samples, and samples with undefined UKBB batch numbers..."
+                "Removing samples with withdrawn consent, control samples, and samples with undefined UKBB 26041 application IDs..."
             )
             # File downloaded on 8/16/21
             withdrawn_ht = hl.import_table(
@@ -573,12 +573,12 @@ def main(args):
 
             all_sample_count = mt.count_cols()
             logger.info(
-                "MT sample count before removing samples with withdrawn consent, control samples, and samples with defined UKBB batch: %i",
+                "MT sample count before removing samples with withdrawn consent, control samples, and samples with defined UKBB IDs: %i",
                 all_sample_count,
             )
 
             # Filter withdrawn samples and double check the number of samples is as expected
-            mt = mt.filter_cols(~sample_map_ht[mt.col_key].withdrawn_consent)
+            mt = mt.filter_cols(hl.is_defined(mt.meta.ukbb_meta.ukbb_app_26041_id))
             if mt.count_cols() - all_sample_count < withdrawn_ids:
                 raise DataException(
                     "Number of removed samples is less than total number of samples with withdrawn consents in sample map HT. Please double check and rerun!"
