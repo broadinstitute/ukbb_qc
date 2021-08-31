@@ -57,7 +57,6 @@ from ukbb_qc.resources.variant_qc import (
     info_ht_path,
     NA12878,
     SYNDIP,
-    var_annotations_ht_path,
 )
 from ukbb_qc.slack_creds import slack_token
 from ukbb_qc.utils.constants import SEXES_UKBB
@@ -541,9 +540,7 @@ def main(args):
             logger.info("Reading in release HT...")
             # NOTE: new_freq is an annotation created when fixing the missing 300K frequencies
             # it is a temp annotation and should have been dropped before writing HT
-            # Also drop VEP here (this annotation uses the older VEP version with a bug),
-            # so we want to add a new annotation from VEP version 101
-            ht = hl.read_table(release_ht_path(*tranche_data)).drop("new_freq", "vep")
+            ht = hl.read_table(release_ht_path(*tranche_data)).drop("new_freq")
 
             logger.info(
                 "Dropping frequencies stratified with subpops (using UKBB hybrid pops as the subpop)..."
@@ -670,13 +667,9 @@ def main(args):
             )
             ht = ht.annotate(**set_female_y_metrics_to_na(ht))
 
-            logger.info("Reading in VEP HT...")
-            vep_ht = hl.read_table(var_annotations_ht_path("vep", *tranche_data))
-            vep_ht = vep_ht.transmute(vep=vep_ht.vep.drop("colocated_variants"))
-
             # Reformat vep annotation
-            vep_ht = vep_ht.annotate(vep=vep_struct_to_csq(vep_ht.vep))
-            ht = ht.annotate(info=ht.info.annotate(vep=vep_ht[ht.key].vep))
+            ht = ht.annotate(vep=vep_struct_to_csq(ht.vep))
+            ht = ht.annotate(info=ht.info.annotate(vep=ht.vep))
             new_vcf_info_dict.update(
                 {"vep": {"Description": hl.eval(mt.vep_csq_header)}}
             )
@@ -965,7 +958,7 @@ def main(args):
                     release_vcf_path(*tranche_data),
                     parallel="header_per_shard",
                     metadata=header_dict,
-                    append_to_header="gs://broad-ukbb/broad.freeze_7/release/vcf/append_to_vcf_header.tsv",
+                    append_to_header="gs://broad-ukbb/broad.freeze_6/release/vcf/append_to_vcf_header.tsv",
                     tabix=True,
                 )
     finally:
