@@ -538,17 +538,12 @@ def make_index_dict(
     Create a look-up Dictionary for entries contained in the frequency annotation array.
 
     :param Table ht: Table or MatrixTable containing freq_meta global annotation to be indexed
-    :param str freq_meta: freq_meta global annotation to be indexed (freq_meta, gnomad_exomes_freq_meta, or gnomad_genomes_freq_meta)
-    :param List[str] pops: List of global populations in frequency array. Used for both gnomAD and UKBB. 
+    :param str freq_meta: freq_meta global annotation to be indexed (freq_meta)
+    :param List[str] pops: List of global populations in frequency array.
         Can handle populations to unique to gnomAD/UKBB or a union of all population names.
     :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
         of each grouping entry in the frequency array
     :rtype: Dict of str: int
     """
     freq_meta = hl.eval(t.globals[freq_meta_str])
-    # check if indexing gnomAD data
-    if "gnomad" in freq_meta_str:
-        index_dict = make_freq_meta_index_dict(freq_meta, gnomad=True, pops=pops)
-    else:
-        index_dict = make_freq_meta_index_dict(freq_meta, gnomad=False, pops=pops)
-    return index_dict
+    return make_freq_meta_index_dict(freq_meta, gnomad=False, pops=pops)
