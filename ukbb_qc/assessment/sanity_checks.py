@@ -8,12 +8,8 @@ from gnomad.assessment.sanity_checks import (
     make_filters_sanity_check_expr,
     sample_sum_check,
 )
-from gnomad.resources.grch37.gnomad import SUBPOPS
 from gnomad.sample_qc.ancestry import POP_NAMES
-from gnomad.utils.vcf import (
-    HISTS,
-    SEXES,
-)
+from gnomad.utils.vcf import HISTS
 from ukbb_qc.utils.constants import SEXES_UKBB
 
 logging.basicConfig(
@@ -254,7 +250,7 @@ def histograms_sanity_check(
                 )
 
 
-def raw_and_adj_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool):
+def raw_and_adj_sanity_checks(ht: hl.Table, verbose: bool):
     """
     Performs sanity checks on raw and adj data in input Table.
 
@@ -264,7 +260,6 @@ def raw_and_adj_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool):
         - Raw values for AC, AN, nhomalt in each sample subset are greater than or equal to their corresponding adj values
 
     :param hl.Table ht: Input Table.
-    :param List[str] subsets: List of sample subsets.
     :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
         show only top values of annotations that fail checks.
     :return: None
@@ -308,112 +303,32 @@ def raw_and_adj_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool):
         verbose=verbose,
     )
 
-    for subset in subsets:
-        if subset != "":
-            subset += "_"
-        for subfield in ["AC", "AN", "nhomalt"]:
-            # Check AC_raw >= AC adj
-            generic_field_check(
-                ht,
-                cond_expr=(
-                    ht.info[f"{subset}{subfield}_raw"]
-                    < ht.info[f"{subset}{subfield}_adj"]
-                ),
-                check_description=f"{subset}{subfield}_raw >= {subset}{subfield}_adj",
-                display_fields=[
-                    f"info.{subset}{subfield}_raw",
-                    f"info.{subset}{subfield}_adj",
-                ],
-                verbose=verbose,
-            )
+    for subfield in ["AC", "AN", "nhomalt"]:
+        # Check AC_raw >= AC adj
+        generic_field_check(
+            ht,
+            cond_expr=(ht.info[f"{subfield}_raw"] < ht.info[f"{subfield}_adj"]),
+            check_description=f"{subfield}_raw >= {subfield}_adj",
+            display_fields=[f"info.{subfield}_raw", f"info.{subfield}_adj",],
+            verbose=verbose,
+        )
 
 
-def frequency_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool) -> None:
+def frequency_sanity_checks(ht: hl.Table) -> None:
     """
     Performs sanity checks on frequency data in input Table.
 
-    Checks:
-        - Number of sites where gnomAD exome frequency is equal to the gnomAD genome frequency (both raw and adj)
-        - Number of sites where the UKBB exome frequency is equal to the gnomAD exome frequency (both raw and adj)
-        - Number of sites where the UKBB exome frequency is equal to the gnomAD genome frequency (both raw and adj)
-
-    Also performs small spot checks:
-        - Counts total number of sites where the gnomAD exome allele count annotation is defined (both raw and adj)
-        - Counts total number of sites where the gnomAD genome allele count annotation is defined (both raw and adj)
+    Perform small spot checks:
         - Counts total number of sites where the UKBB exome allele count annotation is defined (both raw and adj)
         
     :param hl.Table ht: Input Table.
-    :param List[str] subsets: List of sample subsets.
     :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
         show only top values of annotations that fail checks.
     :return: None
     :rtype: None
     """
-    for subset in subsets:
-        if subset == "":
-            for subfield in ["AC", "AN", "nhomalt"]:
-
-                for group_type in ["adj", "raw"]:
-                    logger.info(f"{group_type} checks -- gnomAD/gnomAD")
-
-                    generic_field_check(
-                        ht,
-                        cond_expr=(
-                            ht.info[f"gnomad_exomes_{subfield}_{group_type}"]
-                            == ht.info[f"gnomad_genomes_{subfield}_{group_type}"]
-                        ),
-                        check_description=f"gnomad_exomes_{subfield}_{group_type} != gnomad_genomes_{subfield}_{group_type}",
-                        display_fields=[
-                            f"info.gnomad_exomes_{subfield}_{group_type}",
-                            f"info.gnomad_genomes_{subfield}_{group_type}",
-                        ],
-                        verbose=verbose,
-                    )
-        else:
-            for subfield in ["AC", "AN", "nhomalt"]:
-                logger.info("raw checks -- gnomAD/UKBB")
-                generic_field_check(
-                    ht,
-                    cond_expr=(
-                        ht.info[f"{subfield}_raw"]
-                        == ht.info[f"{subset}_{subfield}_raw"]
-                    ),
-                    check_description=f"{subfield}_raw != {subset}_{subfield}_raw",
-                    display_fields=[
-                        f"info.{subfield}_raw",
-                        f"info.{subset}_{subfield}_raw",
-                    ],
-                    verbose=verbose,
-                )
-                logger.info("adj checks -- gnomAD/UKBB")
-                generic_field_check(
-                    ht,
-                    cond_expr=(
-                        ht.info[f"{subfield}_adj"]
-                        == ht.info[f"{subset}_{subfield}_adj"]
-                    ),
-                    check_description=f"{subfield}_adj != {subset}_{subfield}_adj",
-                    display_fields=[
-                        f"info.{subfield}_adj",
-                        f"info.{subset}_{subfield}_adj",
-                    ],
-                    verbose=verbose,
-                )
-
     freq_counts = ht.aggregate(
         hl.struct(
-            total_defined_gnomad_wes_AC=hl.agg.count_where(
-                hl.is_defined(ht.info.gnomad_exomes_AC_adj)
-            ),
-            total_defined_gnomad_wes_AC_raw=hl.agg.count_where(
-                hl.is_defined(ht.info.gnomad_exomes_AC_raw)
-            ),
-            total_defined_gnomad_wgs_AC=hl.agg.count_where(
-                hl.is_defined(ht.info.gnomad_genomes_AC_adj)
-            ),
-            total_defined_gnomad_wgs_AC_raw=hl.agg.count_where(
-                hl.is_defined(ht.info.gnomad_genomes_AC_raw)
-            ),
             total_defined_ukb_AC=hl.agg.count_where(hl.is_defined(ht.info.AC_adj)),
             total_defined_ukb_AC_raw=hl.agg.count_where(hl.is_defined(ht.info.AC_raw)),
         )
@@ -423,7 +338,6 @@ def frequency_sanity_checks(ht: hl.Table, subsets: List[str], verbose: bool) -> 
 
 def sample_sum_sanity_checks(
     ht: hl.Table,
-    subsets: List[str],
     info_metrics: List[str],
     verbose: bool,
     pop_names: Dict[str, str] = POP_NAMES,
@@ -434,10 +348,9 @@ def sample_sum_sanity_checks(
     Computes afresh the sum of annotations for a specified group of annotations, and compare to the annotated version;
     displays results from checking the sum of the specified annotations in the terminal.
 
-    Also checks that annotations for all expected sample populations are present (both for gnomAD and UKBB).
+    Also checks that annotations for all expected sample populations are present.
 
     :param hl.Table ht: Input Table.
-    :param List[str] subsets: List of sample subsets.
     :param List[str] info_metrics: List of metrics in info struct of input Table.
     :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
         show only top values of annotations that fail checks.
@@ -445,100 +358,36 @@ def sample_sum_sanity_checks(
     :return: None
     :rtype: None
     """
-    # Get gnomAD subpops
-    GNOMAD_NFE_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["NFE"]))
-    GNOMAD_EAS_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["EAS"]))
+    # Check if pops are present
+    sexes = SEXES_UKBB
+    pop_adjusted = list(
+        set([x for x in info_metrics if (("adj" in x) and ("raw" not in x))])
+    )
+    pop_adjusted = [i.replace("_adj", "") for i in pop_adjusted]
 
-    # Remove unnecessary population names from pop_names dict
-    # This is to avoid checking for populations we don't need to check
-    KEEP_GNOMAD_POPS = ["afr", "amr", "asj", "eas", "fin", "nfe", "oth", "sas"]
+    pop_found = ht.freq_meta.filter(lambda x: x.contains("pop"))
+    pop_found = list(hl.eval(pop_found.group_by(lambda x: x["pop"])).keys())
+    for pop in pop_found:
+        no_pop = True
+        for i in pop_adjusted:
+            if pop in i:
+                no_pop = False
+        if no_pop:
+            pop_found.remove(pop)
+            logger.warning(f"{pop} found in freq_meta but not in info_metrics!")
 
-    for pop in pop_names.copy():
-        if pop not in KEEP_GNOMAD_POPS:
-            pop_names.pop(pop)
+    # Print any missing pops to terminal
+    missing_pops = set(pop_names.keys()) - set(pop_found)
+    if len(missing_pops) != 0:
+        logger.warning(f"Missing {missing_pops} pops!")
 
-    for subset in subsets:
-        # Check if pops are present
-        if "gnomad" in subset:
-            sexes = SEXES
-            pop_adjusted = list(
-                set([x for x in info_metrics if (subset in x) and ("raw" not in x)])
-            )
-        else:
-            sexes = SEXES_UKBB
-            pop_adjusted = list(
-                set(
-                    [
-                        x
-                        for x in info_metrics
-                        if (("adj" in x) and ("gnomad" not in x) and ("raw" not in x))
-                    ]
-                )
-            )
-        pop_adjusted = [i.replace("_adj", "") for i in pop_adjusted]
-
-        pop_found = ht[f"{subset + '_' if subset != '' else subset}freq_meta"].filter(
-            lambda x: x.contains("pop")
-        )
-        pop_found = list(hl.eval(pop_found.group_by(lambda x: x["pop"])).keys())
-        for pop in pop_found:
-            no_pop = True
-            for i in pop_adjusted:
-                if pop in i:
-                    no_pop = False
-            if no_pop:
-                pop_found.remove(pop)
-                logger.warning(
-                    f"{pop} found in {subset} subset freq_meta but not in info_metrics!"
-                )
-
-        # Print any missing pops to terminal
-        missing_pops = set(pop_names.keys()) - set(pop_found)
-        if len(missing_pops) != 0:
-            logger.warning(f"Missing {missing_pops} pops in {subset} subset!")
-
-        # Perform sample sum checks
-        sample_sum_check(
-            ht, subset, dict(group=["adj"], pop=list(set(pop_found))), verbose
-        )
-        sample_sum_check(ht, subset, dict(group=["adj"], sex=sexes), verbose)
-        sample_sum_check(
-            ht,
-            subset,
-            dict(group=["adj"], pop=list(set(pop_found)), sex=sexes),
-            verbose,
-        )
-
-        if "gnomad" in subset:
-            # Adjust subpops to those found in subset
-            nfe_subpop_adjusted = list(
-                set([x for x in pop_adjusted if "nfe_" in x and "male" not in x])
-            )
-            if nfe_subpop_adjusted != []:
-                sample_sum_check(
-                    ht,
-                    subset,
-                    dict(group=["adj"], pop=["nfe"], subpop=GNOMAD_NFE_SUBPOPS),
-                    verbose,
-                    subpop="nfe",
-                )
-            eas_subpop_adjusted = list(
-                set(
-                    [
-                        x
-                        for x in pop_adjusted
-                        if subset in x and "eas_" in x and "male" not in x
-                    ]
-                )
-            )
-            if eas_subpop_adjusted != []:
-                sample_sum_check(
-                    ht,
-                    subset,
-                    dict(group=["adj"], pop=["eas"], subpop=GNOMAD_EAS_SUBPOPS),
-                    verbose,
-                    subpop="eas",
-                )
+    # Perform sample sum checks
+    subset = ""
+    sample_sum_check(ht, subset, dict(group=["adj"], pop=list(set(pop_found))), verbose)
+    sample_sum_check(ht, subset, dict(group=["adj"], sex=sexes), verbose)
+    sample_sum_check(
+        ht, subset, dict(group=["adj"], pop=list(set(pop_found)), sex=sexes), verbose,
+    )
 
 
 def sex_chr_sanity_checks(
@@ -634,13 +483,10 @@ def missingness_sanity_checks(
 
 
 def sanity_check_release_mt(
-    mt: hl.MatrixTable,
-    subsets: List[str],
-    missingness_threshold: float = 0.5,
-    verbose: bool = False,
+    mt: hl.MatrixTable, missingness_threshold: float = 0.5, verbose: bool = False,
 ) -> None:
     """
-    Perform a battery of sanity checks on a specified group of subsets in a MatrixTable containing variant annotations.
+    Perform a battery of sanity checks on a MatrixTable containing variant annotations.
 
     Includes:
     - Summaries of % filter status for different partitions of variants
@@ -650,7 +496,6 @@ def sanity_check_release_mt(
     - Checks on sex-chromosome annotations; and summaries of % missingness in variant annotations
 
     :param MatrixTable mt: MatrixTable containing variant annotations to check.
-    :param List[str] subsets: List of subsets to be checked.
     :param float missingness_threshold: Upper cutoff for allowed amount of missingness. Default is 0.5
     :param bool verbose: If True, display top values of relevant annotations being checked, regardless of whether check
         conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
@@ -672,10 +517,10 @@ def sanity_check_release_mt(
     histograms_sanity_check(ht, verbose=verbose)
 
     logger.info("RAW AND ADJ CHECKS:")
-    raw_and_adj_sanity_checks(ht, subsets, verbose)
+    raw_and_adj_sanity_checks(ht, verbose)
 
     logger.info("FREQUENCY CHECKS:")
-    frequency_sanity_checks(ht, subsets, verbose)
+    frequency_sanity_checks(ht)
 
     # Pull row annotations from HT
     info_metrics = list(ht.row.info)
@@ -683,7 +528,7 @@ def sanity_check_release_mt(
     non_info_metrics.remove("info")
 
     logger.info("SAMPLE SUM CHECKS:")
-    sample_sum_sanity_checks(ht, subsets, info_metrics, verbose)
+    sample_sum_sanity_checks(ht, info_metrics, verbose)
 
     logger.info("SEX CHROMOSOME ANNOTATION CHECKS:")
     sex_chr_sanity_checks(ht, info_metrics, contigs, verbose)

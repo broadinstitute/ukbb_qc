@@ -97,9 +97,6 @@ AS_FIELDS.remove("AS_BaseQRankSum")
 # Add sibling singletons to AS_FIELDS
 AS_FIELDS.append("sibling_singleton")
 
-# Make subset list (used in properly filling out VCF header descriptions and naming VCF info fields)
-SUBSET_LIST = [""]  # empty for ukbb
-
 # Select populations to keep from the list of population names in POP_NAMES
 # This removes pop names we don't want to use in the UKBB release
 # (e.g., "uniform", "consanguineous") to reduce clutter
@@ -631,9 +628,7 @@ def main(args):
                 (~info_ht[mt.row_key].AS_lowqual)
                 & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
             )
-            sanity_check_release_mt(
-                mt, subsets=SUBSET_LIST, missingness_threshold=0.5, verbose=args.verbose
-            )
+            sanity_check_release_mt(mt, missingness_threshold=0.5, verbose=args.verbose)
 
         if args.prepare_release_vcf:
 
