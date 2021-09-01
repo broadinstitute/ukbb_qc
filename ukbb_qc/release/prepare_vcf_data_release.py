@@ -522,7 +522,7 @@ def main(args):
             # Annotate meta HT information onto MT cols
             meta_ht = hl.read_table(meta_ht_path(*tranche_data))
             mt = mt.annotate_cols(**{"meta": meta_ht[mt.s]})
-            mt = mt.transmute_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype)
+            mt = mt.annotate_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype)
 
             logger.info("Removing duplicate sample IDs...")
             # UKB_4048554_0301608642 and UKB_1223807_0330880742 are both present in the 300K MT twice
@@ -580,24 +580,24 @@ def main(args):
                 withdrawn_ids,
             )
 
-            all_sample_count = mt.count_cols()
             logger.info(
                 "MT sample count before removing samples with withdrawn consent, control samples, and samples with defined UKBB IDs: %i",
-                all_sample_count,
+                filtered_sample_count,
             )
 
             # Filter withdrawn samples and double check the number of samples is as expected
             mt = mt.filter_cols(~sample_map_ht[mt.col_key].withdrawn_consent)
-            if mt.count_cols() - all_sample_count < withdrawn_ids:
+            if filtered_sample_count - mt.count_cols() < withdrawn_ids:
+                logger.error(
+                    "Removed %i samples", filtered_sample_count - mt.count_cols()
+                )
                 raise DataException(
                     "Number of removed samples is less than total number of samples with withdrawn consents in sample map HT. Please double check and rerun!"
                 )
 
             controls = hl.literal([NA12878, SYNDIP])
-            mt = mt.filter_cols(
-                hl.is_defined(mt.meta.ukbb_meta.ukbb_app_26041_id)
-                & ~controls.contains(mt.col_key)
-            )
+            mt = mt.filter_cols(~controls.contains(mt.s))
+            mt = mt.filter_cols(hl.is_defined(mt.meta.ukbb_meta.ukbb_app_26041_id))
             final_sample_count = mt.count_cols()
             logger.info(
                 "MT sample count after removing withdrawn and control samples: %i",
