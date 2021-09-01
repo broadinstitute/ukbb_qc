@@ -322,8 +322,6 @@ def frequency_sanity_checks(ht: hl.Table) -> None:
         - Counts total number of sites where the UKBB exome allele count annotation is defined (both raw and adj)
         
     :param hl.Table ht: Input Table.
-    :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
-        show only top values of annotations that fail checks.
     :return: None
     :rtype: None
     """
