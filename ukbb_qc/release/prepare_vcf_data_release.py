@@ -576,7 +576,7 @@ def main(args):
             )
 
             # Filter withdrawn samples and double check the number of samples is as expected
-            mt = mt.filter_cols(hl.is_defined(mt.meta.ukbb_meta.ukbb_app_26041_id))
+            mt = mt.filter_cols(~sample_map_ht[mt.col_key].withdrawn_consent)
             if mt.count_cols() - all_sample_count < withdrawn_ids:
                 raise DataException(
                     "Number of removed samples is less than total number of samples with withdrawn consents in sample map HT. Please double check and rerun!"
