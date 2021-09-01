@@ -456,7 +456,9 @@ def main(args):
             # NOTE: hardcoding this resource here because the version of gnomad methods required to run this script
             # will only point to dbsnp version 151
             # Path is from gnomad repo: https://github.com/broadinstitute/gnomad_methods/blob/master/gnomad/resources/grch38/reference_data.py#L156
-            dbsnp_ht = "gs://gnomad-public-requester-pays/resources/grch38/dbsnp/dbsnp_b154_grch38_all_20200514.ht"
+            dbsnp_ht = hl.read_table(
+                "gs://gnomad-public-requester-pays/resources/grch38/dbsnp/dbsnp_b154_grch38_all_20200514.ht"
+            )
             ht = ht.annotate(rsid=hl.str(";").join(dbsnp_ht[ht.key].rsid))
 
             logger.info("Constructing INFO field")
@@ -477,7 +479,7 @@ def main(args):
             ht = ht.annotate(vep=vep_struct_to_csq(ht.vep))
             ht = ht.annotate(info=ht.info.annotate(vep=ht.vep))
             new_vcf_info_dict.update(
-                {"vep": {"Description": hl.eval(mt.vep_csq_header)}}
+                {"vep": {"Description": hl.eval(ht.vep_csq_header)}}
             )
 
             logger.info("Selecting fields and writing VCF HT...")
@@ -486,9 +488,9 @@ def main(args):
 
             # Make filter dict and add field for MonoAllelic filter
             filter_dict = make_vcf_filter_dict(
-                hl.eval(mt.rf_globals.rf_snv_cutoff.min_score),
-                hl.eval(mt.rf_globals.rf_indel_cutoff.min_score),
-                hl.eval(mt.rf_globals.inbreeding_cutoff),
+                hl.eval(ht.rf_globals.rf_snv_cutoff.min_score),
+                hl.eval(ht.rf_globals.rf_indel_cutoff.min_score),
+                hl.eval(ht.rf_globals.inbreeding_cutoff),
             )
             filter_dict["MonoAllelic"] = {
                 "Description": "Samples are all homozygous reference or all homozygous alternate for the variant"
