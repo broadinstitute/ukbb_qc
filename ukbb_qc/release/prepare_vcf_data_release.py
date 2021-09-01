@@ -535,7 +535,7 @@ def main(args):
             logger.info("Original sample count: %i", original_sample_count)
             mt = mt.annotate_cols(new_s=hl.format("%s_%s", mt.s, mt.col_idx))
             remove_ids = hl.literal(
-                ["UKB_1223807_0330880742_205124", "UKB_4048554_0301608642_81090"]
+                ["UKB_1223807_0330880742_205125", "UKB_4048554_0301608642_81090"]
             )
             mt = mt.filter_cols(~remove_ids.contains(mt.new_s)).drop("new_s", "col_idx")
             filtered_sample_count = mt.count_cols()
