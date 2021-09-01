@@ -584,7 +584,7 @@ def main(args):
 
             controls = hl.literal([NA12878, SYNDIP])
             mt = mt.filter_cols(
-                hl.is_defined(sample_map_ht[mt.col_key].batch)
+                hl.is_defined(mt.meta.ukbb_meta.ukbb_app_26041_id)
                 & ~controls.contains(mt.col_key)
             )
             final_sample_count = mt.count_cols()
