@@ -544,8 +544,18 @@ def main(args):
                 filtered_sample_count,
             )
             if filtered_sample_count != original_sample_count - 2:
+                logger.error(
+                    "Expected to remove these ID/column index combinations: %s",
+                    hl.eval(remove_ids),
+                )
+                ht = mt.cols()
+                ht = ht.filter(
+                    (ht.s == "UKB_1223807_0330880742")
+                    | (ht.s == "UKB_4048554_0301608642")
+                )
+                ht.show()
                 raise DataException(
-                    "Expected to remove two duplicate sample IDs. Please double check and rerun!"
+                    f"Expected to remove two duplicate sample IDs. Removed {filtered_sample_count != original_sample_count}. Please double check and rerun!"
                 )
 
             logger.info(
