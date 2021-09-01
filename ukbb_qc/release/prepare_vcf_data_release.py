@@ -270,6 +270,7 @@ def unfurl_nested_annotations(
     expr_dict = dict()
 
     # Set variables to locate necessary fields, compute freq index dicts, and compute faf index dict for UKBB
+    prefix = ""
     faf = "faf"
     freq = "freq"
     faf_idx = make_index_dict(t=t, freq_meta_str="faf_meta", pops=pops)
@@ -279,7 +280,6 @@ def unfurl_nested_annotations(
     # Unfurl freq index dict
     # Cycles through each key and index (e.g., k=adj_afr, i=31)
     for k, i in freq_idx.items():
-        prefix = ""
 
         # Set combination to key
         # e.g., set entry of 'afr_adj' to combo
