@@ -598,16 +598,20 @@ def main(args):
             mt = hl.filter_intervals(mt, [hl.parse_locus_interval("chrM")], keep=False)
 
             if args.test:
-                logger.info("Filtering to chr20 and chrX (for tests only)...")
+                logger.info(
+                    "Filtering to 2 partitions on chr20 and chrX (for tests only)..."
+                )
                 # Using filter intervals to keep all the work done by get_ukbb_data
                 # (removing sample with withdrawn consent/their ref blocks/variants,
                 # also keeping meta col annotations)
                 # Using chr20 to test a small autosome and chrX to test a sex chromosome
                 # Some annotations (like FAF) are 100% missing on autosomes
-                mt = hl.filter_intervals(
-                    mt,
-                    [hl.parse_locus_interval("chr20"), hl.parse_locus_interval("chrX")],
-                )
+                mt_chr20 = hl.filter_intervals(mt, [hl.parse_locus_interval("chr20")])
+                mt_chr20 = mt_chr20._filter_partitions(range(2))
+
+                mt_chrx = hl.filter_intervals(mt, [hl.parse_locus_interval("chrX")])
+                mt_chrx = mt_chrx._filter_partitions(range(2))
+                mt = mt_chr20.union_rows(mt_chrx)
 
             logger.info("Splitting raw MT...")
             mt = hl.experimental.sparse_split_multi(mt)
