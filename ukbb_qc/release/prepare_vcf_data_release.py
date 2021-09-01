@@ -379,7 +379,7 @@ def main(args):
             # Cohort freq notes:
             # Cohort freq has 4 entries in freq and freq meta:
             # cohort (adj), cohort (raw), cohort (XX), and cohort (XY)
-            ht = ht.annotate_rows(freq=ht.freq[:28])
+            ht = ht.annotate(freq=ht.freq[:28])
             ht = ht.annotate_globals(freq_meta=ht.freq_meta[:28])
 
             # This was removed from the 455K but is necessary for the 300K
@@ -434,7 +434,7 @@ def main(args):
             segdup_ht = hl.read_table(
                 "gs://gnomad-public-requester-pays/resources/grch38/seg_dup_intervals/GRCh38_segdups.ht"
             )
-            ht = ht.annotate_rows(
+            ht = ht.annotate(
                 region_flag=ht.region_flag.annotate(
                     # Also add non-PAR annotation
                     nonpar=(ht.locus.in_x_nonpar() | ht.locus.in_y_nonpar()),
@@ -449,7 +449,7 @@ def main(args):
                     rf_negative_label=ht.rf.fail_hard_filters,
                 )
             )
-            ht = ht.annotate_rows(info=hl.struct(**make_info_expr(ht)))
+            ht = ht.annotate(info=hl.struct(**make_info_expr(ht)))
 
             logger.info("Reformatting rsid...")
             # Update rsid annotation to be a set and not a string
