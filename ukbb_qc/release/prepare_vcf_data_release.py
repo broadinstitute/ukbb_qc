@@ -6,7 +6,6 @@ from typing import Dict, List, Union
 
 import hail as hl
 
-from gnomad.resources.grch38.reference_data import seg_dup_intervals
 from gnomad.resources.resource_utils import DataException
 from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.sample_qc.sex import adjust_sex_ploidy
@@ -431,7 +430,10 @@ def main(args):
             # NOTE: We did not have a segdup file when preparing the 300K release,
             # which is why this annotation is missing
             logger.info("Updating region flag expr to include segdup intervals...")
-            segdup_ht = seg_dup_intervals.ht()
+            # Hardcoding this here because this doesn't exist in the version of gnomad methods repo needed to run this code
+            segdup_ht = hl.read_table(
+                "gs://gnomad-public-requester-pays/resources/grch38/seg_dup_intervals/GRCh38_segdups.ht"
+            )
             ht = ht.annotate_rows(
                 region_flag=ht.region_flag.annotate(
                     # Also add non-PAR annotation
