@@ -548,7 +548,6 @@ def main(args):
                     "Expected to remove two duplicate sample IDs. Please double check and rerun!"
                 )
 
-            # TODO: update this section based on discussion with UKBB PMs
             logger.info(
                 "Removing samples with withdrawn consent, control samples, and samples with undefined UKBB 26041 application IDs..."
             )
