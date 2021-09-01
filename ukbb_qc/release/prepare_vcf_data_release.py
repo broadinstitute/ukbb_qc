@@ -316,7 +316,6 @@ def unfurl_nested_annotations(
         }
         expr_dict.update(combo_dict)
 
-    prefix = ""
     combo_dict = {
         f"{prefix}popmax": t[popmax].pop,
         f"{prefix}AC_popmax": t[popmax].AC,
