@@ -470,7 +470,7 @@ def main(args):
 
             # Unfurl nested UKBB frequency annotations and add to INFO field
             ht = ht.annotate(
-                info=ht.info.annotate(**unfurl_nested_annotations(ht, pops=UKBB_POPS,))
+                info=ht.info.annotate(**unfurl_nested_annotations(ht, pops=UKBB_POPS))
             )
             ht = ht.annotate(**set_female_y_metrics_to_na(ht))
 
