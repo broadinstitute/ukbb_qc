@@ -83,7 +83,7 @@ VCF_INFO_DICT["sibling_singleton"] = {
 # Add interval QC, capture region to REGION_FLAG_FIELDS and remove decoy, segdup
 # NOTE: MISSING_REGION_FIELDS could change for 500K if we get hg38 files
 INTERVAL_FIELDS = ["fail_interval_qc", "in_capture_region"]
-MISSING_REGION_FIELDS = ("decoy", "segdup")
+MISSING_REGION_FIELDS = ("decoy",)
 REGION_FLAG_FIELDS = [
     field for field in REGION_FLAG_FIELDS if field not in MISSING_REGION_FIELDS
 ]
@@ -616,12 +616,14 @@ def main(args):
                 # also keeping meta col annotations)
                 # Using chr20 to test a small autosome and chrX to test a sex chromosome
                 # Some annotations (like FAF) are 100% missing on autosomes
-                mt_chr20 = hl.filter_intervals(mt, [hl.parse_locus_interval("chr20")])
-                mt_chr20 = mt_chr20._filter_partitions(range(2))
+                # mt_chr20 = hl.filter_intervals(mt, [hl.parse_locus_interval("chr20")])
+                # mt_chr20 = mt_chr20._filter_partitions(range(2))
 
                 mt_chrx = hl.filter_intervals(mt, [hl.parse_locus_interval("chrX")])
-                mt_chrx = mt_chrx._filter_partitions(range(2))
+                mt_chrx = mt_chrx.filter_rows(mt_chrx.locus.in_x_nonpar())
+                mt_chrx = mt_chrx._filter_partitions(range(10))
                 mt = mt_chr20.union_rows(mt_chrx)
+                # mt = mt_chrx
 
             logger.info("Splitting raw MT...")
             mt = hl.experimental.sparse_split_multi(mt)
