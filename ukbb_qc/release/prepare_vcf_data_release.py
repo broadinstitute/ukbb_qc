@@ -382,6 +382,22 @@ def main(args):
             ht = ht.annotate(freq=ht.freq[:28])
             ht = ht.annotate_globals(freq_meta=ht.freq_meta[:28])
 
+            logger.info("Checking for variants with AC raw == 0...")
+            ac_raw_0 = ht.aggregate(hl.agg.count_where(ht.freq[1].AC == 0))
+            logger.info("Found %i sites with AC raw == 0", ac_raw_0)
+            logger.info("Changing AC0 sites to structs with missing values...")
+            null_freq_expr = hl.struct(
+                AC=hl.null(hl.tint32),
+                AF=hl.null(hl.tfloat64),
+                AN=hl.null(hl.tint32),
+                homozygote_count=hl.null(hl.tint32),
+            )
+            ht = ht.annotate(
+                freq=hl.if_else(
+                    ht.freq[1].AC == 0, hl.array([null_freq_expr] * 28), ht.freq,
+                )
+            )
+
             # This was removed from the 455K but is necessary for the 300K
             from ukbb_qc.resources.basics import vqsr_sites_path
             from gnomad.utils.sparse_mt import split_info_annotation
@@ -616,14 +632,13 @@ def main(args):
                 # also keeping meta col annotations)
                 # Using chr20 to test a small autosome and chrX to test a sex chromosome
                 # Some annotations (like FAF) are 100% missing on autosomes
-                # mt_chr20 = hl.filter_intervals(mt, [hl.parse_locus_interval("chr20")])
-                # mt_chr20 = mt_chr20._filter_partitions(range(2))
+                mt_chr20 = hl.filter_intervals(mt, [hl.parse_locus_interval("chr20")])
+                mt_chr20 = mt_chr20._filter_partitions(range(2))
 
                 mt_chrx = hl.filter_intervals(mt, [hl.parse_locus_interval("chrX")])
                 mt_chrx = mt_chrx.filter_rows(mt_chrx.locus.in_x_nonpar())
                 mt_chrx = mt_chrx._filter_partitions(range(10))
                 mt = mt_chr20.union_rows(mt_chrx)
-                # mt = mt_chrx
 
             logger.info("Splitting raw MT...")
             mt = hl.experimental.sparse_split_multi(mt)
