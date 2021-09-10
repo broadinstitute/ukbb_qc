@@ -394,7 +394,7 @@ def main(args):
             )
             ht = ht.annotate(
                 freq=hl.if_else(
-                    ht.freq[1].AC == 0, hl.array([null_freq_expr] * 28), ht.freq,
+                    ht.freq[1].AC == 0, hl.array([null_freq_expr] * hl.len(ht.freq_meta)), ht.freq,
                 )
             )
 
