@@ -83,7 +83,7 @@ VCF_INFO_DICT["sibling_singleton"] = {
 # Add interval QC, capture region to REGION_FLAG_FIELDS and remove decoy, segdup
 # NOTE: MISSING_REGION_FIELDS could change for 500K if we get hg38 files
 INTERVAL_FIELDS = ["fail_interval_qc", "in_capture_region"]
-MISSING_REGION_FIELDS = ("decoy",)
+MISSING_REGION_FIELDS = {"decoy"}
 REGION_FLAG_FIELDS = [
     field for field in REGION_FLAG_FIELDS if field not in MISSING_REGION_FIELDS
 ]
@@ -387,10 +387,10 @@ def main(args):
             logger.info("Found %i sites with AC raw == 0", ac_raw_0)
             logger.info("Changing AC0 sites to structs with missing values...")
             null_freq_expr = hl.struct(
-                AC=hl.null(hl.tint32),
-                AF=hl.null(hl.tfloat64),
-                AN=hl.null(hl.tint32),
-                homozygote_count=hl.null(hl.tint32),
+                AC=hl.missing(hl.tint32),
+                AF=hl.missing(hl.tfloat64),
+                AN=hl.missing(hl.tint32),
+                homozygote_count=hl.missing(hl.tint32),
             )
             ht = ht.annotate(
                 freq=hl.if_else(
