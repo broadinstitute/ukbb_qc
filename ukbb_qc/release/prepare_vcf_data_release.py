@@ -639,7 +639,7 @@ def main(args):
 
                 mt_chrx = hl.filter_intervals(mt, [hl.parse_locus_interval("chrX")])
                 mt_chrx = mt_chrx.filter_rows(mt_chrx.locus.in_x_nonpar())
-                mt_chrx = mt_chrx._filter_partitions(range(10))
+                mt_chrx = mt_chrx._filter_partitions(range(2))
                 mt = mt_chr20.union_rows(mt_chrx)
 
             logger.info("Splitting raw MT...")
