@@ -385,7 +385,7 @@ def main(args):
             logger.info("Checking for variants with AC raw == 0...")
             ac_raw_0 = ht.aggregate(hl.agg.count_where(ht.freq[1].AC == 0))
             logger.info("Found %i sites with AC raw == 0", ac_raw_0)
-            logger.info("Changing AC0 sites to structs with missing values...")
+            logger.info("Changing raw AC == 0 sites to structs with missing values...")
             null_freq_expr = hl.struct(
                 AC=hl.null(hl.tint32),
                 AF=hl.null(hl.tfloat64),
