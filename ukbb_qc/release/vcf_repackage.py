@@ -86,7 +86,7 @@ if __name__ == "__main__":
     )
     p.add_argument(
         "--output-dir",
-        help="Where to write haplotype caller output.",
+        help="Where to write repackaged vcf output.",
         default="gs://broad-ukbb/broad.freeze_6/release/vcf/sharded_vcf/repackaged/",
     )
     args = p.parse_args()
