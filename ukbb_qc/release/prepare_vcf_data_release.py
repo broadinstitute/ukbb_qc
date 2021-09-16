@@ -677,6 +677,8 @@ def main(args):
                 sys.exit(1)
 
             mt = hl.read_matrix_table(release_mt_path(*tranche_data))
+            if args.test:
+                mt = mt.filter_partitions(range(2))
             meta_ht = hl.read_table(meta_ht_path(*tranche_data))
 
             logger.info("Changing sample IDs to UKBB IDs...")
