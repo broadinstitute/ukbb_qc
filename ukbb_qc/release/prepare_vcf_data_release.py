@@ -807,6 +807,20 @@ def main(args):
                     metadata=header_dict,
                     append_to_header="gs://broad-ukbb/broad.freeze_6/release/vcf/append_to_vcf_header.tsv",
                 )
+
+                logger.info("Getting start and stops per shard...")
+
+                def part_min_and_max(part):
+                    keys = part.map(lambda x: x.select("locus", "alleles"))
+                    return hl.struct(start=keys[0], end=keys[-1])
+
+                ht = mt.rows()
+                print(
+                    ht._map_partitions(
+                        lambda p: hl.array([part_min_and_max(p)])
+                    ).collect()
+                )
+
     finally:
         logger.info("Copying hail log to logging bucket...")
         hl.copy_log(logging_path(*tranche_data))
