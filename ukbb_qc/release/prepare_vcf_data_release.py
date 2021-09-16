@@ -677,6 +677,12 @@ def main(args):
                 sys.exit(1)
 
             mt = hl.read_matrix_table(release_mt_path(*tranche_data))
+            meta_ht = hl.read_table(meta_ht_path(*tranche_data))
+
+            logger.info("Changing sample IDs to UKBB IDs...")
+            mt = mt.annotate_cols(ukbb_app_26041_id=meta_ht[mt.s].ukbb_app_26041_id)
+            mt = mt.key_cols_by(s=mt.ukbb_app_26041_id)
+
             logger.info("Reading header dict from pickle...")
             with hl.hadoop_open(release_header_path(*tranche_data), "rb") as p:
                 header_dict = pickle.load(p)
@@ -798,7 +804,6 @@ def main(args):
                     parallel="header_per_shard",
                     metadata=header_dict,
                     append_to_header="gs://broad-ukbb/broad.freeze_6/release/vcf/append_to_vcf_header.tsv",
-                    tabix=True,
                 )
     finally:
         logger.info("Copying hail log to logging bucket...")
