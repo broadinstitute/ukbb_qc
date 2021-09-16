@@ -22,7 +22,7 @@ logger = logging.getLogger("repackage_vcf_shards")
 logger.setLevel(logging.INFO)
 
 
-DOCKER_IMAGE = "gcr.io/broad-mpg-gnomad/tgg-methods-vm:20210623"
+DOCKER_IMAGE = "gcr.io/broad-mpg-gnomad/tgg-methods-vm:20210915"
 """
 Docker image to be passed to hail batch. 
 
