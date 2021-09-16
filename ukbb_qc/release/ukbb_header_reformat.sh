@@ -16,14 +16,14 @@ vcfgz_path="$1"
 outfile="$2"
 
 # Get header up until the sample names, bgzip regularly
-( bcftools view --no-version -h "$vcfgz_path" | head -n -1; bcftools view --no-version -h "$vcfgz_path" | tail -n 1 | awk '{for (i=1; i<=9; i++) {printf("%s\t", $i) }}' ) | bgzip | head -c -28 > "$outfile"
+( bcftools view --no-version -h "$vcfgz_path" | head -n -1; bcftools view --no-version -h "$vcfgz_path" | tail -n 1 | gawk '{for (i=1; i<=9; i++) {printf("%s\t", $i) }}' ) | bgzip | head -c -28 > "$outfile"
 
 # Mark the starting byte range 
 lo=$(stat -c '%s' "$outfile")
 let lo++
 
 # Reprint sample ids with 7 digits and bgzip with 0-compression
-bcftools view --no-version -h "$vcfgz_path" | tail -n 1 | awk '{for (i=10; i<=NF; i++) {printf "%07d%c", $i, (i==NF?"\n":"\t")}}' | bgzip -l 0 | head -c -28 >> "$outfile"
+bcftools view --no-version -h "$vcfgz_path" | tail -n 1 | gawk '{for (i=10; i<=NF; i++) {printf "%07d%c", $i, (i==NF?"\n":"\t")}}' | bgzip -l 0 | head -c -28 >> "$outfile"
 
 # Mark the ending byte range
 hi=$(stat -c '%s' "$outfile")
