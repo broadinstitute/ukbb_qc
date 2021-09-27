@@ -40,7 +40,7 @@ VCF_ANNOTATIONS = {
             "RF": {
                 "Description": "Failed random forest filtering thresholds of 0.4 for SNPs and 0.2 for indels (probabilities of being a true positive variant."
             },
-            "PASS": {"Description": "Passed all variant filters"},
+            "PASS": {"Description": "Passed all variant filters."},
         },
     },
     "INFO_ANNOTATIONS": {
