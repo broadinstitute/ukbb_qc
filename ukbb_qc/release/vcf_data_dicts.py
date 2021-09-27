@@ -56,7 +56,7 @@ VCF_ANNOTATIONS = {
                 "Description": "Allele type (snv, insertion, deletion, or mixed).",
             },
             "has_star": {
-                "Description": "Variant locus coincides with a spanning deletion (represented by a star) observed elsewhere in the callset",
+                "Description": "Variant locus coincides with a spanning deletion (represented by a star) observed elsewhere in the callset.",
             },
             "n_alt_alleles": {
                 "Description": "Total number of alternate alleles observed at variant locus.",
