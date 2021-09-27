@@ -7,7 +7,7 @@ GLOBAL_SAMPLE_ANNOTATIONS = {
     },
     "sex_imputation_ploidy_cutoffs": {
         "Description": (
-            "Contains sex chromosome ploidy cutoffs used when determining sex chromosome karyotypes for the gnomAD sex "
+            "Contains sex chromosome ploidy cutoffs used when determining sex chromosome karyotypes for sex "
             "imputation. Format: (upper cutoff for single X, (lower cutoff for double X, upper cutoff for double X), "
             "lower cutoff for triple X) and (lower cutoff for single Y, upper cutoff for single Y), lower cutoff for "
             "double Y)."
