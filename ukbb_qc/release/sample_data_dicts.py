@@ -220,7 +220,7 @@ SAMPLE_ANNOTATIONS = {
                 "Description": "Whether the sample is high quality (True if sample was not hard filtered or removed during outlier detection)."
             },
             "release": {
-                "Description": "Whether the sample should be included in the final release (true if the sample has a defined `batch` and is high quality)."
+                "Description": "Whether the sample should be included in the final release (True if the sample has a defined `batch` and is high quality)."
             },
             "qc_metrics_filters": {
                 "Description": "Set summarizing any outlier detection flags for this sample."
