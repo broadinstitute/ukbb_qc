@@ -13,17 +13,10 @@ GLOBAL_SAMPLE_ANNOTATIONS = {
             "double Y)."
         )
     },
-    "platform_inference_hdbscan_parameters": {
-        "Description": (
-            "Contains HDBSCAN parameters (minimum cluster size and minimum number of samples) "
-            "used to infer platform labels."
-        )
-    },
     "population_inference_pca_metrics": {
         "Description": (
-            "Contains the number of principal components (PCs) used when running PC-project, the minimum cutoff "
-            "probability of belonging to a given population for assignment, and the number of PCs used when performing "
-            "the from-scratch ancestry principal component analysis (PCA)."
+            "Contains the number of principal components (PCs) used when running PC-project and the minimum cutoff "
+            "probability of belonging to a given population for assignment."
         )
     },
     "relatedness_inference_cutoffs": {
@@ -137,25 +130,6 @@ SAMPLE_ANNOTATIONS = {
             "call_rate": {"Description": "Fraction of calls not missing or filtered."},
             "dp_mean": {"Description": "Sample mean depth."},
             "dp_stdev": {"Description": "Standard deviation for sample depth."},
-        },
-    },
-    "platform_inference": {
-        "Description": "Struct containing platform inference information.",
-        "sub_annotations": {
-            "callrate_pcs": {"Description": "Sample's scores for each call rate PC."},
-            "qc_platform": {"Description": "Sample's inferred platform."},
-        },
-    },
-    "hybrid_pop_data": {
-        "Description": "Struct containing information from hybrid ancestry assignment.",
-        "sub_annotations": {
-            "scores": {
-                "Description": "Sample's scores for each PC used in from-scratch ancestry PCA."
-            },
-            "cluster": {
-                "Description": "Sample's cluster assignment using the from-scratch ancestry PCA."
-            },
-            "pop": {"Description": "Sample's inferred hybrid ancestry assignment."},
         },
     },
     "sample_filters": {
