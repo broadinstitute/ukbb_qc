@@ -47,7 +47,7 @@ GLOBAL_SAMPLE_ANNOTATIONS = {
 }
 
 SAMPLE_ANNOTATIONS = {
-    "s": {"Description": "Sample ID."},
+    "s": {"Description": "UKBB application 26041 sample ID."},
     "ukbb_meta": {
         "Description": "Struct containing metadata information provided by the UK Biobank (UKBB).",
         "sub_annotations": {
@@ -57,7 +57,6 @@ SAMPLE_ANNOTATIONS = {
                     "Numeric version of batch. 0: 150K, 1: 100K, 2: 200K, 3: 300K."
                 )
             },
-            "ukbb_app_26041_id": {"Description": "UKBB sample ID."},
             "withdrawn_consent": {
                 "Description": ("Whether sample has withdrawn consent.")
             },
@@ -194,9 +193,6 @@ SAMPLE_ANNOTATIONS = {
                     "Whether the sample was removed from QC when filtering related samples. True if sample had a full sibling "
                     "relationship with a second sample."
                 )
-            },
-            "control": {
-                "Description": "True if sample is a control sample (NA12878, syndip)."
             },
             "fail_n_snp": {
                 "Description": "Whether the sample was removed from QC for having a n_snp value larger upper MAD or smaller than the lower MAD threshold."
