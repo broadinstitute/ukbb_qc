@@ -39,7 +39,7 @@ GLOBAL_SAMPLE_ANNOTATIONS = {
         "Description": (
             "Contains the medians, the median absolute deviations (MADs), the upper MAD threshold, and the "
             "lower MAD threshold for each sample QC metric used in outlier filtering. The metrics are: number "
-            "of SNPs (n_SNP), transition to transversion ratio (r_ti_tv), insertion to deletion ratio "
+            "of SNPs (n_snp), transition to transversion ratio (r_ti_tv), insertion to deletion ratio "
             "(r_insertion_deletion), number of insertions (n_insertion), number of deletions (n_deletion), "
             "and ratio of heterozygous to homozygous variants (r_het_hom_var)."
         )
