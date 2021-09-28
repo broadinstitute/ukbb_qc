@@ -82,7 +82,7 @@ SAMPLE_ANNOTATIONS = {
             "n_discordant": {
                 "Description": (
                     "Number of genotypes which were called (homozygous reference, heterozygous, or homozygous "
-                    "variant) in both datasets, but where the call did not match between the two. Provided by "
+                    "alternate) in both datasets, but where the call did not match between the two. Provided by "
                     "`hl.concordance`."
                 )
             },
