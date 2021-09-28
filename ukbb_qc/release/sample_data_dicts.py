@@ -54,7 +54,7 @@ SAMPLE_ANNOTATIONS = {
             "batch": {"Description": "Sample's data tranche (100K, 150K, 200K, 300K)."},
             "batch_num": {
                 "Description": (
-                    "Numeric version of batch. 0: 150K, 1: 100K, 2: 200K, 3: 300K."
+                    "Numeric representation of batch. 0: 150K, 1: 100K, 2: 200K, 3: 300K."
                 )
             },
             "withdrawn_consent": {
