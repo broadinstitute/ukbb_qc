@@ -150,7 +150,7 @@ SAMPLE_ANNOTATIONS = {
         "Description": "Struct containing information from hybrid ancestry assignment.",
         "sub_annotations": {
             "scores": {
-                "Description": "Sample scores for each PC used in from-scratch ancestry PCA."
+                "Description": "Sample's scores for each PC used in from-scratch ancestry PCA."
             },
             "cluster": {
                 "Description": "Sample's cluster assignment from the from-scratch ancestry PCA."
