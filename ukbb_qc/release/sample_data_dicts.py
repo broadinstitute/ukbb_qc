@@ -132,7 +132,7 @@ SAMPLE_ANNOTATIONS = {
         },
     },
     "sample_qc": {
-        "Description": "Struct containing sample QC metrics calculated using hl.sample_qc().",
+        "Description": "Struct containing sample QC metrics calculated using `hl.sample_qc()`.",
         "sub_annotations": {
             "call_rate": {"Description": "Fraction of calls not missing or filtered."},
             "dp_mean": {"Description": "Sample mean depth."},
