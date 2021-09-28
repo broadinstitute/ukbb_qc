@@ -16,19 +16,19 @@ GLOBAL_SAMPLE_ANNOTATIONS = {
     "platform_inference_hdbscan_parameters": {
         "Description": (
             "Contains HDBSCAN parameters (minimum cluster size and minimum number of samples) "
-            "used in inferring platform labels."
+            "used to infer platform labels."
         )
     },
     "population_inference_pca_metrics": {
         "Description": (
             "Contains the number of principal components (PCs) used when running PC-project, the minimum cutoff "
-            "probability of belonging to a given population for assignment, and number of PCs used when performing "
+            "probability of belonging to a given population for assignment, and the number of PCs used when performing "
             "the from-scratch ancestry principal component analysis (PCA)."
         )
     },
     "relatedness_inference_cutoffs": {
         "Description": (
-            "Contains the minor allele frequency cutoff for sites included in running ancestry imputation, "
+            "Contains the minor allele frequency cutoff for sites included when running ancestry imputation, "
             "the minimum kinship threshold for emitting a pair of samples in PC relate, the IBD0 cutoff used "
             "to distinguish parent-child relationships from full sibling relationships, the minimum kinship "
             "threshold for determining second-degree relatedness, and the kinship thresholds for determining "
@@ -39,7 +39,7 @@ GLOBAL_SAMPLE_ANNOTATIONS = {
         "Description": (
             "Contains the medians, the median absolute deviations (MADs), the upper MAD threshold, and the "
             "lower MAD threshold for each sample QC metric used in outlier filtering. The metrics are: number "
-            "of SNPs (n_SNP), transition to transversion ratio (r_ti_tv), insertion to deletion ratio "
+            "of SNPs (n_snp), transition to transversion ratio (r_ti_tv), insertion to deletion ratio "
             "(r_insertion_deletion), number of insertions (n_insertion), number of deletions (n_deletion), "
             "and ratio of heterozygous to homozygous variants (r_het_hom_var)."
         )
