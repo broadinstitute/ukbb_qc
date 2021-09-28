@@ -47,9 +47,9 @@ GLOBAL_SAMPLE_ANNOTATIONS = {
 }
 
 SAMPLE_ANNOTATIONS = {
-    "s": {"Description": "UKBB application 26041 sample ID."},
-    "ukbb_meta": {
-        "Description": "Struct containing metadata information provided by the UK Biobank (UKBB).",
+    "s": {"Description": "UK Biobank (UKB) application 26041 sample ID."},
+    "ukb_meta": {
+        "Description": "Struct containing metadata information provided by the UK Biobank.",
         "sub_annotations": {
             "batch": {"Description": "Sample's data tranche (150K, 100K, 200K, 300K)."},
             "batch_num": {
@@ -235,7 +235,7 @@ SAMPLE_ANNOTATIONS = {
     },
     "gnomad_pc_project_pop_data": {
         "Description": (
-            "Struct containing ancestry information derived from projecting the UKBB data onto the gnomAD population PCs and using a random forest classifier trained on gnomAD ancestry labels to assign ancestry."
+            "Struct containing ancestry information derived from projecting the UK Biobank data onto the gnomAD population PCs and using a random forest classifier trained on gnomAD ancestry labels to assign ancestry."
         ),
         "sub_annotations": {
             "scores": {"Description": "Sample's scores for each gnomAD population PC."},
