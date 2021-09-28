@@ -706,7 +706,7 @@ VCF_ANNOTATIONS = {
             },
             "age_hist_hom_n_larger": {
                 "Description": (
-                    "Count of age values falling above lowest histogram bin edge for homozygous alternate individuals."
+                    "Count of age values falling above highest histogram bin edge for homozygous alternate individuals."
                 )
             },
             "vep": {
