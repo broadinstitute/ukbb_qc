@@ -54,15 +54,15 @@ SAMPLE_ANNOTATIONS = {
             "batch": {"Description": "Sample's data tranche (150K, 100K, 200K, 300K)."},
             "batch_num": {
                 "Description": (
-                    "Numeric version of batch. 0: 150K, 1: 100K, 2: 200K, 3: 300K."
+                    "Numeric representation of batch. 0: 150K, 1: 100K, 2: 200K, 3: 300K."
                 )
             },
             "withdrawn_consent": {
-                "Description": ("Whether sample has withdrawn consent.")
+                "Description": "Whether sample has withdrawn consent."
             },
-            "age": {"Description": ("Sample's age at recruitment.")},
+            "age": {"Description": "Sample's age at recruitment."},
             "array_sex": {
-                "Description": ("Sample sex as inferred from genotype data.")
+                "Description": "Sample's sex as inferred from genotype data."
             },
             "self_reported_ancestry": {
                 "Description": "Sample's self reported ancestry."
@@ -75,14 +75,14 @@ SAMPLE_ANNOTATIONS = {
             "concordance": {
                 "Description": (
                     "List of lists containing concordance as calculated using `hl.concordance` for: "
-                    "No Data (missing variant), No Call (missing genotype call), Homozygous Reference "
-                    "Heterozygous, Homozygous Variant"
+                    "no Data (missing variant), no Call (missing genotype call), homozygous reference, "
+                    "heterozygous, and homozygous alternate."
                 )
             },
             "n_discordant": {
                 "Description": (
                     "Number of genotypes which were called (homozygous reference, heterozygous, or homozygous "
-                    "variant) in both datasets, but where the call did not match between the two. Provided by "
+                    "alternate) in both datasets, but where the call did not match between the two. Provided by "
                     "`hl.concordance`."
                 )
             },
@@ -91,7 +91,7 @@ SAMPLE_ANNOTATIONS = {
             },
             "num_gt_non_ref": {
                 "Description": (
-                    "Total number of non-ref genotypes between the array and exome data."
+                    "Total number of non-reference genotypes between the array and exome data."
                 )
             },
             "prop_gt_con_non_ref": {
@@ -132,7 +132,7 @@ SAMPLE_ANNOTATIONS = {
         },
     },
     "sample_qc": {
-        "Description": "Struct containing sample QC metrics calculated using hl.sample_qc().",
+        "Description": "Struct containing sample QC metrics calculated using `hl.sample_qc()`.",
         "sub_annotations": {
             "call_rate": {"Description": "Fraction of calls not missing or filtered."},
             "dp_mean": {"Description": "Sample mean depth."},
@@ -150,10 +150,10 @@ SAMPLE_ANNOTATIONS = {
         "Description": "Struct containing information from hybrid ancestry assignment.",
         "sub_annotations": {
             "scores": {
-                "Description": "Sample scores for each PC used in from-scratch ancestry PCA."
+                "Description": "Sample's scores for each PC used in from-scratch ancestry PCA."
             },
             "cluster": {
-                "Description": "Sample's cluster assignment from the from-scratch ancestry PCA."
+                "Description": "Sample's cluster assignment using the from-scratch ancestry PCA."
             },
             "pop": {"Description": "Sample's inferred hybrid ancestry assignment."},
         },
@@ -173,44 +173,41 @@ SAMPLE_ANNOTATIONS = {
             "related": {
                 "Description": (
                     "Whether the sample was removed from QC when filtering related samples. True if sample had a second degree "
-                    "relationship with a second sample."
+                    "relationship with another sample."
                 )
             },
             "duplicate": {
                 "Description": (
-                    "Whether the sample was removed from QC when filtering related samples. True if sample had a duplicate or "
-                    "monozygotic twin relationship with a second sample."
+                    "Whether the sample had a duplicate or monozygotic twin relationship with another sample."
                 )
             },
             "parent_child": {
                 "Description": (
-                    "Whether the sample was removed from QC when filtering related samples. True if sample had a parent-child "
-                    "relationship with a second sample."
+                    "Whether the sample had a parent-child relationship with another sample."
                 )
             },
             "sibling": {
                 "Description": (
-                    "Whether the sample was removed from QC when filtering related samples. True if sample had a full sibling "
-                    "relationship with a second sample."
+                    "Whether the sample had a full sibling relationship with another sample."
                 )
             },
             "fail_n_snp": {
-                "Description": "Whether the sample was removed from QC for having a n_snp value larger upper MAD or smaller than the lower MAD threshold."
+                "Description": "Whether the sample was removed from QC for having a n_snp value larger than the upper MAD or smaller than the lower MAD threshold."
             },
             "fail_r_ti_tv": {
-                "Description": "Whether the sample was removed from QC for having a r_ti_tv value larger upper MAD or smaller than the lower MAD threshold."
+                "Description": "Whether the sample was removed from QC for having a r_ti_tv value larger than the upper MAD or smaller than the lower MAD threshold."
             },
             "fail_r_insertion_deletion": {
-                "Description": "Whether the sample was removed from QC for having a r_insertion_deletion value larger upper MAD or smaller than the lower MAD threshold."
+                "Description": "Whether the sample was removed from QC for having a r_insertion_deletion value larger than the upper MAD or smaller than the lower MAD threshold."
             },
             "fail_n_insertion": {
-                "Description": "Whether the sample was removed from QC for having a n_insertion value larger upper MAD or smaller than the lower MAD threshold."
+                "Description": "Whether the sample was removed from QC for having a n_insertion value larger than the upper MAD or smaller than the lower MAD threshold."
             },
             "fail_n_deletion": {
-                "Description": "Whether the sample was removed from QC for having a n_deletion value larger upper MAD or smaller than the lower MAD threshold."
+                "Description": "Whether the sample was removed from QC for having a n_deletion value larger than the upper MAD or smaller than the lower MAD threshold."
             },
             "fail_r_het_hom_var": {
-                "Description": "Whether the sample was removed from QC for having a r_het_hom_var value larger upper MAD or smaller than the lower MAD threshold."
+                "Description": "Whether the sample was removed from QC for having a r_het_hom_var value larger than the upper MAD or smaller than the lower MAD threshold."
             },
             "high_quality": {
                 "Description": "Whether the sample is high quality (True if sample was not hard filtered or removed during outlier detection)."
