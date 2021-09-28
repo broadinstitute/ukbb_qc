@@ -252,7 +252,7 @@ VCF_ANNOTATIONS = {
             "AN_raw": {
                 "Description": "Total number of alleles in samples before removing low-confidence genotypes."
             },
-            "AF": {
+            "AF_raw": {
                 "Description": "Alternate allele frequency in samples before removing low-confidence genotypes."
             },
             "nhomalt_raw": {
