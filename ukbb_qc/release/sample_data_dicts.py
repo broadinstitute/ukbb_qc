@@ -223,15 +223,10 @@ SAMPLE_ANNOTATIONS = {
             },
         },
     },
-    "relatedness_inference": {
-        "Description": "Struct containing relatedness inference information.",
-        "sub_annotations": {
-            "relationships": {
-                "Description": (
-                    "Set containing all relationship strings (e.g., parent-child) for this sample."
-                )
-            },
-        },
+    "relatedness_inference_relationships": {
+        "Description": (
+            "Set containing all relationship strings (e.g., parent-child) for this sample."
+        )
     },
     "gnomad_pc_project_pop_data": {
         "Description": (
