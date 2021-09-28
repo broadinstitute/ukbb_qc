@@ -5,7 +5,6 @@ import subprocess
 from typing import List, Tuple
 
 from gnomad.utils.file_utils import get_file_stats
-from ukbb_qc.resources.basics import release_vcf_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 
 logging.basicConfig(
@@ -16,11 +15,18 @@ logger = logging.getLogger("checksums")
 logger.setLevel(logging.INFO)
 
 
+PATH = "gs://broad-ukbb-requester-pays/broad.freeze_6/sharded_vcf/"
+"""
+Path to requester pays bucket containing repackaged VCF shards and indices.
+"""
+
+
 def checksums(
     tranche_data: Tuple[str, str],
     out_file: str,
     shards: List[str],
     indices: List[str] = None,
+    project_id: str = "maclab-ukbb",
 ) -> None:
     """
     Generate file stats (size and md5) for VCF shards or tabix indices.
@@ -29,6 +35,8 @@ def checksums(
     :param str out_file: Path to output file.
     :param List[str] shards: List of VCF shard file names.
     :param List[str] indices: List of VCF tabix index names. Default is None.
+    :param str project_id: Google cloud project. Required for file stats function since VCF shards and indices
+        are in requester-pays bucket.
     :return: Nothing (writes to output file)
     :rtype: None
     """
@@ -39,15 +47,15 @@ def checksums(
         # Write size and md5 for each shard
         logger.info("Writing file size and md5 for VCF shards...")
         for shard in shards:
-            vcf_url = f"{release_vcf_path(*tranche_data, contig=None)}/{shard}"
-            size, _, md5 = get_file_stats(vcf_url)
+            vcf_url = f"{PATH}/{shard}"
+            size, _, md5 = get_file_stats(vcf_url, project_id)
             o.write(f"{shard}\t{size}\t{md5}\n")
 
         if indices:
             logger.info("Writing file size and md5 for tabix indices...")
             for index in indices:
-                index_url = f"{release_vcf_path(*tranche_data, contig=None)}/{index}"
-                size, _, md5 = get_file_stats(index_url)
+                index_url = f"{PATH}/{index}"
+                size, _, md5 = get_file_stats(index_url, project_id)
                 o.write(f"{index}\t{size}\t{md5}\n")
 
 
@@ -60,14 +68,13 @@ def main(args):
     out_file = args.out
 
     # Get names of vcf shards
-    path = release_vcf_path(*tranche_data, contig=None)
     files = (
-        subprocess.check_output(["gsutil", "ls", path])
+        subprocess.check_output(["gsutil", "ls", PATH])
         .decode("utf8")
         .strip()
         .split("\n")
     )
-    shards = [os.path.split(f)[-1] for f in files if f.endswith(".bgz")]
+    shards = [os.path.split(f)[-1] for f in files if f.endswith(".gz")]
 
     # Get names of tabix indices if args.indices is set
     indices = None
