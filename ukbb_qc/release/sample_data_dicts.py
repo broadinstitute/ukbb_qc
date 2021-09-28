@@ -173,7 +173,7 @@ SAMPLE_ANNOTATIONS = {
             "related": {
                 "Description": (
                     "Whether the sample was removed from QC when filtering related samples. True if sample had a second degree "
-                    "relationship with a second sample."
+                    "relationship with another sample."
                 )
             },
             "duplicate": {
