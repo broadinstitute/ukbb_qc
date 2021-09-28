@@ -91,7 +91,7 @@ SAMPLE_ANNOTATIONS = {
             },
             "num_gt_non_ref": {
                 "Description": (
-                    "Total number of non-ref genotypes between the array and exome data."
+                    "Total number of non-reference genotypes between the array and exome data."
                 )
             },
             "prop_gt_con_non_ref": {
