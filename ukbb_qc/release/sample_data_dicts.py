@@ -62,7 +62,7 @@ SAMPLE_ANNOTATIONS = {
             },
             "age": {"Description": "Sample's age at recruitment."},
             "array_sex": {
-                "Description": ("Sample sex as inferred from genotype data.")
+                "Description": "Sample's sex as inferred from genotype data."
             },
             "self_reported_ancestry": {
                 "Description": "Sample's self reported ancestry."
