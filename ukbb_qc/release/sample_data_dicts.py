@@ -209,7 +209,7 @@ SAMPLE_ANNOTATIONS = {
                 "Description": "Whether the sample was removed from QC for having a n_deletion value larger upper MAD or smaller than the lower MAD threshold."
             },
             "fail_r_het_hom_var": {
-                "Description": "Whether the sample was removed from QC for having a r_het_hom_var value larger upper MAD or smaller than the lower MAD threshold."
+                "Description": "Whether the sample was removed from QC for having a r_het_hom_var value larger than the upper MAD or smaller than the lower MAD threshold."
             },
             "high_quality": {
                 "Description": "Whether the sample is high quality (True if sample was not hard filtered or removed during outlier detection)."
