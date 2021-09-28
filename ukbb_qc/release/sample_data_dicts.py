@@ -16,7 +16,7 @@ GLOBAL_SAMPLE_ANNOTATIONS = {
     "platform_inference_hdbscan_parameters": {
         "Description": (
             "Contains HDBSCAN parameters (minimum cluster size and minimum number of samples) "
-            "used in inferring platform labels."
+            "used to infer platform labels."
         )
     },
     "population_inference_pca_metrics": {
