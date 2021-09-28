@@ -734,54 +734,22 @@ def main(args):
             )
 
             # Export VCFs by chromosome
-            if args.per_chromosome:
-                ht = mt.rows().checkpoint(
-                    get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False),
-                    overwrite=args.overwrite,
-                )
+            ht = mt.rows().checkpoint(
+                get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False),
+                overwrite=args.overwrite,
+            )
 
-                rg = get_reference_genome(mt.locus)
-                contigs = rg.contigs[:24]  # autosomes + X/Y
-                logger.info(f"Contigs: {contigs}")
+            rg = get_reference_genome(mt.locus)
+            contigs = rg.contigs[:24]  # autosomes + X/Y
+            logger.info(f"Contigs: {contigs}")
 
-                for contig in contigs:
-                    # Checked with Hail team about the fastest way to filter to a contig
-                    # This method shouldn't be any faster than `filter_intervals`: the same amount of data is read in both cases
-                    # `_calculate_new_partitions` might give us more parallelism downstream
-                    # Decided to stick with `_calculate_new_partitions` method because it felt much faster on the 300K tranche
-                    mt = hl.read_matrix_table(release_mt_path(*tranche_data))
-                    mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
-                    intervals = mt._calculate_new_partitions(10000)
-                    mt = hl.read_matrix_table(
-                        release_mt_path(*tranche_data), _intervals=intervals
-                    )
-                    mt = mt.annotate_rows(**ht[mt.row_key])
+            for contig in contigs:
+                # Read in MT and filter to contig
+                mt = hl.read_matrix_table(release_mt_path(*tranche_data))
+                mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
+                mt = mt.annotate_rows(**ht[mt.row_key])
 
-                    logger.info("Densifying and exporting VCF...")
-                    mt = hl.experimental.densify(mt)
-
-                    logger.info("Removing low QUAL variants and * alleles...")
-                    info_ht = hl.read_table(info_ht_path(data_source, freeze))
-                    mt = mt.filter_rows(
-                        (~info_ht[mt.row_key].AS_lowqual)
-                        & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
-                    )
-
-                    logger.info("Adjusting sex ploidy...")
-                    mt = adjust_sex_ploidy(
-                        mt, mt.sex_karyotype, male_str="XY", female_str="XX"
-                    )
-
-                    hl.export_vcf(
-                        mt.select_cols(),
-                        release_vcf_path(*tranche_data, contig=contig),
-                        metadata=header_dict,
-                    )
-
-            # Export sharded VCF
-            if args.parallelize:
-
-                logger.info("Densifying...")
+                logger.info("Densifying and exporting VCF...")
                 mt = hl.experimental.densify(mt)
 
                 logger.info("Removing low QUAL variants and * alleles...")
@@ -797,10 +765,12 @@ def main(args):
                 )
                 mt = mt.select_cols()
 
-                logger.info("Exporting VCF...")
+                logger.info("Adjusting partitions...")
+                mt = mt.naive_coalesce(args.n_shards)
+
                 hl.export_vcf(
-                    mt,
-                    release_vcf_path(*tranche_data),
+                    mt.select_cols(),
+                    release_vcf_path(*tranche_data, contig=contig),
                     parallel="header_per_shard",
                     metadata=header_dict,
                     append_to_header="gs://broad-ukbb/broad.freeze_6/release/vcf/append_to_vcf_header.tsv",
@@ -870,17 +840,6 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--prepare_release_vcf", help="Prepare release VCF", action="store_true"
-    )
-    export_opts = parser.add_mutually_exclusive_group()
-    export_opts.add_argument(
-        "--per_chromosome",
-        help="Prepare release VCFs per chromosome",
-        action="store_true",
-    )
-    export_opts.add_argument(
-        "--parallelize",
-        help="Parallelize VCF export by exporting sharded VCF",
-        action="store_true",
     )
     parser.add_argument(
         "--n_shards",
