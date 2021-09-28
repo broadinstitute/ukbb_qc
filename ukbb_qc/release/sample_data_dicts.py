@@ -178,8 +178,7 @@ SAMPLE_ANNOTATIONS = {
             },
             "duplicate": {
                 "Description": (
-                    "Whether the sample was removed from QC when filtering related samples. True if sample had a duplicate or "
-                    "monozygotic twin relationship with a second sample."
+                    "Whether the sample had a duplicate or monozygotic twin relationship with another sample."
                 )
             },
             "parent_child": {
