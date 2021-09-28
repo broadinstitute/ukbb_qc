@@ -45,6 +45,7 @@ def main(args):
     freeze = args.freeze
     tranche_data = (data_source, freeze)
     output_dir = args.output_dir
+    coordinates_output_dir = "gs://broad-ukbb/broad.freeze_6/temp"
 
     logger.info("Getting VCF shards...")
     rg = get_reference_genome("GRCh38")
@@ -68,6 +69,7 @@ def main(args):
                 # Using 'repackaged' + gz extension since that is the extension DNANexus uses in their code
                 output_name = f"ukb26041_{contig}_block{os.path.split(shard)[-1].split('.')[0].split('-')[1]}.repackaged.gz"
                 output_tabix = f"{output_name}.tbi"
+                output_coordinates = f"{output_name}_coordinates.tsv"
                 j = init_job(
                     batch, f"{shard} repackage", DOCKER_IMAGE, args.cpu, args.memory,
                 )
@@ -84,11 +86,14 @@ def main(args):
     EOF"""
                 )
                 j.command(
-                    f"""bash ukbb_header_reformat.sh {local_vcf_path} {output_name}"""
+                    f"""bash ukbb_header_reformat.sh {local_vcf_path} {output_name} > {output_coordinates}"""
                 )
                 j.command(f"""gsutil -u maclab-ukbb -m cp {output_name} {output_dir}""")
                 j.command(
                     f"""gsutil -u maclab-ukbb -m cp {output_tabix} {output_dir}"""
+                )
+                j.command(
+                    f"""gsutil -m cp {output_coordinates} {coordinates_output_dir}"""
                 )
 
 
