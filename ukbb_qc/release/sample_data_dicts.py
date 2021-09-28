@@ -60,7 +60,7 @@ SAMPLE_ANNOTATIONS = {
             "withdrawn_consent": {
                 "Description": "Whether sample has withdrawn consent."
             },
-            "age": {"Description": ("Sample's age at recruitment.")},
+            "age": {"Description": "Sample's age at recruitment."},
             "array_sex": {
                 "Description": ("Sample sex as inferred from genotype data.")
             },
