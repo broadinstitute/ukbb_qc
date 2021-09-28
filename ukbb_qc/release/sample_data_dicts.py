@@ -195,7 +195,7 @@ SAMPLE_ANNOTATIONS = {
                 "Description": "Whether the sample was removed from QC for having a n_snp value larger than the upper MAD or smaller than the lower MAD threshold."
             },
             "fail_r_ti_tv": {
-                "Description": "Whether the sample was removed from QC for having a r_ti_tv value larger upper MAD or smaller than the lower MAD threshold."
+                "Description": "Whether the sample was removed from QC for having a r_ti_tv value larger than the upper MAD or smaller than the lower MAD threshold."
             },
             "fail_r_insertion_deletion": {
                 "Description": "Whether the sample was removed from QC for having a r_insertion_deletion value larger upper MAD or smaller than the lower MAD threshold."
