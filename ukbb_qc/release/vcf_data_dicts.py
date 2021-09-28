@@ -249,10 +249,10 @@ VCF_ANNOTATIONS = {
             "AC_raw": {
                 "Description": "Alternate allele count for samples before removing low-confidence genotypes."
             },
-            "AN": {
+            "AN_raw": {
                 "Description": "Total number of alleles in samples before removing low-confidence genotypes."
             },
-            "AF": {
+            "AF_raw": {
                 "Description": "Alternate allele frequency in samples before removing low-confidence genotypes."
             },
             "nhomalt_raw": {
@@ -691,7 +691,7 @@ VCF_ANNOTATIONS = {
             },
             "age_hist_het_n_larger": {
                 "Description": (
-                    "Count of age values falling above lowest histogram bin edge for heterozygous individuals."
+                    "Count of age values falling above highest histogram bin edge for heterozygous individuals."
                 )
             },
             "age_hist_hom_bin_freq": {
@@ -706,7 +706,7 @@ VCF_ANNOTATIONS = {
             },
             "age_hist_hom_n_larger": {
                 "Description": (
-                    "Count of age values falling above lowest histogram bin edge for homozygous alternate individuals."
+                    "Count of age values falling above highest histogram bin edge for homozygous alternate individuals."
                 )
             },
             "vep": {
