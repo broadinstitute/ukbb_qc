@@ -249,7 +249,7 @@ VCF_ANNOTATIONS = {
             "AC_raw": {
                 "Description": "Alternate allele count for samples before removing low-confidence genotypes."
             },
-            "AN": {
+            "AN_raw": {
                 "Description": "Total number of alleles in samples before removing low-confidence genotypes."
             },
             "AF": {
