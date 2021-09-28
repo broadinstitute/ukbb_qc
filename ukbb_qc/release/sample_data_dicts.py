@@ -51,7 +51,7 @@ SAMPLE_ANNOTATIONS = {
     "ukbb_meta": {
         "Description": "Struct containing metadata information provided by the UK Biobank (UKBB).",
         "sub_annotations": {
-            "batch": {"Description": "Sample's data tranche (150K, 100K, 200K, 300K)."},
+            "batch": {"Description": "Sample's data tranche (100K, 150K, 200K, 300K)."},
             "batch_num": {
                 "Description": (
                     "Numeric version of batch. 0: 150K, 1: 100K, 2: 200K, 3: 300K."
