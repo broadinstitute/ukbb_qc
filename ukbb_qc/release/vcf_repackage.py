@@ -86,8 +86,10 @@ def main(args):
                 j.command(
                     f"""bash ukbb_header_reformat.sh {local_vcf_path} {output_name}"""
                 )
-                j.command(f"""gsutil -m cp {output_name} {output_dir}""")
-                j.command(f"""gsutil -m cp {output_tabix} {output_dir}""")
+                j.command(f"""gsutil -u maclab-ukbb -m cp {output_name} {output_dir}""")
+                j.command(
+                    f"""gsutil -u maclab-ukbb -m cp {output_tabix} {output_dir}"""
+                )
 
 
 if __name__ == "__main__":
@@ -98,7 +100,7 @@ if __name__ == "__main__":
     p.add_argument(
         "--output-dir",
         help="Where to write repackaged vcf output.",
-        default="gs://broad-ukbb/broad.freeze_6/release/vcf/sharded_vcf/repackaged/",
+        default="gs://broad-ukbb-requester-pays/broad.freeze_6/sharded_vcf/",
     )
     args = p.parse_args()
     main(args)
