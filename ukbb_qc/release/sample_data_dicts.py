@@ -153,7 +153,7 @@ SAMPLE_ANNOTATIONS = {
                 "Description": "Sample's scores for each PC used in from-scratch ancestry PCA."
             },
             "cluster": {
-                "Description": "Sample's cluster assignment from the from-scratch ancestry PCA."
+                "Description": "Sample's cluster assignment using the from-scratch ancestry PCA."
             },
             "pop": {"Description": "Sample's inferred hybrid ancestry assignment."},
         },
