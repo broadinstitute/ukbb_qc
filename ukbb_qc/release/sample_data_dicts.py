@@ -188,8 +188,7 @@ SAMPLE_ANNOTATIONS = {
             },
             "sibling": {
                 "Description": (
-                    "Whether the sample was removed from QC when filtering related samples. True if sample had a full sibling "
-                    "relationship with a second sample."
+                    "Whether the sample had a full sibling relationship with another sample."
                 )
             },
             "fail_n_snp": {
