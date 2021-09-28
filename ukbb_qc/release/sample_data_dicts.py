@@ -22,7 +22,7 @@ GLOBAL_SAMPLE_ANNOTATIONS = {
     "population_inference_pca_metrics": {
         "Description": (
             "Contains the number of principal components (PCs) used when running PC-project, the minimum cutoff "
-            "probability of belonging to a given population for assignment, and number of PCs used when performing "
+            "probability of belonging to a given population for assignment, and the number of PCs used when performing "
             "the from-scratch ancestry principal component analysis (PCA)."
         )
     },
