@@ -201,7 +201,8 @@ def raw_mt_path(
         return f"gs://broad-ukbb/{data_source}.freeze_{freeze}/data/{data_source}.freeze_{freeze}.nf.mt"
     elif data_source == "broad":
         # create dict for raw mts for freeze 5 and later
-        dsp_prefix = "gs://broad-pharma5-ukbb-outputs"
+        # mts are now in nearline storage
+        dsp_prefix = "gs://broad-ukbb-crams-nearline/broad-pharma5-ukbb-outputs"
         raw_mt_names = {
             5: "hail_dataproc_20191108115937",
             6: "hail_dataproc_20200130092005.mt",
