@@ -1,8 +1,6 @@
 import logging
 from tqdm import tqdm
 
-import hail as hl
-
 from gnomad.utils.file_utils import parallel_file_exists
 
 from tgg.batch.batch_utils import (
@@ -39,8 +37,6 @@ def main(args):
 
     Necessary only because batch cluster had to be frozen during initial HC job, and ~4k jobs errored out.
     """
-    hl.init(log="/dev/null", quiet=True)
-
     logger.info("Getting sample IDs to check and their corresponding bamouts...")
     bamouts = {}
     with open(args.ids_file) as i:
@@ -48,7 +44,7 @@ def main(args):
             sample = line.strip()
             bamouts[
                 sample
-            ] = f"{readviz_haplotype_caller_path}/outputs/{sample}.bamout.bam"
+            ] = f"{readviz_haplotype_caller_path()}/outputs/{sample}.bamout.bam"
 
     logger.info("Running file existence check on bamouts...")
     bamout_files_exist = parallel_file_exists(list(bamouts.values()))
