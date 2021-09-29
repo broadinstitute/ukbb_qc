@@ -206,7 +206,7 @@ SAMPLE_ANNOTATIONS = {
         "sub_annotations": {
             "scores": {"Description": "Sample's scores for each gnomAD population PC."},
             "pop": {
-                "Description": "Sample's inferred gnomAD PC project population label."
+                "Description": "Sample's inferred gnomAD PC-project population label."
             },
         },
     },
