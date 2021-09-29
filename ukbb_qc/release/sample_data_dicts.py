@@ -22,7 +22,7 @@ GLOBAL_SAMPLE_ANNOTATIONS = {
     "relatedness_inference_cutoffs": {
         "Description": (
             "Contains the minor allele frequency cutoff for sites included when running ancestry imputation, "
-            "the minimum kinship threshold for emitting a pair of samples in PC relate, the IBD0 cutoff used "
+            "the minimum kinship threshold for emitting a pair of samples in PC-relate, the IBD0 cutoff used "
             "to distinguish parent-child relationships from full sibling relationships, the minimum kinship "
             "threshold for determining second-degree relatedness, and the kinship thresholds for determining "
             "whether a pair had first-degree relatedness."
