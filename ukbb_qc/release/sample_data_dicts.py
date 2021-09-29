@@ -68,7 +68,7 @@ SAMPLE_ANNOTATIONS = {
             "concordance": {
                 "Description": (
                     "List of lists containing concordance as calculated using `hl.concordance` for: "
-                    "no Data (missing variant), no Call (missing genotype call), homozygous reference, "
+                    "no data (missing variant), no call (missing genotype call), homozygous reference, "
                     "heterozygous, and homozygous alternate."
                 )
             },
