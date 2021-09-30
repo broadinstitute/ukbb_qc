@@ -767,6 +767,11 @@ def main(args):
 
                 logger.info("Adjusting partitions...")
                 mt = mt.naive_coalesce(args.n_shards)
+                ht = mt.rows()
+
+                # Unkey HT to avoid this error with map_partitions:
+                # ValueError: Table._map_partitions must preserve key fields
+                ht = ht.key_by()
 
                 hl.export_vcf(
                     mt.select_cols(),
@@ -777,15 +782,9 @@ def main(args):
                 )
 
                 logger.info("Getting start and stops per shard...")
-
                 def part_min_and_max(part):
                     keys = part.map(lambda x: x.select("locus", "alleles"))
                     return hl.struct(start=keys[0], end=keys[-1])
-
-                ht = mt.rows()
-                # Unkey HT to avoid this error with map_partitions:
-                # ValueError: Table._map_partitions must preserve key fields
-                ht = ht.key_by()
                 print(
                     ht._map_partitions(
                         lambda p: hl.array([part_min_and_max(p)])
