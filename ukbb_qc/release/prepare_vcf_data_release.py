@@ -783,6 +783,9 @@ def main(args):
                     return hl.struct(start=keys[0], end=keys[-1])
 
                 ht = mt.rows()
+                # Unkey HT to avoid this error with map_partitions:
+                # ValueError: Table._map_partitions must preserve key fields
+                ht = ht.key_by()
                 print(
                     ht._map_partitions(
                         lambda p: hl.array([part_min_and_max(p)])
