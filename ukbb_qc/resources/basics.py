@@ -391,17 +391,23 @@ def raw_mt_path(
     if data_source == "regeneron":
         return f"gs://broad-ukbb/{data_source}.freeze_{freeze}/data/{data_source}.freeze_{freeze}.nf.mt"
     elif data_source == "broad":
-        # create dict for raw mts for freeze 5 and later
-        dsp_prefix = "gs://broad-pharma5-ukbb-outputs"
+        # Create dict for raw mts for freeze 5 and later
+        # Freeze 5 and 6 MTs are now in nearline storage
+        dsp_prefix = "gs://broad-ukbb-crams-nearline/broad-pharma5-ukbb-outputs"
         raw_mt_names = {
             5: "hail_dataproc_20191108115937",
             6: "hail_dataproc_20200130092005.mt",
-            7: "hail_450k_dataproc_20201207164032.mt",
         }
+        # Freeze 7 MT is still in standard storage
+        freeze_7_path = (
+            "gs://broad-ukbb/broad.freeze_7/raw/hail_450k_dataproc_20201207164032.mt"
+        )
         if freeze == 4 or (freeze == 5 and densified):
             return f"gs://broad-ukbb/{data_source}.freeze_{freeze}/data/{data_source}.freeze_{freeze}{tempstr}.mt"
         else:
-            return f"{dsp_prefix}/{raw_mt_names[freeze]}"
+            if freeze < 7:
+                return f"{dsp_prefix}/{raw_mt_names[freeze]}"
+            return freeze_7_path
 
 
 def hardcalls_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
