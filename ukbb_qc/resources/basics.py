@@ -46,20 +46,23 @@ def pan_ancestry_bridge_path() -> str:
     return "gs://broad-ukbb/resources/bridge_26041_31063.csv"
 
 
-def excluded_samples_path(freeze: int = CURRENT_FREEZE) -> str:
+def excluded_samples_path() -> str:
     """
     Returns path to list of samples to exclude from QC due to withdrawn consents
 
-    :param int freeze: One of data freezes.
     :return: Path to excluded samples list
     :rtype: str
     """
     # NOTE: we did not have files with withdrawn sample IDs for freezes 4 and 5
+    # NOTE: These are the files we used to produce freeze 6 and 7 QC
     excluded_file_names = {
         6: "w26041_20200204.csv",
         7: "w26041_20200820.csv",
     }
-    return f"gs://broad-ukbb/resources/withdrawn_consents/{excluded_file_names[freeze]}"
+    # This is the file with the most up to date sample withdrawals (received after freeze 7 QC completed)
+    # File downloaded on 8/16/21
+    latest_file = "w26041_20210809.csv"
+    return f"gs://broad-ukbb/resources/withdrawn_consents/{latest_file}"
 
 
 def dup_resolution_path(freeze: int = CURRENT_FREEZE) -> str:
@@ -238,12 +241,12 @@ def get_ukbb_data(
     logger.info(f"Number of samples in MT: {mt.count_cols()}")
 
     # Add warning that no samples will be removed if excluded samples file doesn't exist
-    if not file_exists(excluded_samples_path(freeze)):
+    if not file_exists(excluded_samples_path()):
         logger.warning(
             "No excluded samples file found. No samples will be removed from MT"
         )
 
-    if file_exists(excluded_samples_path(freeze)) or ukbb_samples_only:
+    if file_exists(excluded_samples_path()) or ukbb_samples_only:
 
         # Read in array sample map HT
         sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze))
@@ -254,30 +257,30 @@ def get_ukbb_data(
 
         # Remove any samples with withdrawn consents
         # NOTE: Keeping samples with missing consents to avoid filtering any samples present in MT but not in sample map HT
-        if file_exists(excluded_samples_path(freeze)):
-            mt = mt.filter_cols(
-                (~sample_map_ht[mt.col_key].withdrawn_consent)
-                | (hl.is_missing(sample_map_ht[mt.col_key].withdrawn_consent))
+        if file_exists(excluded_samples_path()):
+            sample_count = mt.count_cols()
+            withdrawn_ht = hl.import_table(
+                excluded_samples_path(), no_header=True,
+            ).key_by("f0")
+            sample_map_ht = sample_map_ht.annotate(
+                withdrawn_consent=hl.is_defined(
+                    withdrawn_ht[sample_map_ht.ukbb_app_26041_id]
+                )
+            )
+            withdrawn_ids = sample_map_ht.aggregate(
+                hl.agg.count_where(sample_map_ht.withdrawn_consent)
+            )
+            logger.info(
+                "Total number of IDs with withdrawn consents in sample map HT: %i",
+                withdrawn_ids,
             )
 
-            # Double check all withdrawn samples were actually excluded
-            withdrawn_ht = hl.import_table(
-                excluded_samples_path(freeze), no_header=True,
-            ).key_by("f0")
-            mt_samples = mt.annotate_cols(
-                ukbb_app_26041_id=sample_map_ht[mt.col_key].ukbb_app_26041_id
-            ).cols()
-            mt_samples = mt_samples.key_by("ukbb_app_26041_id")
-            withdrawn_samples_in_mt = mt_samples.filter(
-                hl.is_defined(withdrawn_ht[mt_samples.ukbb_app_26041_id])
-            ).count()
-
-            if withdrawn_samples_in_mt > 0:
+            mt = mt.filter_cols(~sample_map_ht[mt.col_key].withdrawn_consent)
+            if sample_count - mt.count_cols() < withdrawn_ids:
+                logger.error("Removed %i samples", sample_count - mt.count_cols())
                 raise DataException(
-                    "Withdrawn samples present in MT. Double check sample filtration"
+                    "Number of removed samples is less than total number of samples with withdrawn consents in sample map HT. Please double check and rerun!"
                 )
-            else:
-                logger.info("No withdrawn samples found in MT")
 
     # Code to resolve duplicate samples specifically in freeze 7/the 450k callset
     if freeze == 7:
