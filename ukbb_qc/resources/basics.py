@@ -191,7 +191,7 @@ def get_ukbb_data(
     :param bool key_by_locus_and_alleles: Whether to key the MatrixTable by locus and alleles
     :param bool adj: Whether the returned data should be filtered to adj genotypes
     :param bool split: Whether the dataset should be split (only applies to raw=False)
-    :param bool ukbb_samples_only: Whether to return only UKBB samples (exclude control samples). Default is False.
+    :param bool ukbb_samples_only: Whether to return only UKBB samples with defined batch (exclude control samples). Default is False.
         Relevant only when running release code.
     :param bool raw: Whether to return the raw data (not recommended: unsplit, and no special consideration on sex chromosomes)
     :param bool repartition: Whether to repartition the MatrixTable. 
@@ -253,7 +253,7 @@ def get_ukbb_data(
 
         # Filter to UKBB samples if specified
         if ukbb_samples_only:
-            mt = mt.filter_cols(hl.is_defined(sample_map_ht[mt.col_key]))
+            mt = mt.filter_cols(hl.is_defined(sample_map_ht[mt.col_key].batch))
 
         # Remove any samples with withdrawn consents
         # NOTE: Keeping samples with missing consents to avoid filtering any samples present in MT but not in sample map HT
