@@ -12,6 +12,7 @@ from gnomad.utils.slack import slack_notifications
 from ukbb_qc.resources.basics import (
     array_sample_map_ht_path,
     check_dups_to_remove,
+    excluded_samples_path,
     get_checkpoint_path,
     known_dups_ht_path,
     logging_path,
@@ -62,11 +63,25 @@ def main(args):
         )
         left_ht = hl.read_table(array_sample_map_ht_path(freeze))
         left_ht = left_ht.annotate(
-            ukbb_meta=hl.struct(**left_ht.row.drop("s", "eid_sample"))
+            ukb_meta=hl.struct(**left_ht.row.drop("s", "eid_sample"))
         ).select("ukbb_meta")
         right_ht = get_age_ht(freeze)
         left_ht = left_ht.annotate(
             ukbb_meta=left_ht.ukbb_meta.annotate(age=right_ht[left_ht.key].age)
+        )
+
+        logger.info("Filtering to samples with defined batch...")
+        left_ht = left_ht.filter(hl.is_defined(left_ht.ukb_meta.batch))
+
+        logger.info("Removing samples with withdrawn consent...")
+        logger.info("Sample count before filtering: %i", left_ht.count())
+        withdrawn_ht = hl.import_table(excluded_samples_path(), no_header=True,).key_by(
+            "f0"
+        )
+        logger.info("Sample count after filtering: %i", left_ht.count())
+
+        left_ht = left_ht.filter(
+            ~hl.is_defined(withdrawn_ht[left_ht.ukbb_app_26041_id])
         )
 
         logger.info(logging_statement.format("array sample concordance HT"))
@@ -238,8 +253,11 @@ def main(args):
         )
         left_ht = left_ht.drop("qc_metrics_filters")
 
+        logger.info("Removing control samples...")
+        truth_samples = hl.literal([SYNDIP, NA12878])
+        left_ht = left_ht.filter(~truth_samples.contains(left_ht.s))
+
         logger.info("Annotating releasable field")
-        # Control samples: CHMI_CHMI3_Nex1 and Coriell_NA12878_NA12878
         left_ht = left_ht.annotate(
             sample_filters=left_ht.sample_filters.annotate(
                 release=hl.if_else(
@@ -253,16 +271,9 @@ def main(args):
             )
         )
 
-        logger.info("Annotating control samples")
-        truth_samples = hl.literal([SYNDIP, NA12878])
-        left_ht = left_ht.annotate(
-            sample_filters=left_ht.sample_filters.annotate(
-                control=(truth_samples.contains(left_ht.s))
-            )
-        )
         logger.info(
-            "Release and control sample counts:"
-            f"{left_ht.aggregate(hl.struct(release=hl.agg.count_where(left_ht.sample_filters.release), control=hl.agg.count_where(left_ht.sample_filters.control)))}"
+            "Release sample counts:"
+            f"{left_ht.aggregate(hl.struct(release=hl.agg.count_where(left_ht.sample_filters.release)))}"
         )
 
         logger.info("Removing duplicate samples and writing out meta ht")
@@ -275,6 +286,10 @@ def main(args):
         num_ids = check_dups_to_remove(ids_to_remove, left_ht)
         logger.info(f"Removing {num_ids} samples...")
         left_ht = left_ht.filter(~ids_to_remove.contains(left_ht.s))
+
+        logger.info("Rekeying table by UKBB ID...")
+        left_ht = left_ht.key_by()
+        left_ht = left_ht.key_by(s=left_ht.ukbb_meta.ukbb_app_26041_id)
 
         left_ht = left_ht.repartition(args.n_partitions)
         left_ht = left_ht.checkpoint(
