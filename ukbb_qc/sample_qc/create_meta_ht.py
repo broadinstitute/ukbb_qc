@@ -75,7 +75,7 @@ def main(args):
 
         logger.info("Removing samples with withdrawn consent...")
         logger.info("Sample count before filtering: %i", left_ht.count())
-        withdrawn_ht = hl.import_table(excluded_samples_path(), no_header=True,).key_by(
+        withdrawn_ht = hl.import_table(excluded_samples_path(), no_header=True).key_by(
             "f0"
         )
         logger.info("Sample count after filtering: %i", left_ht.count())
