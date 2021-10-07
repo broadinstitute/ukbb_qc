@@ -378,7 +378,7 @@ def main(args):
 
             logger.info("Reading in release patch frequencies...")
             patch_ht = (
-                hl.read_table(
+                hl.read_matrix_table(
                     get_checkpoint_path(
                         *tranche_data,
                         name="release_patch_sites_dense_annot_no_hyphen.mt",
