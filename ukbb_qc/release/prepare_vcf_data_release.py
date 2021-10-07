@@ -264,9 +264,9 @@ def unfurl_nested_annotations(
     faf = "faf"
     freq = "freq"
     prefix = ""
-    faf_idx = make_index_dict(t=t, freq_meta_str="faf_meta", pops=pops,)
+    faf_idx = make_index_dict(t=t, freq_meta_str="faf_meta", pops=pops)
     popmax = "popmax"
-    freq_idx = make_index_dict(t=t, freq_meta_str="freq_meta", pops=pops,)
+    freq_idx = make_index_dict(t=t, freq_meta_str="freq_meta", pops=pops)
 
     # Unfurl freq index dict
     # Cycles through each key and index (e.g., k=adj_afr, i=31)
@@ -378,7 +378,7 @@ def main(args):
 
             logger.info("Reading in release patch frequencies...")
             patch_ht = (
-                hl.read_table(
+                hl.read_matrix_table(
                     get_checkpoint_path(
                         *tranche_data,
                         name="release_patch_sites_dense_annot_no_hyphen.mt",
