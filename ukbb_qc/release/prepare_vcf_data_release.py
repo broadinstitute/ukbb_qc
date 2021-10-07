@@ -264,7 +264,7 @@ def unfurl_nested_annotations(
     faf = "faf"
     freq = "freq"
     prefix = ""
-    faf_idx = make_index_dict(t=t, freq_meta_str="faf_meta", pops=pops,)
+    faf_idx = make_index_dict(t=t, freq_meta_str="faf_meta", pops=pops)
     popmax = "popmax"
     freq_idx = make_index_dict(t=t, freq_meta_str="freq_meta", pops=pops,)
 
