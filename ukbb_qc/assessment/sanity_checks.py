@@ -358,7 +358,7 @@ def sample_sum_sanity_checks(
         show only top values of annotations that fail checks.
     :param Dict[str, str] ukbb_names: Dict with UKBB population names (keys) and population descriptions (values).
         Default is UKBB_POPS.
-    :param List[str] sexes: List of sample sexes. Default is SEXES.
+    :param List[str] sexes: List of sample sexes. Default is UKBB_SEXES.
     :return: None
     :rtype: None
     """
