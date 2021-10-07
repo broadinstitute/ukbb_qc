@@ -537,7 +537,7 @@ def make_freq_meta_index_dict(
         frequency array annotation.
     :param List[str] pops: List of global populations in frequency array. 
     :param List[str] groups: Group names used to generate labels for high quality genotypes and all raw genotypes. Default is GROUPS.
-    :param List[str] ukbb_sexes: UKBB, gnomAD v3 sample sexes ("XX", "XY") used in VCF export. Default is SEXES.
+    :param List[str] sexes: UKBB sample sexes ("XX", "XY") used in VCF export. Default is SEXES.
     :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
         of each grouping entry in the frequency array
     :rtype: Dict[str, int]
@@ -555,8 +555,8 @@ def make_index_dict(
     """
     Create a look-up Dictionary for entries contained in the frequency annotation array.
 
-    :param Table ht: Table or MatrixTable containing freq_meta global annotation to be indexed.
-    :param str freq_meta: freq_meta global annotation to be indexed.
+    :param Table t: Table or MatrixTable containing freq_meta global annotation to be indexed.
+    :param str freq_meta_str: freq_meta global annotation to be indexed (e.g. 'freq_meta').
     :param List[str] pops: List of global populations in frequency array. 
     :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
         of each grouping entry in the frequency array.
