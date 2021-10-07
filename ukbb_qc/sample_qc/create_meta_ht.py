@@ -78,11 +78,11 @@ def main(args):
         withdrawn_ht = hl.import_table(excluded_samples_path(), no_header=True).key_by(
             "f0"
         )
-        logger.info("Sample count after filtering: %i", left_ht.count())
 
         left_ht = left_ht.filter(
-            ~hl.is_defined(withdrawn_ht[left_ht.ukbb_app_26041_id])
+            hl.is_missing(withdrawn_ht[left_ht.ukbb_app_26041_id])
         )
+        logger.info("Sample count after filtering: %i", left_ht.count())
 
         logger.info(logging_statement.format("array sample concordance HT"))
         left_ht = left_ht.annotate(ukbb_id=left_ht.ukbb_meta.ukbb_app_26041_id)
