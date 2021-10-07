@@ -345,7 +345,7 @@ def sample_sum_sanity_checks(
     sexes: List[str] = UKBB_SEXES,
 ) -> None:
     """
-    Performs sanity checks on sample sums in input Table.
+    Perform sanity checks on sample sums in input Table.
 
     Computes afresh the sum of annotations for a specified group of annotations, and compare to the annotated version;
     displays results from checking the sum of the specified annotations in the terminal.
