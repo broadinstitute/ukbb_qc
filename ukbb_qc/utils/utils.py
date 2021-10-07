@@ -4,7 +4,6 @@ from typing import Dict, List, Union
 
 import hail as hl
 
-from gnomad.resources.grch37.gnomad import SUBPOPS
 from gnomad.resources.grch38.gnomad import SEXES
 from gnomad.resources.grch38.reference_data import lcr_intervals
 from gnomad.resources.resource_utils import DataException
@@ -43,21 +42,6 @@ from ukbb_qc.utils.constants import UKBB_POPS
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("utils")
 logger.setLevel(logging.INFO)
-
-
-GNOMAD_NFE_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["NFE"]))
-"""
-Dictionary of gnomAD v2 nfe subpop labels and description. 
-
-Used in VCF export.
-"""
-
-GNOMAD_EAS_SUBPOPS = list(map(lambda x: x.lower(), SUBPOPS["EAS"]))
-"""
-Dictionary of gnomAD v2 eas subpop labels and description. 
-
-Used in VCF export.
-"""
 
 
 # Generic

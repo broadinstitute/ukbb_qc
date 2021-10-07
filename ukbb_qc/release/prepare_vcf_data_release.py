@@ -502,9 +502,6 @@ def main(args):
             ).select_entries(*SPARSE_ENTRIES)
             mt = mt.transmute_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype)
 
-            # Annotate MT with het annotation
-            mt = mt.annotate_entries(het=mt.GT.is_het())
-
             logger.info("Removing chrM...")
             mt = hl.filter_intervals(mt, [hl.parse_locus_interval("chrM")], keep=False)
 
@@ -522,6 +519,18 @@ def main(args):
                 mt_chrx = mt_chrx.filter_rows(mt_chrx.locus.in_x_nonpar())
                 mt_chrx = mt_chrx._filter_partitions(range(2))
                 mt = mt_chr20.union_rows(mt_chrx)
+
+            logger.info("Adding het_non_ref annotation...")
+            # Adding a Boolean for whether a sample had a heterozygous non-reference genotype
+            # Need to add this prior to splitting MT to make sure these genotypes
+            # are not adjusted by the homalt hotfix downstream
+            mt = mt.annotate_entries(het_non_ref=mt.LGT.is_het_non_ref())
+
+            logger.info("Splitting densified MT...")
+            mt = hl.experimental.sparse_split_multi(mt)
+
+            # Add het_non_ref to ENTRIES (otherwise annotation gets accidentally dropped here)
+            ENTRIES.append("het_non_ref")
 
             logger.info("Splitting raw MT...")
             mt = hl.experimental.sparse_split_multi(mt)
@@ -740,22 +749,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--prepare_release_vcf", help="Prepare release VCF", action="store_true"
     )
-    export_opts = parser.add_mutually_exclusive_group()
-    export_opts.add_argument(
-        "--per_chromosome",
-        help="Prepare release VCFs per chromosome",
-        action="store_true",
-    )
-    export_opts.add_argument(
-        "--parallelize",
-        help="Parallelize VCF export by exporting sharded VCF",
-        action="store_true",
-    )
     parser.add_argument(
         "--n_shards",
-        help="Desired number of shards for output VCF (if --parallelize is set). Will be used to repartition raw MT on read",
+        help="Desired number of shards for output VCF. Can also be used to repartition raw MT on read.",
         type=int,
-        default=25000,
+        default=500,
     )
     parser.add_argument(
         "--slack_channel", help="Slack channel to post results and notifications to."

@@ -29,7 +29,6 @@ from ukbb_qc.resources.sample_qc import (
     related_drop_path,
     relatedness_ht_path,
     sex_ht_path,
-    meta_ht_path,
 )
 from ukbb_qc.resources.variant_qc import SYNDIP, NA12878
 from ukbb_qc.slack_creds import slack_token
@@ -55,6 +54,7 @@ def main(args):
 
     data_source = "broad"
     freeze = args.freeze
+    tranche_data = (data_source, freeze)
 
     try:
         logging_statement = "Reading in {} and joining with meta HT"
@@ -86,7 +86,7 @@ def main(args):
 
         logger.info(logging_statement.format("array sample concordance HT"))
         left_ht = left_ht.annotate(ukbb_id=left_ht.ukbb_meta.ukbb_app_26041_id)
-        right_ht = hl.read_table(array_concordance_results_path(data_source, freeze))
+        right_ht = hl.read_table(array_concordance_results_path(*tranche_data))
         right_ht = right_ht.annotate(
             array_concordance=hl.struct(**right_ht.row.drop("s"))
         ).select("array_concordance")
@@ -97,7 +97,7 @@ def main(args):
         left_ht = left_ht.key_by("s").drop("ukbb_id")
 
         logger.info(logging_statement.format("sex HT"))
-        right_ht = hl.read_table(sex_ht_path(data_source, freeze))
+        right_ht = hl.read_table(sex_ht_path(*tranche_data))
         # Create struct for join
         right_ht = right_ht.transmute(
             sex_imputation=hl.struct(**right_ht.row.drop("s", "array_sex"))
@@ -111,27 +111,13 @@ def main(args):
         )
 
         logger.info(logging_statement.format("sample QC HT"))
-        right_ht = hl.read_table(qc_ht_path(data_source, freeze))
+        right_ht = hl.read_table(qc_ht_path(*tranche_data))
         left_ht = join_tables(left_ht, "s", right_ht, "s", "right")
 
-        logger.info(logging_statement.format("platform PCA HT"))
-        right_ht = hl.read_table(platform_pca_assignments_ht_path(data_source, freeze))
-        # Put platform info into struct for join
-        right_ht = right_ht.transmute(
-            platform_inference=hl.struct(
-                callrate_pcs=right_ht.scores, qc_platform=right_ht.qc_platform
-            )
-        )
-        right_ht = right_ht.annotate_globals(
-            platform_inference_hdbscan_parameters=right_ht.globals
-        ).select_globals("platform_inference_hdbscan_parameters")
-        left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
-
         logger.info(logging_statement.format("population PCA HT"))
-        right_ht = hl.read_table(ancestry_hybrid_ht_path(data_source, freeze))
-        right_ht = right_ht.annotate_globals(
-            population_inference_pca_metrics=right_ht.globals
-        ).select_globals("population_inference_pca_metrics")
+        logger.info("Keeping only self reported ancestry information...")
+        right_ht = hl.read_table(ancestry_hybrid_ht_path(*tranche_data))
+        right_ht = right_ht.select("self_reported_ancestry")
         left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
         left_ht = left_ht.transmute(
             ukbb_meta=left_ht.ukbb_meta.annotate(
@@ -147,14 +133,14 @@ def main(args):
 
         logger.info("Creating checkpoint")
         left_ht = left_ht.checkpoint(
-            get_checkpoint_path(data_source, freeze, "intermediate_ht_join", mt=False),
+            get_checkpoint_path(*tranche_data, "intermediate_ht_join", mt=False),
             overwrite=True,
         )
 
         logger.info(
             "Reading hard filters HT, renaming hard filters struct to sample_filters, and joining with meta HT"
         )
-        right_ht = hl.read_table(hard_filters_ht_path(data_source, freeze)).select(
+        right_ht = hl.read_table(hard_filters_ht_path(*tranche_data)).select(
             "hard_filters"
         )
         left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
@@ -163,11 +149,9 @@ def main(args):
         logger.info(
             "Reading in related samples to drop HT and preparing to annotate meta HT's sample_filter struct with relatedness booleans"
         )
-        related_samples_to_drop_ht = hl.read_table(
-            related_drop_path(data_source, freeze)
-        )
+        related_samples_to_drop_ht = hl.read_table(related_drop_path(*tranche_data))
         relatedness_ht = get_relatedness_set_ht(
-            hl.read_table(relatedness_ht_path(data_source, freeze))
+            hl.read_table(relatedness_ht_path(*tranche_data))
         )
         related_samples_to_drop_ht = related_samples_to_drop_ht.annotate(
             relationships=relatedness_ht[related_samples_to_drop_ht.s].relationships
@@ -218,8 +202,7 @@ def main(args):
         logger.info(logging_statement.format("outlier HT"))
         right_ht = hl.read_table(
             platform_pop_outlier_ht_path(
-                data_source,
-                freeze,
+                *tranche_data,
                 args.pop_assignment_method,
                 args.platform_assignment_method,
             )
@@ -292,8 +275,12 @@ def main(args):
         left_ht = left_ht.key_by(s=left_ht.ukbb_meta.ukbb_app_26041_id)
 
         left_ht = left_ht.repartition(args.n_partitions)
+        logger.info(
+            "Writing new meta HT to temp (to avoid overwriting meta HT used for QC (written to `meta_ht_path`)..."
+        )
         left_ht = left_ht.checkpoint(
-            meta_ht_path(data_source, freeze), overwrite=args.overwrite
+            get_checkpoint_path(*tranche_data, "ror_meta", mt=False),
+            overwrite=args.overwrite,
         )
         left_ht.summarize()
         logger.info(f"Final count: {left_ht.count()}")
@@ -301,7 +288,7 @@ def main(args):
 
     finally:
         logger.info("Copying hail log to logging bucket...")
-        hl.copy_log(logging_path(data_source, freeze))
+        hl.copy_log(logging_path(*tranche_data))
 
 
 if __name__ == "__main__":
