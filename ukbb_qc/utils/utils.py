@@ -571,7 +571,7 @@ def make_index_dict(
     """
     Create a look-up Dictionary for entries contained in the frequency annotation array.
 
-    :param Table ht: Table or MatrixTable containing freq_meta global annotation to be indexed.
+    :param Table t: Table or MatrixTable containing freq_meta global annotation to be indexed.
     :param str freq_meta: freq_meta global annotation to be indexed.
     :param List[str] pops: List of global populations in frequency array. 
     :return: Dictionary keyed by grouping combinations in the frequency array, with values describing the corresponding index
