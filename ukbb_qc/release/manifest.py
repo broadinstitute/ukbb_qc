@@ -37,7 +37,7 @@ def get_urls(in_file_path: str) -> Dict[str, str]:
         _ = i.readline()
         for line in i:
             # Format:
-            # URL   HTTP Method Expiration  Signed URL
+            # URL\tHTTP Method\tExpiration\tSigned URL
             file, _, _, url = line.strip().split("\t")
             file_urls[file] = url
     return file_urls
