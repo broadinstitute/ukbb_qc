@@ -46,817 +46,817 @@ VCF_ANNOTATIONS = {
     "INFO_ANNOTATIONS": {
         "Description": "VCF INFO field annotations.",
         "sub_annotations": {
-            "AC": {"Number": "A", "Description": "Alternate allele count"},
-            "AN": {"Number": "1", "Description": "Total number of alleles"},
-            "AF": {"Number": "A", "Description": "Alternate allele frequency"},
+            "AC": {"Number": "A", "Description": "Alternate allele count."},
+            "AN": {"Number": "1", "Description": "Total number of alleles."},
+            "AF": {"Number": "A", "Description": "Alternate allele frequency."},
             "nhomalt": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals",
+                "Description": "Count of homozygous individuals.",
             },
             "rf_tp_probability": {
-                "Description": "Probability of a called variant being a true variant as determined by random forest model"
+                "Description": "Probability of a called variant being a true variant as determined by random forest model."
             },
             "FS": {
-                "Description": "Phred-scaled p-value of Fisher's exact test for strand bias"
+                "Description": "Phred-scaled p-value of Fisher's exact test for strand bias."
             },
             "InbreedingCoeff": {
                 "Number": "A",
-                "Description": "Inbreeding coefficient, the excess heterozygosity at a variant site, computed as 1 - (the number of heterozygous genotypes)/(the number of heterozygous genotypes expected under Hardy-Weinberg equilibrium)",
+                "Description": "Inbreeding coefficient, the excess heterozygosity at a variant site, computed as 1 - (the number of heterozygous genotypes)/(the number of heterozygous genotypes expected under Hardy-Weinberg equilibrium).",
             },
             "MQ": {
-                "Description": "Root mean square of the mapping quality of reads across all samples"
+                "Description": "Root mean square of the mapping quality of reads across all samples."
             },
             "MQRankSum": {
-                "Description": "Z-score from Wilcoxon rank sum test of alternate vs. reference read mapping qualities"
+                "Description": "Z-score from Wilcoxon rank sum test of alternate vs. reference read mapping qualities."
             },
             "QD": {
-                "Description": "Variant call confidence normalized by depth of sample reads supporting a variant"
+                "Description": "Variant call confidence normalized by depth of sample reads supporting a variant."
             },
             "ReadPosRankSum": {
-                "Description": "Z-score from Wilcoxon rank sum test of alternate vs. reference read position bias"
+                "Description": "Z-score from Wilcoxon rank sum test of alternate vs. reference read position bias."
             },
             "SOR": {
-                "Description": "Strand bias estimated by the symmetric odds ratio test"
+                "Description": "Strand bias estimated by the symmetric odds ratio test."
             },
             "POSITIVE_TRAIN_SITE": {
-                "Description": "Variant was used to build the positive training set of high-quality variants for VQSR"
+                "Description": "Variant was used to build the positive training set of high-quality variants for VQSR."
             },
             "NEGATIVE_TRAIN_SITE": {
-                "Description": "Variant was used to build the negative training set of low-quality variants for VQSR"
+                "Description": "Variant was used to build the negative training set of low-quality variants for VQSR."
             },
             "BaseQRankSum": {
-                "Description": "Z-score from Wilcoxon rank sum test of alternate vs. reference base qualities"
+                "Description": "Z-score from Wilcoxon rank sum test of alternate vs. reference base qualities."
             },
             "VarDP": {
-                "Description": "Depth over variant genotypes (does not include depth of reference samples)"
+                "Description": "Depth over variant genotypes (does not include depth of reference samples)."
             },
             "VQSLOD": {
-                "Description": "Log-odds ratio of being a true variant versus being a false positive under the trained VQSR Gaussian mixture model"
+                "Description": "Log-odds ratio of being a true variant versus being a false positive under the trained VQSR Gaussian mixture model."
             },
             "culprit": {
-                "Description": "Worst-performing annotation in the VQSR Gaussian mixture model"
+                "Description": "Worst-performing annotation in the VQSR Gaussian mixture model."
             },
-            "lcr": {"Description": "Variant falls within a low complexity region"},
+            "lcr": {"Description": "Variant falls within a low complexity region."},
             "nonpar": {
-                "Description": "Variant (on sex chromosome) falls outside a pseudoautosomal region"
+                "Description": "Variant (on sex chromosome) falls outside a pseudoautosomal region."
             },
             "segdup": {
-                "Description": "Variant falls within a segmental duplication region"
+                "Description": "Variant falls within a segmental duplication region."
             },
             "rf_positive_label": {
-                "Description": "Variant was labelled as a positive example for training of random forest model"
+                "Description": "Variant was labelled as a positive example for training of random forest model."
             },
             "rf_negative_label": {
-                "Description": "Variant was labelled as a negative example for training of random forest model"
+                "Description": "Variant was labelled as a negative example for training of random forest model."
             },
-            "rf_label": {"Description": "Random forest training label"},
+            "rf_label": {"Description": "Random forest training label."},
             "rf_train": {
-                "Description": "Variant was used in training random forest model"
+                "Description": "Variant was used in training random forest model."
             },
             "transmitted_singleton": {
-                "Description": "Variant was a callset-wide doubleton that was transmitted within a family from a parent to a child (i.e., a singleton amongst unrelated samples in cohort)"
+                "Description": "Variant was a callset-wide doubleton that was transmitted within a family from a parent to a child (i.e., a singleton amongst unrelated samples in cohort)."
             },
             "original_alleles": {
-                "Description": "Alleles before splitting multiallelics"
+                "Description": "Alleles before splitting multiallelics."
             },
             "variant_type": {
-                "Description": "Variant type (snv, indel, multi-snv, multi-indel, or mixed)"
+                "Description": "Variant type (snv, indel, multi-snv, multi-indel, or mixed)."
             },
             "allele_type": {
-                "Description": "Allele type (snv, insertion, deletion, or mixed)"
+                "Description": "Allele type (snv, insertion, deletion, or mixed)."
             },
             "n_alt_alleles": {
                 "Number": "1",
-                "Description": "Total number of alternate alleles observed at variant locus",
+                "Description": "Total number of alternate alleles observed at variant locus.",
             },
-            "was_mixed": {"Description": "Variant type was mixed"},
+            "was_mixed": {"Description": "Variant type was mixed."},
             "has_star": {
-                "Description": "Variant locus coincides with a spanning deletion (represented by a star) observed elsewhere in the callset"
+                "Description": "Variant locus coincides with a spanning deletion (represented by a star) observed elsewhere in the callset."
             },
             "AS_pab_max": {
                 "Number": "A",
                 "Description": "Maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of 0.5",
             },
             "outside_capture_region": {
-                "Description": "Variant falls outside exome capture regions"
+                "Description": "Variant falls outside exome capture regions."
             },
             "sibling_singleton": {
-                "Description": "Variant was a callset-wide doubleton that was present only within a sibling pair"
+                "Description": "Variant was a callset-wide doubleton that was present only within a sibling pair."
             },
             "AS_FS": {
                 "Number": "A",
-                "Description": "Allele-specific phred-scaled p-value of Fisher's exact test for strand bias",
+                "Description": "Allele-specific phred-scaled p-value of Fisher's exact test for strand bias.",
             },
             "AS_MQ": {
                 "Number": "A",
-                "Description": "Allele-specific root mean square of the mapping quality of reads across all samples",
+                "Description": "Allele-specific root mean square of the mapping quality of reads across all samples.",
             },
             "AS_MQRankSum": {
                 "Number": "A",
-                "Description": "Allele-specific z-score from Wilcoxon rank sum test of alternate vs. reference read mapping qualities",
+                "Description": "Allele-specific z-score from Wilcoxon rank sum test of alternate vs. reference read mapping qualities.",
             },
             "AS_QD": {
                 "Number": "A",
-                "Description": "Allele-specific variant call confidence normalized by depth of sample reads supporting a variant",
+                "Description": "Allele-specific variant call confidence normalized by depth of sample reads supporting a variant.",
             },
             "AS_ReadPosRankSum": {
                 "Number": "A",
-                "Description": "Allele-specific z-score from Wilcoxon rank sum test of alternate vs. reference read position bias",
+                "Description": "Allele-specific z-score from Wilcoxon rank sum test of alternate vs. reference read position bias.",
             },
             "AS_SOR": {
                 "Number": "A",
-                "Description": "Allele-specific strand bias estimated by the symmetric odds ratio test",
+                "Description": "Allele-specific strand bias estimated by the symmetric odds ratio test.",
             },
             "AS_VarDP": {
                 "Number": "A",
-                "Description": "Allele-specific depth over variant genotypes (does not include depth of reference samples)",
+                "Description": "Allele-specific depth over variant genotypes (does not include depth of reference samples).",
             },
             "AS_culprit": {
                 "Number": "A",
-                "Description": "Allele-specific worst-performing annotation in the VQSR Gaussian mixture model",
+                "Description": "Allele-specific worst-performing annotation in the VQSR Gaussian mixture model.",
             },
             "AS_VQSLOD": {
                 "Number": "A",
-                "Description": "Allele-specific log-odds ratio of being a true variant versus being a false positive under the trained VQSR Gaussian mixture model",
+                "Description": "Allele-specific log-odds ratio of being a true variant versus being a false positive under the trained VQSR Gaussian mixture model.",
             },
             "AC_raw": {
                 "Number": "A",
-                "Description": "Alternate allele count for samples, before removing low-confidence genotypes",
+                "Description": "Alternate allele count for samples, before removing low-confidence genotypes.",
             },
             "AN_raw": {
                 "Number": "1",
-                "Description": "Total number of alleles in samples, before removing low-confidence genotypes",
+                "Description": "Total number of alleles in samples, before removing low-confidence genotypes.",
             },
             "AF_raw": {
                 "Number": "A",
-                "Description": "Alternate allele frequency in samples, before removing low-confidence genotypes",
+                "Description": "Alternate allele frequency in samples, before removing low-confidence genotypes.",
             },
             "nhomalt_raw": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals in samples, before removing low-confidence genotypes",
+                "Description": "Count of homozygous individuals in samples, before removing low-confidence genotypes.",
             },
             "AC_XX": {
                 "Number": "A",
-                "Description": "Alternate allele count for XX samples",
+                "Description": "Alternate allele count for XX samples.",
             },
             "AN_XX": {
                 "Number": "1",
-                "Description": "Total number of alleles in XX samples",
+                "Description": "Total number of alleles in XX samples.",
             },
             "AF_XX": {
                 "Number": "A",
-                "Description": "Alternate allele frequency in XX samples",
+                "Description": "Alternate allele frequency in XX samples.",
             },
             "nhomalt_XX": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals in XX samples",
+                "Description": "Count of homozygous individuals in XX samples.",
             },
             "AC_XY": {
                 "Number": "A",
-                "Description": "Alternate allele count for XY samples",
+                "Description": "Alternate allele count for XY samples.",
             },
             "AN_XY": {
                 "Number": "1",
-                "Description": "Total number of alleles in XY samples",
+                "Description": "Total number of alleles in XY samples.",
             },
             "AF_XY": {
                 "Number": "A",
-                "Description": "Alternate allele frequency in XY samples",
+                "Description": "Alternate allele frequency in XY samples.",
             },
             "nhomalt_XY": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals in XY samples",
+                "Description": "Count of homozygous individuals in XY samples.",
             },
             "AC_EUR": {
                 "Number": "A",
-                "Description": "Alternate allele count for samples of European ancestry",
+                "Description": "Alternate allele count for samples of European ancestry.",
             },
             "AN_EUR": {
                 "Number": "1",
-                "Description": "Total number of alleles in samples of European ancestry",
+                "Description": "Total number of alleles in samples of European ancestry.",
             },
             "AF_EUR": {
                 "Number": "A",
-                "Description": "Alternate allele frequency in samples of European ancestry",
+                "Description": "Alternate allele frequency in samples of European ancestry.",
             },
             "nhomalt_EUR": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals in samples of European ancestry",
+                "Description": "Count of homozygous individuals in samples of European ancestry.",
             },
             "AC_CSA": {
                 "Number": "A",
-                "Description": "Alternate allele count for samples of Central/South Asian ancestry",
+                "Description": "Alternate allele count for samples of Central/South Asian ancestry.",
             },
             "AN_CSA": {
                 "Number": "1",
-                "Description": "Total number of alleles in samples of Central/South Asian ancestry",
+                "Description": "Total number of alleles in samples of Central/South Asian ancestry.",
             },
             "AF_CSA": {
                 "Number": "A",
-                "Description": "Alternate allele frequency in samples of Central/South Asian ancestry",
+                "Description": "Alternate allele frequency in samples of Central/South Asian ancestry.",
             },
             "nhomalt_CSA": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals in samples of Central/South Asian ancestry",
+                "Description": "Count of homozygous individuals in samples of Central/South Asian ancestry.",
             },
             "AC_AFR": {
                 "Number": "A",
-                "Description": "Alternate allele count for samples of African ancestry",
+                "Description": "Alternate allele count for samples of African ancestry.",
             },
             "AN_AFR": {
                 "Number": "1",
-                "Description": "Total number of alleles in samples of African ancestry",
+                "Description": "Total number of alleles in samples of African ancestry.",
             },
             "AF_AFR": {
                 "Number": "A",
-                "Description": "Alternate allele frequency in samples of African ancestry",
+                "Description": "Alternate allele frequency in samples of African ancestry.",
             },
             "nhomalt_AFR": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals in samples of African ancestry",
+                "Description": "Count of homozygous individuals in samples of African ancestry.",
             },
             "AC_EAS": {
                 "Number": "A",
-                "Description": "Alternate allele count for samples of East Asian ancestry",
+                "Description": "Alternate allele count for samples of East Asian ancestry.",
             },
             "AN_EAS": {
                 "Number": "1",
-                "Description": "Total number of alleles in samples of East Asian ancestry",
+                "Description": "Total number of alleles in samples of East Asian ancestry.",
             },
             "AF_EAS": {
                 "Number": "A",
-                "Description": "Alternate allele frequency in samples of East Asian ancestry",
+                "Description": "Alternate allele frequency in samples of East Asian ancestry.",
             },
             "nhomalt_EAS": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals in samples of East Asian ancestry",
+                "Description": "Count of homozygous individuals in samples of East Asian ancestry.",
             },
             "AC_MID": {
                 "Number": "A",
-                "Description": "Alternate allele count for samples of Middle Eastern ancestry",
+                "Description": "Alternate allele count for samples of Middle Eastern ancestry.",
             },
             "AN_MID": {
                 "Number": "1",
-                "Description": "Total number of alleles in samples of Middle Eastern ancestry",
+                "Description": "Total number of alleles in samples of Middle Eastern ancestry.",
             },
             "AF_MID": {
                 "Number": "A",
-                "Description": "Alternate allele frequency in samples of Middle Eastern ancestry",
+                "Description": "Alternate allele frequency in samples of Middle Eastern ancestry.",
             },
             "nhomalt_MID": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals in samples of Middle Eastern ancestry",
+                "Description": "Count of homozygous individuals in samples of Middle Eastern ancestry.",
             },
             "AC_AMR": {
                 "Number": "A",
-                "Description": "Alternate allele count for samples of Admixed American ancestry",
+                "Description": "Alternate allele count for samples of Admixed American ancestry.",
             },
             "AN_AMR": {
                 "Number": "1",
-                "Description": "Total number of alleles in samples of Admixed American ancestry",
+                "Description": "Total number of alleles in samples of Admixed American ancestry.",
             },
             "AF_AMR": {
                 "Number": "A",
-                "Description": "Alternate allele frequency in samples of Admixed American ancestry",
+                "Description": "Alternate allele frequency in samples of Admixed American ancestry.",
             },
             "nhomalt_AMR": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals in samples of Admixed American ancestry",
+                "Description": "Count of homozygous individuals in samples of Admixed American ancestry.",
             },
             "AC_EUR_XX": {
                 "Number": "A",
-                "Description": "Alternate allele count for XX samples of European ancestry",
+                "Description": "Alternate allele count for XX samples of European ancestry.",
             },
             "AN_EUR_XX": {
                 "Number": "1",
-                "Description": "Total number of alleles in XX samples of European ancestry",
+                "Description": "Total number of alleles in XX samples of European ancestry.",
             },
             "AF_EUR_XX": {
                 "Number": "A",
-                "Description": "Alternate allele frequency in XX samples of European ancestry",
+                "Description": "Alternate allele frequency in XX samples of European ancestry.",
             },
             "nhomalt_EUR_XX": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals in XX samples of European ancestry",
+                "Description": "Count of homozygous individuals in XX samples of European ancestry.",
             },
             "AC_EUR_XY": {
                 "Number": "A",
-                "Description": "Alternate allele count for XY samples of European ancestry",
+                "Description": "Alternate allele count for XY samples of European ancestry.",
             },
             "AN_EUR_XY": {
                 "Number": "1",
-                "Description": "Total number of alleles in XY samples of European ancestry",
+                "Description": "Total number of alleles in XY samples of European ancestry.",
             },
             "AF_EUR_XY": {
                 "Number": "A",
-                "Description": "Alternate allele frequency in XY samples of European ancestry",
+                "Description": "Alternate allele frequency in XY samples of European ancestry.",
             },
             "nhomalt_EUR_XY": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals in XY samples of European ancestry",
+                "Description": "Count of homozygous individuals in XY samples of European ancestry.",
             },
             "AC_CSA_XX": {
                 "Number": "A",
-                "Description": "Alternate allele count for XX samples of Central/South Asian ancestry",
+                "Description": "Alternate allele count for XX samples of Central/South Asian ancestry.",
             },
             "AN_CSA_XX": {
                 "Number": "1",
-                "Description": "Total number of alleles in XX samples of Central/South Asian ancestry",
+                "Description": "Total number of alleles in XX samples of Central/South Asian ancestry.",
             },
             "AF_CSA_XX": {
                 "Number": "A",
-                "Description": "Alternate allele frequency in XX samples of Central/South Asian ancestry",
+                "Description": "Alternate allele frequency in XX samples of Central/South Asian ancestry.",
             },
             "nhomalt_CSA_XX": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals in XX samples of Central/South Asian ancestry",
+                "Description": "Count of homozygous individuals in XX samples of Central/South Asian ancestry.",
             },
             "AC_CSA_XY": {
                 "Number": "A",
-                "Description": "Alternate allele count for XY samples of Central/South Asian ancestry",
+                "Description": "Alternate allele count for XY samples of Central/South Asian ancestry.",
             },
             "AN_CSA_XY": {
                 "Number": "1",
-                "Description": "Total number of alleles in XY samples of Central/South Asian ancestry",
+                "Description": "Total number of alleles in XY samples of Central/South Asian ancestry.",
             },
             "AF_CSA_XY": {
                 "Number": "A",
-                "Description": "Alternate allele frequency in XY samples of Central/South Asian ancestry",
+                "Description": "Alternate allele frequency in XY samples of Central/South Asian ancestry.",
             },
             "nhomalt_CSA_XY": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals in XY samples of Central/South Asian ancestry",
+                "Description": "Count of homozygous individuals in XY samples of Central/South Asian ancestry.",
             },
             "AC_AFR_XX": {
                 "Number": "A",
-                "Description": "Alternate allele count for XX samples of African ancestry",
+                "Description": "Alternate allele count for XX samples of African ancestry.",
             },
             "AN_AFR_XX": {
                 "Number": "1",
-                "Description": "Total number of alleles in XX samples of African ancestry",
+                "Description": "Total number of alleles in XX samples of African ancestry.",
             },
             "AF_AFR_XX": {
                 "Number": "A",
-                "Description": "Alternate allele frequency in XX samples of African ancestry",
+                "Description": "Alternate allele frequency in XX samples of African ancestry.",
             },
             "nhomalt_AFR_XX": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals in XX samples of African ancestry",
+                "Description": "Count of homozygous individuals in XX samples of African ancestry.",
             },
             "AC_AFR_XY": {
                 "Number": "A",
-                "Description": "Alternate allele count for XY samples of African ancestry",
+                "Description": "Alternate allele count for XY samples of African ancestry.",
             },
             "AN_AFR_XY": {
                 "Number": "1",
-                "Description": "Total number of alleles in XY samples of African ancestry",
+                "Description": "Total number of alleles in XY samples of African ancestry.",
             },
             "AF_AFR_XY": {
                 "Number": "A",
-                "Description": "Alternate allele frequency in XY samples of African ancestry",
+                "Description": "Alternate allele frequency in XY samples of African ancestry.",
             },
             "nhomalt_AFR_XY": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals in XY samples of African ancestry",
+                "Description": "Count of homozygous individuals in XY samples of African ancestry.",
             },
             "AC_EAS_XX": {
                 "Number": "A",
-                "Description": "Alternate allele count for XX samples of East Asian ancestry",
+                "Description": "Alternate allele count for XX samples of East Asian ancestry.",
             },
             "AN_EAS_XX": {
                 "Number": "1",
-                "Description": "Total number of alleles in XX samples of East Asian ancestry",
+                "Description": "Total number of alleles in XX samples of East Asian ancestry.",
             },
             "AF_EAS_XX": {
                 "Number": "A",
-                "Description": "Alternate allele frequency in XX samples of East Asian ancestry",
+                "Description": "Alternate allele frequency in XX samples of East Asian ancestry.",
             },
             "nhomalt_EAS_XX": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals in XX samples of East Asian ancestry",
+                "Description": "Count of homozygous individuals in XX samples of East Asian ancestry.",
             },
             "AC_EAS_XY": {
                 "Number": "A",
-                "Description": "Alternate allele count for XY samples of East Asian ancestry",
+                "Description": "Alternate allele count for XY samples of East Asian ancestry.",
             },
             "AN_EAS_XY": {
                 "Number": "1",
-                "Description": "Total number of alleles in XY samples of East Asian ancestry",
+                "Description": "Total number of alleles in XY samples of East Asian ancestry.",
             },
             "AF_EAS_XY": {
                 "Number": "A",
-                "Description": "Alternate allele frequency in XY samples of East Asian ancestry",
+                "Description": "Alternate allele frequency in XY samples of East Asian ancestry.",
             },
             "nhomalt_EAS_XY": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals in XY samples of East Asian ancestry",
+                "Description": "Count of homozygous individuals in XY samples of East Asian ancestry.",
             },
             "AC_MID_XX": {
                 "Number": "A",
-                "Description": "Alternate allele count for XX samples of Middle Eastern ancestry",
+                "Description": "Alternate allele count for XX samples of Middle Eastern ancestry.",
             },
             "AN_MID_XX": {
                 "Number": "1",
-                "Description": "Total number of alleles in XX samples of Middle Eastern ancestry",
+                "Description": "Total number of alleles in XX samples of Middle Eastern ancestry.",
             },
             "AF_MID_XX": {
                 "Number": "A",
-                "Description": "Alternate allele frequency in XX samples of Middle Eastern ancestry",
+                "Description": "Alternate allele frequency in XX samples of Middle Eastern ancestry.",
             },
             "nhomalt_MID_XX": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals in XX samples of Middle Eastern ancestry",
+                "Description": "Count of homozygous individuals in XX samples of Middle Eastern ancestry.",
             },
             "AC_MID_XY": {
                 "Number": "A",
-                "Description": "Alternate allele count for XY samples of Middle Eastern ancestry",
+                "Description": "Alternate allele count for XY samples of Middle Eastern ancestry.",
             },
             "AN_MID_XY": {
                 "Number": "1",
-                "Description": "Total number of alleles in XY samples of Middle Eastern ancestry",
+                "Description": "Total number of alleles in XY samples of Middle Eastern ancestry.",
             },
             "AF_MID_XY": {
                 "Number": "A",
-                "Description": "Alternate allele frequency in XY samples of Middle Eastern ancestry",
+                "Description": "Alternate allele frequency in XY samples of Middle Eastern ancestry.",
             },
             "nhomalt_MID_XY": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals in XY samples of Middle Eastern ancestry",
+                "Description": "Count of homozygous individuals in XY samples of Middle Eastern ancestry.",
             },
             "AC_AMR_XX": {
                 "Number": "A",
-                "Description": "Alternate allele count for XX samples of Admixed American ancestry",
+                "Description": "Alternate allele count for XX samples of Admixed American ancestry.",
             },
             "AN_AMR_XX": {
                 "Number": "1",
-                "Description": "Total number of alleles in XX samples of Admixed American ancestry",
+                "Description": "Total number of alleles in XX samples of Admixed American ancestry.",
             },
             "AF_AMR_XX": {
                 "Number": "A",
-                "Description": "Alternate allele frequency in XX samples of Admixed American ancestry",
+                "Description": "Alternate allele frequency in XX samples of Admixed American ancestry.",
             },
             "nhomalt_AMR_XX": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals in XX samples of Admixed American ancestry",
+                "Description": "Count of homozygous individuals in XX samples of Admixed American ancestry.",
             },
             "AC_AMR_XY": {
                 "Number": "A",
-                "Description": "Alternate allele count for XY samples of Admixed American ancestry",
+                "Description": "Alternate allele count for XY samples of Admixed American ancestry.",
             },
             "AN_AMR_XY": {
                 "Number": "1",
-                "Description": "Total number of alleles in XY samples of Admixed American ancestry",
+                "Description": "Total number of alleles in XY samples of Admixed American ancestry.",
             },
             "AF_AMR_XY": {
                 "Number": "A",
-                "Description": "Alternate allele frequency in XY samples of Admixed American ancestry",
+                "Description": "Alternate allele frequency in XY samples of Admixed American ancestry.",
             },
             "nhomalt_AMR_XY": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals in XY samples of Admixed American ancestry",
+                "Description": "Count of homozygous individuals in XY samples of Admixed American ancestry.",
             },
             "faf95": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 95% CI)",
+                "Description": "Filtering allele frequency (using Poisson 95% CI).",
             },
             "faf99": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 99% CI)",
+                "Description": "Filtering allele frequency (using Poisson 99% CI).",
             },
             "faf95_raw": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 95% CI) for samples, before removing low-confidence genotypes",
+                "Description": "Filtering allele frequency (using Poisson 95% CI) for samples, before removing low-confidence genotypes.",
             },
             "faf99_raw": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 99% CI) for samples, before removing low-confidence genotypes",
+                "Description": "Filtering allele frequency (using Poisson 99% CI) for samples, before removing low-confidence genotypes.",
             },
             "faf95_XX": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 95% CI) for XX samples",
+                "Description": "Filtering allele frequency (using Poisson 95% CI) for XX samples.",
             },
             "faf99_XX": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 99% CI) for XX samples",
+                "Description": "Filtering allele frequency (using Poisson 99% CI) for XX samples.",
             },
             "faf95_XY": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 95% CI) for XY samples",
+                "Description": "Filtering allele frequency (using Poisson 95% CI) for XY samples.",
             },
             "faf99_XY": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 99% CI) for XY samples",
+                "Description": "Filtering allele frequency (using Poisson 99% CI) for XY samples.",
             },
             "faf95_EUR": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 95% CI) for samples of European ancestry",
+                "Description": "Filtering allele frequency (using Poisson 95% CI) for samples of European ancestry.",
             },
             "faf99_EUR": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 99% CI) for samples of European ancestry",
+                "Description": "Filtering allele frequency (using Poisson 99% CI) for samples of European ancestry.",
             },
             "faf95_CSA": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 95% CI) for samples of Central/South Asian ancestry",
+                "Description": "Filtering allele frequency (using Poisson 95% CI) for samples of Central/South Asian ancestry.",
             },
             "faf99_CSA": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 99% CI) for samples of Central/South Asian ancestry",
+                "Description": "Filtering allele frequency (using Poisson 99% CI) for samples of Central/South Asian ancestry.",
             },
             "faf95_AFR": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 95% CI) for samples of African ancestry",
+                "Description": "Filtering allele frequency (using Poisson 95% CI) for samples of African ancestry.",
             },
             "faf99_AFR": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 99% CI) for samples of African ancestry",
+                "Description": "Filtering allele frequency (using Poisson 99% CI) for samples of African ancestry.",
             },
             "faf95_EAS": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 95% CI) for samples of East Asian ancestry",
+                "Description": "Filtering allele frequency (using Poisson 95% CI) for samples of East Asian ancestry.",
             },
             "faf99_EAS": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 99% CI) for samples of East Asian ancestry",
+                "Description": "Filtering allele frequency (using Poisson 99% CI) for samples of East Asian ancestry.",
             },
             "faf95_MID": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 95% CI) for samples of Middle Eastern ancestry",
+                "Description": "Filtering allele frequency (using Poisson 95% CI) for samples of Middle Eastern ancestry.",
             },
             "faf99_MID": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 99% CI) for samples of Middle Eastern ancestry",
+                "Description": "Filtering allele frequency (using Poisson 99% CI) for samples of Middle Eastern ancestry.",
             },
             "faf95_AMR": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 95% CI) for samples of Admixed American ancestry",
+                "Description": "Filtering allele frequency (using Poisson 95% CI) for samples of Admixed American ancestry.",
             },
             "faf99_AMR": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 99% CI) for samples of Admixed American ancestry",
+                "Description": "Filtering allele frequency (using Poisson 99% CI) for samples of Admixed American ancestry.",
             },
             "faf95_EUR_XX": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 95% CI) for XX samples of European ancestry",
+                "Description": "Filtering allele frequency (using Poisson 95% CI) for XX samples of European ancestry.",
             },
             "faf99_EUR_XX": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 99% CI) for XX samples of European ancestry",
+                "Description": "Filtering allele frequency (using Poisson 99% CI) for XX samples of European ancestry.",
             },
             "faf95_EUR_XY": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 95% CI) for XY samples of European ancestry",
+                "Description": "Filtering allele frequency (using Poisson 95% CI) for XY samples of European ancestry.",
             },
             "faf99_EUR_XY": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 99% CI) for XY samples of European ancestry",
+                "Description": "Filtering allele frequency (using Poisson 99% CI) for XY samples of European ancestry.",
             },
             "faf95_CSA_XX": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 95% CI) for XX samples of Central/South Asian ancestry",
+                "Description": "Filtering allele frequency (using Poisson 95% CI) for XX samples of Central/South Asian ancestry.",
             },
             "faf99_CSA_XX": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 99% CI) for XX samples of Central/South Asian ancestry",
+                "Description": "Filtering allele frequency (using Poisson 99% CI) for XX samples of Central/South Asian ancestry.",
             },
             "faf95_CSA_XY": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 95% CI) for XY samples of Central/South Asian ancestry",
+                "Description": "Filtering allele frequency (using Poisson 95% CI) for XY samples of Central/South Asian ancestry.",
             },
             "faf99_CSA_XY": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 99% CI) for XY samples of Central/South Asian ancestry",
+                "Description": "Filtering allele frequency (using Poisson 99% CI) for XY samples of Central/South Asian ancestry.",
             },
             "faf95_AFR_XX": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 95% CI) for XX samples of African ancestry",
+                "Description": "Filtering allele frequency (using Poisson 95% CI) for XX samples of African ancestry.",
             },
             "faf99_AFR_XX": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 99% CI) for XX samples of African ancestry",
+                "Description": "Filtering allele frequency (using Poisson 99% CI) for XX samples of African ancestry.",
             },
             "faf95_AFR_XY": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 95% CI) for XY samples of African ancestry",
+                "Description": "Filtering allele frequency (using Poisson 95% CI) for XY samples of African ancestry.",
             },
             "faf99_AFR_XY": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 99% CI) for XY samples of African ancestry",
+                "Description": "Filtering allele frequency (using Poisson 99% CI) for XY samples of African ancestry.",
             },
             "faf95_EAS_XX": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 95% CI) for XX samples of East Asian ancestry",
+                "Description": "Filtering allele frequency (using Poisson 95% CI) for XX samples of East Asian ancestry.",
             },
             "faf99_EAS_XX": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 99% CI) for XX samples of East Asian ancestry",
+                "Description": "Filtering allele frequency (using Poisson 99% CI) for XX samples of East Asian ancestry.",
             },
             "faf95_EAS_XY": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 95% CI) for XY samples of East Asian ancestry",
+                "Description": "Filtering allele frequency (using Poisson 95% CI) for XY samples of East Asian ancestry.",
             },
             "faf99_EAS_XY": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 99% CI) for XY samples of East Asian ancestry",
+                "Description": "Filtering allele frequency (using Poisson 99% CI) for XY samples of East Asian ancestry.",
             },
             "faf95_MID_XX": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 95% CI) for XX samples of Middle Eastern ancestry",
+                "Description": "Filtering allele frequency (using Poisson 95% CI) for XX samples of Middle Eastern ancestry.",
             },
             "faf99_MID_XX": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 99% CI) for XX samples of Middle Eastern ancestry",
+                "Description": "Filtering allele frequency (using Poisson 99% CI) for XX samples of Middle Eastern ancestry.",
             },
             "faf95_MID_XY": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 95% CI) for XY samples of Middle Eastern ancestry",
+                "Description": "Filtering allele frequency (using Poisson 95% CI) for XY samples of Middle Eastern ancestry.",
             },
             "faf99_MID_XY": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 99% CI) for XY samples of Middle Eastern ancestry",
+                "Description": "Filtering allele frequency (using Poisson 99% CI) for XY samples of Middle Eastern ancestry.",
             },
             "faf95_AMR_XX": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 95% CI) for XX samples of Admixed American ancestry",
+                "Description": "Filtering allele frequency (using Poisson 95% CI) for XX samples of Admixed American ancestry.",
             },
             "faf99_AMR_XX": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 99% CI) for XX samples of Admixed American ancestry",
+                "Description": "Filtering allele frequency (using Poisson 99% CI) for XX samples of Admixed American ancestry.",
             },
             "faf95_AMR_XY": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 95% CI) for XY samples of Admixed American ancestry",
+                "Description": "Filtering allele frequency (using Poisson 95% CI) for XY samples of Admixed American ancestry.",
             },
             "faf99_AMR_XY": {
                 "Number": "A",
-                "Description": "Filtering allele frequency (using Poisson 99% CI) for XY samples of Admixed American ancestry",
+                "Description": "Filtering allele frequency (using Poisson 99% CI) for XY samples of Admixed American ancestry.",
             },
             "age_hist_het_bin_freq": {
                 "Number": "A",
-                "Description": "Histogram of ages of heterozygous individuals; bin edges are: 30.0|35.0|40.0|45.0|50.0|55.0|60.0|65.0|70.0|75.0|80.0; total number of individuals of any genotype bin: 0|0|7|51796|66083|76337|90827|121484|93585|2424|0|0",
+                "Description": "Histogram of ages of heterozygous individuals; bin edges are: 30.0|35.0|40.0|45.0|50.0|55.0|60.0|65.0|70.0|75.0|80.0; total number of individuals of any genotype bin: 0|0|7|51796|66083|76337|90827|121484|93585|2424|0|0.",
             },
             "age_hist_het_n_smaller": {
                 "Number": "A",
-                "Description": "Count of age values falling below lowest histogram bin edge for heterozygous individuals",
+                "Description": "Count of age values falling below lowest histogram bin edge for heterozygous individuals.",
             },
             "age_hist_het_n_larger": {
                 "Number": "A",
-                "Description": "Count of age values falling above highest histogram bin edge for heterozygous individuals",
+                "Description": "Count of age values falling above highest histogram bin edge for heterozygous individuals.",
             },
             "age_hist_hom_bin_freq": {
                 "Number": "A",
-                "Description": "Histogram of ages of homozygous alternate individuals; bin edges are: 30.0|35.0|40.0|45.0|50.0|55.0|60.0|65.0|70.0|75.0|80.0; total number of individuals of any genotype bin: 0|0|7|51796|66083|76337|90827|121484|93585|2424|0|0",
+                "Description": "Histogram of ages of homozygous alternate individuals; bin edges are: 30.0|35.0|40.0|45.0|50.0|55.0|60.0|65.0|70.0|75.0|80.0; total number of individuals of any genotype bin: 0|0|7|51796|66083|76337|90827|121484|93585|2424|0|0.",
             },
             "age_hist_hom_n_smaller": {
                 "Number": "A",
-                "Description": "Count of age values falling below lowest histogram bin edge for homozygous alternate individuals",
+                "Description": "Count of age values falling below lowest histogram bin edge for homozygous alternate individuals.",
             },
             "age_hist_hom_n_larger": {
                 "Number": "A",
-                "Description": "Count of age values falling above highest histogram bin edge for homozygous alternate individuals",
+                "Description": "Count of age values falling above highest histogram bin edge for homozygous alternate individuals.",
             },
-            "popmax": {"Number": "A", "Description": "Population with maximum AF"},
+            "popmax": {"Number": "A", "Description": "Population with maximum AF."},
             "AC_popmax": {
                 "Number": "A",
-                "Description": "Allele count in the population with the maximum AF",
+                "Description": "Allele count in the population with the maximum AF.",
             },
             "AN_popmax": {
                 "Number": "A",
-                "Description": "Total number of alleles in the population with the maximum AF",
+                "Description": "Total number of alleles in the population with the maximum AF.",
             },
             "AF_popmax": {
                 "Number": "A",
-                "Description": "Maximum allele frequency across populations",
+                "Description": "Maximum allele frequency across populations.",
             },
             "nhomalt_popmax": {
                 "Number": "A",
-                "Description": "Count of homozygous individuals in the population with the maximum allele frequency",
+                "Description": "Count of homozygous individuals in the population with the maximum allele frequency.",
             },
             "gq_hist_alt_bin_freq": {
                 "Number": "A",
-                "Description": "Histogram for GQ in heterozygous individuals calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100",
+                "Description": "Histogram for GQ in heterozygous individuals calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.",
             },
             "gq_hist_alt_n_smaller": {
                 "Number": "A",
-                "Description": "Count of GQ values falling below lowest histogram bin edge GQ in heterozygous individuals calculated on high quality genotypes",
+                "Description": "Count of GQ values falling below lowest histogram bin edge GQ in heterozygous individuals calculated on high quality genotypes.",
             },
             "gq_hist_alt_n_larger": {
                 "Number": "A",
-                "Description": "Count of GQ values falling above highest histogram bin edge GQ in heterozygous individuals calculated on high quality genotypes",
+                "Description": "Count of GQ values falling above highest histogram bin edge GQ in heterozygous individuals calculated on high quality genotypes.",
             },
             "gq_hist_all_bin_freq": {
                 "Number": "A",
-                "Description": "Histogram for GQ calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100",
+                "Description": "Histogram for GQ calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.",
             },
             "gq_hist_all_n_smaller": {
                 "Number": "A",
-                "Description": "Count of GQ values falling below lowest histogram bin edge GQ calculated on high quality genotypes",
+                "Description": "Count of GQ values falling below lowest histogram bin edge GQ calculated on high quality genotypes.",
             },
             "gq_hist_all_n_larger": {
                 "Number": "A",
-                "Description": "Count of GQ values falling above highest histogram bin edge GQ calculated on high quality genotypes",
+                "Description": "Count of GQ values falling above highest histogram bin edge GQ calculated on high quality genotypes.",
             },
             "dp_hist_alt_bin_freq": {
                 "Number": "A",
-                "Description": "Histogram for DP in heterozygous individuals calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100",
+                "Description": "Histogram for DP in heterozygous individuals calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.",
             },
             "dp_hist_alt_n_smaller": {
                 "Number": "A",
-                "Description": "Count of DP values falling below lowest histogram bin edge DP in heterozygous individuals calculated on high quality genotypes",
+                "Description": "Count of DP values falling below lowest histogram bin edge DP in heterozygous individuals calculated on high quality genotypes.",
             },
             "dp_hist_alt_n_larger": {
                 "Number": "A",
-                "Description": "Count of DP values falling above highest histogram bin edge DP in heterozygous individuals calculated on high quality genotypes",
+                "Description": "Count of DP values falling above highest histogram bin edge DP in heterozygous individuals calculated on high quality genotypes.",
             },
             "dp_hist_all_bin_freq": {
                 "Number": "A",
-                "Description": "Histogram for DP calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100",
+                "Description": "Histogram for DP calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.",
             },
             "dp_hist_all_n_smaller": {
                 "Number": "A",
-                "Description": "Count of DP values falling below lowest histogram bin edge DP calculated on high quality genotypes",
+                "Description": "Count of DP values falling below lowest histogram bin edge DP calculated on high quality genotypes.",
             },
             "dp_hist_all_n_larger": {
                 "Number": "A",
-                "Description": "Count of DP values falling above highest histogram bin edge DP calculated on high quality genotypes",
+                "Description": "Count of DP values falling above highest histogram bin edge DP calculated on high quality genotypes.",
             },
             "ab_hist_alt_bin_freq": {
                 "Number": "A",
-                "Description": "Histogram for AB in heterozygous individuals calculated on high quality genotypes; bin edges are: 0.00|0.05|0.10|0.15|0.20|0.25|0.30|0.35|0.40|0.45|0.50|0.55|0.60|0.65|0.70|0.75|0.80|0.85|0.90|0.95|1.00",
+                "Description": "Histogram for AB in heterozygous individuals calculated on high quality genotypes; bin edges are: 0.00|0.05|0.10|0.15|0.20|0.25|0.30|0.35|0.40|0.45|0.50|0.55|0.60|0.65|0.70|0.75|0.80|0.85|0.90|0.95|1.00.",
             },
             "ab_hist_alt_n_smaller": {
                 "Number": "A",
-                "Description": "Count of AB values falling below lowest histogram bin edge AB in heterozygous individuals calculated on high quality genotypes",
+                "Description": "Count of AB values falling below lowest histogram bin edge AB in heterozygous individuals calculated on high quality genotypes.",
             },
             "ab_hist_alt_n_larger": {
                 "Number": "A",
-                "Description": "Count of AB values falling above highest histogram bin edge AB in heterozygous individuals calculated on high quality genotypes",
+                "Description": "Count of AB values falling above highest histogram bin edge AB in heterozygous individuals calculated on high quality genotypes.",
             },
             "gq_hist_alt_raw_bin_freq": {
                 "Number": "A",
-                "Description": "Histogram for GQ in heterozygous individuals; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100",
+                "Description": "Histogram for GQ in heterozygous individuals; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.",
             },
             "gq_hist_alt_raw_n_smaller": {
                 "Number": "A",
-                "Description": "Count of GQ values falling below lowest histogram bin edge GQ in heterozygous individuals",
+                "Description": "Count of GQ values falling below lowest histogram bin edge GQ in heterozygous individuals.",
             },
             "gq_hist_alt_raw_n_larger": {
                 "Number": "A",
-                "Description": "Count of GQ values falling above highest histogram bin edge GQ in heterozygous individuals",
+                "Description": "Count of GQ values falling above highest histogram bin edge GQ in heterozygous individuals.",
             },
             "gq_hist_all_raw_bin_freq": {
                 "Number": "A",
-                "Description": "Histogram for GQ; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100",
+                "Description": "Histogram for GQ; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.",
             },
             "gq_hist_all_raw_n_smaller": {
                 "Number": "A",
-                "Description": "Count of GQ values falling below lowest histogram bin edge GQ",
+                "Description": "Count of GQ values falling below lowest histogram bin edge GQ.",
             },
             "gq_hist_all_raw_n_larger": {
                 "Number": "A",
-                "Description": "Count of GQ values falling above highest histogram bin edge GQ",
+                "Description": "Count of GQ values falling above highest histogram bin edge GQ.",
             },
             "dp_hist_alt_raw_bin_freq": {
                 "Number": "A",
-                "Description": "Histogram for DP in heterozygous individuals; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100",
+                "Description": "Histogram for DP in heterozygous individuals; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.",
             },
             "dp_hist_alt_raw_n_smaller": {
                 "Number": "A",
-                "Description": "Count of DP values falling below lowest histogram bin edge DP in heterozygous individuals",
+                "Description": "Count of DP values falling below lowest histogram bin edge DP in heterozygous individuals.",
             },
             "dp_hist_alt_raw_n_larger": {
                 "Number": "A",
-                "Description": "Count of DP values falling above highest histogram bin edge DP in heterozygous individuals",
+                "Description": "Count of DP values falling above highest histogram bin edge DP in heterozygous individuals.",
             },
             "dp_hist_all_raw_bin_freq": {
                 "Number": "A",
-                "Description": "Histogram for DP; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100",
+                "Description": "Histogram for DP; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.",
             },
             "dp_hist_all_raw_n_smaller": {
                 "Number": "A",
-                "Description": "Count of DP values falling below lowest histogram bin edge DP",
+                "Description": "Count of DP values falling below lowest histogram bin edge DP.",
             },
             "dp_hist_all_raw_n_larger": {
                 "Number": "A",
-                "Description": "Count of DP values falling above highest histogram bin edge DP",
+                "Description": "Count of DP values falling above highest histogram bin edge DP.",
             },
             "ab_hist_alt_raw_bin_freq": {
                 "Number": "A",
-                "Description": "Histogram for AB in heterozygous individuals; bin edges are: 0.00|0.05|0.10|0.15|0.20|0.25|0.30|0.35|0.40|0.45|0.50|0.55|0.60|0.65|0.70|0.75|0.80|0.85|0.90|0.95|1.00",
+                "Description": "Histogram for AB in heterozygous individuals; bin edges are: 0.00|0.05|0.10|0.15|0.20|0.25|0.30|0.35|0.40|0.45|0.50|0.55|0.60|0.65|0.70|0.75|0.80|0.85|0.90|0.95|1.00.",
             },
             "ab_hist_alt_raw_n_smaller": {
                 "Number": "A",
-                "Description": "Count of AB values falling below lowest histogram bin edge AB in heterozygous individuals",
+                "Description": "Count of AB values falling below lowest histogram bin edge AB in heterozygous individuals.",
             },
             "ab_hist_alt_raw_n_larger": {
                 "Number": "A",
-                "Description": "Count of AB values falling above highest histogram bin edge AB in heterozygous individuals",
+                "Description": "Count of AB values falling above highest histogram bin edge AB in heterozygous individuals.",
             },
             "fail_interval_qc": {
-                "Description": "Variant falls within a region where less than 85.0% of samples had a mean coverage of 20X on autosomes and 10X on sex chromosomes"
+                "Description": "Variant falls within a region where less than 85.0% of samples had a mean coverage of 20X on autosomes and 10X on sex chromosomes."
             },
             "vep": {
-                "Description": "Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|ALLELE_NUM|DISTANCE|STRAND|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info"
+                "Description": "Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|ALLELE_NUM|DISTANCE|STRAND|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info."
             },
         },
     },
