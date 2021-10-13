@@ -633,8 +633,9 @@ def main(args):
                     "AC",
                     "AN",
                     "AF",
+                    "nhomalt",
                     "rf_tp_probability",
-                    *mt.info.drop("AC", "AN", "AF", "rf_tp_probability"),
+                    *mt.info.drop("AC", "AN", "AF", "nhomalt", "rf_tp_probability"),
                 )
             )
 
