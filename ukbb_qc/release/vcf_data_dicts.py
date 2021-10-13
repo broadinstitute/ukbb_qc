@@ -663,6 +663,8 @@ VCF_ANNOTATIONS = {
             "vep": {
                 "Description": "Consequence annotations from Ensembl VEP. More details about VEP output is described here: https://uswest.ensembl.org/info/docs/tools/vep/vep_formats.html#output. VEP was run using the LOFTEE plugin and information about the additional LOFTEE annotations can be found here: https://github.com/konradjk/loftee. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|ALLELE_NUM|DISTANCE|STRAND|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info."
             },
+            "vep_version": {"Description": "VEP version."},
+            "dbsnp_version": {"Description": "dbSNP version."},
         },
     },
 }
