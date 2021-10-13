@@ -28,7 +28,10 @@ We flagged any sample falling outside <b>4</b> median absolute deviations (MAD) 
 - Insertion : deletion ratio
 - Transition : transversion (TiTv) ratio
 - Heterozygous : homozygous ratio
+
 We ran outlier detection on all samples that passed hard filters and included all related samples. The majority of the samples removed from QC were samples inferred to have a second-degree or greater relationship with other samples in the dataset. This finding is not unexpected, as previous studies have shown that the UK Biobank data contains a large number (approximately 30%) of related samples (Bycroft, C., Freeman, C., Petkova, D. et al. The UK Biobank resource with deep phenotyping and genomic data. Nature 562, 203-209 (2018). https://doi.org/10.1038/s41586-018-0579-z). 
+
+Note that a sample's tranche refers to the data freeze when a sample was released: 150K, 100K, 200K, 300K, or 455K.
 
 ## Variant Quality Control
 For variant QC, we used a combination of a random forest (RF) classifier and hard filters.
