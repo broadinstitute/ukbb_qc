@@ -69,5 +69,5 @@ The thresholds were chosen to maximize sensitivity and specificity based on the 
 
 ### Variant hard filters
 Two hard filters were also used to exclude variants:
-Excess heterozygotes defined by an inbreeding coefficient < <b>-0.3</b>
-Variants where no sample had a high quality genotype <b>(depth >= 10, genotype quality >= 20 and minor allele balance > 0.2 for heterozygous genotypes)</b>
+- Excess heterozygotes defined by an inbreeding coefficient < <b>-0.3</b>
+- Variants where no sample had a high quality genotype <b>(depth >= 10, genotype quality >= 20 and minor allele balance > 0.2 for heterozygous genotypes)</b>
