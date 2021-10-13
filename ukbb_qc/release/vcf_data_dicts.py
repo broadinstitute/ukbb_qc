@@ -554,12 +554,12 @@ VCF_ANNOTATIONS = {
             "age_hist_hom_n_larger": {
                 "Description": "Count of age values falling above highest histogram bin edge for homozygous alternate individuals.",
             },
-            "popmax": {"Description": "Population with maximum AF."},
+            "popmax": {"Description": "Population with maximum allele frequency."},
             "AC_popmax": {
-                "Description": "Allele count in the population with the maximum AF.",
+                "Description": "Allele count in the population with the maximum allele frequency.",
             },
             "AN_popmax": {
-                "Description": "Total number of alleles in the population with the maximum AF.",
+                "Description": "Total number of alleles in the population with the maximum allele frequency.",
             },
             "AF_popmax": {
                 "Description": "Maximum allele frequency across populations.",
