@@ -15,7 +15,7 @@ The hard filters applied to the raw data and used in downstream QC were: sex imp
 We excluded these hard-filtered samples from subsequent sample QC analyses (platform PCA, relatedness inference, ancestry imputation, and outlier detection) so that these low quality samples would not influence our downstream results.
 
 ### Relatedness inference
-We used the `pc_relate` method in Hail to infer relatedness on variants that are <b>autosomal, bi-allelic single nucleotide variants (SNVs), common (allele frequency > 0.1%), high call rate (> 99%), and LD-pruned with a cutoff of r2 = 0.1</b>. We then used the `maximal_independent_set` method in Hail to get the largest set of samples with no pair of samples related at the 2nd degree or closer, prioritizing samples with greater mean depth. The related samples that are not in the maximal independent set are flagged.
+We used the `pc_relate` method in Hail to infer relatedness on variants that are <b>autosomal, bi-allelic single nucleotide variants (SNVs), common (allele frequency > 0.1%), high call rate (> 99%), and LD-pruned with a cutoff of r2 = 0.1</b>. We then used the `maximal_independent_set` method in Hail to get the largest set of samples with no pair of samples related at the 2nd degree or closer, prioritizing samples with greater mean depth. The related samples that are not in the maximal independent set are flagged as related.
 
 ### Ancestry inference
 We projected the UK Biobank data onto the gnomAD population principal components (PCs) and then used a random forest classifier trained on gnomAD ancestry labels to assign ancestry to the UK Biobank samples. 
