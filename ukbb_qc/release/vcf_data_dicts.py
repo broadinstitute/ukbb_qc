@@ -46,6 +46,16 @@ VCF_ANNOTATIONS = {
     "INFO_ANNOTATIONS": {
         "Description": "VCF INFO field annotations.",
         "sub_annotations": {
+            "AC": {"Number": "A", "Description": "Alternate allele count"},
+            "AN": {"Number": "1", "Description": "Total number of alleles"},
+            "AF": {"Number": "A", "Description": "Alternate allele frequency"},
+            "nhomalt": {
+                "Number": "A",
+                "Description": "Count of homozygous individuals",
+            },
+            "rf_tp_probability": {
+                "Description": "Probability of a called variant being a true variant as determined by random forest model"
+            },
             "FS": {
                 "Description": "Phred-scaled p-value of Fisher's exact test for strand bias"
             },
@@ -102,9 +112,6 @@ VCF_ANNOTATIONS = {
             "rf_label": {"Description": "Random forest training label"},
             "rf_train": {
                 "Description": "Variant was used in training random forest model"
-            },
-            "rf_tp_probability": {
-                "Description": "Probability of a called variant being a true variant as determined by random forest model"
             },
             "transmitted_singleton": {
                 "Description": "Variant was a callset-wide doubleton that was transmitted within a family from a parent to a child (i.e., a singleton amongst unrelated samples in cohort)"
@@ -171,13 +178,6 @@ VCF_ANNOTATIONS = {
             "AS_VQSLOD": {
                 "Number": "A",
                 "Description": "Allele-specific log-odds ratio of being a true variant versus being a false positive under the trained VQSR Gaussian mixture model",
-            },
-            "AC": {"Number": "A", "Description": "Alternate allele count"},
-            "AN": {"Number": "1", "Description": "Total number of alleles"},
-            "AF": {"Number": "A", "Description": "Alternate allele frequency"},
-            "nhomalt": {
-                "Number": "A",
-                "Description": "Count of homozygous individuals",
             },
             "AC_raw": {
                 "Number": "A",
