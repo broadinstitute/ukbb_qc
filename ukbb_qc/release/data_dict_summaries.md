@@ -29,9 +29,18 @@ We flagged any sample falling outside <b>4</b> median absolute deviations (MAD) 
 - Transition : transversion (TiTv) ratio
 - Heterozygous : homozygous ratio
 
-We ran outlier detection on all samples that passed hard filters and included all related samples. The majority of the samples removed from QC were samples inferred to have a second-degree or greater relationship with other samples in the dataset. This finding is not unexpected, as previous studies have shown that the UK Biobank data contains a large number (approximately 30%) of related samples (Bycroft, C., Freeman, C., Petkova, D. et al. The UK Biobank resource with deep phenotyping and genomic data. Nature 562, 203-209 (2018). https://doi.org/10.1038/s41586-018-0579-z). 
-
 Note that a sample's tranche refers to the data freeze when a sample was released: 150K, 100K, 200K, 300K, or 455K.
+We ran outlier detection on all samples that passed hard filters and included all related samples.
+
+### Sample QC filter summary
+| Filter type | Filtered | Not Filtered | Percent Filtered |
+| ----------- | -------- | ------------ | ---------------- |
+| Hard filters | 683 | 453988 | 0.15 |
+| Relatedness filters | 29899 | 424772 | 6.58 |
+| Outlier filters | 3061 | 450927 | 0.67 |
+| All filters | 33459 | 421212 | 7.36 | 
+
+The majority of the samples removed from QC were samples inferred to have a second-degree or greater relationship with other samples in the dataset. This finding is not unexpected, as previous studies have shown that the UK Biobank data contains a large number (approximately 30%) of related samples (Bycroft, C., Freeman, C., Petkova, D. et al. The UK Biobank resource with deep phenotyping and genomic data. Nature 562, 203-209 (2018). https://doi.org/10.1038/s41586-018-0579-z). 
 
 ## Variant Quality Control
 For variant QC, we used a combination of a random forest (RF) classifier and hard filters.
@@ -62,7 +71,7 @@ We used the following allele and site annotations as features in the random fore
 In order to set a threshold for the variants that PASS the RF filter, we looked at a few metrics:
 - Number of de novo mutations in the 672 trios
 - Sensitivity to ClinVar variants
-- Precision recall curves in two truth samples present in our data: NA12878 and a pseudo-diploid sample (syndip). Note: syndip was sequenced at Broad, not with the UK Biobank cohort.
+- Precision recall curves in two truth samples present in our data: NA12878 and a pseudo-diploid sample (syndip; https://www.nature.com/articles/s41592-018-0054-7?WT.feed_name=subjects_standards;%20https://github.com/lh3/CHM-eval). Note: syndip was sequenced at Broad, not with the UK Biobank cohort.
 - Comparison to variant QC using previous data tranche containing 300,000 exomes
 - Ti/Tv ratio
 - Proportion singletons
