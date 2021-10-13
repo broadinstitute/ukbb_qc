@@ -225,14 +225,8 @@ SAMPLE_ANNOTATIONS = {
             "PC18": {"Description": "Sample's scores for population PC 18."},
             "PC19": {"Description": "Sample's scores for population PC 19."},
             "PC20": {"Description": "Sample's scores for population PC 20."},
-            "pop": {"Description": "Sample's pan-ancestry label. One of: AFR, AMR, CSA, EAS, EUR, MID."},
-            "related": {"Description": "Sample's relatedness information."},
-            "age": {"Description": "Age covariate used in GWAS analyses."},
-            "sex": {"Description": "Sex covariate used in GWAS analyses."},
-            "age_sex": {"Description": "Age * sex covariate used in GWAS analyses."},
-            "age2": {"Description": "Age squared covariate used in GWAS analyses."},
-            "age2_sex": {
-                "Description": "Age squared * sex covariate used in GWAS analyses."
+            "pop": {
+                "Description": "Sample's pan-ancestry label. One of: AFR, AMR, CSA, EAS, EUR, MID."
             },
         },
     },
