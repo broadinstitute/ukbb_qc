@@ -15,7 +15,6 @@ logging.basicConfig(
 logger = logging.getLogger("checksums")
 logger.setLevel(logging.INFO)
 
-
 PATH = "gs://broad-ukbb-requester-pays/broad.freeze_7/sharded_vcf/"
 """
 Path to requester pays bucket containing repackaged VCF shards and indices.
@@ -45,7 +44,7 @@ def get_urls(in_file_path: str) -> Dict[str, str]:
         _ = i.readline()
         for line in i:
             # Format:
-            # URL   HTTP Method Expiration  Signed URL
+            # URL\tHTTP Method\tExpiration\tSigned URL
             file, _, _, url = line.strip().split("\t")
             file_urls[file] = url
     return file_urls
