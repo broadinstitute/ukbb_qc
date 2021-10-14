@@ -79,9 +79,7 @@ def main(args):
             "f0"
         )
 
-        left_ht = left_ht.filter(
-            hl.is_missing(withdrawn_ht[left_ht.ukbb_app_26041_id])
-        )
+        left_ht = left_ht.filter(hl.is_missing(withdrawn_ht[left_ht.ukbb_app_26041_id]))
         logger.info("Sample count after filtering: %i", left_ht.count())
 
         logger.info(logging_statement.format("array sample concordance HT"))
@@ -187,9 +185,7 @@ def main(args):
             )
         )
         left_ht = left_ht.annotate(
-            relatedness_inference=hl.struct(
-                relationships=relatedness_ht[left_ht.s].relationships,
-            )
+            relatedness_inference_relationships=relatedness_ht[left_ht.s].relationships,
         )
 
         logger.info("Adding relatedness globals (cutoffs)")
