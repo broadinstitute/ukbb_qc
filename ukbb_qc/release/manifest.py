@@ -26,7 +26,15 @@ def get_urls(in_file_path: str) -> Dict[str, str]:
     """
     Open file containing presigned URLs (created using `gsutil signurl`).
 
-    Coordinates are required by DNAnexus.
+    Pre-signed URLs are required by DNAnexus for ROR.
+    Pre-signed URls are created so that a user without a Google account can download data. For more information, see:
+    https://cloud.google.com/storage/docs/access-control/signed-urls.
+
+    This is an example command for how to create a pre-signed URL that lasts 1 second for a file in a requester pays bucket:
+    ```
+    gsutil -u maclab-ukbb signurl -r us-east1 -d 1s -b maclab-ukbb /Users/kchao/Desktop/maclab-ukbb-b14de5ad82e8.json gs://broad-ukbb-requester-pays/broad.freeze_6/sharded_vcf/*.tbi
+    ```
+    For more information on how to create a pre-signed URL, see https://cloud.google.com/storage/docs/gsutil/commands/signurl.
 
     :param str in_file_path: Input file path. Should be stored locally.
     :return: Dictionary containing file names (key) and presigned URLs (value).
@@ -54,8 +62,7 @@ def get_coordinates(in_cloud_file_path: str) -> Tuple[int, int]:
     :rtype: Tuple[int, int]
     """
     with hl.hadoop_open(in_cloud_file_path) as i:
-        low, high = i.readline().strip().split()
-    return (low, high)
+        return i.readline().strip().split()
 
 
 def generate_manifest(
@@ -69,7 +76,7 @@ def generate_manifest(
     Generate manifest file for VCF shards.
 
     Read in signed URLs, header coordinates (required for DNAnexus), and 
-    generate file stats (size and md5) for VCF shards or tabix indices.
+    generate md5 for VCF shards or tabix indices.
 
     :param str out_file: Path to output file.
     :param List[str] shards: List of VCF shard file names.
