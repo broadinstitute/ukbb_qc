@@ -12,10 +12,10 @@ The hard filters applied to the raw data and used in downstream QC were: sex imp
 - Sex imputation filters (filtered all karyotypes except XX and XY):
 - Low callrate (cutoff <b>0.99</b>)
 - Low mean coverage (cutoff <b>20X</b>)
-We excluded hard-filtered samples from platform PCA, relatedness inference, ancestry imputation, and outlier detection so that these low quality samples would not influence our downstream results.
+We excluded these hard-filtered samples from subsequent sample QC analyses (platform PCA, relatedness inference, ancestry imputation, and outlier detection) so that these low quality samples would not influence our downstream results.
 
 ### Relatedness inference
-We used the `pc_relate` method in Hail to infer relatedness on variants that are <b>autosomal, bi-allelic single nucleotide variants (SNVs), common (allele frequency > 0.1%), high call rate (> 99%), and LD-pruned with a cutoff of r2 = 0.1</b>. We then used the `maximal_independent_set` method in Hail to get the largest set of samples with no pair of samples related at the 2nd degree or closer, prioritizing samples with greater mean depth. The related samples that are not in the maximal independent set are flagged.
+We used the `pc_relate` method in Hail to infer relatedness on variants that are <b>autosomal, bi-allelic single nucleotide variants (SNVs), common (allele frequency > 0.1%), high call rate (> 99%), and LD-pruned with a cutoff of r2 = 0.1</b>. We then used the `maximal_independent_set` method in Hail to get the largest set of samples with no pair of samples related at the 2nd degree or closer, prioritizing samples with greater mean depth. The related samples that are not in the maximal independent set are flagged as related.
 
 ### Ancestry inference
 We projected the UK Biobank data onto the gnomAD population principal components (PCs) and then used a random forest classifier trained on gnomAD ancestry labels to assign ancestry to the UK Biobank samples. 
@@ -77,9 +77,9 @@ In order to set a threshold for the variants that PASS the RF filter, we looked 
 - Proportion singletons
 - Proportion bi-allelic variants
 
-The thresholds were chosen to maximize sensitivity and specificity based on the metrics listed above. Final thresholds were RF true positive bin of <b>0.4</b> in well covered intervals for single nucleotide variants and <b>0.2</b> in well covered intervals for indels.
+The thresholds were chosen to maximize sensitivity and specificity based on the metrics listed above. Final thresholds were RF true positive bin of <b>90</b> in well covered intervals for single nucleotide variants and <b>75</b> in well covered intervals for indels.
 
 ### Variant hard filters
 Two hard filters were also used to exclude variants:
-Excess heterozygotes defined by an inbreeding coefficient < <b>-0.3</b>
-Variants where no sample had a high quality genotype <b>(depth >= 10, genotype quality >= 20 and minor allele balance > 0.2 for heterozygous genotypes)</b>
+- Excess heterozygotes defined by an inbreeding coefficient < <b>-0.3</b>
+- Variants where no sample had a high quality genotype <b>(depth >= 10, genotype quality >= 20 and minor allele balance > 0.2 for heterozygous genotypes)</b>
