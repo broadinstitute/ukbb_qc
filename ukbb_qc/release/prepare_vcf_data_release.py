@@ -654,6 +654,8 @@ def main(args):
 
                 logger.info("Densifying and exporting VCF...")
                 mt = hl.experimental.densify(mt)
+                # Drop END and het non ref to avoid exporting
+                mt = mt.drop("END", "het_non_ref")
 
                 logger.info("Removing low QUAL variants and * alleles...")
                 info_ht = hl.read_table(info_ht_path(data_source, freeze))
