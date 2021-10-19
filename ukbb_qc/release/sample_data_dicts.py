@@ -199,35 +199,9 @@ SAMPLE_ANNOTATIONS = {
             "Set containing all relationship strings (e.g., parent-child) for this sample."
         )
     },
-    "pan_ancestry_meta": {
+    "pan_ancestry_pop": {
         "Description": (
-            "Struct containing ancestry, relatedness, and sex information from the Pan-UK Biobank project (https://pan.ukbb.broadinstitute.org/). "
-            "Also contains covariates used in Pan-UK Biobank GWAS analyses (age, sex, age * sex, age^2, age^2 * sex)."
+            "Sample's ancestry label from the Pan-UK Biobank project (https://pan.ukbb.broadinstitute.org/). One of: AFR, AMR, CSA, EAS, EUR, MID."
         ),
-        "sub_annotations": {
-            "PC1": {"Description": "Sample's scores for population PC 1."},
-            "PC2": {"Description": "Sample's scores for population PC 2."},
-            "PC3": {"Description": "Sample's scores for population PC 3."},
-            "PC4": {"Description": "Sample's scores for population PC 4."},
-            "PC5": {"Description": "Sample's scores for population PC 5."},
-            "PC6": {"Description": "Sample's scores for population PC 6."},
-            "PC7": {"Description": "Sample's scores for population PC 7."},
-            "PC8": {"Description": "Sample's scores for population PC 8."},
-            "PC9": {"Description": "Sample's scores for population PC 9."},
-            "PC10": {"Description": "Sample's scores for population PC 10."},
-            "PC11": {"Description": "Sample's scores for population PC 11."},
-            "PC12": {"Description": "Sample's scores for population PC 12."},
-            "PC13": {"Description": "Sample's scores for population PC 13."},
-            "PC14": {"Description": "Sample's scores for population PC 14."},
-            "PC15": {"Description": "Sample's scores for population PC 15."},
-            "PC16": {"Description": "Sample's scores for population PC 16."},
-            "PC17": {"Description": "Sample's scores for population PC 17."},
-            "PC18": {"Description": "Sample's scores for population PC 18."},
-            "PC19": {"Description": "Sample's scores for population PC 19."},
-            "PC20": {"Description": "Sample's scores for population PC 20."},
-            "pop": {
-                "Description": "Sample's pan-ancestry label. One of: AFR, AMR, CSA, EAS, EUR, MID."
-            },
-        },
     },
 }
