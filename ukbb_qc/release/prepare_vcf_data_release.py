@@ -83,10 +83,11 @@ REGION_FLAG_FIELDS = [
 REGION_FLAG_FIELDS.extend(INTERVAL_FIELDS)
 
 # Remove BaseQRankSum from site and allele-specific fields (this is a legacy annotation)
-# Also remove SB from site fields since we do not release it
+# Also remove SB from site fields, AS_QUALapprox from AS fields since we do not release these
 SITE_FIELDS.remove("BaseQRankSum")
 SITE_FIELDS.remove("SB")
 AS_FIELDS.remove("AS_BaseQRankSum")
+AS_FIELDS.remove("AS_QUALapprox")
 
 # Add sibling singletons to AS_FIELDS
 AS_FIELDS.append("sibling_singleton")
