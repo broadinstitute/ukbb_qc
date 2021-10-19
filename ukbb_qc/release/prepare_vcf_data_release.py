@@ -381,7 +381,10 @@ def main(args):
             # Add AS_SB_TABLE, AS_QUALapprox here because it is missing from the release HT
             info_ht = hl.read_table(info_ht_path(data_source, freeze))
             ht = ht.annotate(
-                info=ht.info.annotate(AS_SB_TABLE=info_ht[ht.key].info.AS_SB_TABLE, AS_QUALapprox=info_ht[ht.key].info.AS_QUALapprox)
+                info=ht.info.annotate(
+                    AS_SB_TABLE=info_ht[ht.key].info.AS_SB_TABLE,
+                    AS_QUALapprox=info_ht[ht.key].info.AS_QUALapprox,
+                )
             )
 
             logger.info("Reading in release patch frequencies...")
