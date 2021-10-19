@@ -80,9 +80,6 @@ VCF_ANNOTATIONS = {
             "NEGATIVE_TRAIN_SITE": {
                 "Description": "Variant was used to build the negative training set of low-quality variants for VQSR."
             },
-            "BaseQRankSum": {
-                "Description": "Z-score from Wilcoxon rank sum test of alternate vs. reference base qualities."
-            },
             "VarDP": {
                 "Description": "Depth over variant genotypes (does not include depth of reference samples)."
             },
@@ -154,6 +151,12 @@ VCF_ANNOTATIONS = {
             },
             "AS_SOR": {
                 "Description": "Allele-specific strand bias estimated by the symmetric odds ratio test.",
+            },
+            "AS_QUALapprox": {
+                "Description": "Allele-specific sum of PL[0] values; used to approximate the QUAL score."
+            },
+            "AS_SB_TABLE": {
+                "Description": "Allele-specific forward/reverse read counts for strand bias tests."
             },
             "AS_VarDP": {
                 "Description": "Allele-specific depth over variant genotypes (does not include depth of reference samples).",
