@@ -126,7 +126,7 @@ def main(args):
         logger.info(logging_statement.format("pan-ancestry HT"))
         right_ht = hl.read_table(pan_ancestry_ht_path())
         left_ht = left_ht.annotate(
-            pan_ancestry_meta=hl.struct(**right_ht[left_ht.ukbb_meta.ukbb_app_26041_id])
+            pan_ancestry_pop=right_ht[left_ht.ukbb_meta.ukbb_app_26041_id].pop
         )
 
         logger.info("Creating checkpoint")
