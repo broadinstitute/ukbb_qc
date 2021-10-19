@@ -526,9 +526,6 @@ def main(args):
             # are not adjusted by the homalt hotfix downstream
             mt = mt.annotate_entries(het_non_ref=mt.LGT.is_het_non_ref())
 
-            logger.info("Splitting densified MT...")
-            mt = hl.experimental.sparse_split_multi(mt)
-
             # Add het_non_ref to ENTRIES (otherwise annotation gets accidentally dropped here)
             ENTRIES.append("het_non_ref")
 
