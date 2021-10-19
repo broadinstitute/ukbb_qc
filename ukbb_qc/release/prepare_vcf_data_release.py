@@ -379,6 +379,12 @@ def main(args):
             ht = ht.annotate(freq=ht.freq[:22])
             ht = ht.annotate_globals(freq_meta=ht.freq_meta[:22])
 
+            # Add AS_SB_TABLE here because it is missing from the release HT
+            info_ht = hl.read_table(info_ht_path(data_source, freeze))
+            ht = ht.annotate(
+                info=ht.info.annotate(AS_SB_TABLE=info_ht[ht.key].info.AS_SB_TABLE)
+            )
+
             logger.info("Reading in release patch frequencies...")
             patch_ht = (
                 hl.read_matrix_table(
