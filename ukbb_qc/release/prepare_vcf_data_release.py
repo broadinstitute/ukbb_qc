@@ -6,6 +6,7 @@ from typing import Dict, List, Union
 import hail as hl
 
 from gnomad.resources.grch38.gnomad import SEXES
+from gnomad.resources.grch38.reference_data import dbsnp
 from gnomad.sample_qc.sex import adjust_sex_ploidy
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
@@ -461,7 +462,7 @@ def main(args):
                 {"vep": {"Description": hl.eval(ht.vep_csq_header)}}
             )
 
-            # NOTE: Correcting rsid here because this was discovered after release HT was created
+            # Re-add rsid to HT and reformat
             logger.info("Reformatting rsid...")
             # dbsnp might have multiple identifiers for one variant
             # thus, rsid is a set annotation, starting with version b154 for dbsnp resource:
@@ -469,6 +470,8 @@ def main(args):
             # `export_vcf` expects this field to be a string, and vcf specs
             # say this field may be delimited by a semi-colon:
             # https://samtools.github.io/hts-specs/VCFv4.2.pdf
+            dbsnp_ht = dbsnp.ht().select("rsid")
+            ht = ht.annotate(rsid=dbsnp_ht[ht.key].rsid)
             ht = ht.annotate(rsid=hl.str(";").join(ht.rsid))
 
             logger.info(
