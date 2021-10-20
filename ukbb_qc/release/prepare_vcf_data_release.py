@@ -480,7 +480,7 @@ def main(args):
             ht = ht.select("info", "filters", "rsid", "qual")
             ht.write(
                 # release_vcf_ht_path(*tranche_data), overwrite=args.overwrite,
-                "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.reexport.ht",
+                "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.ht",
                 overwrite=args.overwrite,
             )
 
