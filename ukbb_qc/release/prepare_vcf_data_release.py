@@ -43,8 +43,6 @@ from ukbb_qc.resources.basics import (
     logging_path,
     release_header_path,
     release_ht_path,
-    release_mt_path,
-    release_vcf_ht_path,
     release_vcf_path,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
@@ -479,7 +477,6 @@ def main(args):
             )
             ht = ht.select("info", "filters", "rsid", "qual")
             ht.write(
-                # release_vcf_ht_path(*tranche_data), overwrite=args.overwrite,
                 "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.ht",
                 overwrite=args.overwrite,
             )
@@ -577,13 +574,20 @@ def main(args):
             mt = mt.key_cols_by(s=mt.meta.ukbb_meta.ukbb_app_26041_id)
 
             logger.info("Annotating release MT with HT annotations...")
-            ht = hl.read_table(release_vcf_ht_path(*tranche_data))
+            ht = hl.read_table(
+                "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.ht"
+            )
             mt = mt.annotate_rows(**ht[mt.row_key])
             mt = mt.annotate_globals(**ht.index_globals())
-            mt.write(release_mt_path(*tranche_data), args.overwrite)
+            mt.write(
+                "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.mt",
+                args.overwrite,
+            )
 
         if args.sanity_check:
-            mt = hl.read_matrix_table(release_mt_path(*tranche_data))
+            mt = hl.read_matrix_table(
+                "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.mt"
+            )
 
             # NOTE: removing lowqual and star alleles here to avoid having additional failed missingness checks
             info_ht = hl.read_table(info_ht_path(data_source, freeze))
@@ -605,7 +609,8 @@ def main(args):
                 "VCF export will densify! Make sure you have an autoscaling cluster."
             )
             mt = hl.read_matrix_table(
-                release_mt_path(*tranche_data), _n_partitions=args.n_shards
+                "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.mt",
+                _n_partitions=args.n_shards,
             )
 
             # NOTE: `qual` annotation is actually `QUALapprox` annotation in 455k tranche
@@ -664,7 +669,9 @@ def main(args):
 
             for contig in contigs:
                 # Read in MT and filter to contig
-                mt = hl.read_matrix_table(release_mt_path(*tranche_data))
+                mt = hl.read_matrix_table(
+                    "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.mt"
+                )
                 mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
                 mt = mt.annotate_rows(**ht[mt.row_key])
 
