@@ -40,7 +40,7 @@ We ran outlier detection on all samples that passed hard filters and included al
 | Outlier filters | 3061 | 450927 | 0.67 |
 | All filters | 33459 | 421212 | 7.36 | 
 
-The majority of the samples removed from QC were samples inferred to have a second-degree or greater relationship with other samples in the dataset. This finding is not unexpected, as previous studies have shown that the UK Biobank data contains a large number (approximately 30%) of related samples (Bycroft, C., Freeman, C., Petkova, D. et al. The UK Biobank resource with deep phenotyping and genomic data. Nature 562, 203-209 (2018). https://doi.org/10.1038/s41586-018-0579-z). 
+The majority of the samples removed from QC were samples inferred to have a second-degree or greater relationship with other samples in the dataset. This finding is not unexpected, as previous studies have shown that the UK Biobank data contains a large number (approximately 30%) of related samples (Bycroft et al. 2018 https://doi.org/10.1038/s41586-018-0579-z). 
 
 ## Variant Quality Control
 For variant QC, we used a combination of a random forest (RF) classifier and hard filters.
