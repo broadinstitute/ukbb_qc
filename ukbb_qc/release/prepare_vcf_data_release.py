@@ -72,6 +72,18 @@ VCF_INFO_DICT["sibling_singleton"] = {
     "Description": "Variant was a callset-wide doubleton that was present only within a sibling pair"
 }
 
+# Add AS_SB_TABLE and AS_QUALapprox to vcf_info_dict
+# NOTE: This is necessary because they were added by default into `INFO_DICT` in a more
+# current version of the gnomad repo than what is necessary to export UKBB data
+VCF_INFO_DICT["AS_SB_TABLE"] = {
+    "Number": ".",
+    "Description": "Allele-specific forward/reverse read counts for strand bias tests",
+}
+VCF_INFO_DICT["AS_QUALapprox"] = {
+    "Number": "1",
+    "Description": "Sum of PL[0] values; used to approximate the QUAL score",
+}
+
 # Add interval QC, capture region to REGION_FLAG_FIELDS and remove decoy
 # NOTE: MISSING_REGION_FIELDS could change for 500K if we get hg38 files
 INTERVAL_FIELDS = ["fail_interval_qc", "outside_capture_region"]
