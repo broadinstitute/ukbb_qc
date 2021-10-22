@@ -551,7 +551,7 @@ def main(args):
                 n_partitions=args.raw_partitions,
                 meta_root="meta",
             ).select_entries(*SPARSE_ENTRIES)
-            mt = mt.transmute_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype)
+            mt = mt.annotate_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype)
 
             logger.info("Removing chrM...")
             mt = hl.filter_intervals(mt, [hl.parse_locus_interval("chrM")], keep=False)
