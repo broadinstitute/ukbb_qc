@@ -6,7 +6,6 @@ from typing import Dict, List, Union
 import hail as hl
 
 from gnomad.resources.grch38.gnomad import SEXES
-from gnomad.resources.grch38.reference_data import dbsnp
 from gnomad.sample_qc.sex import adjust_sex_ploidy
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
@@ -504,7 +503,10 @@ def main(args):
             # `export_vcf` expects this field to be a string, and vcf specs
             # say this field may be delimited by a semi-colon:
             # https://samtools.github.io/hts-specs/VCFv4.2.pdf
-            dbsnp_ht = dbsnp.ht().select("rsid")
+            # dbsnp ht doesn't work in this version of gnomad methods
+            dbsnp_ht = hl.read_table(
+                "gs://gnomad-public-requester-pays/resources/grch38/dbsnp/dbsnp_b154_grch38_all_20200514.ht"
+            ).select("rsid")
             ht = ht.annotate(rsid=dbsnp_ht[ht.key].rsid)
             ht = ht.annotate(rsid=hl.str(";").join(ht.rsid))
 
