@@ -381,8 +381,31 @@ def main(args):
             info_ht = hl.read_table(info_ht_path(data_source, freeze))
             ht = ht.annotate(
                 info=ht.info.annotate(
-                    AS_SB_TABLE=info_ht[ht.key].info.AS_SB_TABLE,
+                    AS_SB_TABLE=hl.array(
+                        [
+                            info_ht[ht.key].info.AS_SB_TABLE[:2],
+                            info_ht[ht.key].info.AS_SB_TABLE[2:],
+                        ]
+                    ),
                     AS_QUALapprox=info_ht[ht.key].info.AS_QUALapprox,
+                )
+            )
+
+            # Reformat AS_SB_TABLE for export
+            # NOTE: Copied this function here because this doesn't exist in the version of the gnomad repo required for
+            # UKB validity checks and export
+            def _get_pipe_expr(
+                array_expr: hl.expr.ArrayExpression,
+            ) -> hl.expr.StringExpression:
+                return hl.delimit(
+                    array_expr.map(lambda x: hl.or_else(hl.str(x), "")), "|"
+                )
+
+            ht = ht.annotate(
+                info=ht.info.annotate(
+                    AS_SB_TABLE=_get_pipe_expr(
+                        ht.info.AS_SB_TABLE.map(lambda x: hl.delimit(x, ","))
+                    )
                 )
             )
 
