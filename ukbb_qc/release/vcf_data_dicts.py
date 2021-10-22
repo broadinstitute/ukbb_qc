@@ -592,25 +592,25 @@ VCF_ANNOTATIONS = {
                 "Description": "Histogram for AB in heterozygous individuals calculated on high quality genotypes; bin edges are: 0.00|0.05|0.10|0.15|0.20|0.25|0.30|0.35|0.40|0.45|0.50|0.55|0.60|0.65|0.70|0.75|0.80|0.85|0.90|0.95|1.00.",
             },
             "gq_hist_alt_raw_bin_freq": {
-                "Description": "Histogram for GQ in heterozygous individuals; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.",
+                "Description": "Histogram for GQ in heterozygous individuals before removing low-confidence genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.",
             },
             "gq_hist_all_raw_bin_freq": {
-                "Description": "Histogram for GQ; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.",
+                "Description": "Histogram for GQ before removing low-confidence genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.",
             },
             "dp_hist_alt_raw_bin_freq": {
-                "Description": "Histogram for DP in heterozygous individuals; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.",
+                "Description": "Histogram for DP in heterozygous individuals before removing low-confidence genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.",
             },
             "dp_hist_alt_raw_n_larger": {
-                "Description": "Count of DP values falling above highest histogram bin edge DP in heterozygous individuals.",
+                "Description": "Count of DP values falling above highest histogram bin edge DP in heterozygous individuals before removing low-confidence genotypes.",
             },
             "dp_hist_all_raw_bin_freq": {
-                "Description": "Histogram for DP; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.",
+                "Description": "Histogram for DP before removing low-confidence genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.",
             },
             "dp_hist_all_raw_n_larger": {
-                "Description": "Count of DP values falling above highest histogram bin edge DP.",
+                "Description": "Count of DP values falling above highest histogram bin edge DP before removing low-confidence genotypes.",
             },
             "ab_hist_alt_raw_bin_freq": {
-                "Description": "Histogram for AB in heterozygous individuals; bin edges are: 0.00|0.05|0.10|0.15|0.20|0.25|0.30|0.35|0.40|0.45|0.50|0.55|0.60|0.65|0.70|0.75|0.80|0.85|0.90|0.95|1.00.",
+                "Description": "Histogram for AB in heterozygous individuals before removing low-confidence genotypes; bin edges are: 0.00|0.05|0.10|0.15|0.20|0.25|0.30|0.35|0.40|0.45|0.50|0.55|0.60|0.65|0.70|0.75|0.80|0.85|0.90|0.95|1.00.",
             },
             "fail_interval_qc": {
                 "Description": "Variant falls within a region where less than 85.0% of samples had a mean coverage of 20X on autosomes and 10X on sex chromosomes."
