@@ -52,7 +52,9 @@ The following training sets were used as true positives for training the random 
 - Transmitted singletons: Variants found in two and only two individuals, which were a parent-offspring pair
 - Sibling singletons: Variants found in two and only two individuals, which were a sibling pair
 - Common (AF > 0.1%) and concordant (> 90% non-reference concordance) array variants
-Variants failing traditional GATK hard filters: <b>QD < 2 | FS > 60 | MQ < 30</b> were used as false positives for the random forest training. To balance the number of variants used as true positive and false positives in the training, we randomly downsample the false positives training set to match the number of training examples in the true positive set.
+Variants failing traditional GATK hard filters: <b>QD < 2 | FS > 60 | MQ < 30</b> were used as false positives for the random forest training. 
+
+To balance the number of variants used as true positive and false positives in the training, we randomly downsample the false positives training set to match the number of training examples in the true positive set.
 
 ### Random forest training features
 We used the following allele and site annotations as features in the random forest model:
