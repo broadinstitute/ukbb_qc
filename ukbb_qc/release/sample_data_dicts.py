@@ -10,7 +10,7 @@ GLOBAL_SAMPLE_ANNOTATIONS = {
             "Contains sex chromosome ploidy cutoffs used when determining sex chromosome karyotypes for sex "
             "imputation. Format: [upper cutoff for single X, (lower cutoff for double X, upper cutoff for double X), "
             "lower cutoff for triple X] and [(lower cutoff for single Y, upper cutoff for single Y), lower cutoff for "
-            "double Y)."
+            "double Y]."
         )
     },
     "population_inference_pca_metrics": {
