@@ -373,9 +373,7 @@ def sample_sum_sanity_checks(
         # because the info metrics will contain fields for AC_adj, AC_XX_adj, and AC_XY_adj
         set([x.split("_")[1] for x in info_metrics if (("adj" in x) and ("AC" in x))])
     )
-    pop_adjusted = set(
-        x for x in pop_adjusted if x != "XX" and x != "XY" and x != "adj"
-    )
+    pop_adjusted = set(x for x in pop_adjusted if x not in ("XX", "XY", "adj"))
 
     pop_found = ht.freq_meta.filter(lambda x: x.contains("pop"))
     pop_found = set(hl.eval(pop_found.group_by(lambda x: x["pop"])).keys())
@@ -637,7 +635,11 @@ def vcf_field_check(
                 )
                 # NOTE: some hists are not exported, so ignoring here
                 # END entry is also not exported (removed during densify)
-                if (field not in hist_fields) and (field != "END"):
+                if (
+                    (field not in hist_fields)
+                    and (field != "END")
+                    and (field != "het_non_ref")
+                ):
                     temp_missing_fields.append(field)
 
         missing_fields.extend(temp_missing_fields)
