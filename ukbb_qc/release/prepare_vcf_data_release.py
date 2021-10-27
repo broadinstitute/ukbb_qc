@@ -634,6 +634,10 @@ def main(args):
                 & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
             )
 
+            # NOTE: Fixing chrY metrics here because they were not correctly annotated into the info struct on the VCF HT
+            mt = mt.annotate_rows(
+                info=mt.info.annotate(**set_female_y_metrics_to_na(mt))
+            )
             sanity_check_release_mt(
                 mt,
                 ukbb_pops=UKBB_POPS,
@@ -649,6 +653,14 @@ def main(args):
             mt = hl.read_matrix_table(
                 "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.mt",
                 _n_partitions=args.n_shards,
+            )
+
+            # NOTE: Fixing chrY metrics here because the code above previously annotated the fixed metrics onto the VCF HT
+            # but added the metrics as top level annotations rather than adding them into the info struct
+            # Line 488 should have been:
+            # ht = ht.annotate(info=ht.info.annotate(**set_female_y_metrics_to_na(ht))
+            mt = mt.annotate_rows(
+                info=mt.info.annotate(**set_female_y_metrics_to_na(mt))
             )
 
             # NOTE: `qual` annotation is actually `QUALapprox` annotation in 455k tranche
