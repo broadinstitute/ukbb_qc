@@ -648,6 +648,10 @@ def main(args):
 
         if args.prepare_release_vcf:
 
+            logger.info("Setting additional hail flag to try to speed up densify...")
+            # According to Tim, this flag parallelizes the single-threaded combine step in densify
+            hl._set_flags(distributed_scan_comb_op="1")
+
             logger.warning(
                 "VCF export will densify! Make sure you have an autoscaling cluster."
             )
