@@ -669,9 +669,6 @@ def main(args):
             # if the type isn't float64
             mt = mt.annotate_rows(qual=hl.float(mt.qual))
 
-            if args.test:
-                mt = mt._filter_partitions(range(2))
-
             logger.info("Reading header dict from pickle...")
             with hl.hadoop_open(release_header_path(*tranche_data), "rb") as p:
                 header_dict = pickle.load(p)
@@ -711,6 +708,9 @@ def main(args):
             if not file_exists(
                 get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False)
             ):
+                print(
+                    get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False)
+                )
                 ht = mt.rows().checkpoint(
                     get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False),
                     overwrite=args.overwrite,
@@ -729,6 +729,8 @@ def main(args):
                 mt = hl.read_matrix_table(
                     "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.mt"
                 )
+                if args.test:
+                    mt = mt._filter_partitions(range(2))
                 mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
                 mt = mt.annotate_rows(**ht[mt.row_key])
 
