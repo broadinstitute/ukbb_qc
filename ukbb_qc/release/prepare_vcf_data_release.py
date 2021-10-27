@@ -7,6 +7,7 @@ import hail as hl
 
 from gnomad.resources.grch38.gnomad import SEXES
 from gnomad.sample_qc.sex import adjust_sex_ploidy
+from gnomad.utils.file_utils import file_exists
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 from gnomad.utils.vep import vep_struct_to_csq
@@ -707,10 +708,13 @@ def main(args):
                 )
             )
 
-            ht = mt.rows().checkpoint(
-                get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False),
-                overwrite=args.overwrite,
-            )
+            if not file_exists(
+                get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False)
+            ):
+                ht = mt.rows().checkpoint(
+                    get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False),
+                    overwrite=args.overwrite,
+                )
 
             # Export VCFs per chromosome
             rg = get_reference_genome(mt.locus)
