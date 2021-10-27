@@ -367,9 +367,15 @@ def sample_sum_sanity_checks(
     # Check if pops are present
     # Get list of all pops present in HT
     pop_adjusted = list(
-        set([x for x in info_metrics if (("adj" in x) and ("raw" not in x))])
+        # This pulls out fields in the info metric that look something like AC_<pop>_adj
+        # It splits on the underscore and takes the second field to extract the pop label
+        # Note that this will also extract the strings 'adj', 'XX', and 'XY'
+        # because the info metrics will contain fields for AC_adj, AC_XX_adj, and AC_XY_adj
+        set([x.split("_")[1] for x in info_metrics if (("adj" in x) and ("AC" in x))])
     )
-    pop_adjusted = set([i.replace("_adj", "") for i in pop_adjusted])
+    pop_adjusted = set(
+        x for x in pop_adjusted if x != "XX" and x != "XY" and x != "adj"
+    )
 
     pop_found = ht.freq_meta.filter(lambda x: x.contains("pop"))
     pop_found = set(hl.eval(pop_found.group_by(lambda x: x["pop"])).keys())
