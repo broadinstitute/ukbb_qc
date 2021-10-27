@@ -770,6 +770,10 @@ def main(args):
                     ).collect()
                 )
 
+                # Exit loop if testing
+                if args.test:
+                    break
+
     finally:
         logger.info("Copying hail log to logging bucket...")
         hl.copy_log(logging_path(*tranche_data))
