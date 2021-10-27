@@ -670,7 +670,7 @@ def main(args):
             mt = mt.annotate_rows(qual=hl.float(mt.qual))
 
             if args.test:
-                mt = mt.filter_partitions(range(2))
+                mt = mt._filter_partitions(range(2))
 
             logger.info("Reading header dict from pickle...")
             with hl.hadoop_open(release_header_path(*tranche_data), "rb") as p:
