@@ -669,6 +669,9 @@ def main(args):
             # if the type isn't float64
             mt = mt.annotate_rows(qual=hl.float(mt.qual))
 
+            # NOTE: Drop QUALapprox here -- it is already in the MT as `qual`
+            mt = mt.annotate_rows(info=mt.info.drop("QUALapprox"))
+
             logger.info("Reading header dict from pickle...")
             with hl.hadoop_open(release_header_path(*tranche_data), "rb") as p:
                 header_dict = pickle.load(p)
