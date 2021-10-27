@@ -715,6 +715,9 @@ def main(args):
                     get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False),
                     overwrite=args.overwrite,
                 )
+            ht = hl.read_table(
+                get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False)
+            )
 
             # Export VCFs per chromosome
             rg = get_reference_genome(mt.locus)
