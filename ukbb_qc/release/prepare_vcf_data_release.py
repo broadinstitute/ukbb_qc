@@ -715,9 +715,6 @@ def main(args):
             if not file_exists(
                 get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False)
             ):
-                print(
-                    get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False)
-                )
                 ht = mt.rows().checkpoint(
                     get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False),
                     overwrite=args.overwrite,
