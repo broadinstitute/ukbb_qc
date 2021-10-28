@@ -1,4 +1,5 @@
 import argparse
+import json
 import logging
 import pickle
 from typing import Dict, List, Union
@@ -721,20 +722,39 @@ def main(args):
             ht = hl.read_table(
                 get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False),
                 # NOTE: This table accidentally wrote to only 2 partitions.
-                # Adding this option to repartition the HT to the same number of partitions as the VCF MT
-                _n_partitions=10757,
+                # Adding this option to repartition the HT to a more reasonable number of partitions
+                _n_partitions=10000,
             )
 
             # Export VCFs per chromosome
             rg = get_reference_genome(mt.locus)
             contigs = rg.contigs[:24]  # autosomes + X/Y
             logger.info(f"Contigs: {contigs}")
+            chrom_var_map = args.chrom_var_map
+            n_var_per_shard = args.n_var_per_shard
 
             for contig in contigs:
+                logger.info("Determining partitioning for %s", contig)
+                # Round to the nearest whole number
+                n_partitions = round(chrom_var_map[contig] / n_var_per_shard)
+
+                # Round the number of partitions to the relevant place
+                # e.g., return 4000 instead of 3839, 900 instead of 913, 70 instead of 69
+                n_digits = -(len(str((n_partitions))) - 1)
+                n_partitions = round(n_partitions, n_digits)
+
                 # Read in MT and filter to contig
                 mt = hl.read_matrix_table(
                     "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.mt"
                 )
+
+                logger.info("Adjusting partitions...")
+                mt = mt.naive_coalesce(n_partitions)
+                ht = mt.rows()
+                # Unkey HT to avoid this error with map_partitions:
+                # ValueError: Table._map_partitions must preserve key fields
+                ht = ht.key_by()
+
                 if args.test:
                     mt = mt._filter_partitions(range(2))
                 mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
@@ -757,13 +777,6 @@ def main(args):
                     mt, mt.sex_karyotype, male_str="XY", female_str="XX"
                 )
                 mt = mt.select_cols()
-
-                logger.info("Adjusting partitions...")
-                mt = mt.naive_coalesce(args.n_shards)
-                ht = mt.rows()
-                # Unkey HT to avoid this error with map_partitions:
-                # ValueError: Table._map_partitions must preserve key fields
-                ht = ht.key_by()
 
                 hl.export_vcf(
                     mt,
@@ -844,9 +857,49 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--n_shards",
-        help="Desired number of shards for output VCF. Can also be used to repartition raw MT on read.",
+        help="Desired number of shards for raw MT. Can also be used to repartition raw MT on read.",
         type=int,
-        default=500,
+        default=3000,
+    )
+    parser.add_argument(
+        "--n_var_per_shard",
+        help="Desired number of variants per output VCF shard.",
+        type=int,
+        # Default is 5000 here because of estimates based on gs://broad-ukbb/broad.freeze_7/release/vcf/broad.freeze_7.chr1.vcf.bgz
+        # This VCF shard is 6.4GiB and has 16152 variants, so each variant is ~0.4MB,
+        # and 5000 variants should produce a shard that is ~2GB
+        default=5000,
+    )
+    parser.add_argument(
+        "--chrom_var_map",
+        help="Number of variants per chromosome in the VCF MT. Used to determine the number of output VCF shards per chromosome.",
+        type=json.loads,
+        default={
+            "chr1": 19193046,
+            "chr2": 14164015,
+            "chr3": 11290556,
+            "chr4": 8055105,
+            "chr5": 8926172,
+            "chr6": 9496506,
+            "chr7": 9614744,
+            "chr8": 6986721,
+            "chr9": 7856805,
+            "chr10": 7916883,
+            "chr11": 10914308,
+            "chr12": 10677476,
+            "chr13": 3833007,
+            "chr14": 6386045,
+            "chr15": 7326938,
+            "chr16": 8522870,
+            "chr17": 11048623,
+            "chr18": 3415118,
+            "chr19": 11182106,
+            "chr20": 4678211,
+            "chr21": 2213473,
+            "chr22": 4564518,
+            "chrX": 6778165,
+            "chrY": 349095,
+        },
     )
     parser.add_argument(
         "--slack_channel", help="Slack channel to post results and notifications to."
