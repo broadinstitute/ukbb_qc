@@ -770,6 +770,7 @@ def main(args):
                     release_vcf_path(*tranche_data, contig=contig),
                     metadata=header_dict,
                     append_to_header=append_to_vcf_header_path(*tranche_data),
+                    parallel="header_per_shard",
                     tabix=True,
                 )
 
