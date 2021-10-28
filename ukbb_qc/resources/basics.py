@@ -666,9 +666,7 @@ def append_to_vcf_header_path(data_source: str, freeze: int) -> str:
         raise DataException(
             "Extra fields to append to VCF header TSV only exists for freeze 7/455K!"
         )
-    return (
-        f"gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/append_to_vcf_header.tsv"
-    )
+    return f"{get_release_path(data_source, freeze)}/vcf/append_to_vcf_header.tsv"
 
 
 def annotation_hists_path(data_source: str, freeze: int) -> str:
