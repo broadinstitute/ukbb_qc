@@ -719,7 +719,10 @@ def main(args):
                     overwrite=args.overwrite,
                 )
             ht = hl.read_table(
-                get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False)
+                get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False),
+                # NOTE: This table accidentally wrote to only 2 partitions.
+                # Adding this option to repartition the HT to the same number of partitions as the VCF MT
+                _n_partitions=10757,
             )
 
             # Export VCFs per chromosome
