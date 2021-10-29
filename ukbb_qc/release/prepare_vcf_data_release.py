@@ -767,12 +767,6 @@ def main(args):
             mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
             mt = mt.annotate_rows(**ht[mt.row_key])
 
-            logger.info("Double checking VCF fields...")
-            # Confirm all VCF fields and descriptions are present
-            if not vcf_field_check(mt, header_dict, new_row_annots, list(mt.entry)):
-                logger.error("Did not pass VCF field check.")
-                return
-
             logger.info("Adjusting partitions...")
             mt = mt.naive_coalesce(n_partitions)
             logger.info("%s has %i", contig, mt.n_partitions())
