@@ -810,9 +810,19 @@ def main(args):
                 keys = part.map(lambda x: x.select("locus", "alleles"))
                 return hl.struct(start=keys[0], end=keys[-1])
 
-            print(
-                ht._map_partitions(lambda p: hl.array([part_min_and_max(p)])).collect()
-            )
+            start_stop_list = ht._map_partitions(
+                lambda p: hl.array([part_min_and_max(p)])
+            ).collect()
+            print(start_stop_list)
+            with hl.hadoop_open(
+                f"gs://broad-ukbb/broad.freeze_7/release/vcf_positions_tsvs/{contig}_start_end_pos.tsv",
+                "w",
+            ) as o:
+                o.write("shard_number\tstart_pos\tend_pos\n")
+                for count, struct in enumerate(start_stop_list):
+                    o.write(
+                        f"{count}\t{struct.start.position}\t{struct.end.position}\n"
+                    )
 
     finally:
         logger.info("Copying hail log to logging bucket...")
