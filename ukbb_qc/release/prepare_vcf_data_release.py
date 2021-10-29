@@ -819,10 +819,13 @@ def main(args):
                 f"gs://broad-ukbb/broad.freeze_7/release/vcf_positions_tsvs/{contig}_start_end_pos.tsv",
                 "w",
             ) as o:
-                o.write("shard_number\tstart_pos\tend_pos\n")
+                o.write("vcf_shard_name\tstart_pos\tend_pos\n")
                 for count, struct in enumerate(start_stop_list):
+                    # Format shard name to have leading zeros
+                    # e.g., 0 should be part-000000.bgz
+                    shard_name = f"part-{count:05d}.bgz"
                     o.write(
-                        f"{count}\t{struct.start.locus.position}\t{struct.end.locus.position}\n"
+                        f"{shard_name}\t{struct.start.locus.position}\t{struct.end.locus.position}\n"
                     )
 
     finally:
