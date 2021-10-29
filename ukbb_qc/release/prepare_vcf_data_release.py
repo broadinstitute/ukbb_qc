@@ -740,12 +740,18 @@ def main(args):
 
                 # Round the number of partitions to the relevant place
                 # e.g., return 4000 instead of 3839, 900 instead of 913, 70 instead of 69
+                # NOTE: The number of shards isn't guaranteed to be even
+                # `hl.naive_coalesce` will return the number of shards found if smaller than desired number
+                # e.g., if the desired number is 2000, but the chromosome only has 1789 partitions,
+                # `hl.naive_coalesce` will do nothing and the chromosome will export to 1789 shards
                 n_digits = -(len(str((n_partitions))) - 1)
                 n_partitions = round(n_partitions, n_digits)
 
                 # Read in MT and filter to contig
+                # Repartition to a large number of partitions here so that the chromosomes have closer to the desired number of shards
                 mt = hl.read_matrix_table(
-                    "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.mt"
+                    "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.mt",
+                    _n_partitions=40000,
                 )
 
                 if args.test:
@@ -755,6 +761,7 @@ def main(args):
 
                 logger.info("Adjusting partitions...")
                 mt = mt.naive_coalesce(n_partitions)
+                logger.info("%s has %i", contig, mt.n_partitions())
                 ht = mt.rows()
                 # Unkey HT to avoid this error with map_partitions:
                 # ValueError: Table._map_partitions must preserve key fields
