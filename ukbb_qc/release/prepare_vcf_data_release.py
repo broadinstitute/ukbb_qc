@@ -822,7 +822,7 @@ def main(args):
                 o.write("shard_number\tstart_pos\tend_pos\n")
                 for count, struct in enumerate(start_stop_list):
                     o.write(
-                        f"{count}\t{struct.start.position}\t{struct.end.position}\n"
+                        f"{count}\t{struct.start.locus.position}\t{struct.end.locus.position}\n"
                     )
 
     finally:
