@@ -771,7 +771,7 @@ def main(args):
             mt = mt.naive_coalesce(n_partitions)
             logger.info("%s has %i partitions", contig, mt.n_partitions())
 
-            logger.info("Densifying and exporting VCF...")
+            logger.info("Densifying...")
             mt = hl.experimental.densify(mt)
             # Drop END and het non ref to avoid exporting
             mt = mt.drop("het_non_ref")
@@ -795,6 +795,7 @@ def main(args):
             mt = adjust_sex_ploidy(mt, mt.sex_karyotype, male_str="XY", female_str="XX")
             mt = mt.select_cols()
 
+            logger.info("Exporting VCF...")
             hl.export_vcf(
                 mt,
                 release_vcf_path(*tranche_data, contig=contig),
