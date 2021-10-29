@@ -10,6 +10,7 @@ from gnomad.resources.grch38.gnomad import SEXES
 from gnomad.sample_qc.sex import adjust_sex_ploidy
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.reference_genome import get_reference_genome
+from gnomad.resources.resource_utils import DataException
 from gnomad.utils.slack import slack_notifications
 from gnomad.utils.vep import vep_struct_to_csq
 from gnomad.utils.vcf import (
@@ -729,86 +730,82 @@ def main(args):
             # Export VCFs per chromosome
             rg = get_reference_genome(mt.locus)
             contigs = rg.contigs[:24]  # autosomes + X/Y
-            logger.info(f"Contigs: {contigs}")
+            contig = args.contig
+            if contig not in contigs:
+                raise DataException(
+                    f"{contig} not in {contigs}. Please double check and restart!"
+                )
+
+            logger.info("Determining partitioning for %s", contig)
             chrom_var_map = args.chrom_var_map
             n_var_per_shard = args.n_var_per_shard
 
-            for contig in contigs:
-                logger.info("Determining partitioning for %s", contig)
-                # Round to the nearest whole number
-                n_partitions = round(chrom_var_map[contig] / n_var_per_shard)
+            # Round to the nearest whole number
+            n_partitions = round(chrom_var_map[contig] / n_var_per_shard)
 
-                # Round the number of partitions to the relevant place
-                # e.g., return 4000 instead of 3839, 900 instead of 913, 70 instead of 69
-                # NOTE: The number of shards isn't guaranteed to be even
-                # `hl.naive_coalesce` will return the number of shards found if smaller than desired number
-                # e.g., if the desired number is 2000, but the chromosome only has 1789 partitions,
-                # `hl.naive_coalesce` will do nothing and the chromosome will export to 1789 shards
-                n_digits = -(len(str((n_partitions))) - 1)
-                n_partitions = round(n_partitions, n_digits)
+            # Round the number of partitions to the relevant place
+            # e.g., return 4000 instead of 3839, 900 instead of 913, 70 instead of 69
+            # NOTE: The number of shards isn't guaranteed to be even
+            # `hl.naive_coalesce` will return the number of shards found if smaller than desired number
+            # e.g., if the desired number is 2000, but the chromosome only has 1789 partitions,
+            # `hl.naive_coalesce` will do nothing and the chromosome will export to 1789 shards
+            n_digits = -(len(str((n_partitions))) - 1)
+            n_partitions = round(n_partitions, n_digits)
 
-                # Read in MT and filter to contig
-                # Repartition to a large number of partitions here so that the chromosomes have closer to the desired number of shards
-                mt = hl.read_matrix_table(
-                    "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.mt",
-                    _n_partitions=40000,
-                )
+            # Read in MT and filter to contig
+            # Repartition to a large number of partitions here so that the chromosomes have closer to the desired number of shards
+            mt = hl.read_matrix_table(
+                "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.mt",
+                _n_partitions=40000,
+            )
 
-                if args.test:
-                    mt = mt._filter_partitions(range(2))
-                mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
-                mt = mt.annotate_rows(**ht[mt.row_key])
+            if args.test:
+                mt = mt._filter_partitions(range(2))
+            mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
+            mt = mt.annotate_rows(**ht[mt.row_key])
 
-                logger.info("Adjusting partitions...")
-                mt = mt.naive_coalesce(n_partitions)
-                logger.info("%s has %i", contig, mt.n_partitions())
-                ht = mt.rows()
-                # Unkey HT to avoid this error with map_partitions:
-                # ValueError: Table._map_partitions must preserve key fields
-                ht = ht.key_by()
+            logger.info("Adjusting partitions...")
+            mt = mt.naive_coalesce(n_partitions)
+            logger.info("%s has %i", contig, mt.n_partitions())
+            ht = mt.rows()
+            # Unkey HT to avoid this error with map_partitions:
+            # ValueError: Table._map_partitions must preserve key fields
+            ht = ht.key_by()
 
-                logger.info("Densifying and exporting VCF...")
-                mt = hl.experimental.densify(mt)
-                # Drop END and het non ref to avoid exporting
-                mt = mt.drop("het_non_ref")
+            logger.info("Densifying and exporting VCF...")
+            mt = hl.experimental.densify(mt)
+            # Drop END and het non ref to avoid exporting
+            mt = mt.drop("het_non_ref")
 
-                logger.info("Removing low QUAL variants and * alleles...")
-                info_ht = hl.read_table(info_ht_path(data_source, freeze))
-                mt = mt.filter_rows(
-                    (~info_ht[mt.row_key].AS_lowqual)
-                    & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
-                )
+            logger.info("Removing low QUAL variants and * alleles...")
+            info_ht = hl.read_table(info_ht_path(data_source, freeze))
+            mt = mt.filter_rows(
+                (~info_ht[mt.row_key].AS_lowqual)
+                & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
+            )
 
-                logger.info("Adjusting sex ploidy...")
-                mt = adjust_sex_ploidy(
-                    mt, mt.sex_karyotype, male_str="XY", female_str="XX"
-                )
-                mt = mt.select_cols()
+            logger.info("Adjusting sex ploidy...")
+            mt = adjust_sex_ploidy(mt, mt.sex_karyotype, male_str="XY", female_str="XX")
+            mt = mt.select_cols()
 
-                hl.export_vcf(
-                    mt,
-                    release_vcf_path(*tranche_data, contig=contig),
-                    metadata=header_dict,
-                    append_to_header=append_to_vcf_header_path(*tranche_data),
-                    parallel="header_per_shard",
-                    tabix=True,
-                )
+            hl.export_vcf(
+                mt,
+                release_vcf_path(*tranche_data, contig=contig),
+                metadata=header_dict,
+                append_to_header=append_to_vcf_header_path(*tranche_data),
+                parallel="header_per_shard",
+                tabix=True,
+            )
 
-                logger.info("Getting start and stops per shard...")
+            logger.info("Getting start and stops per shard...")
 
-                def part_min_and_max(part):
-                    keys = part.map(lambda x: x.select("locus", "alleles"))
-                    return hl.struct(start=keys[0], end=keys[-1])
+            def part_min_and_max(part):
+                keys = part.map(lambda x: x.select("locus", "alleles"))
+                return hl.struct(start=keys[0], end=keys[-1])
 
-                print(
-                    ht._map_partitions(
-                        lambda p: hl.array([part_min_and_max(p)])
-                    ).collect()
-                )
-
-                # Exit loop if testing
-                if args.test:
-                    break
+            print(
+                ht._map_partitions(lambda p: hl.array([part_min_and_max(p)])).collect()
+            )
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -863,10 +860,7 @@ if __name__ == "__main__":
         "--prepare_release_vcf", help="Prepare release VCF", action="store_true"
     )
     parser.add_argument(
-        "--n_shards",
-        help="Desired number of shards for raw MT. Can also be used to repartition raw MT on read.",
-        type=int,
-        default=3000,
+        "--contig", help="Chromosome to export",
     )
     parser.add_argument(
         "--n_var_per_shard",
