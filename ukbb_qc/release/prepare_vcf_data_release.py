@@ -657,69 +657,72 @@ def main(args):
             logger.warning(
                 "VCF export will densify! Make sure you have an autoscaling cluster."
             )
-            mt = hl.read_matrix_table(
-                "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.mt",
-            )
-
-            # NOTE: Fixing chrY metrics here because the code above previously annotated the fixed metrics onto the VCF HT
-            # but added the metrics as top level annotations rather than adding them into the info struct
-            # Line 488 should have been:
-            # ht = ht.annotate(info=ht.info.annotate(**set_female_y_metrics_to_na(ht))
-            mt = mt.annotate_rows(
-                info=mt.info.annotate(**set_female_y_metrics_to_na(mt))
-            )
-
-            # NOTE: `qual` annotation is actually `QUALapprox` annotation in 455k tranche
-            # Need to convert this field to a float because `export_vcf` won't export this field
-            # if the type isn't float64
-            mt = mt.annotate_rows(qual=hl.float(mt.qual))
-
-            # NOTE: Drop QUALapprox here -- it is already in the MT as `qual`
-            mt = mt.annotate_rows(info=mt.info.drop("QUALapprox"))
-
             logger.info("Reading header dict from pickle...")
             with hl.hadoop_open(release_header_path(*tranche_data), "rb") as p:
                 header_dict = pickle.load(p)
 
-            # Reformat names to remove "adj" pre-export
-            # e.g, renaming "AC_adj" to "AC"
-            # All unlabeled frequency information is assumed to be adj
-            row_annots = list(mt.row.info)
-            new_row_annots = []
-            for x in row_annots:
-                x = x.replace("_adj", "")
-                new_row_annots.append(x)
-
-            info_annot_mapping = dict(
-                zip(new_row_annots, [mt.info[f"{x}"] for x in row_annots])
-            )
-
-            # Confirm all VCF fields and descriptions are present
-            if not vcf_field_check(mt, header_dict, new_row_annots, list(mt.entry)):
-                logger.error("Did not pass VCF field check.")
-                return
-
-            mt = mt.transmute_rows(info=hl.struct(**info_annot_mapping))
-
-            # Rearrange INFO field in desired ordering
-            mt = mt.annotate_rows(
-                info=mt.info.select(
-                    "AC",
-                    "AN",
-                    "AF",
-                    "nhomalt",
-                    "rf_tp_probability",
-                    *mt.info.drop("AC", "AN", "AF", "nhomalt", "rf_tp_probability"),
-                )
-            )
-
+            # Reformat VCF annotations and create flat VCF ready HT if it doesn't exist
             if not file_exists(
                 get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False)
             ):
+                mt = hl.read_matrix_table(
+                    "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.mt",
+                )
+
+                # NOTE: Fixing chrY metrics here because the code above previously annotated the fixed metrics onto the VCF HT
+                # but added the metrics as top level annotations rather than adding them into the info struct
+                # Line 488 should have been:
+                # ht = ht.annotate(info=ht.info.annotate(**set_female_y_metrics_to_na(ht))
+                mt = mt.annotate_rows(
+                    info=mt.info.annotate(**set_female_y_metrics_to_na(mt))
+                )
+
+                # NOTE: `qual` annotation is actually `QUALapprox` annotation in 455k tranche
+                # Need to convert this field to a float because `export_vcf` won't export this field
+                # if the type isn't float64
+                mt = mt.annotate_rows(qual=hl.float(mt.qual))
+
+                # NOTE: Drop QUALapprox here -- it is already in the MT as `qual`
+                mt = mt.annotate_rows(info=mt.info.drop("QUALapprox"))
+
+                # Reformat names to remove "adj" pre-export
+                # e.g, renaming "AC_adj" to "AC"
+                # All unlabeled frequency information is assumed to be adj
+                row_annots = list(mt.row.info)
+                new_row_annots = []
+                for x in row_annots:
+                    x = x.replace("_adj", "")
+                    new_row_annots.append(x)
+
+                info_annot_mapping = dict(
+                    zip(new_row_annots, [mt.info[f"{x}"] for x in row_annots])
+                )
+
+                # Confirm all VCF fields and descriptions are present
+                if not vcf_field_check(mt, header_dict, new_row_annots, list(mt.entry)):
+                    logger.error("Did not pass VCF field check.")
+                    return
+
+                mt = mt.transmute_rows(info=hl.struct(**info_annot_mapping))
+
+                # Rearrange INFO field in desired ordering
+                mt = mt.annotate_rows(
+                    info=mt.info.select(
+                        "AC",
+                        "AN",
+                        "AF",
+                        "nhomalt",
+                        "rf_tp_probability",
+                        *mt.info.drop("AC", "AN", "AF", "nhomalt", "rf_tp_probability"),
+                    )
+                )
+
+                # Write flattened VCF ready HT
                 ht = mt.rows().checkpoint(
                     get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False),
                     overwrite=args.overwrite,
                 )
+
             ht = hl.read_table(
                 get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False),
                 # NOTE: This table accidentally wrote to only 2 partitions.
@@ -763,6 +766,12 @@ def main(args):
                 mt = mt._filter_partitions(range(2))
             mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
             mt = mt.annotate_rows(**ht[mt.row_key])
+
+            logger.info("Double checking VCF fields...")
+            # Confirm all VCF fields and descriptions are present
+            if not vcf_field_check(mt, header_dict, new_row_annots, list(mt.entry)):
+                logger.error("Did not pass VCF field check.")
+                return
 
             logger.info("Adjusting partitions...")
             mt = mt.naive_coalesce(n_partitions)
