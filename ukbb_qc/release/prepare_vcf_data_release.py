@@ -760,7 +760,7 @@ def main(args):
             mt = hl.read_matrix_table(
                 "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.mt",
                 _n_partitions=40000,
-            )
+            ).select_rows()
 
             if args.test:
                 mt = mt._filter_partitions(range(2))
