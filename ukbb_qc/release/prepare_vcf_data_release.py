@@ -748,17 +748,17 @@ def main(args):
                     "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.mt"
                 )
 
+                if args.test:
+                    mt = mt._filter_partitions(range(2))
+                mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
+                mt = mt.annotate_rows(**ht[mt.row_key])
+
                 logger.info("Adjusting partitions...")
                 mt = mt.naive_coalesce(n_partitions)
                 ht = mt.rows()
                 # Unkey HT to avoid this error with map_partitions:
                 # ValueError: Table._map_partitions must preserve key fields
                 ht = ht.key_by()
-
-                if args.test:
-                    mt = mt._filter_partitions(range(2))
-                mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
-                mt = mt.annotate_rows(**ht[mt.row_key])
 
                 logger.info("Densifying and exporting VCF...")
                 mt = hl.experimental.densify(mt)
