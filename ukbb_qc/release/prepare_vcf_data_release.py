@@ -731,7 +731,7 @@ def main(args):
             )
 
             # Export VCFs per chromosome
-            rg = get_reference_genome(mt.locus)
+            rg = get_reference_genome(ht.locus)
             contigs = rg.contigs[:24]  # autosomes + X/Y
             contig = args.contig
             if contig not in contigs:
