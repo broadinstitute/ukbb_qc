@@ -767,6 +767,10 @@ def main(args):
             mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
             mt = mt.annotate_rows(**ht[mt.row_key])
 
+            logger.info("Adjusting partitions...")
+            mt = mt.naive_coalesce(n_partitions)
+            logger.info("%s has %i partitions", contig, mt.n_partitions())
+
             logger.info("Densifying and exporting VCF...")
             mt = hl.experimental.densify(mt)
             # Drop END and het non ref to avoid exporting
@@ -779,9 +783,9 @@ def main(args):
                 & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
             )
 
-            logger.info("Adjusting partitions...")
+            logger.info("Adjusting partitions again post-densify...")
             mt = mt.naive_coalesce(n_partitions)
-            logger.info("%s has %i", contig, mt.n_partitions())
+            logger.info("%s has %i partitions post-densify", contig, mt.n_partitions())
             ht = mt.rows()
             # Unkey HT to avoid this error with map_partitions:
             # ValueError: Table._map_partitions must preserve key fields
