@@ -830,7 +830,10 @@ def main(args):
 
     finally:
         logger.info("Copying hail log to logging bucket...")
-        hl.copy_log(logging_path(*tranche_data))
+        if args.prepare_release_vcf:
+            hl.copy_log(f"{logging_path(*tranche_data)}/vcf_release_{contig}.log")
+        else:
+            hl.copy_log(logging_path(*tranche_data))
 
 
 if __name__ == "__main__":
