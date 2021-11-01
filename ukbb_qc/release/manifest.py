@@ -88,7 +88,7 @@ def generate_manifest(
     """
     file_urls = get_urls(url_file_path)
 
-    coordinate_temp_path = "gs://broad-ukbb/broad.freeze_7/temp"
+    coordinate_temp_path = "gs://broad-ukbb/broad.freeze_7/temp/coodinates"
     with open(out_file, "w") as o:
         # Write header
         o.write("file_name\tlink\tmd5sum\theader_lo\theader_hi\n")
