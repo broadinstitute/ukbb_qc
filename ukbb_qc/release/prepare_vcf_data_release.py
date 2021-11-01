@@ -802,7 +802,7 @@ def main(args):
                 metadata=header_dict,
                 append_to_header=append_to_vcf_header_path(*tranche_data),
                 parallel="header_per_shard",
-                tabix=True,
+                # Removed tabix here because the repackaging code produces an index
             )
 
             logger.info("Getting start and stops per shard...")
