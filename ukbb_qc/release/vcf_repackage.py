@@ -53,7 +53,7 @@ def main(args):
     contigs = rg.contigs[:24]  # autosomes + X/Y
     logger.info(f"Contigs: {contigs}")
 
-    contig = args.contigs
+    contig = args.contig
     if contig not in contigs:
         raise DataException(
             f"{contig} not in {contigs}. Please double check and restart!"
