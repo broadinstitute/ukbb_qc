@@ -662,8 +662,11 @@ def main(args):
                 header_dict = pickle.load(p)
 
             # Reformat VCF annotations and create flat VCF ready HT if it doesn't exist
-            if not file_exists(
-                get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False)
+            if (
+                not file_exists(
+                    get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False)
+                )
+                or args.overwrite_flat_vcf_ht
             ):
                 mt = hl.read_matrix_table(
                     "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.mt",
@@ -717,17 +720,44 @@ def main(args):
                     )
                 )
 
+                # NOTE: adding this here because this code uses an older version of the gnomad methods repo
+                # where `adjust_vcf_incompatible_types` doesn't exist
+                logger.info("Adjusting VCF incompatible types...")
+                info_type_convert_expr = {}
+                # Convert int64 fields to int32 (int64 isn't supported by VCF)
+                for f, ft in ht.info.dtype.items():
+                    if ft == hl.dtype("int64"):
+                        logger.warning(
+                            "Coercing field info.%s from int64 to int32 for VCF output. Value will be capped at int32 max value.",
+                            f,
+                        )
+                        info_type_convert_expr.update(
+                            {f: hl.int32(hl.min(2 ** 31 - 1, ht.info[f]))}
+                        )
+                    elif ft == hl.dtype("array<int64>"):
+                        logger.warning(
+                            "Coercing field info.%s from array<int64> to array<int32> for VCF output. Array values will be capped "
+                            "at int32 max value.",
+                            f,
+                        )
+                        info_type_convert_expr.update(
+                            {
+                                f: ht.info[f].map(
+                                    lambda x: hl.int32(hl.min(2 ** 31 - 1, x))
+                                )
+                            }
+                        )
+
+                ht = ht.annotate(info=ht.info.annotate(**info_type_convert_expr))
+
                 # Write flattened VCF ready HT
                 ht = mt.rows().checkpoint(
                     get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False),
-                    overwrite=args.overwrite,
+                    overwrite=True,
                 )
 
             ht = hl.read_table(
                 get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False),
-                # NOTE: This table accidentally wrote to only 2 partitions.
-                # Adding this option to repartition the HT to a more reasonable number of partitions
-                _n_partitions=10000,
             )
 
             # Export VCFs per chromosome
@@ -882,6 +912,11 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--prepare_release_vcf", help="Prepare release VCF", action="store_true"
+    )
+    parser.add_argument(
+        "--overwrite_flat_vcf_ht",
+        help="Overwrite HT with annotations flattened from nested structs for VCF export",
+        action="store_true",
     )
     parser.add_argument(
         "--contig", help="Chromosome to export",
