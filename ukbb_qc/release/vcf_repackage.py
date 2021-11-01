@@ -77,7 +77,12 @@ def main(args):
             output_tabix = f"{output_name}.tbi"
             output_coordinates = f"{output_name}_coordinates.tsv"
             j = init_job(
-                batch, f"{shard} repackage", DOCKER_IMAGE, args.cpu, args.memory,
+                batch,
+                f"{shard} repackage",
+                DOCKER_IMAGE,
+                args.cpu,
+                args.memory,
+                args.disk_size,
             )
             j.command(
                 f"""gcloud -q auth activate-service-account --key-file=/gsa-key/key.json"""
@@ -98,12 +103,17 @@ EOF"""
 
 
 if __name__ == "__main__":
-    p = init_arg_parser(default_cpu=8, default_billing_project="gnomad-production")
+    p = init_arg_parser(
+        default_cpu=1, default_memory=7, default_billing_project="gnomad-production"
+    )
     p.add_argument(
         "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
     )
     p.add_argument(
         "--contig", help="Chromosome to repackage",
+    )
+    p.add_argument(
+        "--disk-size", help="Storage (in GB) for batch jobs", default=10, type=int
     )
     p.add_argument(
         "--output-dir",
