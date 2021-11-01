@@ -11,7 +11,6 @@ from tgg.batch.batch_utils import (
 )
 
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.reference_genome import get_reference_genome
 
 from ukbb_qc.resources.basics import release_vcf_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
@@ -49,8 +48,10 @@ def main(args):
     coordinates_output_dir = "gs://broad-ukbb/broad.freeze_7/temp"
 
     logger.info("Getting VCF shards...")
-    rg = get_reference_genome("GRCh38")
-    contigs = rg.contigs[:24]  # autosomes + X/Y
+    contigs = []
+    for i in range(1, 23):
+        contigs.append(f"chr{i}")
+    contigs.extend(["chrX", "chrY"])
     logger.info(f"Contigs: {contigs}")
 
     contig = args.contig
