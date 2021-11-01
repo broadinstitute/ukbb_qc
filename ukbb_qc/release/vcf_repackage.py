@@ -11,6 +11,7 @@ from tgg.batch.batch_utils import (
 )
 
 from gnomad.resources.resource_utils import DataException
+from gnomad.utils.file_utils import parallel_file_exists
 
 from ukbb_qc.resources.basics import release_vcf_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
@@ -45,7 +46,7 @@ def main(args):
     freeze = args.freeze
     tranche_data = (data_source, freeze)
     output_dir = args.output_dir
-    coordinates_output_dir = "gs://broad-ukbb/broad.freeze_7/temp"
+    coordinates_output_dir = "gs://broad-ukbb/broad.freeze_7/temp/coordinates"
 
     logger.info("Getting VCF shards...")
     contigs = []
@@ -67,10 +68,28 @@ def main(args):
         .strip()
         .split("\n")
     )
+    logger.info("Found %i shards", len(shards))
+
+    logger.info("Checking if any output files already exist...")
+    output_coordinate_file_map = {}
+    for shard in shards:
+        output_name = f"ukb26041_{contig}_block{os.path.split(shard)[-1].split('.')[0].split('-')[1]}.repackaged.gz"
+        output_coordinate_file_map[
+            shard
+        ] = f"{coordinates_output_dir}/{output_name}_coordinates.tsv"
+    output_coordinate_files_exist = parallel_file_exists(
+        list(output_coordinate_file_map.values())
+    )
+
+    shards_to_repackage = []
+    for shard in output_coordinate_file_map:
+        if not output_coordinate_files_exist[output_coordinate_file_map[shard]]:
+            shards_to_repackage.append(shard)
+    logger.info("Found %i shards to repackage", len(shards_to_repackage))
 
     # Process shards
     with run_batch(args, batch_name="Repackage VCF shards") as batch:
-        for shard in tqdm(shards, unit="shards"):
+        for shard in tqdm(shards_to_repackage, unit="shards"):
             # Naming the output shard with this format:
             # ukb<field_id>_chr<#>_block<#>.repackaged.gz
             # Using 'repackaged' + gz extension since that is the extension DNANexus uses in their code
