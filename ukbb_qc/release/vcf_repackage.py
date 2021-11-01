@@ -124,7 +124,7 @@ EOF"""
 
 if __name__ == "__main__":
     p = init_arg_parser(
-        default_cpu=2, default_memory=8, default_billing_project="gnomad-production"
+        default_cpu=2, default_memory=16, default_billing_project="gnomad-production"
     )
     p.add_argument(
         "--freeze", help="Data freeze to use", default=CURRENT_FREEZE, type=int
