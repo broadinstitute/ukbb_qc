@@ -722,6 +722,7 @@ def main(args):
 
                 # NOTE: adding this here because this code uses an older version of the gnomad methods repo
                 # where `adjust_vcf_incompatible_types` doesn't exist
+                ht = mt.rows()
                 logger.info("Adjusting VCF incompatible types...")
                 info_type_convert_expr = {}
                 # Convert int64 fields to int32 (int64 isn't supported by VCF)
@@ -751,7 +752,7 @@ def main(args):
                 ht = ht.annotate(info=ht.info.annotate(**info_type_convert_expr))
 
                 # Write flattened VCF ready HT
-                ht = mt.rows().checkpoint(
+                ht.write(
                     get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False),
                     overwrite=True,
                 )
@@ -861,6 +862,7 @@ def main(args):
     finally:
         logger.info("Copying hail log to logging bucket...")
         if args.prepare_release_vcf:
+            contig = args.contig
             hl.copy_log(f"{logging_path(*tranche_data)}/vcf_release_{contig}.log")
         else:
             hl.copy_log(logging_path(*tranche_data))
