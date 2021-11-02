@@ -40,7 +40,8 @@ def main(args):
     Required for return of results to UKBB.
 
     .. note::
-        Run this script in the same directory as `ukbb_header_reformat.sh`.
+        - Run this script in the same directory as `ukbb_header_reformat.sh`.
+        - This script needs a more recent version of the gnomad methods repo than the VCF export code as it relies on `parallel_file_exists`.
     """
     data_source = "broad"
     freeze = args.freeze
