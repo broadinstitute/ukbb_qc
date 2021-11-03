@@ -406,7 +406,7 @@ def main(args):
             )
 
             # Reformat AS_SB_TABLE for export
-            # NOTE: Copied this function here because this doesn't exist in the version of the gnomad repo required for
+            # NOTE: Copied this function here because this doesn't exist in the version of the gnomAD repo required for
             # UKB validity checks and export
             def _get_pipe_expr(
                 array_expr: hl.expr.ArrayExpression,
