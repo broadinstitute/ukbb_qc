@@ -8,6 +8,7 @@ from gnomad.assessment.sanity_checks import (
     make_filters_sanity_check_expr,
     sample_sum_check,
 )
+from gnomad.resources.resource_utils import DataException
 from gnomad.utils.vcf import HISTS
 
 from ukbb_qc.utils.constants import UKBB_POPS, UKBB_SEXES
@@ -381,7 +382,7 @@ def sample_sum_sanity_checks(
     # Check if any pops that should have been exported are missing from freq meta
     missing_pops = set(pops.keys()) - pop_found
     if len(missing_pops) != 0:
-        logger.warning(f"Missing {missing_pops} pops!")
+        raise DataException(f"Missing {missing_pops} pops!")
 
     # Check for pops in freq meta but not info metrics
     pops_in_meta_but_not_info = pop_found.difference(pop_adjusted)
