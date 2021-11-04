@@ -74,6 +74,12 @@ def main(args):
     logger.info("Checking if any output files already exist...")
     output_coordinate_file_map = {}
     for shard in shards:
+        # Skip chr9 part-00000.bgz shard (it only has a header)
+        if (
+            shard
+            == "gs://broad-ukbb/broad.freeze_7/release/vcf/broad.freeze_7.chr9.vcf.bgz/part-00000.bgz"
+        ):
+            continue
         output_name = f"ukb26041_{contig}_block{os.path.split(shard)[-1].split('.')[0].split('-')[1]}.repackaged.gz"
         output_coordinate_file_map[
             shard
@@ -91,6 +97,12 @@ def main(args):
     # Process shards
     with run_batch(args, batch_name="Repackage VCF shards") as batch:
         for shard in tqdm(shards_to_repackage, unit="shards"):
+            if (
+                shard
+                == "gs://broad-ukbb/broad.freeze_7/release/vcf/broad.freeze_7.chr9.vcf.bgz/part-00000.bgz"
+            ):
+                logger.info("Shard is empty chr9 shard. Continuing...")
+                continue
             # Naming the output shard with this format:
             # ukb<field_id>_chr<#>_block<#>.repackaged.gz
             # Using 'repackaged' + gz extension since that is the extension DNANexus uses in their code
