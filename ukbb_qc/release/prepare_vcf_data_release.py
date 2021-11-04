@@ -505,7 +505,7 @@ def main(args):
             # The code below re-adds rsid annotation to HT and reformats for export
             logger.info("Reformatting rsid...")
             # dbsnp might have multiple identifiers for one variant
-            # thus, rsid is a set annotation, starting with version b154 for dbsnp resource:
+            # Thus, rsid is a set annotation, starting with version b154 for dbsnp resource:
             # https://github.com/broadinstitute/gnomad_methods/blob/master/gnomad/resources/grch38/reference_data.py#L136
             # `export_vcf` expects this field to be a string, and vcf specs
             # say this field may be delimited by a semi-colon:
