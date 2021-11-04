@@ -497,8 +497,8 @@ def main(args):
                 {"vep": {"Description": hl.eval(ht.vep_csq_header)}}
             )
 
-            # NOTE: rsid on release HT is a string but should be a set -- need to fix before releasing
-            # Re-add rsid annotation to HT and reformat for export
+            # NOTE: rsid on release HT is a string but should be a set
+            # The code below re-adds rsid annotation to HT and reformats for export
             logger.info("Reformatting rsid...")
             # dbsnp might have multiple identifiers for one variant
             # thus, rsid is a set annotation, starting with version b154 for dbsnp resource:
