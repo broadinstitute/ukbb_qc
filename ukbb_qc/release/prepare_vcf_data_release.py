@@ -796,7 +796,7 @@ def main(args):
 
             logger.info("Densifying...")
             mt = hl.experimental.densify(mt)
-            # Drop END and het non ref to avoid exporting
+            # Drop het non ref to avoid exporting
             mt = mt.drop("het_non_ref")
 
             logger.info("Removing low QUAL variants and * alleles...")
