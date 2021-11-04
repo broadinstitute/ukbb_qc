@@ -75,8 +75,8 @@ VCF_INFO_DICT["sibling_singleton"] = {
 }
 
 # Add AS_SB_TABLE and AS_QUALapprox to vcf_info_dict
-# NOTE: This is necessary because they were added by default into `INFO_DICT` in a more
-# current version of the gnomad repo than what is necessary to export UKBB data
+# NOTE: This is necessary because the current version of the gnomAD repo has these values in `INFO_DICT`,
+# but the older version of the gnomAD repo required to export UKB data does not
 VCF_INFO_DICT["AS_SB_TABLE"] = {
     "Number": ".",
     "Description": "Allele-specific forward/reverse read counts for strand bias tests",
