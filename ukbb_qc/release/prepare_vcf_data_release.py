@@ -353,6 +353,10 @@ def main(args):
     freeze = args.freeze
     tranche_data = (data_source, freeze)
 
+    # Path to VCF HT/VCF MT (not using resource to avoid overwriting previously created HT/MT)
+    ukb_ht_path = "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.ht"
+    ukb_vcf_mt_path = "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.mt"
+
     # NOTE: This isn't generally recommended, but these export steps appear to be particularly
     # slow if this flag isn't set
     logger.info("Setting hail flag (to try to speed up computations)...")
@@ -518,8 +522,7 @@ def main(args):
             )
             ht = ht.select("info", "filters", "rsid", "qual")
             ht.write(
-                "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.ht",
-                overwrite=args.overwrite,
+                ukb_ht_path, overwrite=args.overwrite,
             )
 
             # Make filter dict and add field for MonoAllelic filter
@@ -615,20 +618,15 @@ def main(args):
             mt = mt.key_cols_by(s=mt.meta.ukbb_meta.ukbb_app_26041_id)
 
             logger.info("Annotating release MT with HT annotations...")
-            ht = hl.read_table(
-                "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.ht"
-            )
+            ht = hl.read_table(ukb_ht_path)
             mt = mt.annotate_rows(**ht[mt.row_key])
             mt = mt.annotate_globals(**ht.index_globals())
             mt.write(
-                "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.mt",
-                args.overwrite,
+                ukb_vcf_mt_path, args.overwrite,
             )
 
         if args.sanity_check:
-            mt = hl.read_matrix_table(
-                "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.mt"
-            )
+            mt = hl.read_matrix_table(ukb_vcf_mt_path)
 
             # NOTE: removing lowqual and star alleles here to avoid having additional failed missingness checks
             info_ht = hl.read_table(info_ht_path(data_source, freeze))
@@ -668,9 +666,7 @@ def main(args):
                 )
                 or args.overwrite_flat_vcf_ht
             ):
-                mt = hl.read_matrix_table(
-                    "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.mt",
-                )
+                mt = hl.read_matrix_table(ukb_vcf_mt_path,)
 
                 # NOTE: Fixing chrY metrics here because the code above previously annotated the fixed metrics onto the VCF HT
                 # but added the metrics as top level annotations rather than adding them into the info struct
@@ -692,10 +688,7 @@ def main(args):
                 # e.g, renaming "AC_adj" to "AC"
                 # All unlabeled frequency information is assumed to be adj
                 row_annots = list(mt.row.info)
-                new_row_annots = []
-                for x in row_annots:
-                    x = x.replace("_adj", "")
-                    new_row_annots.append(x)
+                new_row_annots = [x.replace("_adj", "") for x in row_annots]
 
                 info_annot_mapping = dict(
                     zip(new_row_annots, [mt.info[f"{x}"] for x in row_annots])
@@ -789,8 +782,7 @@ def main(args):
             # Read in MT and filter to contig
             # Repartition to a large number of partitions here so that the chromosomes have closer to the desired number of shards
             mt = hl.read_matrix_table(
-                "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.mt",
-                _n_partitions=40000,
+                ukb_vcf_mt_path, _n_partitions=40000,
             ).select_rows()
 
             if args.test:
