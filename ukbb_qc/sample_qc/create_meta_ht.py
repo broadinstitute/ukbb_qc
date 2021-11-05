@@ -68,7 +68,7 @@ def main(args):
         ).select("ukbb_meta")
         right_ht = get_age_ht(freeze)
         left_ht = left_ht.annotate(
-            ukbb_meta=left_ht.ukbb_meta.annotate(age=right_ht[left_ht.key].age)
+            ukb_meta=left_ht.ukbb_meta.annotate(age=right_ht[left_ht.key].age)
         )
 
         logger.info("Filtering to samples with defined batch...")
