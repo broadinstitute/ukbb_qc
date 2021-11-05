@@ -189,9 +189,6 @@ SAMPLE_ANNOTATIONS = {
             "release": {
                 "Description": "Whether the sample should be included in the final release (True if the sample has a defined `batch` and is high quality)."
             },
-            "qc_metrics_filters": {
-                "Description": "Set summarizing any outlier detection flags for this sample."
-            },
         },
     },
     "relatedness_inference_relationships": {
@@ -199,9 +196,16 @@ SAMPLE_ANNOTATIONS = {
             "Set containing all relationship strings (e.g., parent-child) for this sample."
         )
     },
+    "gnomad_pc_project_pop": {
+        "Description": "Sample's ancestry label created by projecting onto gnomAD population principal components. Used to create sample's hybrid ancestry label.",
+    },
+    "hybrid_pop": {
+        "Description": "Sample's hybrid ancestry label (used in sample QC).",
+    },
     "pan_ancestry_pop": {
         "Description": (
-            "Sample's ancestry label from the Pan-UK Biobank project (https://pan.ukbb.broadinstitute.org/). One of: AFR, AMR, CSA, EAS, EUR, MID."
+            "Sample's ancestry label from the Pan-UK Biobank project (https://pan.ukbb.broadinstitute.org/). One of: AFR, AMR, CSA, EAS, EUR, MID. "
+            "These labels were used for frequency calculations instead of the hybrid ancestry labels."
         ),
     },
 }
