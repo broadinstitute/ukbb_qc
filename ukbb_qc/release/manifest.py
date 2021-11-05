@@ -15,7 +15,7 @@ logging.basicConfig(
 logger = logging.getLogger("checksums")
 logger.setLevel(logging.INFO)
 
-PATH = "gs://broad-ukbb-requester-pays/broad.freeze_7/sharded_vcf/"
+PATH = "gs://broad-ukbb-requester-pays/broad.freeze_7/sharded_vcf"
 """
 Path to requester pays bucket containing repackaged VCF shards and indices.
 """
