@@ -1,4 +1,5 @@
 import argparse
+import base64
 import logging
 import os
 import subprocess
@@ -6,7 +7,7 @@ from typing import Dict, List, Tuple
 
 import hail as hl
 
-from gnomad.utils.file_utils import get_file_stats
+from google.cloud import storage
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -69,7 +70,7 @@ def generate_manifest(
     shards: List[str],
     indices: List[str],
     url_file_path: str,
-    project_id: str = "maclab-ukbb",
+    md5sums: Dict[str, str],
 ) -> None:
     """
     Generate manifest file for VCF shards.
@@ -81,8 +82,7 @@ def generate_manifest(
     :param List[str] shards: List of VCF shard file names.
     :param List[str] indices: List of VCF tabix index names.
     :param str url_file_path: Path to file containing presigned URLs.
-    :param str project_id: Google cloud project. Required for file stats function since VCF shards and indices
-        are in requester-pays bucket.
+    :param Dict[str, str] md5sums: Dictionary containing file name (key) and md5sum (value).
     :return: Nothing (writes to output file)
     :rtype: None
     """
@@ -107,7 +107,7 @@ def generate_manifest(
             )
 
             # Get md5 checksum
-            _, _, md5 = get_file_stats(vcf_url, project_id)
+            md5 = md5sums[shard]
 
             # Write to output
             o.write(f"{shard}\t{url}\t{md5}\t{low}\t{high}\n")
@@ -118,13 +118,45 @@ def generate_manifest(
                 index_url = f"{PATH}/{index}"
 
                 # Get presigned url
-                url = file_urls[vcf_url]
+                url = file_urls[index_url]
 
                 # Get md5 checksum
-                _, _, md5 = get_file_stats(index_url, project_id)
+                md5 = md5sums[index]
 
                 # Write to output
                 o.write(f"{index}\t{url}\t{md5}\tNA\tNA\n")
+
+
+def get_md5sums(bucket: str, prefix: str, gcloud_project: str) -> Dict[str, str]:
+    """
+    Get md5sums.
+
+    Uses Google's Python API to get md5 checksums:
+    https://googleapis.dev/python/storage/latest/client.html#google.cloud.storage.client.Client.list_blobs
+    https://googleapis.dev/python/storage/latest/blobs.html
+
+    Using `list_blobs` pulls md5 checksums within a few minutes for the entire bucket.
+
+    :param str bucket: Top-level bucket that contains all VCF shards/indices.
+    :param str prefix: Name of buckets that contain VCF shards/indices.
+    :param str gcloud_project: Name of Google cloud project.
+    :return: Dictionary of VCF/VCF index file names and their md5 checksums.
+    :rtype: Dict[str, str]
+    """
+    md5sums = {}
+
+    logger.info("Listing blobs (faster way to get md5sums...")
+    client = storage.Client()
+    bucket = storage.Bucket(client, bucket, user_project=gcloud_project)
+    # List all blobs ONLY in the freeze_7 VCF bucket
+    all_blobs = list(client.list_blobs(bucket, prefix=prefix))
+    for blob in all_blobs:
+        file_name = blob.name
+        # Skip anb Blobs that do not contain VCF shard or index information
+        if "repackaged" not in file_name:
+            continue
+        md5sums[file_name] = base64.b64decode(blob.md5_hash).hex()
+    return md5sums
 
 
 def main(args):
@@ -148,12 +180,31 @@ def main(args):
     indices = [os.path.split(f)[-1] for f in files if f.endswith(".tbi")]
 
     logger.info("Generating manifest file...")
-    generate_manifest(out_file, shards, indices, args.url)
+    md5sums = get_md5sums(args.bucket, args.prefix, args.gcloud_project)
+    generate_manifest(out_file, shards, indices, args.url, md5sums)
 
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-b",
+        "--bucket",
+        help="Name of top-level bucket containing VCF shards and indices",
+        default="broad-ukbb-requester-pays",
+    )
+    parser.add_argument(
+        "-p",
+        "--prefix",
+        help="Name of buckets within top-level bucket that contain VCF shards and indices",
+        default="broad.freeze_7/sharded_vcf/",
+    )
+    parser.add_argument(
+        "-g",
+        "--gcloud-project",
+        help="Name of Google project associated with VCF shards/indices.",
+        default="maclab-ukbb",
+    )
     parser.add_argument(
         "-u", "--url", help="Path to local TSV containing presigned URLs",
     )
