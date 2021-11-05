@@ -35,6 +35,6 @@ if __name__ == "__main__":
         "--output-tsv-path",
         help="Path to local output file. Required for file stats function because TSVs with shard start/end positions are in a requester-pays bucket.",
     )
-    parser.add_argument("--project-id", help="Project ID.")
+    parser.add_argument("--project-id", help="Project ID.", default="maclab-ukbb")
     args = parser.parse_args()
     main(args)
