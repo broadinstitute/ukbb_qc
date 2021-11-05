@@ -47,7 +47,7 @@ The majority of the samples removed from QC were samples inferred to have a seco
 ## Variant Quality Control
 For variant QC, we used a combination of a random forest (RF) classifier and hard filters.
 
-### Random forest training sets
+### Random forest (RF) training sets
 The following training sets were used as true positives for training the random forest model:
 - Omni: SNVs present on the Omni 2.5 genotyping array and found in 1000 Genomes data
 - Mills Indels present in the Mills and Devine data
