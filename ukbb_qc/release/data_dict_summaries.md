@@ -76,7 +76,6 @@ In order to set a threshold for the variants that PASS the RF filter, we looked 
 - Number of de novo mutations in the 672 trios
 - Sensitivity to ClinVar variants
 - Precision recall curves in two truth samples present in our data: NA12878 and a pseudo-diploid sample (syndip; https://www.nature.com/articles/s41592-018-0054-7?WT.feed_name=subjects_standards;%20https://github.com/lh3/CHM-eval). Note: syndip was sequenced at Broad, not with the UK Biobank cohort.
-- Comparison to variant QC using previous data tranche containing 300,000 exomes
 - Ti/Tv ratio
 - Proportion singletons
 - Proportion bi-allelic variants
