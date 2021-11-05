@@ -23,7 +23,6 @@ from ukbb_qc.resources.sample_qc import (
     ancestry_hybrid_ht_path,
     array_concordance_results_path,
     hard_filters_ht_path,
-    platform_pca_assignments_ht_path,
     platform_pop_outlier_ht_path,
     qc_ht_path,
     related_drop_path,
@@ -61,7 +60,9 @@ def main(args):
         logger.info(
             "Reading in array map/pharma meta HT and annotating with age HT to start creating meta HT"
         )
-        left_ht = hl.read_table(array_sample_map_ht_path(freeze))
+        left_ht = hl.read_table(
+            array_sample_map_ht_path(freeze), _n_partitions=args.n_partitions
+        )
         left_ht = left_ht.annotate(
             ukb_meta=hl.struct(**left_ht.row.drop("s", "eid_sample"))
         ).select("ukbb_meta")
@@ -270,7 +271,6 @@ def main(args):
         left_ht = left_ht.key_by()
         left_ht = left_ht.key_by(s=left_ht.ukbb_meta.ukbb_app_26041_id)
 
-        left_ht = left_ht.repartition(args.n_partitions)
         logger.info(
             "Writing new meta HT to temp (to avoid overwriting meta HT used for QC (written to `meta_ht_path`)..."
         )
