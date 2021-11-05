@@ -31,7 +31,7 @@ We flagged any sample falling outside <b>4</b> median absolute deviations (MAD) 
 - Transition : transversion (TiTv) ratio
 - Heterozygous : homozygous ratio
 
-Note that a sample's tranche refers to the data freeze when a sample was released: 150K, 100K, 200K, 300K, or 455K.
+Note that a sample's tranche refers to the data freeze when a sample was released: 150K (inital 50K public release), 100K, 200K, 300K, or 455K.
 We ran outlier detection on all samples that passed hard filters and included all related samples.
 
 ### Sample QC filter summary

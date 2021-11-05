@@ -14,7 +14,6 @@ from ukbb_qc.resources.sample_qc import meta_ht_path
 from ukbb_qc.slack_creds import slack_token
 
 
-
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
     datefmt="%m/%d/%Y %I:%M:%S %p",
@@ -51,7 +50,9 @@ def main(args):
         ht = ht.key_by(s=ht.ukb_meta.ukbb_app_26041_id)
         ht = ht.annotate(ukb_meta=ht.ukb_meta.drop("ukbb_app_26041_id"))
 
-        logger.info("Removing extra pan-ancestry information...")
+        logger.info("Removing extra ancestry information...")
+        ht = ht.transmute(gnomad_pc_project_pop=ht.gnomad_pc_project_pop_data.pop)
+        ht = ht.transmute(hybrid_pop=ht.hybrid_pop_data.pop)
         ht = ht.transmute(pan_ancestry_pop=ht.pan_ancestry_meta.pop)
 
         logger.info("Getting globals from original sample meta HT...")
