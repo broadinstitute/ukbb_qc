@@ -26,6 +26,9 @@ def main(args):
 
     hl.init(log="/create_meta.log", default_reference="GRCh38")
 
+    logger.info("Setting hail flag (to try to speed up computations)...")
+    hl._set_flags(no_whole_stage_codegen="1")
+
     data_source = "broad"
     freeze = args.freeze
     tranche_data = (data_source, freeze)
