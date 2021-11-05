@@ -5,12 +5,12 @@ We examined the concordance of the exome data with the UK Biobank array data lif
 ### Sex inference
 We used the `impute_sex` method in Hail to infer sex using <b>common (allele frequency > 0.1%), non-pseudoautosomal, bi-allelic single nucleotide variants (SNVs)</b> on chromosome X. We then aggregated non-pseudoautosomal chromosome X and chromosome Y coverage for all samples and normalized these values by coverage across chromosome 20. We then checked the distribution of chromosome X and Y ploidies for XX and XY karyotypes to determine each karyotype's ploidy cutoffs. The adjusted ploidy cutoffs helped us add additional granularity to the inferred sex, differentiating between X0, XX, XXX, XY, XXY, XYY, and XXYY karyotypes.
 ### Interval QC
-Due to the Hail package's [sparse](https://hail.is/docs/0.2/experimental/vcf_combiner.html#working-with-sparse-matrix-tables) calling method, this dataset included every observed variant from each sample [gVCF](https://gatk.broadinstitute.org/hc/en-us/articles/360035531812-GVCF-Genomic-Variant-Call-Format). We decided to apply interval QC to determine which intervals had adequate coverage and were therefore most appropriate for sample QC. Our analysis showed that padding 100 base pairs into the introns and using Broad-specific calling intervals reduced sample callrate significantly. We decided to use 50 base pair padded UK Biobank intervals for sample QC analysis and selected intervals where 85% of all samples had a mean coverage of at least 20X.
+Due to the Hail package's [sparse](https://hail.is/docs/0.2/experimental/vcf_combiner.html#working-with-sparse-matrix-tables) calling method, this dataset included every observed variant from each sample [gVCF](https://gatk.broadinstitute.org/hc/en-us/articles/360035531812-GVCF-Genomic-Variant-Call-Format). We decided to apply interval QC to determine which intervals had adequate coverage and were therefore most appropriate for sample QC. Our analysis showed that padding 100 base pairs into the introns and using Broad-specific calling intervals reduced sample call rate significantly. We decided to use 50 base pair padded UK Biobank intervals for sample QC analysis and selected intervals where 85% of all samples had a mean coverage of at least 20X.
 
 ### Hard filters
-The hard filters applied to the raw data and used in downstream QC were: sex imputation filters, low callrate, and low coverage:
+The hard filters applied to the raw data and used in downstream QC were: sex imputation filters, low call rate, and low coverage:
 - Sex imputation filters (filtered all karyotypes except XX and XY):
-- Low callrate (cutoff <b>0.99</b>)
+- Low call rate (cutoff <b>0.99</b>)
 - Low mean coverage (cutoff <b>20X</b>)
 We excluded these hard-filtered samples from subsequent sample QC analyses (platform PCA, relatedness inference, ancestry imputation, and outlier detection) so that these low quality samples would not influence our downstream results.
 
