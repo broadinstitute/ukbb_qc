@@ -65,10 +65,10 @@ def main(args):
         )
         left_ht = left_ht.annotate(
             ukb_meta=hl.struct(**left_ht.row.drop("s", "eid_sample"))
-        ).select("ukbb_meta")
+        ).select("ukb_meta")
         right_ht = get_age_ht(freeze)
         left_ht = left_ht.annotate(
-            ukb_meta=left_ht.ukbb_meta.annotate(age=right_ht[left_ht.key].age)
+            ukb_meta=left_ht.ukb_meta.annotate(age=right_ht[left_ht.key].age)
         )
 
         logger.info("Filtering to samples with defined batch...")
@@ -84,7 +84,7 @@ def main(args):
         logger.info("Sample count after filtering: %i", left_ht.count())
 
         logger.info(logging_statement.format("array sample concordance HT"))
-        left_ht = left_ht.annotate(ukbb_id=left_ht.ukbb_meta.ukbb_app_26041_id)
+        left_ht = left_ht.annotate(ukbb_id=left_ht.ukb_meta.ukbb_app_26041_id)
         right_ht = hl.read_table(array_concordance_results_path(*tranche_data))
         right_ht = right_ht.annotate(
             array_concordance=hl.struct(**right_ht.row.drop("s"))
@@ -106,7 +106,7 @@ def main(args):
         ).select_globals("sex_imputation_ploidy_cutoffs")
         left_ht = join_tables(left_ht, "s", right_ht, "s", "right")
         left_ht = left_ht.transmute(
-            ukbb_meta=left_ht.ukbb_meta.annotate(array_sex=left_ht.array_sex)
+            ukb_meta=left_ht.ukb_meta.annotate(array_sex=left_ht.array_sex)
         )
 
         logger.info(logging_statement.format("sample QC HT"))
@@ -119,7 +119,7 @@ def main(args):
         right_ht = right_ht.select("self_reported_ancestry")
         left_ht = join_tables(left_ht, "s", right_ht, "s", "outer")
         left_ht = left_ht.transmute(
-            ukbb_meta=left_ht.ukbb_meta.annotate(
+            ukb_meta=left_ht.ukb_meta.annotate(
                 self_reported_ancestry=left_ht.self_reported_ancestry
             )
         )
@@ -127,7 +127,7 @@ def main(args):
         logger.info(logging_statement.format("pan-ancestry HT"))
         right_ht = hl.read_table(pan_ancestry_ht_path())
         left_ht = left_ht.annotate(
-            pan_ancestry_pop=right_ht[left_ht.ukbb_meta.ukbb_app_26041_id].pop
+            pan_ancestry_pop=right_ht[left_ht.ukb_meta.ukbb_app_26041_id].pop
         )
 
         logger.info("Creating checkpoint")
@@ -242,7 +242,7 @@ def main(args):
             sample_filters=left_ht.sample_filters.annotate(
                 release=hl.if_else(
                     (
-                        hl.is_defined(left_ht.ukbb_meta.batch)
+                        hl.is_defined(left_ht.ukb_meta.batch)
                         & left_ht.sample_filters.high_quality
                     ),
                     True,
@@ -269,7 +269,7 @@ def main(args):
 
         logger.info("Rekeying table by UKBB ID...")
         left_ht = left_ht.key_by()
-        left_ht = left_ht.key_by(s=left_ht.ukbb_meta.ukbb_app_26041_id)
+        left_ht = left_ht.key_by(s=left_ht.ukb_meta.ukbb_app_26041_id)
 
         logger.info(
             "Writing new meta HT to temp (to avoid overwriting meta HT used for QC (written to `meta_ht_path`)..."
