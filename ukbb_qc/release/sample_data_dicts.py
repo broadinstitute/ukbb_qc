@@ -193,7 +193,7 @@ SAMPLE_ANNOTATIONS = {
     },
     "relatedness_inference_relationships": {
         "Description": (
-            "Set containing all relationship strings (e.g., parent-child) for this sample."
+            "Set containing all relationship strings (e.g., parent-child, siblings) for this sample."
         )
     },
     "gnomad_pc_project_pop": {
