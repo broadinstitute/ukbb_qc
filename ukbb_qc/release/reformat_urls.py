@@ -29,11 +29,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input-url-path",
-        help="Path to input local file with pre-signed URLs for TSVs containing VCF shard start/end positions.",
+        help="Path to input local file with pre-signed URLs.",
     )
     parser.add_argument(
         "--output-tsv-path",
-        help="Path to local output file. Required for file stats function because TSVs with shard start/end positions are in a requester-pays bucket.",
+        help="Path to local output file. Required for file stats function because input files are in a requester-pays bucket.",
     )
     parser.add_argument("--project-id", help="Project ID.", default="maclab-ukbb")
     args = parser.parse_args()
