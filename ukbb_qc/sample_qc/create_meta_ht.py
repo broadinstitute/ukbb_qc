@@ -47,6 +47,7 @@ def main(args):
 
         logger.info("Un-nesting sample meta information...")
         ht = ht.annotate(**ht.meta)
+        ht = ht.drop("meta")
 
         logger.info("Keying by UKBB application 26041 ID...")
         ht = ht.transmute(ukb_meta=ht.ukbb_meta)
@@ -75,7 +76,8 @@ def main(args):
         logger.info("Writing HT to requester pays bucket...")
         ht.write(f"{args.requester_pays_path}/meta.ht", overwrite=args.overwrite)
         ht.export(f"{args.requester_pays_path}/meta.tsv.bgz")
-        ht.summarize()
+        for metric in ht.row:
+            ht[f"{metric}"].summarize()
         logger.info(f"Final count: {ht.count()}")
         logger.info("Complete")
 
