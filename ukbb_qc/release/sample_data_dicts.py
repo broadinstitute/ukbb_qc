@@ -187,7 +187,10 @@ SAMPLE_ANNOTATIONS = {
                 "Description": "Whether the sample is high quality (True if sample was not hard filtered or removed during outlier detection)."
             },
             "release": {
-                "Description": "Whether the sample should be included in the final release (True if the sample has a defined `batch` and is high quality)."
+                "Description": (
+                    "Whether the sample should be included in the final release (True if the sample has a defined `batch` and is high quality). "
+                    "Note that not all release samples are included in the frequency calculations, as this field does not remove related samples."
+                )
             },
         },
     },
