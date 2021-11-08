@@ -145,7 +145,7 @@ def get_md5sums(bucket: str, prefix: str, gcloud_project: str) -> Dict[str, str]
     """
     md5sums = {}
 
-    logger.info("Listing blobs (faster way to get md5sums...")
+    logger.info("Listing blobs (faster way to get md5sums)...")
     client = storage.Client()
     bucket = storage.Bucket(client, bucket, user_project=gcloud_project)
     # List all blobs ONLY in the freeze_7 VCF bucket
