@@ -126,7 +126,7 @@ VCF_ANNOTATIONS = {
                 "Description": "Variant locus coincides with a spanning deletion (represented by a star) observed elsewhere in the callset."
             },
             "AS_pab_max": {
-                "Description": "Maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of 0.5",
+                "Description": "Maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of 0.5.",
             },
             "outside_capture_region": {
                 "Description": "Variant falls outside exome capture regions."
