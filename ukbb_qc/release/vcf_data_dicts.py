@@ -38,7 +38,7 @@ VCF_ANNOTATIONS = {
                 "Description": "Samples are all homozygous reference or all homozygous alternate for the variant."
             },
             "RF": {
-                "Description": "Failed random forest filtering thresholds of 0.061026613170892155 for SNPs and 0.06405981151588196 for indels (probabilities of being a true positive variant."
+                "Description": "Failed random forest filtering thresholds of 0.061026613170892155 for SNPs and 0.06405981151588196 for indels (probabilities of being a true positive variant)."
             },
             "PASS": {"Description": "Passed all variant filters."},
         },
