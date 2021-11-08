@@ -15,14 +15,14 @@ GLOBAL_SAMPLE_ANNOTATIONS = {
     },
     "population_inference_pca_metrics": {
         "Description": (
-            "Contains the number of principal components (PCs) used when running PC-project and the minimum cutoff "
+            "Contains the number of principal components (PCs) used when running PC-project https://hail.is/docs/0.2/experimental/index.html#hail.experimental.pc_project) and the minimum cutoff "
             "probability of belonging to a given population for assignment."
         )
     },
     "relatedness_inference_cutoffs": {
         "Description": (
             "Contains the minor allele frequency cutoff for sites included when running ancestry imputation, "
-            "the minimum kinship threshold for emitting a pair of samples in PC-relate, the IBD0 cutoff used "
+            "the minimum kinship threshold for emitting a pair of samples in PC-relate (https://hail.is/docs/0.2/methods/relatedness.html#hail.methods.pc_relate), the IBD0 cutoff used "
             "to distinguish parent-child relationships from full sibling relationships, the minimum kinship "
             "threshold for determining second-degree relatedness, and the kinship thresholds for determining "
             "whether a pair had first-degree relatedness."
@@ -67,7 +67,7 @@ SAMPLE_ANNOTATIONS = {
         "sub_annotations": {
             "concordance": {
                 "Description": (
-                    "List of lists containing concordance as calculated using hail's concordance module for: "
+                    "List of lists containing concordance as calculated using hail's concordance method (https://hail.is/docs/0.2/methods/genetics.html#hail.methods.concordance) for: "
                     "no data (missing variant), no call (missing genotype call), homozygous reference, "
                     "heterozygous, and homozygous alternate."
                 )
@@ -76,7 +76,7 @@ SAMPLE_ANNOTATIONS = {
                 "Description": (
                     "Number of genotypes which were called (homozygous reference, heterozygous, or homozygous "
                     "alternate) in both datasets, but where the call did not match between the two. Provided by "
-                    "hail's concordance module."
+                    "hail's concordance method (https://hail.is/docs/0.2/methods/genetics.html#hail.methods.concordance)."
                 )
             },
             "num_gt_con_non_ref": {
@@ -98,7 +98,7 @@ SAMPLE_ANNOTATIONS = {
         "Description": "Struct containing sex imputation information.",
         "sub_annotations": {
             "is_female": {
-                "Description": "True if the imputed sex (from hail's impute sex module) is female, false if male, missing if undetermined."
+                "Description": "True if the imputed sex (from hail's impute sex method, https://hail.is/docs/0.2/methods/genetics.html#hail.methods.impute_sex) is female, false if male, missing if undetermined."
             },
             "f_stat": {
                 "Description": "Inbreeding coefficient (excess heterozygosity) on chromosome X."
@@ -125,7 +125,7 @@ SAMPLE_ANNOTATIONS = {
         },
     },
     "sample_qc": {
-        "Description": "Struct containing sample QC metrics calculated using `hl.sample_qc()`.",
+        "Description": "Struct containing sample QC metrics calculated using hail's sample QC method (https://hail.is/docs/0.2/methods/genetics.html#hail.methods.sample_qc).",
         "sub_annotations": {
             "call_rate": {"Description": "Fraction of calls not missing or filtered."},
             "dp_mean": {"Description": "Sample mean depth."},
