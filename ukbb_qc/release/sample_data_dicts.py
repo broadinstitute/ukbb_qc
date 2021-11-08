@@ -67,7 +67,7 @@ SAMPLE_ANNOTATIONS = {
         "sub_annotations": {
             "concordance": {
                 "Description": (
-                    "List of lists containing concordance as calculated using `hl.concordance` for: "
+                    "List of lists containing concordance as calculated using hail's concordance module for: "
                     "no data (missing variant), no call (missing genotype call), homozygous reference, "
                     "heterozygous, and homozygous alternate."
                 )
@@ -76,7 +76,7 @@ SAMPLE_ANNOTATIONS = {
                 "Description": (
                     "Number of genotypes which were called (homozygous reference, heterozygous, or homozygous "
                     "alternate) in both datasets, but where the call did not match between the two. Provided by "
-                    "`hl.concordance`."
+                    "hail's concordance module."
                 )
             },
             "num_gt_con_non_ref": {
@@ -98,7 +98,7 @@ SAMPLE_ANNOTATIONS = {
         "Description": "Struct containing sex imputation information.",
         "sub_annotations": {
             "is_female": {
-                "Description": "True if the imputed sex (from `hl.impute_sex`) is female, false if male, missing if undetermined."
+                "Description": "True if the imputed sex (from hail's impute sex module) is female, false if male, missing if undetermined."
             },
             "f_stat": {
                 "Description": "Inbreeding coefficient (excess heterozygosity) on chromosome X."
@@ -149,7 +149,7 @@ SAMPLE_ANNOTATIONS = {
             },
             "related": {
                 "Description": (
-                    "Whether the sample was removed from QC when filtering related samples. True if sample had a second degree "
+                    "Whether the sample was removed from QC when filtering related samples. True if the sample had a second degree "
                     "relationship with another sample."
                 )
             },
