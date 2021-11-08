@@ -31,7 +31,7 @@ VCF_ANNOTATIONS = {
         "Description": "VCF FILTER field annotations.",
         "sub_annotations": {
             "AC0": {
-                "Description": "Allele count is zero after filtering out low-confidence genotypes (GQ < 20; DP < 10; and AB < 0.2 for het calls)"
+                "Description": "Allele count is zero after filtering out low-confidence genotypes (GQ < 20; DP < 10; and AB < 0.2 for het calls)/"
             },
             "InbreedingCoeff": {"Description": "InbreedingCoeff < -0.3."},
             "MonoAllelic": {
