@@ -70,7 +70,7 @@ def main(args):
 
         logger.info("Un-nesting relationship set...")
         ht = ht.transmute(
-            relatedness_inference_relationships=ht.relationship_inference.relationships
+            relatedness_inference_relationships=ht.relatedness_inference.relationships
         )
 
         logger.info("Getting globals from original sample meta HT...")
