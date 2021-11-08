@@ -80,7 +80,8 @@ In order to set a threshold for the variants that PASS the RF filter, we looked 
 - Proportion singletons
 - Proportion bi-allelic variants
 
-The thresholds were chosen to maximize sensitivity and specificity based on the metrics listed above. Final thresholds were RF true positive bin of <b>90</b> in well covered intervals for single nucleotide variants and <b>75</b> in well covered intervals for indels.
+The thresholds were chosen to maximize sensitivity and specificity based on the metrics listed above. Final thresholds were RF true positive bin of <b>90</b> in well covered intervals for single nucleotide variants and <b>75</b> in well covered intervals for indels. The corresponding RF filtering thresholds were 0.061026613170892155 for SNPs and 0.06405981151588196 for indels (probabilities of being a true positive variant).
+
 
 ### Variant hard filters
 Two hard filters were also used to exclude variants:
