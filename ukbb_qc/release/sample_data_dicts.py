@@ -144,6 +144,9 @@ SAMPLE_ANNOTATIONS = {
             "sex_aneuploidy": {
                 "Description": "Whether the sample was removed from QC for having a sex aneuploidy."
             },
+            "low_coverage": {
+                "Description": "Whether the sample was removed from QC for mean coverage less than 20X."
+            },
             "related": {
                 "Description": (
                     "Whether the sample was removed from QC when filtering related samples. True if sample had a second degree "

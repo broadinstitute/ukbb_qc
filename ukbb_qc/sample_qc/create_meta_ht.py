@@ -47,7 +47,8 @@ def main(args):
 
         logger.info("Un-nesting sample meta information...")
         ht = ht.annotate(**ht.meta)
-        ht = ht.drop("meta")
+        # Also drop platform inference here
+        ht = ht.drop("meta", "platform_inference")
 
         logger.info("Keying by UKBB application 26041 ID...")
         ht = ht.transmute(ukb_meta=ht.ukbb_meta)
@@ -59,10 +60,31 @@ def main(args):
         ht = ht.transmute(hybrid_pop=ht.hybrid_pop_data.pop)
         ht = ht.transmute(pan_ancestry_pop=ht.pan_ancestry_meta.pop)
 
+        logger.info(
+            "Dropping hard filter information from sample_filters (each individual hard filter flag already exists in this struct)..."
+        )
+        logger.info("Also drop control annotation...")
+        ht = ht.annotate(
+            sample_filters=ht.sample_filters.drop("hard_filtered", "control")
+        )
+
+        logger.info("Un-nesting relationship set...")
+        ht = ht.transmute(
+            relatedness_inference_relationships=ht.relationship_inference.relationships
+        )
+
         logger.info("Getting globals from original sample meta HT...")
         meta_ht = hl.read_table(meta_ht_path(*tranche_data)).select()
         logger.info("Dropping unnecessary globals from meta HT...")
         meta_ht = meta_ht.drop("platform_inference_hdbscan_parameters")
+        meta_ht = meta_ht.annotate_globals(
+            sex_imputation_ploidy_cutoffs=meta_ht.sex_imputation_ploidy_cutoffs.drop(
+                "f_stat_cutoff"
+            ),
+            population_inference_pca_metrics=meta_ht.population_inference_pca_metrics.drop(
+                "n_exome_pcs"
+            ),
+        )
         ht = ht.annotate_globals(**meta_ht.index_globals())
 
         logger.info(
