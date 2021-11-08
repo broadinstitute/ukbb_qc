@@ -112,7 +112,8 @@ def generate_manifest(
             # Write to output
             o.write(f"{shard}\t{url}\t{md5}\t{low}\t{high}\n")
 
-        if indices:
+    if indices:
+        with open(out_file, "a") as o:
             logger.info("Writing file details for tabix indices...")
             for index in indices:
                 index_url = f"{PATH}/{index}"
