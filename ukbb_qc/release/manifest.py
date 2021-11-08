@@ -151,7 +151,7 @@ def get_md5sums(bucket: str, prefix: str, gcloud_project: str) -> Dict[str, str]
     # List all blobs ONLY in the freeze_7 VCF bucket
     all_blobs = list(client.list_blobs(bucket, prefix=prefix))
     for blob in all_blobs:
-        file_name = blob.name
+        file_name = os.path.basename(blob.name)
         # Skip anb Blobs that do not contain VCF shard or index information
         if "repackaged" not in file_name:
             continue
