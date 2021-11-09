@@ -1,0 +1,2 @@
+# Return of results 
+Most of the code in this repo is compatible with the most recent version of the Hail utilities for gnomAD repo (https://github.com/broadinstitute/gnomad_methods). Note, however, that the validity checks called in `prepare_vcf_data_release.py` and `sanity_checks.py` are expecting an older version of the gnomAD repo. This is the commit that is compatible with the validity checks: `d43951086bfea1b80b1bad34b3193f7c031dbc8d`. 

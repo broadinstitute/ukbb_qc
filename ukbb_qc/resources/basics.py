@@ -46,20 +46,23 @@ def pan_ancestry_bridge_path() -> str:
     return "gs://broad-ukbb/resources/bridge_26041_31063.csv"
 
 
-def excluded_samples_path(freeze: int = CURRENT_FREEZE) -> str:
+def excluded_samples_path() -> str:
     """
     Returns path to list of samples to exclude from QC due to withdrawn consents
 
-    :param int freeze: One of data freezes.
     :return: Path to excluded samples list
     :rtype: str
     """
     # NOTE: we did not have files with withdrawn sample IDs for freezes 4 and 5
+    # NOTE: These are the files we used to produce freeze 6 and 7 QC
     excluded_file_names = {
         6: "w26041_20200204.csv",
         7: "w26041_20200820.csv",
     }
-    return f"gs://broad-ukbb/resources/withdrawn_consents/{excluded_file_names[freeze]}"
+    # This is the file with the most up to date sample withdrawals (received after freeze 7 QC completed)
+    # File downloaded on 8/16/21
+    latest_file = "w26041_20210809.csv"
+    return f"gs://broad-ukbb/resources/withdrawn_consents/{latest_file}"
 
 
 def dup_resolution_path(freeze: int = CURRENT_FREEZE) -> str:
@@ -188,7 +191,7 @@ def get_ukbb_data(
     :param bool key_by_locus_and_alleles: Whether to key the MatrixTable by locus and alleles
     :param bool adj: Whether the returned data should be filtered to adj genotypes
     :param bool split: Whether the dataset should be split (only applies to raw=False)
-    :param bool ukbb_samples_only: Whether to return only UKBB samples (exclude control samples). Default is False.
+    :param bool ukbb_samples_only: Whether to return only UKBB samples with defined batch (exclude control samples). Default is False.
         Relevant only when running release code.
     :param bool raw: Whether to return the raw data (not recommended: unsplit, and no special consideration on sex chromosomes)
     :param bool repartition: Whether to repartition the MatrixTable. 
@@ -238,46 +241,46 @@ def get_ukbb_data(
     logger.info(f"Number of samples in MT: {mt.count_cols()}")
 
     # Add warning that no samples will be removed if excluded samples file doesn't exist
-    if not file_exists(excluded_samples_path(freeze)):
+    if not file_exists(excluded_samples_path()):
         logger.warning(
             "No excluded samples file found. No samples will be removed from MT"
         )
 
-    if file_exists(excluded_samples_path(freeze)) or ukbb_samples_only:
+    if file_exists(excluded_samples_path()) or ukbb_samples_only:
 
         # Read in array sample map HT
         sample_map_ht = hl.read_table(array_sample_map_ht_path(freeze))
 
         # Filter to UKBB samples if specified
         if ukbb_samples_only:
-            mt = mt.filter_cols(hl.is_defined(sample_map_ht[mt.col_key]))
+            mt = mt.filter_cols(hl.is_defined(sample_map_ht[mt.col_key].batch))
 
         # Remove any samples with withdrawn consents
         # NOTE: Keeping samples with missing consents to avoid filtering any samples present in MT but not in sample map HT
-        if file_exists(excluded_samples_path(freeze)):
-            mt = mt.filter_cols(
-                (~sample_map_ht[mt.col_key].withdrawn_consent)
-                | (hl.is_missing(sample_map_ht[mt.col_key].withdrawn_consent))
+        if file_exists(excluded_samples_path()):
+            sample_count = mt.count_cols()
+            withdrawn_ht = hl.import_table(
+                excluded_samples_path(), no_header=True,
+            ).key_by("f0")
+            sample_map_ht = sample_map_ht.annotate(
+                withdrawn_consent=hl.is_defined(
+                    withdrawn_ht[sample_map_ht.ukbb_app_26041_id]
+                )
+            )
+            withdrawn_ids = sample_map_ht.aggregate(
+                hl.agg.count_where(sample_map_ht.withdrawn_consent)
+            )
+            logger.info(
+                "Total number of IDs with withdrawn consents in sample map HT: %i",
+                withdrawn_ids,
             )
 
-            # Double check all withdrawn samples were actually excluded
-            withdrawn_ht = hl.import_table(
-                excluded_samples_path(freeze), no_header=True,
-            ).key_by("f0")
-            mt_samples = mt.annotate_cols(
-                ukbb_app_26041_id=sample_map_ht[mt.col_key].ukbb_app_26041_id
-            ).cols()
-            mt_samples = mt_samples.key_by("ukbb_app_26041_id")
-            withdrawn_samples_in_mt = mt_samples.filter(
-                hl.is_defined(withdrawn_ht[mt_samples.ukbb_app_26041_id])
-            ).count()
-
-            if withdrawn_samples_in_mt > 0:
+            mt = mt.filter_cols(~sample_map_ht[mt.col_key].withdrawn_consent)
+            if sample_count - mt.count_cols() < withdrawn_ids:
+                logger.error("Removed %i samples", sample_count - mt.count_cols())
                 raise DataException(
-                    "Withdrawn samples present in MT. Double check sample filtration"
+                    "Number of removed samples is less than total number of samples with withdrawn consents in sample map HT. Please double check and rerun!"
                 )
-            else:
-                logger.info("No withdrawn samples found in MT")
 
     # Code to resolve duplicate samples specifically in freeze 7/the 450k callset
     if freeze == 7:
@@ -391,17 +394,23 @@ def raw_mt_path(
     if data_source == "regeneron":
         return f"gs://broad-ukbb/{data_source}.freeze_{freeze}/data/{data_source}.freeze_{freeze}.nf.mt"
     elif data_source == "broad":
-        # create dict for raw mts for freeze 5 and later
-        dsp_prefix = "gs://broad-pharma5-ukbb-outputs"
+        # Create dict for raw mts for freeze 5 and later
+        # Freeze 5 and 6 MTs are now in nearline storage
+        dsp_prefix = "gs://broad-ukbb-crams-nearline/broad-pharma5-ukbb-outputs"
         raw_mt_names = {
             5: "hail_dataproc_20191108115937",
             6: "hail_dataproc_20200130092005.mt",
-            7: "hail_450k_dataproc_20201207164032.mt",
         }
+        # Freeze 7 MT is still in standard storage
+        freeze_7_path = (
+            "gs://broad-ukbb/broad.freeze_7/raw/hail_450k_dataproc_20201207164032.mt"
+        )
         if freeze == 4 or (freeze == 5 and densified):
             return f"gs://broad-ukbb/{data_source}.freeze_{freeze}/data/{data_source}.freeze_{freeze}{tempstr}.mt"
         else:
-            return f"{dsp_prefix}/{raw_mt_names[freeze]}"
+            if freeze < 7:
+                return f"{dsp_prefix}/{raw_mt_names[freeze]}"
+            return freeze_7_path
 
 
 def hardcalls_mt_path(data_source: str, freeze: int = CURRENT_FREEZE) -> str:
@@ -657,9 +666,7 @@ def append_to_vcf_header_path(data_source: str, freeze: int) -> str:
         raise DataException(
             "Extra fields to append to VCF header TSV only exists for freeze 7/455K!"
         )
-    return (
-        f"gs://broad-ukbb/{data_source}.freeze_{freeze}/temp/append_to_vcf_header.tsv"
-    )
+    return f"{get_release_path(data_source, freeze)}/vcf/append_to_vcf_header.tsv"
 
 
 def annotation_hists_path(data_source: str, freeze: int) -> str:

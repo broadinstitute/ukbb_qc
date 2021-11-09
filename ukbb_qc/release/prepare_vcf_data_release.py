@@ -1,15 +1,16 @@
 import argparse
+import json
 import logging
 import pickle
-import sys
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Union
 
 import hail as hl
 
 from gnomad.resources.grch38.gnomad import SEXES
-from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.sample_qc.sex import adjust_sex_ploidy
+from gnomad.utils.file_utils import file_exists
 from gnomad.utils.reference_genome import get_reference_genome
+from gnomad.resources.resource_utils import DataException
 from gnomad.utils.slack import slack_notifications
 from gnomad.utils.vep import vep_struct_to_csq
 from gnomad.utils.vcf import (
@@ -17,7 +18,6 @@ from gnomad.utils.vcf import (
     ALLELE_TYPE_FIELDS,
     AS_FIELDS,
     ENTRIES,
-    FAF_POPS,
     FORMAT_DICT,
     GROUPS,
     HISTS,
@@ -33,7 +33,7 @@ from gnomad.utils.vcf import (
     SPARSE_ENTRIES,
     VQSR_FIELDS,
 )
-from gnomad.utils.vcf import SEXES as SEXES_STR
+
 from ukbb_qc.assessment.sanity_checks import (
     sanity_check_release_mt,
     vcf_field_check,
@@ -45,15 +45,13 @@ from ukbb_qc.resources.basics import (
     logging_path,
     release_header_path,
     release_ht_path,
-    release_mt_path,
-    release_vcf_ht_path,
     release_vcf_path,
 )
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.variant_qc import info_ht_path
 from ukbb_qc.slack_creds import slack_token
 from ukbb_qc.utils.constants import UKBB_POPS
-from ukbb_qc.utils.utils import GNOMAD_EAS_SUBPOPS, GNOMAD_NFE_SUBPOPS, make_index_dict
+from ukbb_qc.utils.utils import make_index_dict
 
 
 logging.basicConfig(
@@ -76,6 +74,18 @@ VCF_INFO_DICT["sibling_singleton"] = {
     "Description": "Variant was a callset-wide doubleton that was present only within a sibling pair"
 }
 
+# Add AS_SB_TABLE and AS_QUALapprox to vcf_info_dict
+# NOTE: This is necessary because the current version of the gnomAD repo has these values in `INFO_DICT`,
+# but the older version of the gnomAD repo required to export UKB data does not
+VCF_INFO_DICT["AS_SB_TABLE"] = {
+    "Number": ".",
+    "Description": "Allele-specific forward/reverse read counts for strand bias tests",
+}
+VCF_INFO_DICT["AS_QUALapprox"] = {
+    "Number": "1",
+    "Description": "Sum of PL[0] values; used to approximate the QUAL score",
+}
+
 # Add interval QC, capture region to REGION_FLAG_FIELDS and remove decoy
 # NOTE: MISSING_REGION_FIELDS could change for 500K if we get hg38 files
 INTERVAL_FIELDS = ["fail_interval_qc", "outside_capture_region"]
@@ -86,47 +96,22 @@ REGION_FLAG_FIELDS = [
 REGION_FLAG_FIELDS.extend(INTERVAL_FIELDS)
 
 # Remove BaseQRankSum from site and allele-specific fields (this is a legacy annotation)
+# Also remove SB from site fields since we do not release it
 SITE_FIELDS.remove("BaseQRankSum")
+SITE_FIELDS.remove("SB")
 AS_FIELDS.remove("AS_BaseQRankSum")
 
 # Add sibling singletons to AS_FIELDS
 AS_FIELDS.append("sibling_singleton")
-
-# Make subset list (used in properly filling out VCF header descriptions and naming VCF info fields)
-SUBSET_LIST = ["", "gnomad_exomes", "gnomad_genomes"]  # empty for ukbb
-
-# Select populations to keep from the list of population names in POP_NAMES
-# This removes pop names we don't want to use in the UKBB release
-# (e.g., "uniform", "consanguineous") to reduce clutter
-KEEP_POPS = ["afr", "amr", "asj", "eas", "fin", "nfe", "oth", "sas"]
-
-# Separating gnomad exome/genome pops and adding 'ami', 'mid' to gnomAD genomes pops
-GNOMAD_GENOMES_POPS = {pop: POP_NAMES[pop] for pop in KEEP_POPS}
-GNOMAD_GENOMES_POPS["ami"] = "Amish"
-GNOMAD_GENOMES_POPS["mid"] = "Middle Eastern"
-
-# Remove unnecessary pop names from pops dict
-# Store this as GNOMAD_EXOMES_POPS
-KEEP_POPS.extend(GNOMAD_NFE_SUBPOPS)
-KEEP_POPS.extend(GNOMAD_EAS_SUBPOPS)
-GNOMAD_EXOMES_POPS = {pop: POP_NAMES[pop] for pop in KEEP_POPS}
 
 
 def populate_info_dict(
     bin_edges: Dict[str, str],
     age_hist_data: str,
     info_dict: Dict[str, Dict[str, str]] = VCF_INFO_DICT,
-    subset_list: List[str] = SUBSET_LIST,
     groups: List[str] = GROUPS,
     ukbb_pops: Dict[str, str] = UKBB_POPS,
-    gnomad_exomes_pops: Dict[str, str] = GNOMAD_EXOMES_POPS,
-    gnomad_genomes_pops: Dict[str, str] = GNOMAD_GENOMES_POPS,
-    faf_pops: List[str] = FAF_POPS,
-    gnomad_sexes: List[str] = SEXES_STR,
     ukbb_sexes: List[str] = SEXES,
-    gnomad_nfe_subpops: List[str] = GNOMAD_NFE_SUBPOPS,
-    gnomad_eas_subpops: List[str] = GNOMAD_EAS_SUBPOPS,
-    subpops: Optional[Dict[str, List[str]]] = None,
 ) -> Dict[str, Dict[str, str]]:
     """
     Calls `make_info_dict` and `make_hist_dict` to populate INFO dictionary with specific sexes, population names, and filtering allele frequency (faf) pops.
@@ -140,22 +125,13 @@ def populate_info_dict(
         - INFO fields for filtering allele frequency (faf) annotations 
         - INFO fields for variant histograms (hist_bin_freq, hist_n_smaller, hist_n_larger for each histogram)
 
-    .. note::
-        If `subpops` is specified, `ukbb_pops` MUST include a description for each population in `subpops`.
-
     :param Dict[str, str] bin_edges: Dictionary of variant annotation histograms and their associated bin edges.
     :param str age_hist_data: Pipe-delimited string of age histograms, from `get_age_distributions`.
     :param Dict[str, Dict[str, str]] info_dict: INFO dict to be populated.
     :param List[str] subset_list: List of sample subsets in dataset. Default is SUBSET_LIST.
     :param List[str] groups: List of sample groups [adj, raw]. Default is GROUPS.
     :param Dict[str, str] ukbb_pops: List of sample global population names for UKBB. Default is UKBB_POPS.
-    :param Dict[str, str] gnomad_exomes_pops: List of sample global population names for gnomAD exomes. Default is GNOMAD_EXOMES_POPS.
-    :param Dict[str, str] gnomad_genomes_pops: List of sample global population names for gnomAD genomes. Default is GNOMAD_GENOMES_POPS.
-    :param List[str] faf_pops: List of faf population names. Default is FAF_POPS.
-    :param List[str] gnomad_sexes: gnomAD v2 sample sexes ("male", "female") used in VCF export. Default is SEXES_STR. 
     :param List[str] ukbb_sexes: UKBB, gnomAD v3 sample sexes ("XX", "XY") used in VCF export. Default is SEXES.
-    :param List[str] gnomad_nfe_subpops: List of nfe subpopulations in gnomAD. Default is GNOMAD_NFE_SUBPOPS.
-    :param List[str] gnomad_eas_subpops: List of eas subpopulations in gnomAD. Default is GNOMAD_EAS_SUBPOPS.
     :param Optional[Dict[str, List[str]]] subpops: Dictionary of global population names (keys)
         and all hybrid population cluster names associated with that global pop (values). 
     :rtype: Dict[str, Dict[str, str]]
@@ -197,154 +173,34 @@ def populate_info_dict(
             dict(group=group, pop=pops, sex=sexes),
         ]
 
-    for subset in subset_list:
-
-        if "gnomad" in subset:
-            description_text = " in gnomAD"
-
-            if "exomes" in subset:
-                faf_label_groups = _create_label_groups(
-                    pops=faf_pops, sexes=gnomad_sexes
-                )
-                for label_group in faf_label_groups:
-                    vcf_info_dict.update(
-                        make_info_dict(
-                            prefix=subset,
-                            pop_names=gnomad_exomes_pops,
-                            label_groups=label_group,
-                            faf=True,
-                            description_text=description_text,
-                        )
-                    )
-
-                gnomad_exomes_label_groups = _create_label_groups(
-                    pops=gnomad_exomes_pops, sexes=gnomad_sexes
-                )
-                for label_group in gnomad_exomes_label_groups:
-                    vcf_info_dict.update(
-                        make_info_dict(
-                            prefix=subset,
-                            pop_names=gnomad_exomes_pops,
-                            label_groups=label_group,
-                            description_text=description_text,
-                        )
-                    )
-
-                # Add popmax to info dict
-                vcf_info_dict.update(
-                    make_info_dict(
-                        prefix=subset,
-                        pop_names=gnomad_exomes_pops,
-                        popmax=True,
-                        description_text=description_text,
-                    )
-                )
-
-                # Add gnomAD exome subpops to info dict
-                vcf_info_dict.update(
-                    make_info_dict(
-                        prefix=subset,
-                        pop_names=gnomad_exomes_pops,
-                        label_groups=dict(
-                            group=["adj"], pop=["nfe"], subpop=gnomad_nfe_subpops
-                        ),
-                        description_text=description_text,
-                    )
-                )
-                vcf_info_dict.update(
-                    make_info_dict(
-                        prefix=subset,
-                        pop_names=gnomad_exomes_pops,
-                        label_groups=dict(
-                            group=["adj"], pop=["eas"], subpop=gnomad_eas_subpops
-                        ),
-                        description_text=description_text,
-                    )
-                )
-
-            else:
-                faf_label_groups = _create_label_groups(pops=faf_pops, sexes=ukbb_sexes)
-                for label_group in faf_label_groups:
-                    vcf_info_dict.update(
-                        make_info_dict(
-                            prefix=subset,
-                            pop_names=gnomad_genomes_pops,
-                            label_groups=label_group,
-                            faf=True,
-                            description_text=description_text,
-                        )
-                    )
-                gnomad_genomes_label_groups = _create_label_groups(
-                    pops=gnomad_genomes_pops, sexes=ukbb_sexes
-                )
-                for label_group in gnomad_genomes_label_groups:
-                    vcf_info_dict.update(
-                        make_info_dict(
-                            prefix=subset,
-                            pop_names=gnomad_genomes_pops,
-                            label_groups=label_group,
-                            description_text=description_text,
-                        )
-                    )
-
-                # Add popmax to info dict
-                vcf_info_dict.update(
-                    make_info_dict(
-                        prefix=subset,
-                        pop_names=gnomad_genomes_pops,
-                        popmax=True,
-                        description_text=description_text,
-                    )
-                )
-
-        else:
-            ukbb_label_groups = _create_label_groups(pops=ukbb_pops, sexes=ukbb_sexes)
-            for label_group in ukbb_label_groups:
-                vcf_info_dict.update(
-                    make_info_dict(
-                        prefix=subset, pop_names=ukbb_pops, label_groups=label_group,
-                    )
-                )
-
-            # NOTE: Using `ukbb_pops` here because all frequency calculations were run on pan-ancestry labels this tranche
-            # `faf_pops` contains only gnomAD population labels
-            faf_label_groups = _create_label_groups(pops=ukbb_pops, sexes=ukbb_sexes)
-            for label_group in faf_label_groups:
-                vcf_info_dict.update(
-                    make_info_dict(
-                        prefix=subset,
-                        pop_names=ukbb_pops,
-                        label_groups=label_group,
-                        faf=True,
-                    )
-                )
-
-            vcf_info_dict.update(
-                make_info_dict(
-                    prefix=subset,
-                    bin_edges=bin_edges,
-                    popmax=True,
-                    age_hist_data="|".join(str(x) for x in age_hist_data),
-                )
+    # Set prefix to empty string (do not want to add extra subset description to autopopulated text for export)
+    prefix = ""
+    ukbb_label_groups = _create_label_groups(pops=ukbb_pops, sexes=ukbb_sexes)
+    for label_group in ukbb_label_groups:
+        vcf_info_dict.update(
+            make_info_dict(
+                prefix=prefix, pop_names=ukbb_pops, label_groups=label_group,
             )
-
-    if subpops:
-        logger.info(
-            "Adding UKBB subpops (hybrid pops) to UKBB population description dict..."
         )
-        for pop in subpops:
-            for cluster in subpops[pop]:
-                ukbb_pops[
-                    f"{cluster}"
-                ] = f"{ukbb_pops[pop]} and hybrid population cluster {cluster}"
-        for pop in subpops:
-            vcf_info_dict.update(
-                make_info_dict(
-                    prefix="",
-                    pop_names=ukbb_pops,
-                    label_groups=dict(group=["adj"], pop=[pop], subpop=subpops[pop]),
-                )
+
+    # NOTE: Using `ukbb_pops` here because all frequency calculations were run on pan-ancestry labels
+    # `faf_pops` contains only gnomAD population labels
+    faf_label_groups = _create_label_groups(pops=ukbb_pops, sexes=ukbb_sexes)
+    for label_group in faf_label_groups:
+        vcf_info_dict.update(
+            make_info_dict(
+                prefix=prefix, pop_names=ukbb_pops, label_groups=label_group, faf=True,
             )
+        )
+
+    vcf_info_dict.update(
+        make_info_dict(
+            prefix=prefix,
+            bin_edges=bin_edges,
+            popmax=True,
+            age_hist_data="|".join(str(x) for x in age_hist_data),
+        )
+    )
 
     # Add variant quality histograms to info dict
     vcf_info_dict.update(make_hist_dict(bin_edges, adj=True))
@@ -406,63 +262,30 @@ def make_info_expr(t: Union[hl.MatrixTable, hl.Table]) -> Dict[str, hl.expr.Expr
 
 
 def unfurl_nested_annotations(
-    t: Union[hl.MatrixTable, hl.Table],
-    gnomad: bool,
-    genome: bool,
-    pops: List[str],
-    subpops: Optional[List[str]] = None,
+    t: Union[hl.MatrixTable, hl.Table], pops: List[str],
 ) -> Dict[str, hl.expr.Expression]:
     """
     Create dictionary keyed by the variant annotation labels to be extracted from variant annotation arrays, where the values
     of the dictionary are Hail Expressions describing how to access the corresponding values.
 
     :param Table/MatrixTable t: Table/MatrixTable containing the nested variant annotation arrays to be unfurled.
-    :param bool gnomad: Whether the annotations are from gnomAD.
-    :param bool genome: Whether the annotations are from genome data (relevant only to gnomAD data).
     :param List[str] pops: List of global populations in frequency array. 
-    :param List[str] subpops: List of all UKBB subpops (possible hybrid population cluster names). Default is None.
     :return: Dictionary containing variant annotations and their corresponding values.
     :rtype: Dict[str, hl.expr.Expression]
     """
     expr_dict = dict()
 
     # Set variables to locate necessary fields, compute freq index dicts, and compute faf index dict for UKBB
-    if gnomad:
-        data_type = "genomes" if genome else "exomes"
-        gnomad_prefix = f"gnomad_{data_type}"
-        popmax = f"{gnomad_prefix}_popmax"
-        faf = f"{gnomad_prefix}_faf"
-        freq = f"{gnomad_prefix}_freq"
-        faf_idx = hl.eval(t.globals[f"{gnomad_prefix}_faf_index_dict"])
-        if data_type != "genomes":
-            subpops = [GNOMAD_NFE_SUBPOPS + GNOMAD_EAS_SUBPOPS]
-
-        freq_idx = make_index_dict(
-            t=t,
-            freq_meta_str=f"{gnomad_prefix}_freq_meta",
-            pops=pops,
-            subpops=subpops,
-            data_type=data_type,
-        )
-
-    else:
-        faf = "faf"
-        freq = "freq"
-        faf_idx = make_index_dict(
-            t=t, freq_meta_str="faf_meta", pops=pops, subpops=subpops
-        )
-        popmax = "popmax"
-        freq_idx = make_index_dict(
-            t=t, freq_meta_str="freq_meta", pops=pops, subpops=subpops
-        )
+    faf = "faf"
+    freq = "freq"
+    prefix = ""
+    faf_idx = make_index_dict(t=t, freq_meta_str="faf_meta", pops=pops)
+    popmax = "popmax"
+    freq_idx = make_index_dict(t=t, freq_meta_str="freq_meta", pops=pops)
 
     # Unfurl freq index dict
     # Cycles through each key and index (e.g., k=adj_afr, i=31)
     for k, i in freq_idx.items():
-        prefix = ""
-        if gnomad:
-            prefix = f"{gnomad_prefix}_"
-
         # Set combination to key
         # e.g., set entry of 'afr_adj' to combo
         combo = k
@@ -481,113 +304,45 @@ def unfurl_nested_annotations(
     ) in faf_idx.items():  # NOTE: faf annotations are all done on adj-only groupings
         entry = k.split("_")
 
-        if gnomad:
+        # Set combo to equal entry
+        combo_fields = entry
+        combo = k
 
-            # Create combo_fields
-            # NOTE: gnomad needs to be handled separately because gnomad faf index dict has different format
-            # gnomad faf index dict has keys like 'adj_afr', but UKBB will index with keys like 'afr_adj'
-            combo_fields = entry[1:] + [entry[0]]
-            combo = "_".join(combo_fields)
-
-            # Skip all gnomAD subsets
-            # Note: this is relevant to the exomes only
-            if not genome:
-                subset_labels = ("controls", "non")
-                if entry[0] in subset_labels:
-                    continue
-
-                # Re-create combo to make sure formatting is consistent with other pop labels
-                # Manually create combo with "_adj"
-                # NOTE: entry[0] in the gnomAD exomes faf meta is "gnomad",
-                # but the value in the faf meta is still "adj"
-                combo_fields = entry[1:] + ["adj"]
-                combo = "_".join(combo_fields)
-
-                prefix = f"{gnomad_prefix}_"
-                combo_dict = {
-                    f"{prefix}faf95_{combo}": hl.or_missing(
-                        hl.set(t[faf][i].meta.values()) == set(combo_fields),
-                        t[faf][i].faf95,
-                    ),
-                    f"{prefix}faf99_{combo}": hl.or_missing(
-                        hl.set(t[faf][i].meta.values()) == set(combo_fields),
-                        t[faf][i].faf99,
-                    ),
-                }
-
-            else:
-                # NOTE: faf format in v3.1 changed; no longer has `meta` field
-                prefix = f"{gnomad_prefix}_"
-                combo_dict = {
-                    f"{prefix}faf95_{combo}": hl.or_missing(
-                        hl.set(hl.eval(t.gnomad_genomes_faf_meta[i].values()))
-                        == set(combo_fields),
-                        t[faf][i].faf95,
-                    ),
-                    f"{prefix}faf99_{combo}": hl.or_missing(
-                        hl.set(hl.eval(t.gnomad_genomes_faf_meta[i].values()))
-                        == set(combo_fields),
-                        t[faf][i].faf99,
-                    ),
-                }
-
-        else:
-            # Set combo to equal entry
-            combo_fields = entry
-            combo = k
-
-            # NOTE: need to compute UKBB separately because UKBB no longer has faf meta bundled into faf
-            combo_dict = {
-                f"faf95_{combo}": hl.or_missing(
-                    hl.set(hl.eval(t.faf_meta[i].values())) == set(combo_fields),
-                    t[faf][i].faf95,
-                ),
-                f"faf99_{combo}": hl.or_missing(
-                    hl.set(hl.eval(t.faf_meta[i].values())) == set(combo_fields),
-                    t[faf][i].faf99,
-                ),
-            }
+        # NOTE: need to compute UKBB separately because UKBB no longer has faf meta bundled into faf
+        combo_dict = {
+            f"faf95_{combo}": hl.or_missing(
+                hl.set(hl.eval(t.faf_meta[i].values())) == set(combo_fields),
+                t[faf][i].faf95,
+            ),
+            f"faf99_{combo}": hl.or_missing(
+                hl.set(hl.eval(t.faf_meta[i].values())) == set(combo_fields),
+                t[faf][i].faf99,
+            ),
+        }
         expr_dict.update(combo_dict)
 
     # Unfurl popmax
-    if gnomad:
-        prefix = f"{gnomad_prefix}_"
-    else:
-        prefix = ""
-
-    if gnomad and not genome:
-        idx = hl.eval(t.globals["gnomad_exomes_popmax_index_dict"]["gnomad"])
-        combo_dict = {
-            f"{prefix}popmax": t[popmax][idx].pop,
-            f"{prefix}AC_popmax": t[popmax][idx].AC,
-            f"{prefix}AN_popmax": t[popmax][idx].AN,
-            f"{prefix}AF_popmax": t[popmax][idx].AF,
-            f"{prefix}nhomalt_popmax": t[popmax][idx].homozygote_count,
-        }
-    else:
-        combo_dict = {
-            f"{prefix}popmax": t[popmax].pop,
-            f"{prefix}AC_popmax": t[popmax].AC,
-            f"{prefix}AN_popmax": t[popmax].AN,
-            f"{prefix}AF_popmax": t[popmax].AF,
-            f"{prefix}nhomalt_popmax": t[popmax].homozygote_count,
-        }
+    combo_dict = {
+        f"{prefix}popmax": t[popmax].pop,
+        f"{prefix}AC_popmax": t[popmax].AC,
+        f"{prefix}AN_popmax": t[popmax].AN,
+        f"{prefix}AF_popmax": t[popmax].AF,
+        f"{prefix}nhomalt_popmax": t[popmax].homozygote_count,
+    }
     expr_dict.update(combo_dict)
 
     # Unfurl UKBB ages
     # We previously dropped:
     # age_hist_hom_bin_edges, age_hist_het_bin_edges
-    if not gnomad:
-        age_hist_dict = {
-            "age_hist_het_bin_freq": hl.delimit(t.age_hist_het.bin_freq, delimiter="|"),
-            "age_hist_het_n_smaller": t.age_hist_het.n_smaller,
-            "age_hist_het_n_larger": t.age_hist_het.n_larger,
-            "age_hist_hom_bin_freq": hl.delimit(t.age_hist_hom.bin_freq, delimiter="|"),
-            "age_hist_hom_n_smaller": t.age_hist_hom.n_smaller,
-            "age_hist_hom_n_larger": t.age_hist_hom.n_larger,
-        }
-        expr_dict.update(age_hist_dict)
-
+    age_hist_dict = {
+        "age_hist_het_bin_freq": hl.delimit(t.age_hist_het.bin_freq, delimiter="|"),
+        "age_hist_het_n_smaller": t.age_hist_het.n_smaller,
+        "age_hist_het_n_larger": t.age_hist_het.n_larger,
+        "age_hist_hom_bin_freq": hl.delimit(t.age_hist_hom.bin_freq, delimiter="|"),
+        "age_hist_hom_n_smaller": t.age_hist_hom.n_smaller,
+        "age_hist_hom_n_larger": t.age_hist_hom.n_larger,
+    }
+    expr_dict.update(age_hist_dict)
     return expr_dict
 
 
@@ -598,12 +353,37 @@ def main(args):
     freeze = args.freeze
     tranche_data = (data_source, freeze)
 
+    # Path to VCF HT/VCF MT (not using resource to avoid overwriting previously created HT/MT)
+    ukb_ht_path = "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.ht"
+    ukb_vcf_mt_path = "gs://broad-ukbb/broad.freeze_7/release/ht/broad.freeze_7.release.vcf.ukb_official_export.mt"
+
+    # NOTE: This isn't generally recommended, but these export steps appear to be particularly
+    # slow if this flag isn't set
+    logger.info("Setting hail flag (to try to speed up computations)...")
+    hl._set_flags(no_whole_stage_codegen="1")
+
     try:
 
         if args.prepare_vcf_annotations:
             logger.info("Starting VCF process...")
             logger.info("Reading in release HT...")
-            ht = hl.read_table(release_ht_path(*tranche_data))
+            # Also drop all gnomAD annotations
+            ht = hl.read_table(release_ht_path(*tranche_data)).drop(
+                "gnomad_exomes_freq",
+                "gnomad_exomes_popmax",
+                "gnomad_exomes_faf",
+                "gnomad_genomes_freq",
+                "gnomad_genomes_popmax",
+                "gnomad_genomes_faf",
+                "gnomad_exomes_freq_meta",
+                "gnomad_exomes_popmax_index_dict",
+                "gnomad_exomes_faf_index_dict",
+                "gnomad_exomes_freq_index_dict",
+                "gnomad_genomes_freq_meta",
+                "gnomad_genomes_faf_index_dict",
+                "gnomad_genomes_faf_meta",
+                "gnomad_genomes_freq_index_dict",
+            )
 
             logger.info(
                 "Dropping cohort frequencies (necessary only for internal use)..."
@@ -614,6 +394,56 @@ def main(args):
             # Six pops (pan-ancestry labels): CSA, MID, AFR, EAS, AMR, EUR
             ht = ht.annotate(freq=ht.freq[:22])
             ht = ht.annotate_globals(freq_meta=ht.freq_meta[:22])
+
+            # Add AS_SB_TABLE, AS_QUALapprox here because it is missing from the release HT
+            info_ht = hl.read_table(info_ht_path(data_source, freeze))
+            ht = ht.annotate(
+                info=ht.info.annotate(
+                    AS_SB_TABLE=hl.array(
+                        [
+                            info_ht[ht.key].info.AS_SB_TABLE[:2],
+                            info_ht[ht.key].info.AS_SB_TABLE[2:],
+                        ]
+                    ),
+                    AS_QUALapprox=info_ht[ht.key].info.AS_QUALapprox,
+                )
+            )
+
+            # Reformat AS_SB_TABLE for export
+            # NOTE: Copied this function here because this doesn't exist in the version of the gnomAD repo required for
+            # UKB validity checks and export
+            def _get_pipe_expr(
+                array_expr: hl.expr.ArrayExpression,
+            ) -> hl.expr.StringExpression:
+                return hl.delimit(
+                    array_expr.map(lambda x: hl.or_else(hl.str(x), "")), "|"
+                )
+
+            ht = ht.annotate(
+                info=ht.info.annotate(
+                    AS_SB_TABLE=_get_pipe_expr(
+                        ht.info.AS_SB_TABLE.map(lambda x: hl.delimit(x, ","))
+                    )
+                )
+            )
+
+            logger.info("Reading in release patch frequencies...")
+            patch_ht = (
+                hl.read_matrix_table(
+                    get_checkpoint_path(
+                        *tranche_data,
+                        name="release_patch_sites_dense_annot_no_hyphen.mt",
+                        mt=True,
+                    ),
+                )
+                .rows()
+                .select_globals()
+                .select("freq")
+            )
+
+            logger.info("Adding patch frequencies...")
+            ht = ht.annotate(patch_freq=patch_ht[ht.key].freq)
+            ht = ht.transmute(freq=hl.coalesce(ht.patch_freq, ht.freq))
 
             logger.info("Making histogram bin edges...")
             # NOTE: using release HT here because age histograms aren't necessarily defined
@@ -660,27 +490,7 @@ def main(args):
 
             # Unfurl nested UKBB frequency annotations and add to INFO field
             ht = ht.annotate(
-                info=ht.info.annotate(
-                    **unfurl_nested_annotations(
-                        ht, gnomad=False, genome=False, pops=UKBB_POPS,
-                    )
-                )
-            )
-            # Unfurl nested gnomAD genome frequency annotations and add to info field
-            ht = ht.annotate(
-                info=ht.info.annotate(
-                    **unfurl_nested_annotations(
-                        ht, gnomad=True, genome=True, pops=GNOMAD_GENOMES_POPS,
-                    )
-                )
-            )
-            # Unfurl nested gnomAD exome frequency annotations and add to info field
-            ht = ht.annotate(
-                info=ht.info.annotate(
-                    **unfurl_nested_annotations(
-                        ht, gnomad=True, genome=False, pops=GNOMAD_EXOMES_POPS,
-                    )
-                )
+                info=ht.info.annotate(**unfurl_nested_annotations(ht, pops=UKBB_POPS))
             )
             ht = ht.annotate(**set_female_y_metrics_to_na(ht))
 
@@ -691,14 +501,20 @@ def main(args):
                 {"vep": {"Description": hl.eval(ht.vep_csq_header)}}
             )
 
-            # NOTE: Correcting rsid here because this was discovered after release HT was created
+            # NOTE: rsid on release HT is a string but should be a set
+            # The code below re-adds rsid annotation to HT and reformats for export
             logger.info("Reformatting rsid...")
             # dbsnp might have multiple identifiers for one variant
-            # thus, rsid is a set annotation, starting with version b154 for dbsnp resource:
+            # Thus, rsid is a set annotation, starting with version b154 for dbsnp resource:
             # https://github.com/broadinstitute/gnomad_methods/blob/master/gnomad/resources/grch38/reference_data.py#L136
             # `export_vcf` expects this field to be a string, and vcf specs
             # say this field may be delimited by a semi-colon:
             # https://samtools.github.io/hts-specs/VCFv4.2.pdf
+            # dbsnp ht doesn't work in this version of gnomad methods
+            dbsnp_ht = hl.read_table(
+                "gs://gnomad-public-requester-pays/resources/grch38/dbsnp/dbsnp_b154_grch38_all_20200514.ht"
+            ).select("rsid")
+            ht = ht.annotate(rsid=dbsnp_ht[ht.key].rsid)
             ht = ht.annotate(rsid=hl.str(";").join(ht.rsid))
 
             logger.info(
@@ -706,7 +522,7 @@ def main(args):
             )
             ht = ht.select("info", "filters", "rsid", "qual")
             ht.write(
-                release_vcf_ht_path(*tranche_data), overwrite=args.overwrite,
+                ukb_ht_path, overwrite=args.overwrite,
             )
 
             # Make filter dict and add field for MonoAllelic filter
@@ -732,16 +548,16 @@ def main(args):
             logger.info("Getting raw MT and dropping all unnecessary entries...")
             # NOTE: reading in raw MatrixTable to be able to return all samples/variants
             mt = get_ukbb_data(
-                data_source,
-                freeze,
+                *tranche_data,
                 key_by_locus_and_alleles=args.key_by_locus_and_alleles,
                 split=False,
                 raw=True,
+                ukbb_samples_only=True,
                 repartition=args.repartition,
                 n_partitions=args.raw_partitions,
                 meta_root="meta",
             ).select_entries(*SPARSE_ENTRIES)
-            mt = mt.transmute_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype)
+            mt = mt.annotate_cols(sex_karyotype=mt.meta.sex_imputation.sex_karyotype)
 
             logger.info("Removing chrM...")
             mt = hl.filter_intervals(mt, [hl.parse_locus_interval("chrM")], keep=False)
@@ -753,10 +569,22 @@ def main(args):
                 # also keeping meta col annotations)
                 # Using chr20 to test a small autosome and chrX to test a sex chromosome
                 # Some annotations (like FAF) are 100% missing on autosomes
-                mt = hl.filter_intervals(
-                    mt,
-                    [hl.parse_locus_interval("chr20"), hl.parse_locus_interval("chrX")],
-                )
+                mt_chr20 = hl.filter_intervals(mt, [hl.parse_locus_interval("chr20")])
+                mt_chr20 = mt_chr20._filter_partitions(range(2))
+
+                mt_chrx = hl.filter_intervals(mt, [hl.parse_locus_interval("chrX")])
+                mt_chrx = mt_chrx.filter_rows(mt_chrx.locus.in_x_nonpar())
+                mt_chrx = mt_chrx._filter_partitions(range(2))
+                mt = mt_chr20.union_rows(mt_chrx)
+
+            logger.info("Adding het_non_ref annotation...")
+            # Adding a Boolean for whether a sample had a heterozygous non-reference genotype
+            # Need to add this prior to splitting MT to make sure these genotypes
+            # are not adjusted by the homalt hotfix downstream
+            mt = mt.annotate_entries(het_non_ref=mt.LGT.is_het_non_ref())
+
+            # Add het_non_ref to ENTRIES (otherwise annotation gets accidentally dropped here)
+            ENTRIES.append("het_non_ref")
 
             logger.info("Splitting raw MT...")
             mt = hl.experimental.sparse_split_multi(mt)
@@ -767,9 +595,9 @@ def main(args):
                 "Setting het genotypes at sites with >1% AF and > 0.9 AB to homalt..."
             )
             # NOTE: Reading release HT here because frequency annotation was updated
-            # Only `join_freq` and release HT have updated frequency annotation
+            # Only release HT has updated frequency annotation
             freq_ht = (
-                hl.read_table(release_ht_path(*tranche_data))
+                hl.read_table(release_ht_path(data_source, freeze=6))
                 .select_globals()
                 .select("freq")
             )
@@ -777,6 +605,8 @@ def main(args):
             mt = mt.annotate_entries(
                 GT=hl.if_else(
                     mt.GT.is_het()
+                    # Skip adjusting genotypes if sample originally had a het nonref genotype
+                    & ~mt.het_non_ref
                     & (freq_ht[mt.row_key].AF > 0.01)
                     & (mt.AD[1] / mt.DP > 0.9),
                     hl.call(1, 1),
@@ -784,14 +614,19 @@ def main(args):
                 )
             )
 
+            logger.info("Changing sample IDs to UKBB IDs...")
+            mt = mt.key_cols_by(s=mt.meta.ukbb_meta.ukbb_app_26041_id)
+
             logger.info("Annotating release MT with HT annotations...")
-            ht = hl.read_table(release_vcf_ht_path(*tranche_data))
+            ht = hl.read_table(ukb_ht_path)
             mt = mt.annotate_rows(**ht[mt.row_key])
             mt = mt.annotate_globals(**ht.index_globals())
-            mt.write(release_mt_path(*tranche_data), args.overwrite)
+            mt.write(
+                ukb_vcf_mt_path, args.overwrite,
+            )
 
         if args.sanity_check:
-            mt = hl.read_matrix_table(release_mt_path(*tranche_data))
+            mt = hl.read_matrix_table(ukb_vcf_mt_path)
 
             # NOTE: removing lowqual and star alleles here to avoid having additional failed missingness checks
             info_ht = hl.read_table(info_ht_path(data_source, freeze))
@@ -800,174 +635,229 @@ def main(args):
                 & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
             )
 
-            # NOTE: Fixing chrY metrics here for 455k tranche
-            # because fix to `set_female_y_metrics_to_na` was pushed
-            # after VCF MT generated
-            # https://github.com/broadinstitute/gnomad_methods/pull/347
+            # NOTE: Fixing chrY metrics here because they were not correctly annotated into the info struct on the VCF HT
             mt = mt.annotate_rows(
                 info=mt.info.annotate(**set_female_y_metrics_to_na(mt))
             )
-
             sanity_check_release_mt(
                 mt,
-                SUBSET_LIST,
                 ukbb_pops=UKBB_POPS,
-                gnomad_exomes_pops=GNOMAD_EXOMES_POPS,
-                gnomad_genomes_pops=GNOMAD_GENOMES_POPS,
                 missingness_threshold=0.5,
                 verbose=args.verbose,
             )
 
         if args.prepare_release_vcf:
 
+            logger.info("Setting additional hail flag to try to speed up densify...")
+            # According to Tim, this flag parallelizes the single-threaded combine step in densify
+            hl._set_flags(distributed_scan_comb_op="1")
+
             logger.warning(
                 "VCF export will densify! Make sure you have an autoscaling cluster."
             )
-            if not args.per_chromosome and not args.parallelize:
-                logger.error("Need to choose how to export the release VCF. Exiting...")
-                sys.exit(1)
-
-            mt = hl.read_matrix_table(
-                release_mt_path(*tranche_data), _n_partitions=args.n_shards
-            )
-
-            # NOTE: Fixing chrY metrics here for 455k tranche
-            # because fix to `set_female_y_metrics_to_na` was pushed
-            # after VCF MT generated
-            # https://github.com/broadinstitute/gnomad_methods/pull/347
-            mt = mt.annotate_rows(
-                info=mt.info.annotate(**set_female_y_metrics_to_na(mt))
-            )
-
-            # NOTE: `qual` annotation is actually `QUALapprox` annotation in 455k tranche
-            # Need to convert this field to a float because `export_vcf` won't export this field
-            # if the type isn't float64
-            mt = mt.annotate_rows(qual=hl.float(mt.qual))
-
-            if args.test:
-                logger.info("Filtering to chr20 and chrX (for tests only)...")
-                # Using filter intervals to keep all the work done by get_ukbb_data
-                # (removing sample with withdrawn consent/their ref blocks/variants,
-                # also keeping meta col annotations)
-                # Using chr20 to test a small autosome and chrX to test a sex chromosome
-                # Some annotations (like FAF) are 100% missing on autosomes
-                mt = hl.filter_intervals(
-                    mt,
-                    [hl.parse_locus_interval("chr20"), hl.parse_locus_interval("chrX")],
-                )
-
             logger.info("Reading header dict from pickle...")
             with hl.hadoop_open(release_header_path(*tranche_data), "rb") as p:
                 header_dict = pickle.load(p)
 
-            # Reformat names to remove "adj" pre-export
-            # e.g, renaming "AC_adj" to "AC"
-            # All unlabeled frequency information is assumed to be adj
-            row_annots = list(mt.row.info)
-            new_row_annots = []
-            for x in row_annots:
-                x = x.replace("_adj", "")
-                new_row_annots.append(x)
-
-            info_annot_mapping = dict(
-                zip(new_row_annots, [mt.info[f"{x}"] for x in row_annots])
-            )
-
-            # Confirm all VCF fields and descriptions are present
-            if not vcf_field_check(mt, header_dict, new_row_annots, list(mt.entry)):
-                logger.error("Did not pass VCF field check.")
-                return
-
-            mt = mt.transmute_rows(info=hl.struct(**info_annot_mapping))
-
-            # Rearrange INFO field in desired ordering
-            mt = mt.annotate_rows(
-                info=mt.info.select(
-                    "AC",
-                    "AN",
-                    "AF",
-                    "rf_tp_probability",
-                    *mt.info.drop("AC", "AN", "AF", "rf_tp_probability"),
+            # Reformat VCF annotations and create flat VCF ready HT if it doesn't exist
+            if (
+                not file_exists(
+                    get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False)
                 )
-            )
+                or args.overwrite_flat_vcf_ht
+            ):
+                mt = hl.read_matrix_table(ukb_vcf_mt_path,)
 
-            # Export VCFs by chromosome
-            if args.per_chromosome:
-                ht = mt.rows().checkpoint(
+                # NOTE: Fixing chrY metrics here because the code above previously annotated the fixed metrics onto the VCF HT
+                # but added the metrics as top level annotations rather than adding them into the info struct
+                # Line 488 should have been:
+                # ht = ht.annotate(info=ht.info.annotate(**set_female_y_metrics_to_na(ht))
+                mt = mt.annotate_rows(
+                    info=mt.info.annotate(**set_female_y_metrics_to_na(mt))
+                )
+
+                # NOTE: `qual` annotation is actually `QUALapprox` annotation in 455k tranche
+                # Need to convert this field to a float because `export_vcf` won't export this field
+                # if the type isn't float64
+                mt = mt.annotate_rows(qual=hl.float(mt.qual))
+
+                # NOTE: Drop QUALapprox here -- it is already in the MT as `qual`
+                mt = mt.annotate_rows(info=mt.info.drop("QUALapprox"))
+
+                # Reformat names to remove "adj" pre-export
+                # e.g, renaming "AC_adj" to "AC"
+                # All unlabeled frequency information is assumed to be adj
+                row_annots = list(mt.row.info)
+                new_row_annots = [x.replace("_adj", "") for x in row_annots]
+
+                info_annot_mapping = dict(
+                    zip(new_row_annots, [mt.info[f"{x}"] for x in row_annots])
+                )
+
+                # Confirm all VCF fields and descriptions are present
+                if not vcf_field_check(mt, header_dict, new_row_annots, list(mt.entry)):
+                    logger.error("Did not pass VCF field check.")
+                    return
+
+                mt = mt.transmute_rows(info=hl.struct(**info_annot_mapping))
+
+                # Rearrange INFO field in desired ordering
+                mt = mt.annotate_rows(
+                    info=mt.info.select(
+                        "AC",
+                        "AN",
+                        "AF",
+                        "nhomalt",
+                        "rf_tp_probability",
+                        *mt.info.drop("AC", "AN", "AF", "nhomalt", "rf_tp_probability"),
+                    )
+                )
+
+                # NOTE: adding this here because this code uses an older version of the gnomad methods repo
+                # where `adjust_vcf_incompatible_types` doesn't exist
+                ht = mt.rows()
+                logger.info("Adjusting VCF incompatible types...")
+                info_type_convert_expr = {}
+                # Convert int64 fields to int32 (int64 isn't supported by VCF)
+                for f, ft in ht.info.dtype.items():
+                    if ft == hl.dtype("int64"):
+                        logger.warning(
+                            "Coercing field info.%s from int64 to int32 for VCF output. Value will be capped at int32 max value.",
+                            f,
+                        )
+                        info_type_convert_expr.update(
+                            {f: hl.int32(hl.min(2 ** 31 - 1, ht.info[f]))}
+                        )
+                    elif ft == hl.dtype("array<int64>"):
+                        logger.warning(
+                            "Coercing field info.%s from array<int64> to array<int32> for VCF output. Array values will be capped "
+                            "at int32 max value.",
+                            f,
+                        )
+                        info_type_convert_expr.update(
+                            {
+                                f: ht.info[f].map(
+                                    lambda x: hl.int32(hl.min(2 ** 31 - 1, x))
+                                )
+                            }
+                        )
+
+                ht = ht.annotate(info=ht.info.annotate(**info_type_convert_expr))
+
+                # Write flattened VCF ready HT
+                ht.write(
                     get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False),
-                    overwrite=args.overwrite,
+                    overwrite=True,
                 )
 
-                rg = get_reference_genome(mt.locus)
-                contigs = rg.contigs[:24]  # autosomes + X/Y
-                logger.info(f"Contigs: {contigs}")
+            ht = hl.read_table(
+                get_checkpoint_path(*tranche_data, name="flat_vcf_ready", mt=False),
+            )
 
-                for contig in contigs:
-                    # Checked with Hail team about the fastest way to filter to a contig
-                    # This method shouldn't be any faster than `filter_intervals`: the same amount of data is read in both cases
-                    # `_calculate_new_partitions` might give us more parallelism downstream
-                    # Decided to stick with `_calculate_new_partitions` method because it felt much faster on the 300K tranche
-                    mt = hl.read_matrix_table(release_mt_path(*tranche_data))
-                    mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
-                    intervals = mt._calculate_new_partitions(10000)
-                    mt = hl.read_matrix_table(
-                        release_mt_path(*tranche_data), _intervals=intervals
-                    )
-                    mt = mt.annotate_rows(**ht[mt.row_key])
-
-                    logger.info("Densifying and exporting VCF...")
-                    mt = hl.experimental.densify(mt)
-
-                    logger.info("Removing low QUAL variants and * alleles...")
-                    info_ht = hl.read_table(info_ht_path(data_source, freeze))
-                    mt = mt.filter_rows(
-                        (~info_ht[mt.row_key].AS_lowqual)
-                        & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
-                    )
-
-                    logger.info("Adjusting sex ploidy...")
-                    mt = adjust_sex_ploidy(
-                        mt, mt.sex_karyotype, male_str="XY", female_str="XX"
-                    )
-
-                    hl.export_vcf(
-                        mt.select_cols(),
-                        release_vcf_path(*tranche_data, contig=contig),
-                        metadata=header_dict,
-                        append_to_header=append_to_vcf_header_path(*tranche_data),
-                        tabix=True,
-                    )
-
-            # Export sharded VCF
-            if args.parallelize:
-
-                logger.info("Densifying...")
-                mt = hl.experimental.densify(mt)
-
-                logger.info("Removing low QUAL variants and * alleles...")
-                info_ht = hl.read_table(info_ht_path(data_source, freeze))
-                mt = mt.filter_rows(
-                    (~info_ht[mt.row_key].AS_lowqual)
-                    & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
+            # Export VCFs per chromosome
+            rg = get_reference_genome(ht.locus)
+            contigs = rg.contigs[:24]  # autosomes + X/Y
+            contig = args.contig
+            if contig not in contigs:
+                raise DataException(
+                    f"{contig} not in {contigs}. Please double check and restart!"
                 )
 
-                logger.info("Adjusting sex ploidy...")
-                mt = adjust_sex_ploidy(
-                    mt, mt.sex_karyotype, male_str="XY", female_str="XX"
-                )
-                mt = mt.select_cols()
+            logger.info("Determining partitioning for %s", contig)
+            chrom_var_map = args.chrom_var_map
+            n_var_per_shard = args.n_var_per_shard
 
-                hl.export_vcf(
-                    mt,
-                    release_vcf_path(*tranche_data),
-                    parallel="header_per_shard",
-                    metadata=header_dict,
-                    append_to_header=append_to_vcf_header_path(*tranche_data),
-                    tabix=True,
-                )
+            # Round to the nearest whole number
+            n_partitions = round(chrom_var_map[contig] / n_var_per_shard)
+
+            # Round the number of partitions to the relevant place
+            # e.g., return 4000 instead of 3839, 900 instead of 913, 70 instead of 69
+            # NOTE: The number of shards isn't guaranteed to be even
+            # `hl.naive_coalesce` will return the number of shards found if smaller than desired number
+            # e.g., if the desired number is 2000, but the chromosome only has 1789 partitions,
+            # `hl.naive_coalesce` will do nothing and the chromosome will export to 1789 shards
+            n_digits = -(len(str((n_partitions))) - 1)
+            n_partitions = round(n_partitions, n_digits)
+
+            # Read in MT and filter to contig
+            # Repartition to a large number of partitions here so that the chromosomes have closer to the desired number of shards
+            mt = hl.read_matrix_table(
+                ukb_vcf_mt_path, _n_partitions=40000,
+            ).select_rows()
+
+            if args.test:
+                mt = mt._filter_partitions(range(2))
+            mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig)])
+            mt = mt.annotate_rows(**ht[mt.row_key])
+
+            logger.info("Adjusting partitions...")
+            mt = mt.naive_coalesce(n_partitions)
+            logger.info("%s has %i partitions", contig, mt.n_partitions())
+
+            logger.info("Densifying...")
+            mt = hl.experimental.densify(mt)
+            # Drop het non ref to avoid exporting
+            mt = mt.drop("het_non_ref")
+
+            logger.info("Removing low QUAL variants and * alleles...")
+            info_ht = hl.read_table(info_ht_path(data_source, freeze))
+            mt = mt.filter_rows(
+                (~info_ht[mt.row_key].AS_lowqual)
+                & ((hl.len(mt.alleles) > 1) & (mt.alleles[1] != "*"))
+            )
+
+            logger.info("Adjusting partitions again post-densify...")
+            mt = mt.naive_coalesce(n_partitions)
+            logger.info("%s has %i partitions post-densify", contig, mt.n_partitions())
+            ht = mt.rows()
+            # Unkey HT to avoid this error with map_partitions:
+            # ValueError: Table._map_partitions must preserve key fields
+            ht = ht.key_by()
+
+            logger.info("Adjusting sex ploidy...")
+            mt = adjust_sex_ploidy(mt, mt.sex_karyotype, male_str="XY", female_str="XX")
+            mt = mt.select_cols()
+
+            logger.info("Exporting VCF...")
+            hl.export_vcf(
+                mt,
+                release_vcf_path(*tranche_data, contig=contig),
+                metadata=header_dict,
+                append_to_header=append_to_vcf_header_path(*tranche_data),
+                parallel="header_per_shard",
+                # Removed tabix here because the repackaging code produces an index
+            )
+
+            logger.info("Getting start and stops per shard...")
+
+            def part_min_and_max(part):
+                keys = part.map(lambda x: x.select("locus", "alleles"))
+                return hl.struct(start=keys[0], end=keys[-1])
+
+            start_stop_list = ht._map_partitions(
+                lambda p: hl.array([part_min_and_max(p)])
+            ).collect()
+            print(start_stop_list)
+            with hl.hadoop_open(
+                f"gs://broad-ukbb/broad.freeze_7/release/vcf_positions_tsvs/{contig}_start_end_pos.tsv",
+                "w",
+            ) as o:
+                o.write("vcf_shard_name\tstart_pos\tend_pos\n")
+                for count, struct in enumerate(start_stop_list):
+                    # Format shard name to have leading zeros
+                    # e.g., 0 should be part-000000.bgz
+                    shard_name = f"part-{count:05d}.bgz"
+                    o.write(
+                        f"{shard_name}\t{struct.start.locus.position}\t{struct.end.locus.position}\n"
+                    )
+
     finally:
         logger.info("Copying hail log to logging bucket...")
-        hl.copy_log(logging_path(*tranche_data))
+        if args.prepare_release_vcf:
+            contig = args.contig
+            hl.copy_log(f"{logging_path(*tranche_data)}/vcf_release_{contig}.log")
+        else:
+            hl.copy_log(logging_path(*tranche_data))
 
 
 if __name__ == "__main__":
@@ -1017,22 +907,53 @@ if __name__ == "__main__":
     parser.add_argument(
         "--prepare_release_vcf", help="Prepare release VCF", action="store_true"
     )
-    export_opts = parser.add_mutually_exclusive_group()
-    export_opts.add_argument(
-        "--per_chromosome",
-        help="Prepare release VCFs per chromosome",
-        action="store_true",
-    )
-    export_opts.add_argument(
-        "--parallelize",
-        help="Parallelize VCF export by exporting sharded VCF",
+    parser.add_argument(
+        "--overwrite_flat_vcf_ht",
+        help="Overwrite HT with annotations flattened from nested structs for VCF export",
         action="store_true",
     )
     parser.add_argument(
-        "--n_shards",
-        help="Desired number of shards for output VCF (if --parallelize is set). Will be used to repartition raw MT on read",
+        "--contig", help="Chromosome to export",
+    )
+    parser.add_argument(
+        "--n_var_per_shard",
+        help="Desired number of variants per output VCF shard.",
         type=int,
-        default=25000,
+        # Default is 5000 here because of estimates based on gs://broad-ukbb/broad.freeze_7/release/vcf/broad.freeze_7.chr1.vcf.bgz
+        # This VCF shard is 6.4GiB and has 16152 variants, so each variant is ~0.4MB,
+        # and 5000 variants should produce a shard that is ~2GB
+        default=5000,
+    )
+    parser.add_argument(
+        "--chrom_var_map",
+        help="Number of variants per chromosome in the VCF MT. Used to determine the number of output VCF shards per chromosome.",
+        type=json.loads,
+        default={
+            "chr1": 19193046,
+            "chr2": 14164015,
+            "chr3": 11290556,
+            "chr4": 8055105,
+            "chr5": 8926172,
+            "chr6": 9496506,
+            "chr7": 9614744,
+            "chr8": 6986721,
+            "chr9": 7856805,
+            "chr10": 7916883,
+            "chr11": 10914308,
+            "chr12": 10677476,
+            "chr13": 3833007,
+            "chr14": 6386045,
+            "chr15": 7326938,
+            "chr16": 8522870,
+            "chr17": 11048623,
+            "chr18": 3415118,
+            "chr19": 11182106,
+            "chr20": 4678211,
+            "chr21": 2213473,
+            "chr22": 4564518,
+            "chrX": 6778165,
+            "chrY": 349095,
+        },
     )
     parser.add_argument(
         "--slack_channel", help="Slack channel to post results and notifications to."
