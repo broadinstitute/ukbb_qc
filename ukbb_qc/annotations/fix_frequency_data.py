@@ -99,6 +99,7 @@ def main(args):
         # Adding a Boolean for whether a sample had a heterozygous non-reference genotype
         # Need to add this prior to splitting multiallelics to make sure these genotypes
         # are not adjusted by the homalt hotfix downstream
+        assert "LGT" in var_mt.entry, "VDS must be unsplit!"
         var_mt = var_mt.annotate_entries(het_non_ref=var_mt.LGT.is_het_non_ref())
         vds = hl.vds.VariantDataset(ref_mt, var_mt)
         vds = hl.vds.split_multi(vds)
