@@ -69,38 +69,6 @@ VDS variant data size: 561.97 GiB
 """
 
 
-def generate_frequency_data(
-    mt: hl.MatrixTable,
-) -> hl.Table:
-    """
-    Generates frequency struct annotation containing AC, AF, AN, and homozygote count for input dataset stratified by population.
-
-    Option to stratify by platform (either inferred platform or tranche as proxy for platform).
-
-    .. note::
-
-        This function expects dense format data.
-        Frequency data is generated using gnomAD PC project population labels as the main population stratification.
-        Hybrid population labels are used as the subpopulation stratification.
-        However, cohort frequency (frequency including all related samples) data is generated using hybrid population labels.
-
-    :param MatrixTable mt: Input MatrixTable.
-    :param int freeze: One of the data freezes.
-    :param list pops_to_remove_for_popmax: List of populations to exclude from popmax calculations.
-    :param list cohort_frequency_pops: List of populations to include in cohort frequency calculations.
-    :param bool platform_strata: Whether to calculate frequencies per platform or tranche as proxy for platform.
-    :param bool tranche: Whether to use tranche (as a proxy for platform) instead of inferred platform.
-    :param bool calculate_by_tranche: Whether to calculate frequencies per tranche.
-    :param hl.expr.StringExpression platform_expr: Expression containing platform or tranche information. Required if platform_strata is set.
-    :param str data_source: One of 'regeneron' or 'broad'. Default is 'broad'.
-    :return: MatrixTable with frequency annotations in struct named `freq` and metadata in globals named `freq_meta`.
-    :rtype: hl.MatrixTable
-    """
-    logger.info("Generating frequency data...")
-    mt = annotate_freq(mt)
-    return mt.select_rows("freq").select_globals("freq_meta")
-
-
 def main(args):
     """
     Recalculate frequency on high quality, European samples in the 455k VDS.
@@ -166,7 +134,9 @@ def main(args):
         )
 
         logger.info("Calculating frequencies")
-        ht = generate_frequency_data(mt)
+        logger.info("Generating frequency data...")
+        mt = annotate_freq(mt)
+        ht = mt.select_rows("freq").select_globals("freq_meta")
         ht = ht.naive_coalesce(args.n_partitions)
         ht.write(var_annotations_ht_path("ukb_freq_fix", *TRANCHE_DATA), args.overwrite)
 
