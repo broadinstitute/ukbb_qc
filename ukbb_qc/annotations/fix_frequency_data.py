@@ -112,11 +112,9 @@ def main(args):
         logger.info("Reading in 455k sample meta...")
         meta_ht = hl.read_table(meta_ht_path(*TRANCHE_DATA))
 
-        # Filter to high quality, EUR UKBB samples only and remove duplicates
+        # Filter to high quality, EUR UKBB samples only, also remove control samples and duplicates
         meta_ht = meta_ht.filter(
             meta_ht.sample_filters.high_quality
-            # Filter to defined batch (this should remove control samples)
-            & hl.is_defined(meta_ht.ukbb_meta.batch)
             & ~meta_ht.sample_filters.duplicate
             & (meta_ht.pan_ancestry_meta.pop == POP)
         )
