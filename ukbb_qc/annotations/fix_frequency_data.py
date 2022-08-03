@@ -37,6 +37,11 @@ POP = "EUR"
 Population to include in frequency calculations.
 """
 
+N_SAMPLES = 394841
+"""
+Total number of high quality EUR samples (minus duplicates) in 455k VDS.
+"""
+
 TRANCHE_DATA = ("broad", CURRENT_FREEZE)
 """
 UKB tranche data (data source and data freeze number).
@@ -119,13 +124,16 @@ def main(args):
         logger.info("Reading in 455k VDS and filtering to high quality EUR samples...")
         vds = hl.vds.read_vds(VDS_PATH)
         vds = hl.vds.filter_samples(vds, meta_ht, remove_dead_alleles=True)
+        var_mt = vds.variant_data
+        ref_mt = vds.reference_data
+        assert (
+            var_mt.count_cols() == N_SAMPLES
+        ), f"Number of samples is {var_mt.count_cols()} but expected {N_SAMPLES}!"
 
         logger.info("Adding het non-ref, sex, and population annotations...")
         # Adding a Boolean for whether a sample had a heterozygous non-reference genotype
         # Need to add this prior to splitting multiallelics to make sure these genotypes
         # are not adjusted by the homalt hotfix downstream
-        var_mt = vds.variant_data
-        ref_mt = vds.reference_data
         var_mt = var_mt.annotate_entries(het_non_ref=var_mt.LGT.is_het_non_ref())
         vds = hl.vds.VariantDataset(ref_mt, var_mt)
         vds = hl.vds.split_multi(vds)
