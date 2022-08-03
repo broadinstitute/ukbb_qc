@@ -14,7 +14,7 @@ import logging
 
 import hail as hl
 
-from gnomad.utils.annotations import annotate_freq
+from gnomad.utils.annotations import annotate_adj, annotate_freq
 from gnomad.utils.slack import slack_notifications
 
 from ukbb_qc.resources.basics import logging_path, release_ht_path
@@ -92,10 +92,7 @@ def generate_frequency_data(
     :rtype: hl.MatrixTable
     """
     logger.info("Generating frequency data...")
-    mt = annotate_freq(
-        mt,
-        sex_expr=mt.sex_karyotype,
-    )
+    mt = annotate_freq(mt)
     mt = mt.select_globals("freq_meta")
     return mt.select_rows("freq")
 
@@ -130,16 +127,14 @@ def main(args):
         var_mt = vds.variant_data
         ref_mt = vds.reference_data
         var_mt = var_mt.annotate_entries(het_non_ref=var_mt.LGT.is_het_non_ref())
-        # Annotate columns on MT here (can't annotate VDS)
-        var_mt = var_mt.annotate_cols(
-            sex_karyotype=meta_ht[var_mt.col_key].sex_imputation.sex_karyotype,
-        )
         vds = hl.vds.VariantDataset(ref_mt, var_mt)
         vds = hl.vds.split_multi(vds)
 
         logger.info("Densifying...")
         mt = hl.vds.to_dense_mt(vds)
         mt = mt.filter_rows(hl.len(mt.alleles) > 1)
+        # Add adj annotation (to get raw and adj frequencies)
+        mt = annotate_adj(mt)
 
         # Temporary hotfix for depletion of homozygous alternate genotypes
         logger.info(
