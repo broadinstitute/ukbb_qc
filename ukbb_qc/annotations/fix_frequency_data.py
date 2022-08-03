@@ -98,8 +98,7 @@ def generate_frequency_data(
     """
     logger.info("Generating frequency data...")
     mt = annotate_freq(mt)
-    mt = mt.select_globals("freq_meta")
-    return mt.select_rows("freq")
+    return mt.select_rows("freq").select_globals("freq_meta")
 
 
 def main(args):
