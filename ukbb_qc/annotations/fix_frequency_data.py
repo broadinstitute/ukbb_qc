@@ -108,10 +108,16 @@ def main(args):
         vd = vd.annotate_entries(het_non_ref=vd.LGT.is_het_non_ref())
         vds = hl.vds.VariantDataset(rd, vd)
         vds = hl.vds.filter_samples(vds, meta_ht, remove_dead_alleles=True)
+        sample_ht = vds.variant_data.cols()
 
         assert (
-            vds.variant_data.count_cols() == N_SAMPLES
-        ), f"Number of samples is {vds.variant_data.count_cols()} but expected {N_SAMPLES}!"
+            sample_ht.count() == N_SAMPLES
+        ), f"Number of samples is {sample_ht.count()} but expected {N_SAMPLES}!"
+
+        ht_samples = meta_ht.aggregate(hl.agg.collect_as_set(meta_ht.s))
+        vds_samples = sample_ht.aggregate(hl.agg.collect_as_set(sample_ht.s))
+
+        assert ht_samples == vds_samples, "Sample IDs in meta HT and VDS don't match!"
 
         logger.info("Densifying...")
         vds = hl.vds.split_multi(vds)
