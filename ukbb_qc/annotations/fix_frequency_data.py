@@ -17,9 +17,9 @@ import hail as hl
 from gnomad.utils.annotations import annotate_adj, annotate_freq
 from gnomad.utils.slack import slack_notifications
 
-from gnomad_qc.v4.resources.basics import get_gnomad_v4_vds
+from gnomad_qc.v4.resources.basics import gnomad_v4_genotypes
 
-from ukbb_qc.resources.basics import logging_path, release_ht_path
+from ukbb_qc.resources.basics import dup_map_path, logging_path, release_ht_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import meta_ht_path
 from ukbb_qc.resources.variant_qc import var_annotations_ht_path
@@ -70,24 +70,51 @@ def main(args):
         logger.info(
             "Reading in v4 VDS and filtering to high quality EUR UKB samples..."
         )
-        vds = get_gnomad_v4_vds(split=False, remove_hard_filtered_samples=False)
-        vds = hl.vds.filter_samples(vds, meta_ht, remove_dead_alleles=True)
-        var_mt = vds.variant_data
-        ref_mt = vds.reference_data
-        assert (
-            var_mt.count_cols() == N_SAMPLES
-        ), f"Number of samples is {var_mt.count_cols()} but expected {N_SAMPLES}!"
+        # Read in raw VDS without using function because function removes ALL withdrawn samples
+        # We only want to remove samples that weren't withdrawn at the time of analysis for the paper
+        vds = gnomad_v4_genotypes.vds()
+
+        # Manually remove 27 known dups
+        # Code copied from gnomad_qc
+        dup_ids = []
+        with hl.hadoop_open(dup_map_path(CURRENT_FREEZE), "r") as d:
+            for line in d:
+                line = line.strip().split("\t")
+                dup_ids.append(f"{line[0]}_{line[1]}")
+
+        def _remove_ukb_dup_by_index(
+            mt: hl.MatrixTable, dup_ids: hl.expr.ArrayExpression
+        ) -> hl.MatrixTable:
+            """
+            Remove UKB samples with exact duplicate names based on column index.
+            :param mt: MatrixTable of either the variant data or reference data of a VDS
+            :param dup_ids: ArrayExpression of UKB samples to remove in format of <sample_name>_<col_idx>
+            :return: MatrixTable of UKB samples with exact duplicate names removed based on column index
+            """
+            mt = mt.add_col_index()
+            mt = mt.annotate_cols(new_s=hl.format("%s_%s", mt.s, mt.col_idx))
+            mt = mt.filter_cols(~dup_ids.contains(mt.new_s)).drop("new_s", "col_idx")
+            return mt
+
+        dup_ids = hl.literal(dup_ids)
+        vd = _remove_ukb_dup_by_index(vds.variant_data, dup_ids)
+        rd = _remove_ukb_dup_by_index(vds.reference_data, dup_ids)
 
         logger.info("Adding het non-ref, sex, and population annotations...")
         # Adding a Boolean for whether a sample had a heterozygous non-reference genotype
         # Need to add this prior to splitting multiallelics to make sure these genotypes
         # are not adjusted by the homalt hotfix downstream
-        assert "LGT" in var_mt.entry, "VDS must be unsplit!"
-        var_mt = var_mt.annotate_entries(het_non_ref=var_mt.LGT.is_het_non_ref())
-        vds = hl.vds.VariantDataset(ref_mt, var_mt)
-        vds = hl.vds.split_multi(vds)
+        assert "LGT" in vd.entry, "VDS must be unsplit!"
+        vd = vd.annotate_entries(het_non_ref=vd.LGT.is_het_non_ref())
+        vds = hl.vds.VariantDataset(rd, vd)
+        vds = hl.vds.filter_samples(vds, meta_ht, remove_dead_alleles=True)
+
+        assert (
+            vds.variant_data.count_cols() == N_SAMPLES
+        ), f"Number of samples is {vds.variant_data.count_cols()} but expected {N_SAMPLES}!"
 
         logger.info("Densifying...")
+        vds = hl.vds.split_multi(vds)
         mt = hl.vds.to_dense_mt(vds)
         mt = mt.filter_rows(hl.len(mt.alleles) > 1)
         # Add adj annotation (to get raw and adj frequencies)
