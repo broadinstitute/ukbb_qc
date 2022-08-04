@@ -17,6 +17,8 @@ import hail as hl
 from gnomad.utils.annotations import annotate_adj, annotate_freq
 from gnomad.utils.slack import slack_notifications
 
+from gnomad_qc.v4.resources.basics import get_gnomad_v4_vds
+
 from ukbb_qc.resources.basics import logging_path, release_ht_path
 from ukbb_qc.resources.resource_utils import CURRENT_FREEZE
 from ukbb_qc.resources.sample_qc import meta_ht_path
@@ -47,27 +49,6 @@ TRANCHE_DATA = ("broad", CURRENT_FREEZE)
 UKB tranche data (data source and data freeze number).
 """
 
-VDS_PATH = "gs://ukbb-pharma-exome-analysis/500k_temp/500k.vds"
-"""
-Path to Variant Dataset (VDS) that contains high quality samples from the final UK Biobank callset.
-
-Generated using the following commands:
-# NOTE: If ever need to rerun, should read v4 VDS using `get_gnomad_v4_vds`
-# (in gnomad_qc/v4/resoures/basics.py)
-vds = hl.vds.read_vds("gs://gnomad/raw/exomes/4.0/gnomad_v4.0.vds")
-meta_ht = hl.read_table("gs://broad-ukbb/broad.freeze_7/sample_qc/meta.ht")
-meta_ht = meta_ht.filter(meta_ht.sample_filters.high_quality)
-vds = hl.vds.filter_samples(vds, meta_ht, remove_dead_alleles=True)
-call_stats_ht = hl.read_table(ukb.var_annotations_ht_path('ukb_freq', *TRANCHE_DATA[CURRENT_TRANCHE]))
-freq_index = get_cohort_index(call_stats_ht)
-var = vds.variant_data.annotate_rows(call_stats=call_stats_ht[vds.variant_data.row_key].freq[freq_index])
-vds = hl.vds.VariantDataset(vds.reference_data, var)
-vds.write(ukb_exomes_path, overwrite=args.overwrite)
-
-Full VDS size: 8.69 TiB
-VDS variant data size: 561.97 GiB
-"""
-
 
 def main(args):
     """
@@ -86,8 +67,10 @@ def main(args):
             & (meta_ht.pan_ancestry_meta.pop == POP)
         )
 
-        logger.info("Reading in 455k VDS and filtering to high quality EUR samples...")
-        vds = hl.vds.read_vds(VDS_PATH)
+        logger.info(
+            "Reading in v4 VDS and filtering to high quality EUR UKB samples..."
+        )
+        vds = get_gnomad_v4_vds(split=False)
         vds = hl.vds.filter_samples(vds, meta_ht, remove_dead_alleles=True)
         var_mt = vds.variant_data
         ref_mt = vds.reference_data
