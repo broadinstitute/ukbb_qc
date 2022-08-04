@@ -70,7 +70,7 @@ def main(args):
         logger.info(
             "Reading in v4 VDS and filtering to high quality EUR UKB samples..."
         )
-        vds = get_gnomad_v4_vds(split=False)
+        vds = get_gnomad_v4_vds(split=False, remove_hard_filtered_samples=False)
         vds = hl.vds.filter_samples(vds, meta_ht, remove_dead_alleles=True)
         var_mt = vds.variant_data
         ref_mt = vds.reference_data
