@@ -54,7 +54,11 @@ def main(args):
     """
     Recalculate frequency on high quality, European samples in the 455k VDS.
     """
-    hl.init(log="/fix_455_frequency.log", default_reference="GRCh38")
+    hl.init(
+        log="/fix_455_frequency.log",
+        tmp_dir="gs://gnomad-tmp-4day",
+        default_reference="GRCh38",
+    )
 
     try:
         logger.info("Reading in 455k sample meta...")
