@@ -14,6 +14,7 @@ import logging
 
 import hail as hl
 
+from gnomad.sample_qc.sex import adjust_sex_ploidy
 from gnomad.utils.annotations import annotate_adj, annotate_freq
 from gnomad.utils.slack import slack_notifications
 
@@ -104,7 +105,7 @@ def main(args):
         vd = _remove_ukb_dup_by_index(vds.variant_data, dup_ids)
         rd = _remove_ukb_dup_by_index(vds.reference_data, dup_ids)
 
-        logger.info("Adding het non-ref, sex, and population annotations...")
+        logger.info("Adding het non-ref annotation...")
         # Adding a Boolean for whether a sample had a heterozygous non-reference genotype
         # Need to add this prior to splitting multiallelics to make sure these genotypes
         # are not adjusted by the homalt hotfix downstream
@@ -129,6 +130,12 @@ def main(args):
         mt = mt.filter_rows(hl.len(mt.alleles) > 1)
         # Add adj annotation (to get raw and adj frequencies)
         mt = annotate_adj(mt)
+
+        # Filter to chrX/Y, also adjust sex ploidy
+        mt = mt.annotate_cols(
+            sex_karyotype=meta_ht[mt.col_key].sex_imputation.sex_karyotype
+        )
+        mt = adjust_sex_ploidy(mt, mt.sex_karyotype, male_str="XY", female_str="XX")
 
         # Temporary hotfix for depletion of homozygous alternate genotypes
         logger.info(
