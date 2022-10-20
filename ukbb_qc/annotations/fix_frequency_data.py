@@ -160,7 +160,9 @@ def main(args):
         mt = mt.select_rows("freq").select_globals("freq_meta")
         ht = mt.rows()
         ht = ht.naive_coalesce(args.n_partitions)
-        ht.write(var_annotations_ht_path("ukb_freq_fix", *TRANCHE_DATA), args.overwrite)
+        ht.write(
+            var_annotations_ht_path("ukb_x_y_freq_fix", *TRANCHE_DATA), args.overwrite
+        )
 
     finally:
         logger.info("Copying hail log to logging bucket...")
