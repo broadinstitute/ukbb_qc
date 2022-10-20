@@ -157,7 +157,8 @@ def main(args):
         logger.info("Calculating frequencies")
         logger.info("Generating frequency data...")
         mt = annotate_freq(mt)
-        ht = mt.select_rows("freq").select_globals("freq_meta")
+        mt = mt.select_rows("freq").select_globals("freq_meta")
+        ht = mt.rows()
         ht = ht.naive_coalesce(args.n_partitions)
         ht.write(var_annotations_ht_path("ukb_freq_fix", *TRANCHE_DATA), args.overwrite)
 
