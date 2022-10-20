@@ -174,6 +174,16 @@ def main(args):
             var_annotations_ht_path("ukb_x_y_freq_fix", *TRANCHE_DATA), args.overwrite
         )
 
+        # Merge with previous results
+        # Read previous fix and filter to autosomes
+        auto_ht = hl.read_table(var_annotations_ht_path("ukb_freq_fix", *TRANCHE_DATA))
+        auto_ht = auto_ht.filter(auto_ht.locus.in_autosome())
+        allo_ht = hl.read_table(
+            var_annotations_ht_path("ukb_x_y_freq_fix", *TRANCHE_DATA)
+        )
+        join_ht = auto_ht.union(allo_ht)
+        join_ht.write(var_annotations_ht_path("ukb_final_freq_fix", *TRANCHE_DATA))
+
     finally:
         logger.info("Copying hail log to logging bucket...")
         hl.copy_log(logging_path(*TRANCHE_DATA))
