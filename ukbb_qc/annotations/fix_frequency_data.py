@@ -132,6 +132,9 @@ def main(args):
         mt = annotate_adj(mt)
 
         # Filter to chrX/Y, also adjust sex ploidy
+        mt = hl.filter_intervals(
+            mt, [hl.parse_locus_interval("chrX"), hl.parse_locus_interval("chrY")]
+        )
         mt = mt.annotate_cols(
             sex_karyotype=meta_ht[mt.col_key].sex_imputation.sex_karyotype
         )
