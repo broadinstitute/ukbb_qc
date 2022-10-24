@@ -180,11 +180,14 @@ def main(args):
             var_annotations_ht_path("ukb_freq_fix", *TRANCHE_DATA)
         ).rows()
         auto_ht = auto_ht.filter(auto_ht.locus.in_autosome())
+        auto_ht = auto_ht.checkpoint("gs://gnomad-tmp/ukb_freq_fix.ht")
         allo_ht = hl.read_table(
             var_annotations_ht_path("ukb_x_y_freq_fix", *TRANCHE_DATA)
         )
         join_ht = auto_ht.union(allo_ht)
-        join_ht.write(var_annotations_ht_path("ukb_final_freq_fix", *TRANCHE_DATA))
+        join_ht.write(
+            var_annotations_ht_path("ukb_freq_fix", *TRANCHE_DATA), overwrite=True
+        )
 
     finally:
         logger.info("Copying hail log to logging bucket...")
