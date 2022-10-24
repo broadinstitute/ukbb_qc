@@ -176,7 +176,9 @@ def main(args):
 
         # Merge with previous results
         # Read previous fix and filter to autosomes
-        auto_ht = hl.read_table(var_annotations_ht_path("ukb_freq_fix", *TRANCHE_DATA))
+        auto_ht = hl.read_table(
+            var_annotations_ht_path("ukb_freq_fix", *TRANCHE_DATA)
+        ).rows()
         auto_ht = auto_ht.filter(auto_ht.locus.in_autosome())
         allo_ht = hl.read_table(
             var_annotations_ht_path("ukb_x_y_freq_fix", *TRANCHE_DATA)
