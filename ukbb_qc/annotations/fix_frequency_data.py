@@ -124,6 +124,10 @@ def main(args):
 
         assert ht_samples == vds_samples, "Sample IDs in meta HT and VDS don't match!"
 
+        # Filter to X/Y
+        vds = hl.vds.filter_intervals(
+            vds, [hl.parse_locus_interval("chrX"), hl.parse_locus_interval("chrY")]
+        )
         logger.info("Densifying...")
         vds = hl.vds.split_multi(vds)
         mt = hl.vds.to_dense_mt(vds)
@@ -131,10 +135,7 @@ def main(args):
         # Add adj annotation (to get raw and adj frequencies)
         mt = annotate_adj(mt)
 
-        # Filter to chrX/Y, also adjust sex ploidy
-        mt = hl.filter_intervals(
-            mt, [hl.parse_locus_interval("chrX"), hl.parse_locus_interval("chrY")]
-        )
+        # Adjust sex ploidy
         mt = mt.annotate_cols(
             sex_karyotype=meta_ht[mt.col_key].sex_imputation.sex_karyotype
         )
