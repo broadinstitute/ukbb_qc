@@ -179,7 +179,7 @@ def main(args):
         # Read previous fix and filter to autosomes
         auto_ht = hl.read_table(
             var_annotations_ht_path("ukb_freq_fix", *TRANCHE_DATA)
-        ).rows()
+        )
         auto_ht = auto_ht.filter(auto_ht.locus.in_autosome())
         auto_ht = auto_ht.checkpoint("gs://gnomad-tmp/ukb_freq_fix.ht")
         allo_ht = hl.read_table(
